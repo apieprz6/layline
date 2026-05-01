@@ -131,3 +131,25 @@ export interface RaceEvent {
   location: string
   startTime: string
 }
+
+// User preferences types (JSONB structure)
+export interface DataSourcePreference {
+  enabled: boolean
+  displayName: string
+}
+
+export interface UserPreferences {
+  dataSources: {
+    chii2: DataSourcePreference
+    45198: DataSourcePreference
+  }
+}
+
+export interface Profile {
+  id: string
+  user_id: string
+  role: string | null
+  preferences: UserPreferences
+  created_at: string
+  updated_at: string
+}
