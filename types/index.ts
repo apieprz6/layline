@@ -8,17 +8,63 @@ export interface WindForecast {
   confidence?: number // 0-1
 }
 
+// Data source status states
+export type DataSourceStatus = 'online' | 'recent' | 'stale' | 'offline' | 'error'
+
+// Buoy metadata for context (never modify raw data)
+export interface BuoyMetadata {
+  station: string
+  source: 'ndbc'
+  location: {
+    latitude: number
+    longitude: number
+  }
+  windMeasurementHeight: number // feet above water
+  adjustmentNote?: string // Context for interpretation (e.g., "Wind measured at 85ft typically reads 20-30% higher than surface")
+}
+
+// Core buoy data structure (raw measurements preserved)
 export interface BuoyData {
   buoyId: string
   name: string
   timestamp: string
-  windSpeed: number // knots
-  windDirection: number // degrees
+  windSpeed: number // knots (raw, unmodified)
+  windDirection: number // degrees (raw, unmodified)
+  windGust?: number // knots
   waveHeight?: number // feet
   wavePeriod?: number // seconds
   airTemp?: number // fahrenheit
   waterTemp?: number // fahrenheit
   pressure?: number // mb
+  metadata: BuoyMetadata
+}
+
+// Result wrapper with status calculation
+export interface BuoyDataResult {
+  data: BuoyData | null
+  status: DataSourceStatus
+  fetchedAt: string // ISO timestamp of last successful fetch
+  error?: string
+}
+
+// NDBC real-time text format response
+export interface BuoyApiResponse {
+  stationId: string
+  timestamp: string
+  windDirection: number // degrees
+  windSpeed: number // m/s (will be converted to knots)
+  windGust?: number // m/s
+  waveHeight?: number // meters
+  dominantWavePeriod?: number // seconds
+  airTemp?: number // degC (will be converted to °F)
+  waterTemp?: number // degC
+  pressure?: number // hPa (will be converted to mb)
+}
+
+// In-memory cache entry
+export interface BuoyCacheEntry {
+  data: BuoyData
+  fetchedAt: number // Unix timestamp in milliseconds
 }
 
 export interface WeatherModel {
