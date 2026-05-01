@@ -1,0 +1,384 @@
+# Wind Condition Classification for Layline
+
+This reference defines the wind condition classification system used throughout the Layline application. Use this for consistent categorization across LLM prompts, UI components, and code.
+
+## Color Coding (Design System)
+
+Light:  #007A52 (teal/green)   - Safe conditions, requires skill
+Medium: #0055BB (blue)          - Optimal racing conditions
+Heavy:  #C47000 (amber)         - Challenging, physically demanding
+Storm:  #CC1100 (red)           - Dangerous, safety concerns
+
+These colors are defined in app/globals.css as:
+--wind-light: #007A52;
+--wind-medium: #0055BB;
+--wind-heavy: #C47000;
+--wind-storm: #CC1100;
+
+## Wind Speed Ranges (in knots)
+
+Light:  0-8 knots (inclusive)
+Medium: 9-15 knots (inclusive)
+Heavy:  16-22 knots (inclusive)
+Storm:  23+ knots
+
+Note: Always use knots, not mph. Boundaries are inclusive.
+
+## Racing Implications by Condition
+
+### Light Air (0-8 knots)
+
+Boat handling characteristics:
+- Minimal heel angle
+- Difficulty maintaining steerage
+- Focus on keeping boat moving (speed > pointing)
+- Very sensitive to crew movement
+
+Crew positioning:
+- Weight forward to reduce drag
+- Minimize movement (creates disturbing waves)
+- Gentle sail trim adjustments
+- May sit to leeward in very light air
+
+Sail trim strategy:
+- Full sails (loose outhaul, loose cunningham)
+- Loose rig for maximum power
+- More sag in forestay acceptable
+- Twist off top of main to reduce drag
+- Focus on keeping telltales flowing
+
+Tactical considerations:
+- Stay in pressure (wind streaks visible on water)
+- Avoid lulls and dead spots
+- Current and waves more impactful
+- Patience required, avoid over-steering
+- Light air sailing is technically demanding
+
+Rig settings:
+- Loose backstay (more sag, fuller sails)
+- Loose shroud tension
+- Minimal cunningham tension
+- Loose outhaul for fuller shape
+- Vang ease to reduce drag
+
+Psychological note:
+- Light air is frustrating but requires most skill
+- Small gains/losses magnified
+- Patience and precision critical
+
+### Medium Air (9-15 knots)
+
+Boat handling characteristics:
+- Comfortable moderate heel
+- Good boat speed achievable
+- Predictable handling
+- Standard racing techniques effective
+
+Crew positioning:
+- Normal hiking positions
+- Weight distributed for optimal trim
+- Active trimming possible without disturbing boat
+
+Sail trim strategy:
+- Standard settings apply
+- Moderate twist in both sails
+- Adjust for waves and shifts
+- Classic upwind/downwind techniques
+- Constant fine-tuning for speed
+
+Tactical considerations:
+- Classic racing tactics work well
+- Wind shifts more predictable
+- Laylines more reliable
+- Strategic positioning matters more than boat handling
+- Competitive fleet racing conditions
+
+Rig settings:
+- Standard/baseline settings
+- Moderate backstay tension
+- Outhaul and cunningham as designed
+- Vang for leech control
+- Adjust based on sea state
+
+Race committee preferences:
+- Most likely to set full course
+- May run multiple laps
+- Standard start sequences
+- Optimal conditions for competitive racing
+
+### Heavy Air (16-22 knots)
+
+Boat handling characteristics:
+- Significant heel angle
+- Physical crew work required
+- Boat speed high but harder to control
+- Overpowered if not adjusted
+
+Crew positioning:
+- Everyone on windward rail ("rail meat")
+- Maximum hiking effort
+- Crew coordination critical
+- Exhausting for entire crew
+
+Sail trim strategy:
+- Flatten sails (tight outhaul, cunningham)
+- Depower with twist
+- Ease sheets in puffs
+- Feather in gusts to reduce heel
+- May need to reef or change to smaller jib
+
+Tactical considerations:
+- Survival mode - minimize mistakes
+- Conservative strategy often wins
+- Boat handling errors costly
+- Rounding marks challenging
+- Crew fatigue becomes factor
+
+Rig settings:
+- Tight backstay (flatten main, tension forestay)
+- Increased shroud tension
+- Maximum cunningham (pull draft forward)
+- Tight outhaul (flatten foot)
+- Vang tight to prevent twist in puffs
+
+Safety considerations:
+- Risk of equipment failure increases
+- Crew injury possible (flying blocks, boom)
+- Man overboard more dangerous
+- Communication difficult due to noise
+- Consider shortening course or postponing
+
+Sail changes to consider:
+- Reef mainsail (reduce area)
+- Change from genoa to smaller jib
+- Consider flattening reef only
+- May need storm sails if sustained heavy air
+
+### Storm Conditions (23+ knots)
+
+Boat handling:
+- Dangerous conditions
+- Very difficult to control boat
+- High risk of capsize or broach
+- Extreme physical demands
+
+Safety priority:
+- Consider not racing
+- If racing, full safety gear required
+- Reefed sails mandatory
+- Experienced crew only
+
+Equipment concerns:
+- High risk of gear failure
+- Rigging under extreme stress
+- Potential for sail damage
+- Capsize or dismasting possible
+
+Race committee decisions:
+- May postpone or abandon racing
+- Shortened course likely
+- Close monitoring required
+- Rescue boats on standby
+
+Crew decision:
+- Evaluate crew experience and boat condition
+- Better to sit out than take unnecessary risk
+- Wednesday beer can race not worth the risk
+
+## TypeScript Implementation
+
+Use this code pattern throughout the application:
+
+```typescript
+// types/index.ts
+type WindCondition = 'light' | 'medium' | 'heavy' | 'storm'
+
+interface WindClassification {
+  condition: WindCondition
+  color: string
+  label: string
+  description: string
+}
+
+// Utility function
+function classifyWind(speedKnots: number): WindCondition {
+  if (speedKnots <= 8) return 'light'
+  if (speedKnots <= 15) return 'medium'
+  if (speedKnots <= 22) return 'heavy'
+  return 'storm'
+}
+
+function getWindColor(condition: WindCondition): string {
+  const colors: Record<WindCondition, string> = {
+    light: '#007A52',
+    medium: '#0055BB',
+    heavy: '#C47000',
+    storm: '#CC1100',
+  }
+  return colors[condition]
+}
+
+function getWindLabel(condition: WindCondition): string {
+  const labels: Record<WindCondition, string> = {
+    light: 'Light Air',
+    medium: 'Medium Air',
+    heavy: 'Heavy Air',
+    storm: 'Storm Conditions',
+  }
+  return labels[condition]
+}
+
+function getWindDescription(condition: WindCondition): string {
+  const descriptions: Record<WindCondition, string> = {
+    light: '0-8 kts • Challenging, requires finesse',
+    medium: '9-15 kts • Optimal racing conditions',
+    heavy: '16-22 kts • Physical, demanding conditions',
+    storm: '23+ kts • Dangerous, consider not racing',
+  }
+  return descriptions[condition]
+}
+```
+
+## UI Components Using This Classification
+
+The following components rely on this classification system:
+
+1. **WindCard.tsx**: Displays current wind conditions with color coding
+   - Shows wind speed, direction, and condition badge
+   - Uses condition color for visual hierarchy
+
+2. **ForecastChart.tsx**: Timeline visualization with color-coded segments
+   - Each forecast period colored by condition
+   - Helps identify condition changes over race window
+
+3. **TacticalBriefing.tsx**: AI-generated advice customized by condition
+   - Light air: Focus on technique and positioning
+   - Medium air: Standard tactical advice
+   - Heavy air: Emphasis on boat handling and safety
+   - Storm: Strongly recommend considering not racing
+
+4. **RigRecommendation.tsx**: Setup guidance based on wind range
+   - Rig settings tailored to condition
+   - Sail selection recommendations
+   - Crew positioning advice
+
+5. **ModelComparison.tsx**: Shows agreement/disagreement across forecasts
+   - Highlights when models disagree on condition category
+   - "All models predict medium air" vs "Models split between light and medium"
+
+## LLM Prompt Context
+
+When generating race briefings, use these ranges to determine:
+
+1. **Recommended rig settings**:
+   - Light: Loose rig, full sails
+   - Medium: Standard settings
+   - Heavy: Tight rig, consider reefing
+   - Storm: Heavily reefed, storm sails
+
+2. **Sail selection**:
+   - Light: Full genoa, full main
+   - Medium: Full inventory
+   - Heavy: Smaller jib or reef main
+   - Storm: Storm sails only
+
+3. **Tactical positioning**:
+   - Light: Stay in pressure, avoid lulls
+   - Medium: Classic racing tactics
+   - Heavy: Conservative, minimize mistakes
+   - Storm: Safety first, consider DNF
+
+4. **Crew positioning and hiking requirements**:
+   - Light: Weight forward, minimal movement
+   - Medium: Standard positions
+   - Heavy: Maximum hiking, rail meat
+   - Storm: All hands securing boat
+
+5. **Race committee expectations**:
+   - Light: May delay start for more wind
+   - Medium: Full course likely
+   - Heavy: May shorten course
+   - Storm: May abandon racing
+
+## Boundary Cases and Edge Conditions
+
+### Gusts vs Sustained Wind
+- Classification based on sustained wind, not gusts
+- Note gusts in briefing if >5 knots above sustained
+- Example: "12 kts sustained (medium) with gusts to 18 kts (brief heavy air conditions)"
+
+### Condition Transitions
+- When forecast shows transition across conditions (e.g., 14-16 kts), mention both
+- Example: "Starting medium air, building to heavy air by race time"
+- Tactical significance: Rig for heavier conditions expected
+
+### Model Disagreement
+- When models disagree on condition classification, highlight uncertainty
+- Example: "Models split: 2 predict medium air, 1 predicts heavy air"
+- Recommend preparing for heavier condition
+
+### Harrison Dever (CHII2) Adjustment
+- CHII2 readings at 85ft are typically 20-30% higher than surface
+- Apply adjustment when classifying: 20 kts at CHII2 → ~14-16 kts on water (medium air)
+- Always show both: "CHII2: 20 kts at 85ft (expect medium air 14-16 kts on water)"
+
+## Display Examples
+
+### UI Badge Example
+```tsx
+<span className="badge" style={{
+  backgroundColor: getWindColor(condition),
+  color: '#FFFFFF'
+}}>
+  {getWindLabel(condition)}
+</span>
+```
+
+### Forecast Table Example
+```
+Time  | Wind  | Condition | Rig Setup
+------|-------|-----------|----------
+6:00  | 8 kts | Light     | Loose rig, full sails
+6:30  | 11 kts| Medium    | Standard settings
+7:00  | 14 kts| Medium    | Standard, watch for building
+7:30  | 17 kts| Heavy     | Tighten backstay, consider reef
+```
+
+### LLM Briefing Example
+```
+Conditions: Medium air (12-14 kts) at race start, building to heavy air (18-20 kts) by second lap.
+
+Rig Setup: Start with standard settings. Have reefing plan ready if wind continues building. Consider changing to working jib after first lap if sustained above 16 kts.
+
+Tactical: Conservative strategy recommended given building conditions. Avoid aggressive maneuvers near laylines. Crew should be prepared for heavy air sail changes.
+```
+
+## Testing Wind Classification
+
+When testing components or LLM prompts:
+- Test boundary values: 8, 9, 15, 16, 22, 23 knots
+- Test transitions between conditions
+- Test with/without CHII2 elevation adjustment
+- Verify color coding matches design system
+- Confirm tactical advice matches condition
+
+## Common Mistakes to Avoid
+
+❌ Using mph instead of knots
+❌ Wrong boundary conditions (e.g., 8 kts as "medium")
+❌ Forgetting CHII2 elevation adjustment
+❌ Inconsistent color coding across components
+❌ Generic advice not tailored to condition
+❌ Not mentioning condition transitions in forecast
+❌ Overly precise classifications (e.g., "14.3 kts = medium-high")
+
+## Summary
+
+This classification system provides:
+- Consistent terminology across application
+- Clear visual hierarchy with colors
+- Actionable guidance for each condition
+- Safety-focused recommendations
+- Tactical context for race planning
+
+Always classify wind conditions using these ranges and apply appropriate colors, labels, and advice based on the condition category.

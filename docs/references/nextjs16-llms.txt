@@ -1,0 +1,294 @@
+# Next.js 16 Breaking Changes for AI Assistants
+
+CRITICAL: This project uses Next.js 16.2.4 (App Router only).
+Your training data likely shows Next.js 12-13 patterns. DO NOT USE THOSE.
+
+## Key Changes from Training Data
+
+### API Routes (NEW PATTERN)
+✅ CORRECT (Next.js 16 App Router):
+```typescript
+// app/api/weather/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  try {
+    const data = await fetchWeatherData()
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json()
+  return NextResponse.json({ success: true })
+}
+```
+
+❌ WRONG (Pages Router - REMOVED):
+```typescript
+// pages/api/weather.ts - DO NOT USE
+export default function handler(req, res) {
+  res.status(200).json({ data: 'test' })
+}
+```
+
+### Components
+
+✅ CORRECT - Server Component (default):
+```typescript
+// app/dashboard/page.tsx
+import { createClient } from '@/lib/supabase/server'
+
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Direct async data fetching
+  const weatherData = await fetchWeather()
+
+  return <div>{weatherData.windSpeed} kts</div>
+}
+```
+
+✅ CORRECT - Client Component (only when needed):
+```typescript
+// components/InteractiveButton.tsx
+'use client'
+
+import { useState } from 'react'
+
+export default function InteractiveButton() {
+  const [count, setState] = useState(0)
+
+  return <button onClick={() => setState(count + 1)}>
+    Clicked {count} times
+  </button>
+}
+```
+
+❌ WRONG - Using 'use client' unnecessarily:
+```typescript
+'use client'  // ← Don't add if no hooks/interactivity needed
+
+export default function StaticCard({ data }: Props) {
+  return <div>{data.text}</div>  // No state, no events
+}
+```
+
+### Auth with Supabase SSR
+
+✅ CORRECT - Server Component:
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function ProtectedPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
+  }
+
+  return <div>Protected: {user.email}</div>
+}
+```
+
+✅ CORRECT - Client Component:
+```typescript
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+
+export default function ClientAuth() {
+  const [user, setUser] = useState(null)
+  const supabase = createClient()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user)
+    })
+  }, [])
+
+  return <div>{user?.email}</div>
+}
+```
+
+❌ WRONG - Old Supabase patterns:
+```typescript
+// DO NOT USE - deprecated
+const supabase = createServerComponentClient({ cookies })
+const supabase = createClientComponentClient()
+```
+
+### Common Mistakes to AVOID
+
+❌ getServerSideProps / getStaticProps (REMOVED in App Router)
+❌ Pages Router file structure (pages/api/*, pages/*.tsx)
+❌ createServerComponentClient (old Supabase pattern)
+❌ Using 'use client' for static components
+❌ Mixing server and client Supabase clients
+❌ Not handling auth in Server Components
+
+### Correct File Structure
+
+✅ App Router (Next.js 16):
+```
+app/
+├── page.tsx                    ← Server Component (home page)
+├── layout.tsx                  ← Server Component (root layout)
+├── globals.css
+├── api/
+│   ├── weather/
+│   │   └── route.ts            ← API route (export GET/POST)
+│   └── race/
+│       └── briefing/
+│           └── route.ts
+├── dashboard/
+│   └── page.tsx                ← Server Component
+└── auth/
+    ├── login/
+    │   └── page.tsx
+    └── signup/
+        └── page.tsx
+```
+
+❌ Pages Router (REMOVED):
+```
+pages/
+├── index.tsx
+├── api/
+│   └── weather.ts
+```
+
+### Middleware Pattern
+
+✅ CORRECT (Layline already implements this):
+```typescript
+// middleware.ts (at root)
+import { type NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
+
+export async function middleware(request: NextRequest) {
+  return await updateSession(request)
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}
+```
+
+### Dynamic Rendering
+
+For pages that need fresh data on every request (auth-protected pages):
+```typescript
+// app/dashboard/page.tsx
+export const dynamic = 'force-dynamic'
+
+export default async function Dashboard() {
+  // Fresh data on every request
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  return <div>Dashboard for {user?.email}</div>
+}
+```
+
+### Data Fetching
+
+✅ CORRECT - Server Component direct fetch:
+```typescript
+export default async function Page() {
+  const res = await fetch('https://api.example.com/data')
+  const data = await res.json()
+  return <div>{data.value}</div>
+}
+```
+
+✅ CORRECT - Client Component with useEffect:
+```typescript
+'use client'
+
+export default function Page() {
+  const [data, setData] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/data')
+      .then(r => r.json())
+      .then(setData)
+  }, [])
+
+  return <div>{data?.value}</div>
+}
+```
+
+❌ WRONG - getServerSideProps:
+```typescript
+// DO NOT USE - removed in App Router
+export async function getServerSideProps() {
+  return { props: { data: 'test' } }
+}
+```
+
+### Error Handling in API Routes
+
+✅ CORRECT:
+```typescript
+export async function GET(request: NextRequest) {
+  try {
+    // Validate env vars
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY not configured')
+    }
+
+    const data = await fetchData()
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+### Path Alias
+
+Layline uses @/ path alias:
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import type { WindForecast } from '@/types'
+import WindCard from '@/components/dashboard/WindCard'
+```
+
+### Resources
+
+- Next.js 16 has breaking changes from your training data
+- Read node_modules/next/dist/docs/ before making architectural changes
+- Check AGENTS.md for project-specific patterns
+- See Layline's existing components for reference implementations
+
+## Quick Reference
+
+| Feature | Next.js 16 (App Router) | Old (Pages Router) |
+|---------|------------------------|-------------------|
+| API Routes | `app/api/*/route.ts` with `export async function GET()` | `pages/api/*.ts` with `export default function handler()` |
+| Pages | `app/*/page.tsx` | `pages/*.tsx` |
+| Layouts | `app/*/layout.tsx` | `pages/_app.tsx` |
+| Data Fetching | Server Components (async), Client Components (useEffect) | `getServerSideProps`, `getStaticProps` |
+| Server/Client | Explicit with 'use client' directive | Automatic based on location |
+| Supabase Auth | `createClient()` from server/client utils | `createServerComponentClient`, etc. |
+
+## Common Next.js 16 Patterns in Layline
+
+1. **Protected Pages**: Server Component + auth check + redirect
+2. **API Routes**: Try/catch + NextResponse.json + env validation
+3. **Client Interactivity**: 'use client' + useState/useEffect
+4. **Middleware**: Supabase session refresh on every request
+5. **Type Safety**: Import types from @/types, explicit return types

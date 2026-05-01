@@ -1,0 +1,472 @@
+# Supabase SSR Auth Patterns for Next.js 16
+
+This reference provides authentication patterns for Supabase in Next.js 16 Server-Side Rendering (SSR) context. Layline uses the latest Supabase SSR approach with separate server and client implementations.
+
+## Critical Setup
+
+Layline uses TWO separate Supabase client implementations:
+
+1. **Server client**: `/lib/supabase/server.ts` - For Server Components and API routes
+2. **Client client**: `/lib/supabase/client.ts` - For Client Components
+
+NEVER mix these. Using the wrong client in the wrong context causes auth failures.
+
+## Server Component Auth Pattern
+
+✅ CORRECT - Protected page with auth check:
+
+```typescript
+// app/dashboard/page.tsx
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+// Force dynamic rendering for fresh auth check
+export const dynamic = 'force-dynamic'
+
+export default async function DashboardPage() {
+  const supabase = await createClient()
+
+  // Get authenticated user
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  // Redirect if not authenticated
+  if (error || !user) {
+    redirect('/auth/login')
+  }
+
+  // Fetch user-specific data
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <p>Welcome, {user.email}</p>
+      {profile && <p>Boat: {profile.boat_name}</p>}
+    </div>
+  )
+}
+```
+
+Key points:
+- Import from '@/lib/supabase/server'
+- Use `await createClient()` (async function)
+- Call `supabase.auth.getUser()` to check authentication
+- Use `redirect()` from 'next/navigation' to send to login
+- Add `export const dynamic = 'force-dynamic'` for auth-protected pages
+
+## Client Component Auth Pattern
+
+✅ CORRECT - Client component with auth state:
+
+```typescript
+// components/UserProfile.tsx
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
+
+export default function UserProfile() {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    // Get initial user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user)
+      setLoading(false)
+    })
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null)
+      }
+    )
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  if (loading) return <div>Loading...</div>
+  if (!user) return <div>Not logged in</div>
+
+  return <div>Logged in as: {user.email}</div>
+}
+```
+
+Key points:
+- Import from '@/lib/supabase/client'
+- Call `createClient()` (NOT async, no await)
+- Use `useState` and `useEffect` for auth state
+- Subscribe to auth changes with `onAuthStateChange`
+- Clean up subscription in return function
+
+## Middleware Pattern (Already Implemented in Layline)
+
+Layline's middleware automatically refreshes Supabase sessions on every request:
+
+```typescript
+// middleware.ts (at root level)
+import { type NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
+
+export async function middleware(request: NextRequest) {
+  return await updateSession(request)
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images/files with extensions
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}
+```
+
+This middleware:
+- Runs on every request (per matcher pattern)
+- Refreshes Supabase auth session
+- Updates cookies for SSR
+- Ensures auth state is consistent across server/client
+
+DO NOT modify this middleware unless you understand SSR auth implications.
+
+## API Route Auth Pattern
+
+✅ CORRECT - Protected API endpoint:
+
+```typescript
+// app/api/race/briefing/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+
+    // Verify authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // Process authenticated request
+    const body = await request.json()
+
+    // User-specific data query
+    const { data, error } = await supabase
+      .from('race_events')
+      .select('*')
+      .eq('user_id', user.id)
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+Key points:
+- Use server client in API routes
+- Check authentication at start of handler
+- Return 401 if not authenticated
+- Use `user.id` for user-specific queries
+- Always wrap in try/catch
+
+## Database Queries with RLS
+
+Layline should have Row Level Security (RLS) enabled on all tables:
+
+```sql
+-- Enable RLS on table
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can read own profile
+CREATE POLICY "Users can read own data"
+ON profiles FOR SELECT
+USING (auth.uid() = id);
+
+-- Policy: Users can update own profile
+CREATE POLICY "Users can update own data"
+ON profiles FOR UPDATE
+USING (auth.uid() = id);
+
+-- Policy: Users can insert own profile
+CREATE POLICY "Users can insert own data"
+ON profiles FOR INSERT
+WITH CHECK (auth.uid() = id);
+```
+
+✅ CORRECT - Server Component query with RLS:
+
+```typescript
+const supabase = await createClient()
+const { data: { user } } = await supabase.auth.getUser()
+
+// RLS policies automatically filter to user's data
+const { data, error } = await supabase
+  .from('profiles')
+  .select('*')
+  .eq('id', user.id)  // Explicit filter recommended
+  .single()
+```
+
+Even with RLS policies, explicitly filter by `user.id` for clarity and defense-in-depth.
+
+## Auth Pages (Login/Signup)
+
+✅ CORRECT - Login page:
+
+```typescript
+// app/auth/login/page.tsx
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const router = useRouter()
+  const supabase = createClient()
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setError(error.message)
+      return
+    }
+
+    // Redirect on success
+    router.push('/dashboard')
+    router.refresh()  // Refresh server components
+  }
+
+  return (
+    <form onSubmit={handleLogin}>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        required
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+        required
+      />
+      {error && <p className="error">{error}</p>}
+      <button type="submit">Log In</button>
+    </form>
+  )
+}
+```
+
+Key points:
+- Login/signup pages are Client Components ('use client')
+- Use client Supabase client
+- Call `router.refresh()` after successful auth to update server components
+- Handle errors gracefully with user feedback
+
+## Logout Pattern
+
+✅ CORRECT - Logout action:
+
+```typescript
+'use client'
+
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+
+export default function LogoutButton() {
+  const router = useRouter()
+  const supabase = createClient()
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+    router.refresh()
+  }
+
+  return (
+    <button onClick={handleLogout}>
+      Log Out
+    </button>
+  )
+}
+```
+
+## Environment Variables
+
+Required Supabase environment variables:
+
+```bash
+# .env.local
+
+# Public variables (exposed to browser)
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Server-only variables (NEVER expose to browser)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Important:
+- `NEXT_PUBLIC_*` variables are exposed to browser
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser
+- Use service role key ONLY in API routes/Server Components when you need to bypass RLS
+- For most operations, use anon key (respects RLS)
+
+## Common Mistakes to Avoid
+
+❌ Using server client in Client Component:
+```typescript
+'use client'
+import { createClient } from '@/lib/supabase/server'  // WRONG
+```
+
+❌ Using client client in Server Component:
+```typescript
+// Server Component
+import { createClient } from '@/lib/supabase/client'  // WRONG
+```
+
+❌ Forgetting await on server createClient:
+```typescript
+const supabase = createClient()  // WRONG - missing await
+const { data } = await supabase.auth.getUser()
+```
+
+❌ Using old Supabase patterns:
+```typescript
+// These are deprecated - DO NOT USE
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+```
+
+❌ Forgetting RLS policies:
+```sql
+-- Table without RLS is insecure
+CREATE TABLE profiles (...);
+-- Must add: ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+```
+
+❌ Not handling auth errors:
+```typescript
+const { data: { user } } = await supabase.auth.getUser()
+// Always check: if (!user) redirect('/auth/login')
+```
+
+❌ Mixing authentication approaches:
+```typescript
+// Pick ONE approach and be consistent
+// Use middleware approach (Layline's pattern)
+// NOT a mix of middleware + manual session management
+```
+
+## Testing Auth Flows
+
+Test these scenarios:
+1. Unauthenticated user accesses protected page → redirects to login
+2. User logs in → can access protected pages
+3. User logs out → redirected to login, cannot access protected pages
+4. User refreshes page → stays authenticated (middleware refreshes session)
+5. Session expires → user redirected to login on next request
+6. Multiple tabs → auth state syncs across tabs (onAuthStateChange)
+
+## Debugging Auth Issues
+
+Common auth debugging steps:
+
+1. Check browser cookies:
+   - Should see `sb-<project>-auth-token` cookies
+   - If missing, auth not working
+
+2. Check middleware is running:
+   - Add console.log in middleware.ts
+   - Should run on every request
+
+3. Verify environment variables:
+   - Check .env.local exists
+   - Check variables are correct
+   - Restart dev server after changes
+
+4. Check Supabase project:
+   - Verify auth is enabled in Supabase dashboard
+   - Check RLS policies are correct
+   - Test queries in SQL editor
+
+5. Check for mixed client usage:
+   - Search for 'supabase/server' in Client Components
+   - Search for 'supabase/client' in Server Components
+
+## Security Best Practices
+
+1. **Always enable RLS** on all tables
+2. **Never expose service role key** to browser
+3. **Validate user input** before database queries
+4. **Use prepared statements** (Supabase does this automatically)
+5. **Check authentication** at start of protected routes
+6. **Use HTTPS** in production (Vercel handles this)
+7. **Rotate keys** if compromised
+8. **Log security events** for monitoring
+9. **Test RLS policies** with different user roles
+10. **Use email verification** for signups (configure in Supabase)
+
+## Summary
+
+Key takeaways for Supabase SSR auth in Layline:
+
+- Use `/lib/supabase/server.ts` in Server Components and API routes
+- Use `/lib/supabase/client.ts` in Client Components
+- Middleware automatically refreshes sessions
+- Always check authentication in protected routes
+- Enable RLS on all tables
+- Handle auth errors gracefully
+- Test auth flows thoroughly
+
+When in doubt, refer to existing Layline implementations:
+- `/app/dashboard/page.tsx` - Protected Server Component
+- `/app/auth/login/page.tsx` - Login Client Component
+- `/middleware.ts` - Session refresh middleware
+- `/lib/supabase/` - Client implementations

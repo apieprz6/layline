@@ -1,0 +1,324 @@
+# Sailing Terminology for AI Assistants
+
+This reference provides sailing terminology for generating domain-accurate code, prompts, UI text, and race briefings in the Layline application.
+
+## Wind Conditions (Layline Classification)
+
+Light air: 0-8 knots
+  - Challenging conditions requiring finesse and technique
+  - Full sails deployed, minimal heel angle
+  - Focus on maintaining boat speed over pointing high
+  - Difficult to maintain steerage and momentum
+  - Crew weight forward to reduce drag
+
+Medium air: 9-15 knots
+  - Optimal racing conditions, most comfortable
+  - Full sail inventory, good boat speed achievable
+  - Standard rig settings applicable
+  - Classic racing tactics work well
+  - Most predictable sailing conditions
+
+Heavy air: 16-22 knots
+  - Physically demanding, crew working hard
+  - Consider reefing mainsail or changing to smaller jib
+  - Tighter rig settings (increased backstay tension)
+  - Crew weight maximized on windward rail
+  - Focus on boat control and survivability
+
+Storm conditions: 23+ knots
+  - Dangerous conditions, safety paramount
+  - Strongly consider not racing
+  - Risk of equipment failure and crew injury
+  - If racing, reef heavily and use storm sails
+
+## Rig Setup Terms
+
+Backstay: Adjustable cable/wire running from top of mast to stern
+  - Controls mast bend and forestay tension
+  - Tighter backstay = flatter mainsail, more forestay tension
+  - Looser backstay = fuller mainsail, less pointing ability
+
+Cunningham: Downhaul line controlling luff tension on mainsail
+  - Pulls sail down to adjust draft position
+  - More tension in heavier air to flatten sail
+  - Named after inventor Briggs Cunningham
+
+Outhaul: Line controlling foot tension of mainsail
+  - Adjusts depth of mainsail along bottom edge
+  - Tight outhaul = flatter sail for heavy air
+  - Loose outhaul = fuller sail for light air
+
+Vang (Boom Vang): Tackle or hydraulic system controlling boom angle
+  - Prevents boom from lifting
+  - Controls mainsail leech twist
+  - Critical for downwind sailing
+
+Prebend: Standing curve built into mast
+  - Affects mainsail shape and luff curve
+  - More prebend = flatter mainsail
+
+Shroud tension: Compression on side stays (shrouds) supporting mast
+  - Affects mast stiffness and bend characteristics
+  - Adjusted with turnbuckles at chainplates
+
+## Sail Trim Terms
+
+Jib sheet: Line controlling angle of jib (foresail) to centerline
+  - Primary control for jib trim
+  - Adjusted constantly while racing
+  - Led through blocks to cockpit winches
+
+Main sheet: Line controlling angle of main boom to centerline
+  - Primary control for mainsail trim
+  - Typically led to traveler car or direct to cockpit
+
+Traveler: Track (usually on deck) allowing main boom attachment point to move side-to-side
+  - Controls boom position athwartships
+  - Key tool for pointing ability and power management
+  - Up to windward = more pointing, down to leeward = more power
+
+Halyard: Line that raises and tensions sails
+  - Jib halyard, main halyard, spinnaker halyard
+  - Proper tension affects luff tension and sail shape
+
+Twist: Amount top of sail is turned off (eased) relative to bottom
+  - More twist = less power, more forgiving
+  - Less twist = more power, requires precision
+  - Controlled by sheet tension and vang
+
+Leech: Trailing (aft) edge of sail
+  - Critical for power and drag
+  - Leech flutter indicates need for adjustment
+
+Luff: Leading (forward) edge of sail
+  - Luff wrinkles indicate over-trimmed sail
+  - Should be smooth and unwrinkled when properly trimmed
+
+Telltales: Yarn or ribbon indicators on sails showing airflow
+  - Used to judge sail trim and wind angle
+  - Both sides should flow aft when properly trimmed
+
+## Tactical Terms
+
+Windward: Upwind direction (toward the source of wind)
+  - "Windward mark" is the upwind turning mark
+  - "To windward" means upwind of another boat
+
+Leeward: Downwind direction (away from the wind source)
+  - "Leeward mark" is the downwind turning mark
+  - "To leeward" means downwind of another boat
+
+Port tack: Sailing with wind coming from port (left) side
+  - Port tack boat must give way to starboard tack boat
+  - Right-of-way rules critical in racing
+
+Starboard tack: Sailing with wind coming from starboard (right) side
+  - Has right-of-way over port tack boats
+  - Can call "starboard" to claim right-of-way
+
+Lift: Wind shift that allows boat to point higher toward windward mark
+  - Favorable shift on current tack
+  - Tack immediately on a lift to maximize gain
+  - "Getting lifted" is advantageous
+
+Header: Wind shift that forces boat to turn away from windward mark
+  - Unfavorable shift on current tack
+  - Consider tacking on a header
+  - "Getting headed" usually indicates time to tack
+
+Favored side: Side of racecourse expected to have advantage
+  - Based on predicted wind shifts, current patterns, or local geography
+  - Strategic decision about which way to go after start
+
+Layline: Course angle that will reach the mark without additional tacks
+  - "On the layline" means one more tack gets you to mark
+  - Approaching layline too early is often disadvantageous
+
+Tack (verb): Turning bow through wind to change from port to starboard tack or vice versa
+  - "Tacking duel" refers to covering maneuver
+  - "Short tacking" means frequent tacks
+
+Gybe/Jibe: Turning stern through wind while sailing downwind
+  - Changes which side boom/spinnaker are on
+  - More dangerous maneuver than tacking
+
+Covering: Staying between competitor and next mark
+  - Defensive tactic to protect position
+  - May involve frequent tacks to maintain cover
+
+## Course Types
+
+Windward-Leeward (W/L): Two-leg course
+  - First leg upwind to windward mark
+  - Second leg downwind back to leeward mark (often start/finish)
+  - Repeat for multiple laps
+  - Most common Wednesday night format
+
+Triangle: Three-sided course with reaching legs
+  - Windward mark, wing marks, leeward mark
+  - Includes reaching (wind from side) in addition to upwind/downwind
+  - Tests full range of sailing angles
+
+Olympic: Combination of windward-leeward and triangle
+  - Multiple legs including windward, leeward, and reaching
+  - More complex than simple W/L
+
+## Points of Sail
+
+Close-hauled: Sailing as close to wind as possible (typically 35-45° off wind)
+  - Upwind sailing
+  - Requires precise trim and helmsmanship
+  - Layline angles are typically close-hauled
+
+Reaching: Sailing with wind from the side (beam reach = 90° to wind)
+  - Fast point of sail
+  - More forgiving trim than close-hauled
+  - Broad reach = wind aft of beam
+
+Running: Sailing directly downwind
+  - Wind from directly behind
+  - Often slowest point of sail
+  - Spinnaker typically deployed if available
+
+## Local Lake Michigan Context
+
+CHII2 (Harrison Dever Crib): Offshore lighthouse/platform used as wind measurement station
+  - Located in Lake Michigan off Chicago
+  - Wind measured at 85 feet elevation
+  - Readings typically 20-30% higher than surface wind
+  - Excellent for direction and trend analysis
+  - NOT representative of actual on-water wind speed
+
+Purdue Buoy (45198): Research buoy measuring on-water conditions
+  - Seasonal deployment (May through October)
+  - Most accurate on-water wind speed when operational
+  - Surface-level measurements
+  - Often offline during winter months
+
+Shoreline thermal effect: Temperature differential between land and water
+  - Cold lake water vs warm land creates local wind patterns
+  - Affects wind speed and direction near shore
+  - Evening races (Wednesday 7pm) often impacted
+  - Wind can "clock" (rotate) as temperature changes
+
+Evening wind: Typical Wednesday night race conditions
+  - Wind often lighter as sun sets
+  - More shifty and unstable than midday
+  - Thermal effects from land/water temperature difference
+  - Direction changes as temperature gradient shifts
+
+Lake effect: Weather phenomenon unique to Great Lakes
+  - Cold lake water modifies air masses crossing it
+  - Creates distinct wind patterns
+  - Spring and fall most pronounced
+
+Navy Pier Racing Circle: Race area off Navy Pier, Chicago
+  - Location: approximately 41.89°N, 87.60°W
+  - Urban harbor setting
+  - Wind influenced by buildings and shoreline
+  - Typical Wednesday night race venue
+
+## PHRF Racing Context
+
+PHRF: Performance Handicap Racing Fleet
+  - Handicap system allowing different boat types to race together
+  - Each boat has rating (seconds per mile)
+  - Corrected time determines winner, not finish order
+  - Typical rating range: 80-250+ seconds per mile
+  - Lower number = faster boat, higher number = slower boat
+
+Corrected time: Elapsed time adjusted by PHRF rating
+  - Formula accounts for boat speed potential
+  - Allows fair competition between different designs
+  - "Time-on-time" or "time-on-distance" calculation methods
+
+One-design racing: All boats are identical (NOT PHRF)
+  - Layline is designed for PHRF racing, not one-design
+  - Different strategic considerations
+
+## Race Roles and Positions
+
+Skipper/Helmsman: Person steering the boat
+  - Primary decision-maker for strategy and tactics
+  - Controls tiller or wheel
+  - Calls for tacks and gybes
+
+Crew: Team members handling sails and lines
+  - Trimmers (jib trimmer, main trimmer)
+  - Pit crew (manages halyards and controls)
+  - Bow crew (handles spinnaker, foresails)
+  - Rail meat (crew weight on windward rail in heavy air)
+
+Tactician: Crew member responsible for race strategy
+  - Advises on course decisions
+  - Monitors competition
+  - Calls wind shifts and strategic moves
+  - Layline's AI briefing assists the tactician
+
+## Common Abbreviations
+
+SOG: Speed Over Ground (actual speed relative to earth)
+COG: Course Over Ground (actual direction relative to earth)
+VMG: Velocity Made Good (speed component toward mark)
+  - Can be VMG upwind or VMG downwind
+  - More important than raw boat speed
+
+TWS: True Wind Speed (actual wind speed)
+TWD: True Wind Direction (actual wind direction, typically magnetic)
+AWS: Apparent Wind Speed (wind speed as felt on moving boat)
+AWA: Apparent Wind Angle (angle of apparent wind to boat centerline)
+
+GPS: Global Positioning System (navigation)
+VHF: Very High Frequency radio (marine communication)
+RC: Race Committee (officials running the race)
+
+## Sail Types
+
+Main/Mainsail: Primary sail attached to mast and boom
+Jib: Foresail attached to forestay (smaller than genoa)
+Genoa: Large overlapping foresail (bigger than jib)
+Spinnaker: Large downwind sail (symmetrical or asymmetrical)
+Storm jib: Small heavy-weather foresail
+Reefed main: Mainsail with area reduced for heavy weather
+
+## Weather and Wind Terms
+
+Knots: Nautical miles per hour (standard wind speed unit in sailing)
+  - 1 knot = 1.15 mph = 1.85 km/h
+  - Always use knots, not mph, in sailing context
+
+Gust: Temporary increase in wind speed
+  - Typically lasts seconds to minutes
+  - Important for crew coordination
+
+Lull: Temporary decrease in wind speed
+  - Opposite of gust
+  - Requires different sail trim
+
+Frontal passage: Weather front moving through area
+  - Often brings significant wind shift
+  - Can dramatically change conditions mid-race
+
+Velocity header: Wind shift where wind also increases
+  - Boat appears to be headed but wind speed increased
+  - May not need to tack despite heading change
+
+## Racing Rules Context (brief)
+
+Port/Starboard: Starboard tack has right-of-way
+Windward/Leeward: Leeward boat has right-of-way when overlapped
+Mark room: Inside boat entitled to room at marks when overlapped
+Starting: No crossing start line before gun
+
+Note: Layline focuses on weather/strategy, not detailed rules
+
+## Usage in Layline Application
+
+When generating race briefings:
+- Use proper terminology (e.g., "windward mark" not "upwind buoy")
+- Reference CHII2 elevation context (85 ft readings)
+- Acknowledge when Purdue Buoy is offline (winter)
+- Frame advice for PHRF racing on Lake Michigan
+- Consider Wednesday evening conditions in tactical advice
+- Use knots for all wind speeds
+- Apply wind condition classifications (light/medium/heavy/storm)

@@ -1,0 +1,76 @@
+# Layline Weather Data Context
+
+Layline fetches real-time weather data from multiple sources to provide sailors with actionable race preparation information for Wednesday night races on Lake Michigan.
+
+## Language
+
+### Data Sources
+
+**Buoy**:
+A physical weather monitoring station on Lake Michigan that provides real-time wind, wave, and environmental measurements.
+_Avoid_: Weather station, sensor, source (too generic)
+
+**Data Source**:
+Any provider of weather information (buoys, forecasts, models). Buoys are one type of data source.
+_Avoid_: API, service, endpoint
+
+**CHII2 (Harrison Dever Crib)**:
+Primary buoy located at Harrison Dever water crib, 85 feet above water surface. Always operational, measures wind at elevation (readings typically 20-30% higher than surface wind).
+
+**Purdue Buoy (45198)**:
+Secondary buoy with surface-level measurements. Seasonal (May-October). Best on-water wind speed when operational.
+
+### Data Status
+
+**Online**:
+Data source successfully fetched within the last 2 minutes. Trustworthy for racing decisions.
+
+**Recent**:
+Data source fetch failed, but cached data is 2-30 minutes old. Still usable for racing decisions with caution.
+
+**Stale**:
+Cached data is 30-120 minutes old. Questionable reliability, use with caution.
+
+**Offline**:
+Cached data is >120 minutes old, or data source never successfully fetched. Not actionable.
+
+**Error**:
+Fetch failed with no cached data available. Data source unavailable.
+
+### Data Fetching
+
+**Live Fetch**:
+Fresh API call bypassing cache. Used on dedicated live data pages with auto-refresh.
+_Avoid_: Real-time, uncached
+
+**Cached Fetch**:
+Returns cached data if within TTL (15 minutes). Used on dashboard for performance.
+_Avoid_: Standard fetch, normal fetch
+
+**Staleness**:
+Time elapsed since data was successfully fetched. Used to determine data source status and display freshness to users.
+
+## Relationships
+
+- A **Buoy** is a type of **Data Source**
+- Each **Buoy** has one **Data Source Status** at any given time
+- **CHII2** is always operational (never seasonally offline)
+- **Purdue Buoy** is seasonal (May-October only)
+- **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
+- **Staleness** determines **Data Source Status** (online → recent → stale → offline)
+
+## Example dialogue
+
+> **Dev:** "When CHII2 is marked as **Recent**, can we still display it?"
+> **Domain expert:** "Yes — **Recent** means the data is 2-30 minutes old, which is still useful for race prep. Just show the timestamp so sailors know it's not brand new."
+
+> **Dev:** "Should we treat **Purdue Buoy** being **Offline** in November as an error?"
+> **Domain expert:** "No — that's expected. Mark it **Offline** with a note that it's seasonal. **Error** is for unexpected failures."
+
+> **Dev:** "What's the difference between **Live Fetch** and **Cached Fetch**?"
+> **Domain expert:** "**Cached Fetch** is for the dashboard where 15-minute-old data is fine. **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
+
+## Flagged ambiguities
+
+- "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
+- "offline" could mean "seasonal" (expected) or "error" (unexpected) — resolved: **Offline** is a neutral status, context determines if it's expected (Purdue in winter) or concerning (CHII2 in summer).
