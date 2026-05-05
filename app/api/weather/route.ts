@@ -36,6 +36,16 @@ export async function GET() {
         airTemp: 58,
         waterTemp: 54,
         pressure: 1015,
+        metadata: {
+          station: '46026',
+          source: 'ndbc',
+          location: {
+            latitude: 37.75,
+            longitude: -122.82,
+          },
+          windMeasurementHeight: 16,
+          adjustmentNote: 'Mock buoy data for development',
+        },
       },
     ]
 

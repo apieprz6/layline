@@ -7,6 +7,8 @@ import ForecastChart from '@/components/dashboard/ForecastChart'
 import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
 import RigRecommendation from '@/components/dashboard/RigRecommendation'
 import ModelComparison from '@/components/dashboard/ModelComparison'
+import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +20,13 @@ export default async function DashboardPage() {
   if (!user) {
     redirect('/auth/login')
   }
+
+  // Fetch live buoy data directly from services (uses internal cache)
+  const [chii2Result, purdueResult] = await Promise.all([
+    fetchCHII2(),
+    fetchPurdueBuoy(),
+  ])
+  const buoyData = [chii2Result, purdueResult]
 
   // Mock race time - Wednesday 7:00 PM
   const raceTime = new Date()
@@ -77,6 +86,9 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
           current={currentWind}
           forecast={{ speed: 14, direction: 248 }}
         />
+
+        {/* Live Wind Card */}
+        <LiveWindCard buoys={buoyData} />
 
         {/* Tactical Briefing */}
         <TacticalBriefing
