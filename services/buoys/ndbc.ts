@@ -4,6 +4,9 @@ import type {
   BuoyApiResponse,
   BuoyCacheEntry,
   DataSourceStatus,
+  BuoyHistoryData,
+  HourlyDataPoint,
+  MinuteDataPoint,
 } from '@/types'
 
 // In-memory cache
@@ -352,4 +355,302 @@ export function getCacheStatus(): Record<
   })
 
   return status
+}
+
+/**
+ * Parse all historical data rows from NDBC text file
+ * Returns array of data points from most recent to oldest
+ */
+function parseNDBCHistoricalRows(
+  text: string,
+  stationId: string
+): Array<{ timestamp: Date; windSpeed: number; windDirection: number }> {
+  const lines = text.trim().split('\n')
+
+  if (lines.length < 3) {
+    return []
+  }
+
+  const headers = lines[0].split(/\s+/)
+  const dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }> = []
+
+  // Skip header lines (0 and 1), parse data rows starting at line 2
+  for (let i = 2; i < lines.length; i++) {
+    const dataLine = lines[i].split(/\s+/)
+
+    if (dataLine.length < headers.length) {
+      continue
+    }
+
+    const data: Record<string, string> = {}
+    headers.forEach((header, index) => {
+      data[header] = dataLine[index]
+    })
+
+    // Extract timestamp
+    const year = data['#YY'] || data['YY']
+    const month = data['MM']
+    const day = data['DD']
+    const hour = data['hh']
+    const minute = data['mm']
+
+    if (!year || !month || !day || !hour || !minute) {
+      continue
+    }
+
+    const timestamp = new Date(
+      `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00Z`
+    )
+
+    // Parse wind data
+    const windDirectionRaw = data['WDIR']
+    const windSpeedRaw = data['WSPD']
+
+    if (
+      !windDirectionRaw ||
+      windDirectionRaw === 'MM' ||
+      windDirectionRaw === '999' ||
+      !windSpeedRaw ||
+      windSpeedRaw === 'MM' ||
+      windSpeedRaw === '99.0'
+    ) {
+      continue
+    }
+
+    const windDirection = parseFloat(windDirectionRaw)
+    const windSpeed = metersPerSecondToKnots(parseFloat(windSpeedRaw))
+
+    if (isNaN(windDirection) || isNaN(windSpeed)) {
+      continue
+    }
+
+    dataPoints.push({ timestamp, windSpeed, windDirection })
+  }
+
+  return dataPoints
+}
+
+/**
+ * Aggregate data points to hourly intervals
+ * Returns last 6 hours of data
+ */
+function aggregateToHourly(
+  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>
+): HourlyDataPoint[] {
+  if (dataPoints.length === 0) return []
+
+  const now = new Date()
+  const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000)
+
+  // Group by hour
+  const hourlyBuckets = new Map<
+    string,
+    Array<{ windSpeed: number; windDirection: number }>
+  >()
+
+  dataPoints.forEach((point) => {
+    if (point.timestamp < sixHoursAgo) return
+
+    const hourKey = point.timestamp.toISOString().slice(0, 13) // YYYY-MM-DDTHH
+    if (!hourlyBuckets.has(hourKey)) {
+      hourlyBuckets.set(hourKey, [])
+    }
+    hourlyBuckets.get(hourKey)!.push({
+      windSpeed: point.windSpeed,
+      windDirection: point.windDirection,
+    })
+  })
+
+  // Calculate averages for each hour
+  const hourlyData: HourlyDataPoint[] = []
+
+  Array.from(hourlyBuckets.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-6) // Take last 6 hours
+    .forEach(([hourKey, points]) => {
+      const avgSpeed = points.reduce((sum, p) => sum + p.windSpeed, 0) / points.length
+
+      // Average directions using vector math
+      let sumSin = 0
+      let sumCos = 0
+      points.forEach((p) => {
+        const rad = (p.windDirection * Math.PI) / 180
+        sumSin += Math.sin(rad)
+        sumCos += Math.cos(rad)
+      })
+      let avgDir = (Math.atan2(sumSin, sumCos) * 180) / Math.PI
+      if (avgDir < 0) avgDir += 360
+
+      const hour = new Date(hourKey + ':00:00Z')
+      const timeStr = hour.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'UTC',
+      })
+
+      hourlyData.push({
+        time: timeStr,
+        spd: Math.round(avgSpeed * 10) / 10,
+        dir: Math.round(avgDir),
+      })
+    })
+
+  return hourlyData
+}
+
+/**
+ * Filter to 10-minute intervals for last 2 hours
+ * Returns ~12 data points
+ */
+function filterToTenMinuteIntervals(
+  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>
+): MinuteDataPoint[] {
+  if (dataPoints.length === 0) return []
+
+  const now = new Date()
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+
+  // Filter to last 2 hours
+  const recentPoints = dataPoints.filter((p) => p.timestamp >= twoHoursAgo)
+
+  // Group by 10-minute buckets
+  const tenMinBuckets = new Map<
+    number,
+    Array<{ windSpeed: number; windDirection: number }>
+  >()
+
+  recentPoints.forEach((point) => {
+    const minutesAgo = Math.floor((now.getTime() - point.timestamp.getTime()) / (60 * 1000))
+    const bucketKey = Math.floor(minutesAgo / 10) * 10 // Round down to nearest 10
+
+    if (bucketKey > 120) return // Only last 2 hours
+
+    if (!tenMinBuckets.has(bucketKey)) {
+      tenMinBuckets.set(bucketKey, [])
+    }
+    tenMinBuckets.get(bucketKey)!.push({
+      windSpeed: point.windSpeed,
+      windDirection: point.windDirection,
+    })
+  })
+
+  // Calculate averages for each bucket
+  const minuteData: MinuteDataPoint[] = []
+
+  Array.from(tenMinBuckets.entries())
+    .sort((a, b) => a[0] - b[0])
+    .forEach(([minsAgo, points]) => {
+      const avgSpeed = points.reduce((sum, p) => sum + p.windSpeed, 0) / points.length
+
+      // Average directions using vector math
+      let sumSin = 0
+      let sumCos = 0
+      points.forEach((p) => {
+        const rad = (p.windDirection * Math.PI) / 180
+        sumSin += Math.sin(rad)
+        sumCos += Math.cos(rad)
+      })
+      let avgDir = (Math.atan2(sumSin, sumCos) * 180) / Math.PI
+      if (avgDir < 0) avgDir += 360
+
+      minuteData.push({
+        minsAgo,
+        spd: Math.round(avgSpeed * 10) / 10,
+        dir: Math.round(avgDir),
+      })
+    })
+
+  return minuteData
+}
+
+// History cache
+const historyCache: Map<
+  string,
+  { data: BuoyHistoryData; fetchedAt: number }
+> = new Map()
+
+const HISTORY_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
+
+/**
+ * Fetch buoy historical data from NDBC
+ */
+async function fetchBuoyHistory(
+  stationId: keyof typeof BUOY_CONFIGS
+): Promise<BuoyHistoryData> {
+  const cacheKey = `${stationId}-history`
+  const now = Date.now()
+
+  // Check cache first
+  const cached = historyCache.get(cacheKey)
+  if (cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
+    return cached.data
+  }
+
+  // Fetch historical data
+  try {
+    const config = BUOY_CONFIGS[stationId]
+    const url = `https://www.ndbc.noaa.gov/data/realtime2/${config.stationId}.txt`
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`NDBC API error: ${response.status} ${response.statusText}`)
+    }
+
+    const text = await response.text()
+    const dataPoints = parseNDBCHistoricalRows(text, config.stationId)
+
+    if (dataPoints.length === 0) {
+      throw new Error('No historical data available')
+    }
+
+    const hourlyHistory = aggregateToHourly(dataPoints)
+    const minuteHistory = filterToTenMinuteIntervals(dataPoints)
+
+    const historyData: BuoyHistoryData = {
+      buoyId: config.stationId,
+      name: config.name,
+      hourlyHistory,
+      minuteHistory,
+      status: 'online',
+      fetchedAt: new Date(now).toISOString(),
+    }
+
+    // Cache the result
+    historyCache.set(cacheKey, { data: historyData, fetchedAt: now })
+
+    return historyData
+  } catch (error) {
+    // Return null history on error
+    const historyData: BuoyHistoryData = {
+      buoyId: BUOY_CONFIGS[stationId].stationId,
+      name: BUOY_CONFIGS[stationId].name,
+      hourlyHistory: null,
+      minuteHistory: null,
+      status: 'error',
+      fetchedAt: new Date(now).toISOString(),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+
+    return historyData
+  }
+}
+
+/**
+ * Fetch CHII2 historical data
+ */
+export async function fetchCHII2History(): Promise<BuoyHistoryData> {
+  return fetchBuoyHistory('CHII2')
+}
+
+/**
+ * Fetch Purdue Buoy historical data
+ */
+export async function fetchPurdueBuoyHistory(): Promise<BuoyHistoryData> {
+  return fetchBuoyHistory('45198')
 }

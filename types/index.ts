@@ -153,3 +153,26 @@ export interface Profile {
   created_at: string
   updated_at: string
 }
+
+// Buoy history types
+export interface HourlyDataPoint {
+  time: string // HH:MM format (e.g., "14:00")
+  spd: number // wind speed in knots
+  dir: number // wind direction in degrees
+}
+
+export interface MinuteDataPoint {
+  minsAgo: number // minutes ago from now (e.g., 0, 10, 20, ...)
+  spd: number // wind speed in knots
+  dir: number // wind direction in degrees
+}
+
+export interface BuoyHistoryData {
+  buoyId: string
+  name: string
+  hourlyHistory: HourlyDataPoint[] | null // 6 hourly points, null if unavailable
+  minuteHistory: MinuteDataPoint[] | null // ~12 10-min points (last 2h), null if unavailable
+  status: DataSourceStatus
+  fetchedAt: string
+  error?: string
+}
