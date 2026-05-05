@@ -34,19 +34,88 @@ function getStatusColor(status: BuoyDataResult['status']): string {
 }
 
 function StationRow({ buoyResult }: { buoyResult: BuoyDataResult }) {
-  const { data, status } = buoyResult
+  const { data, status, error } = buoyResult
 
-  // Handle missing data
-  if (!data) {
-    return null
-  }
+  // Determine station info (even if offline)
+  const buoyId = data?.buoyId || (error?.includes('Purdue') ? '45198' : 'CHII2')
+  const stationInfo = STATION_INFO[buoyId as keyof typeof STATION_INFO]
 
-  const stationInfo = STATION_INFO[data.buoyId as keyof typeof STATION_INFO]
   if (!stationInfo) {
     return null
   }
 
   const statusColor = getStatusColor(status)
+
+  // Handle offline/error state
+  if (!data) {
+    const isSeasonalOffline = error?.includes('seasonal')
+
+    return (
+      <div
+        style={{
+          padding: '10px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          borderRadius: '8px',
+          border: '1px solid var(--surface-border)',
+          background: 'var(--card-bg)',
+        }}
+      >
+        {/* Status dot */}
+        <div
+          style={{
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            background: statusColor,
+            boxShadow: `0 0 6px ${statusColor}88`,
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Station name + status message */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 'var(--weight-semibold)',
+              fontSize: '12px',
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {stationInfo.name}
+          </div>
+          <div
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '9px',
+              color: 'var(--text-muted)',
+              marginTop: '1px',
+            }}
+          >
+            {isSeasonalOffline ? 'Seasonal (May-Oct)' : 'Offline'}
+          </div>
+        </div>
+
+        {/* Offline indicator */}
+        <div
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            fontStyle: 'italic',
+          }}
+        >
+          No data
+        </div>
+      </div>
+    )
+  }
+
   const windCondition = (kts: number) => {
     if (kts <= 8) return '#007A52' // light
     if (kts <= 15) return '#0055BB' // medium
@@ -150,13 +219,18 @@ function StationRow({ buoyResult }: { buoyResult: BuoyDataResult }) {
 }
 
 export default function LiveWindCard({ buoys }: LiveWindCardProps) {
-  // Only show CHII2 and Purdue Buoy (45198) in order
-  const chii2 = buoys.find((b) => b.data?.buoyId === 'CHII2')
-  const purdue = buoys.find((b) => b.data?.buoyId === '45198')
+  // Find CHII2 and Purdue Buoy (45198) in order
+  // Match by buoyId in data, or by error message if offline
+  const chii2 = buoys.find(
+    (b) => b.data?.buoyId === 'CHII2' || (!b.data && !b.error?.includes('Purdue'))
+  )
+  const purdue = buoys.find(
+    (b) => b.data?.buoyId === '45198' || (!b.data && b.error?.includes('Purdue'))
+  )
 
   const displayBuoys = [chii2, purdue].filter(Boolean) as BuoyDataResult[]
 
-  // If no buoys available, don't render the card
+  // If no buoys available at all, don't render the card
   if (displayBuoys.length === 0) {
     return null
   }
@@ -189,8 +263,8 @@ export default function LiveWindCard({ buoys }: LiveWindCardProps) {
 
       {/* Station rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-        {displayBuoys.map((buoy) => (
-          <StationRow key={buoy.data?.buoyId} buoyResult={buoy} />
+        {displayBuoys.map((buoy, index) => (
+          <StationRow key={buoy.data?.buoyId || `buoy-${index}`} buoyResult={buoy} />
         ))}
       </div>
     </div>
