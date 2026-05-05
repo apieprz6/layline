@@ -50,6 +50,55 @@ _Avoid_: Standard fetch, normal fetch
 **Staleness**:
 Time elapsed since data was successfully fetched. Used to determine data source status and display freshness to users.
 
+### Wind Analysis
+
+**Veering**:
+Wind direction shifting clockwise (e.g., SW → W → NW). Indicated by positive direction delta over time.
+_Avoid_: Clocking
+
+**Backing**:
+Wind direction shifting counter-clockwise (e.g., W → SW → S). Indicated by negative direction delta over time.
+_Avoid_: Anti-clocking
+
+**Oscillation Range**:
+The spread of wind direction changes over a time period (e.g., ±5° last hour). Indicates direction stability.
+_Avoid_: Direction variance, shifting range
+
+**Gust Factor**:
+Percentage difference between gust and average wind speed ((gust - avg) / avg × 100). Indicates puffiness.
+- >30%: Puffy conditions
+- 15-30%: Moderate
+- <15%: Smooth
+
+**Speed Trend**:
+Rate of wind speed change over time (e.g., "building +2 kts/h" or "easing"). Calculated by comparing recent average (last 20 min) to longer average (last 2 hours).
+_Avoid_: Acceleration, wind change
+
+**Variability (σ)**:
+Standard deviation of wind speed over a time period. Measures consistency.
+_Avoid_: Stability, consistency
+
+### UI Components
+
+**Station Card**:
+UI component displaying buoy data. Has two states:
+- **Collapsed**: Shows current wind speed, direction, gust, status dot
+- **Expanded**: Adds history charts, trend badges, detailed statistics
+
+**Summary Bar**:
+Aggregated status display showing count of online stations, average wind across online sources, consensus direction, and last sync time.
+
+**Trend Badge**:
+Pill-shaped indicator showing speed or direction trend (e.g., "↑ Building +1.5 kts" or "↻ Veering +8° / 2h").
+
+### Data Structures
+
+**Hourly History**:
+6-hour wind data aggregated to hourly intervals for sparkline charts. Each point: `{ time, spd, dir }`.
+
+**Minute History**:
+Fine-grained wind data (10-minute intervals, last 2 hours) used for trend calculations. Each point: `{ minsAgo, spd, dir }`.
+
 ## Relationships
 
 - A **Buoy** is a type of **Data Source**
@@ -58,6 +107,11 @@ Time elapsed since data was successfully fetched. Used to determine data source 
 - **Purdue Buoy** is seasonal (May-October only)
 - **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
 - **Staleness** determines **Data Source Status** (online → recent → stale → offline)
+- **Station Card** has collapsed (dashboard) and expanded (Wind Data page) states
+- **Hourly History** feeds sparkline charts, **Minute History** feeds trend calculations
+- **Speed Trend** calculated from **Minute History** (20min avg vs 2h avg)
+- **Veering** is positive direction delta, **Backing** is negative direction delta
+- **Summary Bar** only averages wind from **Online** stations (excludes recent/stale/offline)
 
 ## Example dialogue
 
@@ -69,6 +123,15 @@ Time elapsed since data was successfully fetched. Used to determine data source 
 
 > **Dev:** "What's the difference between **Live Fetch** and **Cached Fetch**?"
 > **Domain expert:** "**Cached Fetch** is for the dashboard where 15-minute-old data is fine. **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
+
+> **Dev:** "The wind direction changed from 230° to 250°. Is that **veering** or **backing**?"
+> **Domain expert:** "That's **veering** — clockwise rotation. If it went from 250° to 230°, that would be **backing**."
+
+> **Dev:** "Should the **Summary Bar** include **Recent** stations in the average wind calculation?"
+> **Domain expert:** "No — only average **Online** stations. If data is older than 2 minutes, it's not representative of current conditions."
+
+> **Dev:** "What's a good **Gust Factor** threshold for showing a warning?"
+> **Domain expert:** "Above 30% is **puffy** — that's when sailors need to be ready for significant speed variations. Below 15% is **smooth**, easy to manage."
 
 ## Flagged ambiguities
 
