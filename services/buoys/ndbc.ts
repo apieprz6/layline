@@ -228,14 +228,93 @@ export async function fetchCHII2(options?: {
 }
 
 /**
- * Fetch Purdue Buoy (45198) data from NDBC
+ * Scaffolded IISEAGrant scraper for Purdue Buoy
+ * TODO: Implement HTML scraping from https://iiseagrant.org/45198/
+ * Returns null and logs warning until implementation is complete
+ */
+async function scrapeIISEAGrant(): Promise<BuoyApiResponse | null> {
+  console.warn('IISEAGrant scraping not implemented - falling back to NDBC')
+  return null
+}
+
+/**
+ * Check if Purdue Buoy is in operational season (May-October)
+ */
+function isPurdueSeason(): boolean {
+  const now = new Date()
+  const month = now.getMonth() // 0-indexed: 0=Jan, 4=May, 9=Oct
+  return month >= 4 && month <= 9 // May (4) through October (9)
+}
+
+/**
+ * Fetch Purdue Buoy (45198) data with primary/fallback strategy
  * Returns cached data if fresh (<2min), otherwise fetches new data
- * Note: Seasonal (May-October only)
+ *
+ * Strategy:
+ * 1. Try IISEAGrant scrape (currently scaffolded, returns null with warning)
+ * 2. Fall back to NDBC station 45198
+ * 3. Handle seasonal offline gracefully (May-October operational)
  */
 export async function fetchPurdueBuoy(options?: {
   bypassCache?: boolean
 }): Promise<BuoyDataResult> {
-  return fetchBuoyData('45198', options)
+  const cacheKey = '45198'
+  const now = Date.now()
+
+  // Check cache first (unless bypass requested)
+  if (!options?.bypassCache) {
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      const ageMs = now - cached.fetchedAt
+      if (ageMs < STATUS_THRESHOLDS.ONLINE) {
+        // Cache is fresh, return immediately
+        return {
+          data: cached.data,
+          status: calculateStatus(cached.fetchedAt, true, false),
+          fetchedAt: new Date(cached.fetchedAt).toISOString(),
+        }
+      }
+    }
+  }
+
+  // Check if in operational season
+  const isOperationalSeason = isPurdueSeason()
+
+  // Attempt IISEAGrant scrape first (currently scaffolded)
+  try {
+    const iisResponse = await scrapeIISEAGrant()
+
+    if (iisResponse) {
+      // IISEAGrant returned data - convert and cache
+      const buoyData = apiResponseToBuoyData(iisResponse, '45198')
+      cache.set(cacheKey, {
+        data: buoyData,
+        fetchedAt: now,
+      })
+      return {
+        data: buoyData,
+        status: 'online',
+        fetchedAt: new Date(now).toISOString(),
+      }
+    }
+  } catch (error) {
+    console.warn('IISEAGrant fetch failed, falling back to NDBC:', error)
+  }
+
+  // Fall back to NDBC station 45198
+  const ndbcResult = await fetchBuoyData('45198', options)
+
+  // If NDBC failed and we're out of season, provide context
+  if (!ndbcResult.data && !isOperationalSeason) {
+    return {
+      data: null,
+      status: 'offline',
+      fetchedAt: new Date(now).toISOString(),
+      error: 'Purdue Buoy is seasonal (May-October only)',
+    }
+  }
+
+  return ndbcResult
 }
 
 /**
