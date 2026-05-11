@@ -18,9 +18,12 @@ const SCALE_MINUTES: Record<TimeScale, number> = {
  * @returns Filtered data points within the time window
  */
 export function windowData(
-  fullHistory: MinuteDataPoint[],
+  fullHistory: MinuteDataPoint[] | undefined | null,
   scale: TimeScale
 ): MinuteDataPoint[] {
+  if (!fullHistory) {
+    return []
+  }
   const maxMinutes = SCALE_MINUTES[scale]
   return fullHistory.filter(point => point.minsAgo <= maxMinutes)
 }

@@ -127,6 +127,20 @@ describe('StationDetailView', () => {
       expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
     })
 
+    it('handles undefined data without crashing', () => {
+      // @ts-expect-error - testing runtime undefined handling
+      render(<StationDetailView data={undefined} buoyId="CHII2" />)
+
+      expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
+    })
+
+    it('handles null data without crashing', () => {
+      // @ts-expect-error - testing runtime null handling
+      render(<StationDetailView data={null} buoyId="CHII2" />)
+
+      expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
+    })
+
     it('handles data with no points in selected window', async () => {
       const futureData: MinuteDataPoint[] = [
         { minsAgo: 100, spd: 10, dir: 210 },

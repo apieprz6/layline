@@ -125,5 +125,15 @@ describe('windowData - Time Scale Filtering', () => {
       expect(result[0]).toHaveProperty('spd')
       expect(result[0]).toHaveProperty('dir')
     })
+
+    it('handles undefined data gracefully', () => {
+      const result = windowData(undefined, '1h')
+      expect(result).toEqual([])
+    })
+
+    it('handles null data gracefully', () => {
+      const result = windowData(null, '1h')
+      expect(result).toEqual([])
+    })
   })
 })
