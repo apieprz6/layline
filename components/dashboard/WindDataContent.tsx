@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { BuoyDataResult } from '@/types'
 import SummaryBar from './SummaryBar'
 import StationCard from './StationCard'
@@ -14,28 +14,6 @@ type Tab = 'live' | 'forecast'
 
 export default function WindDataContent({ buoys }: WindDataContentProps) {
   const [activeTab, setActiveTab] = useState<Tab>('live')
-  const [expandedStationId, setExpandedStationId] = useState<string | null>(null)
-
-  // Determine default expanded station on mount
-  useEffect(() => {
-    const purdue = buoys.find((b) => b.data?.buoyId === '45198')
-    const chii2 = buoys.find((b) => b.data?.buoyId === 'CHII2')
-
-    // Default to Purdue expanded (surface data), fallback to CHII2 if Purdue offline
-    if (purdue && purdue.status === 'online') {
-      setExpandedStationId('45198')
-    } else if (chii2 && chii2.status === 'online') {
-      setExpandedStationId('CHII2')
-    } else if (purdue) {
-      setExpandedStationId('45198')
-    } else if (chii2) {
-      setExpandedStationId('CHII2')
-    }
-  }, [buoys])
-
-  const toggleStation = (stationId: string) => {
-    setExpandedStationId(expandedStationId === stationId ? null : stationId)
-  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
@@ -123,8 +101,6 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
                   <StationCard
                     key={buoyId}
                     buoyResult={buoy}
-                    isExpanded={expandedStationId === buoyId}
-                    onToggleExpand={() => toggleStation(buoyId)}
                   />
                 )
               })}
