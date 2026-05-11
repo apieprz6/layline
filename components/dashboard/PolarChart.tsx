@@ -3,10 +3,13 @@
 import { useMemo } from 'react'
 import type { MinuteDataPoint } from '@/types'
 import { getWindColorHex } from '@/lib/utils/wind'
+import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
+import { formatTimeOffset } from '@/lib/utils/time'
 
 interface PolarChartProps {
   data: MinuteDataPoint[]
   buoyId: string
+  timeWindowMinutes: number
   referenceTime?: Date
 }
 
@@ -36,21 +39,56 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
   return [x, y]
 }
 
-export default function PolarChart({ data, buoyId }: PolarChartProps) {
-  // Calculate the time scale (oldest to newest)
-  const oldestTime = useMemo(() => {
-    if (data.length === 0) return 0
-    return Math.max(...data.map(d => d.minsAgo))
-  }, [data])
+export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarChartProps) {
+  // Get time scale configuration
+  const timeScale = useMemo(() => {
+    const scaleEntry = Object.entries(TIME_SCALES).find(
+      ([_, config]) => config.minutes === timeWindowMinutes
+    )
+    return scaleEntry ? scaleEntry[1] : null
+  }, [timeWindowMinutes])
 
-  // Map data points to polar coordinates with r01 values
+  // Calculate radial ring positions from ticks
+  const radialRings = useMemo(() => {
+    if (!timeScale) return []
+
+    return timeScale.ticks.map((tickMinutes, index) => ({
+      minutes: tickMinutes,
+      r01: 1 - (tickMinutes / timeWindowMinutes),
+      isOuterRing: index === 0,
+    }))
+  }, [timeScale, timeWindowMinutes])
+
+  // Filter which rings get time labels (to avoid clutter)
+  const labeledRings = useMemo(() => {
+    const n = radialRings.length
+    if (n === 0) return []
+
+    return radialRings.filter((ring, i) => {
+      // Always show outer (i === 0) and inner (i === n-1)
+      if (i === 0 || i === n - 1) return true
+
+      // Show midpoint
+      if (i === Math.floor(n / 2)) return true
+
+      // For 5+ rings, show quarter points
+      if (n >= 5 && (i === Math.floor(n / 4) || i === Math.floor((3 * n) / 4))) {
+        return true
+      }
+
+      return false
+    })
+  }, [radialRings])
+
+  // Filter and map data points to polar coordinates relative to time window
   const dataPoints = useMemo(() => {
-    if (oldestTime === 0) return []
+    if (timeWindowMinutes === 0) return []
 
     return data
+      .filter(point => point.minsAgo <= timeWindowMinutes) // Filter to time window
       .map(point => {
-        // r01: 1 = now (outer ring), 0 = oldest (center)
-        const r01 = 1 - (point.minsAgo / oldestTime)
+        // r01: 1 = now (outer ring), 0 = oldest time in window (center)
+        const r01 = 1 - (point.minsAgo / timeWindowMinutes)
         const [x, y] = polarToXY(point.dir, r01, CENTER_X, CENTER_Y, R)
         const color = getWindColorHex(point.spd)
         const opacity = Math.round((0.15 + 0.85 * Math.pow(r01, 1.2)) * 1e6) / 1e6
@@ -58,7 +96,7 @@ export default function PolarChart({ data, buoyId }: PolarChartProps) {
         return { ...point, x, y, r01, color, opacity }
       })
       .sort((a, b) => a.minsAgo - b.minsAgo) // Sort oldest to newest
-  }, [data, oldestTime])
+  }, [data, timeWindowMinutes])
 
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
@@ -169,22 +207,68 @@ export default function PolarChart({ data, buoyId }: PolarChartProps) {
           )
         })}
 
-        {/* Radial time rings (3 rings: outer, middle, inner) */}
-        {[1, 0.5, 0].map((r01, i) => {
-          const isOuterRing = i === 0
+        {/* Radial time rings at tick intervals */}
+        {radialRings.map((ring, i) => (
+          <circle
+            key={`ring-${ring.minutes}`}
+            cx={CENTER_X}
+            cy={CENTER_Y}
+            r={Math.max(0, ring.r01 * R)}
+            fill="none"
+            stroke={ring.isOuterRing ? 'rgba(0,68,204,0.55)' : 'rgba(0,0,0,0.12)'}
+            strokeWidth={ring.isOuterRing ? 1.5 : 0.75}
+            strokeDasharray={ring.isOuterRing ? '0' : '2 4'}
+          />
+        ))}
+
+        {/* Time labels on radial rings at North (0°) */}
+        {labeledRings.map(ring => {
+          const label = formatTimeOffset(ring.minutes)
+          const isNow = ring.minutes === 0
+          const [lx, ly] = polarToXY(0, ring.r01, CENTER_X, CENTER_Y, R)
+
+          // Calculate label width for background box
+          const labelWidth = Math.max(24, label.length * 6.2)
+
           return (
-            <circle
-              key={`ring-${i}`}
-              cx={CENTER_X}
-              cy={CENTER_Y}
-              r={Math.max(0, r01 * R)}
-              fill="none"
-              stroke={isOuterRing ? 'rgba(0,68,204,0.55)' : 'rgba(0,0,0,0.12)'}
-              strokeWidth={isOuterRing ? 1.5 : 0.75}
-              strokeDasharray={isOuterRing ? '0' : '2 4'}
-            />
+            <g key={`label-${ring.minutes}`} transform={`translate(${lx + 5}, ${ly + 2})`}>
+              {/* Background box */}
+              <rect
+                x={-3}
+                y={-8}
+                width={labelWidth}
+                height={11}
+                rx={2}
+                fill={isNow ? 'rgba(0,68,204,0.10)' : 'rgba(240,237,230,0.95)'}
+              />
+              {/* Label text */}
+              <text
+                x={0}
+                y={0}
+                fontFamily="var(--font-mono)"
+                fontSize={8.5}
+                fontWeight={isNow ? 600 : 500}
+                fill={isNow ? '#0044CC' : '#666666'}
+              >
+                {label}
+              </text>
+            </g>
           )
         })}
+
+        {/* Center label showing oldest time in window */}
+        {timeWindowMinutes > 0 && (
+          <text
+            x={CENTER_X}
+            y={CENTER_Y + 14}
+            textAnchor="middle"
+            fontFamily="var(--font-mono)"
+            fontSize={8.5}
+            fill="rgba(0,0,0,0.4)"
+          >
+            {formatTimeOffset(timeWindowMinutes)}
+          </text>
+        )}
 
         {/* Compass labels */}
         {COMPASS_LABELS.map(({ label, angle }) => {

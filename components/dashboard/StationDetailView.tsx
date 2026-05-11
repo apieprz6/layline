@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { MinuteDataPoint } from '@/types'
-import { windowData, type TimeScale } from '@/lib/utils/windowing'
+import { windowData, TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import ScaleControl from './ScaleControl'
 import PolarChart from './PolarChart'
 
@@ -17,6 +17,8 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
   const filteredData = useMemo(() => {
     return windowData(data, scaleId)
   }, [data, scaleId])
+
+  const timeWindowMinutes = TIME_SCALES[scaleId].minutes
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -41,7 +43,7 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
         >
           Wind Direction × Time
         </h2>
-        <PolarChart data={filteredData} buoyId={buoyId} />
+        <PolarChart data={filteredData} buoyId={buoyId} timeWindowMinutes={timeWindowMinutes} />
       </div>
     </div>
   )

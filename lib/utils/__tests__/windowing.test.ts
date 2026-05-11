@@ -1,5 +1,46 @@
-import { windowData } from '../windowing'
+import { windowData, TIME_SCALES } from '../windowing'
 import type { MinuteDataPoint } from '@/types'
+
+describe('TIME_SCALES configuration', () => {
+  it('has complete configuration for all time scales', () => {
+    expect(TIME_SCALES['30m']).toEqual({
+      minutes: 30,
+      label: 'Last 30 min',
+      ticks: [0, 5, 10, 15, 20, 25, 30],
+    })
+
+    expect(TIME_SCALES['1h']).toEqual({
+      minutes: 60,
+      label: 'Last hour',
+      ticks: [0, 15, 30, 45, 60],
+    })
+
+    expect(TIME_SCALES['6h']).toEqual({
+      minutes: 360,
+      label: 'Last 6 hours',
+      ticks: [0, 60, 120, 180, 240, 300, 360],
+    })
+
+    expect(TIME_SCALES['24h']).toEqual({
+      minutes: 1440,
+      label: 'Last 24 hours',
+      ticks: [0, 240, 480, 720, 960, 1200, 1440],
+    })
+
+    expect(TIME_SCALES['72h']).toEqual({
+      minutes: 4320,
+      label: 'Last 72 hours',
+      ticks: [0, 720, 1440, 2160, 2880, 3600, 4320],
+    })
+  })
+
+  it('has ticks that start at 0 and end at minutes value', () => {
+    Object.entries(TIME_SCALES).forEach(([scaleId, config]) => {
+      expect(config.ticks[0]).toBe(0)
+      expect(config.ticks[config.ticks.length - 1]).toBe(config.minutes)
+    })
+  })
+})
 
 describe('windowData - Time Scale Filtering', () => {
   // Sample data covering 120 minutes (2 hours)
