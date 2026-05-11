@@ -1,3 +1,6 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
 import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
@@ -27,6 +30,7 @@ export default function StationRow({
   status,
   onClick,
 }: StationRowProps) {
+  const router = useRouter()
   const stationInfo = getStationInfo(buoyId)
   if (!stationInfo) {
     return null
@@ -36,6 +40,14 @@ export default function StationRow({
   const wc = getWindCondition(windSpeed)
   const windColorHex = getWindColorHex(windSpeed)
 
+  const handleClick = () => {
+    if (onClick) {
+      onClick()
+    } else {
+      router.push(`/dashboard/station/${buoyId}`)
+    }
+  }
+
   return (
     <div
       style={{
@@ -43,9 +55,9 @@ export default function StationRow({
         display: 'flex',
         alignItems: 'center',
         gap: spacing(3),
-        cursor: onClick ? 'pointer' : 'default',
+        cursor: 'pointer',
       }}
-      onClick={onClick}
+      onClick={handleClick}
     >
       {/* Status dot */}
       <div
