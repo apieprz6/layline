@@ -5,6 +5,7 @@ import type { MinuteDataPoint } from '@/types'
 import { windowData, TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import ScaleControl from './ScaleControl'
 import PolarChart from './PolarChart'
+import WindReadout from './WindReadout'
 
 interface StationDetailViewProps {
   data: MinuteDataPoint[]
@@ -13,6 +14,7 @@ interface StationDetailViewProps {
 
 export default function StationDetailView({ data, buoyId }: StationDetailViewProps) {
   const [scaleId, setScaleId] = useState<TimeScale>('1h')
+  const [hoverPoint, setHoverPoint] = useState<MinuteDataPoint | null>(null)
 
   const filteredData = useMemo(() => {
     return windowData(data, scaleId)
@@ -43,7 +45,19 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
         >
           Wind Direction × Time
         </h2>
-        <PolarChart data={filteredData} buoyId={buoyId} timeWindowMinutes={timeWindowMinutes} />
+        <PolarChart
+          data={filteredData}
+          buoyId={buoyId}
+          timeWindowMinutes={timeWindowMinutes}
+          hoverPoint={hoverPoint}
+          onHoverChange={setHoverPoint}
+        />
+
+        {hoverPoint && (
+          <div style={{ marginTop: '16px' }}>
+            <WindReadout point={hoverPoint} buoyId={buoyId} />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import PolarChart from '../PolarChart'
 import type { MinuteDataPoint } from '@/types'
 
@@ -92,12 +92,14 @@ describe('PolarChart', () => {
 
       // 30m scale should have 7 rings: [0, 5, 10, 15, 20, 25, 30]
       const circles = container.querySelectorAll('circle')
-      // Filter for radial ring circles (not data points, not center dot)
+      // Filter for radial ring circles (not data points, not center dot, not reference ring)
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
         const stroke = c.getAttribute('stroke')
-        // Rings have fill="none" and stroke with rgba
-        return fill === 'none' && stroke && stroke.includes('rgba')
+        const strokeWidth = c.getAttribute('stroke-width')
+        // Rings have fill="none" and stroke with rgba, and strokeWidth 0.75 or 1.5
+        // Exclude reference ring (strokeWidth 2.5)
+        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
       })
 
       expect(ringCircles.length).toBe(7)
@@ -112,7 +114,9 @@ describe('PolarChart', () => {
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
         const stroke = c.getAttribute('stroke')
-        return fill === 'none' && stroke && stroke.includes('rgba')
+        const strokeWidth = c.getAttribute('stroke-width')
+        // Exclude reference ring (strokeWidth 2.5)
+        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
       })
 
       // 1h scale should have 5 rings: [0, 15, 30, 45, 60]
@@ -295,6 +299,252 @@ describe('PolarChart', () => {
 
       // Should not show 85ft text
       expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Touch interaction', () => {
+    it('calls onHoverChange with nearest data point when pointer down', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },   // North, at outer ring
+        { minsAgo: 30, spd: 10, dir: 180 }, // South, at center
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+      expect(svg).toBeInTheDocument()
+
+      // Simulate pointer down near the top (North position)
+      // Center is at (180, 180), North point should be near (180, 42)
+      if (svg) {
+        fireEvent.pointerDown(svg, {
+          clientX: 180,
+          clientY: 50,
+        })
+      }
+
+      // Should call onHoverChange with the North point (first data point)
+      expect(handleHoverChange).toHaveBeenCalledWith(data[0])
+    })
+
+    it('calls onHoverChange when pointer moves over chart', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+        { minsAgo: 30, spd: 10, dir: 180 },
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+
+      if (svg) {
+        fireEvent.pointerMove(svg, {
+          clientX: 200,
+          clientY: 200,
+        })
+      }
+
+      // Should call onHoverChange with one of the data points
+      expect(handleHoverChange).toHaveBeenCalledTimes(1)
+      const called = handleHoverChange.mock.calls[0][0]
+      expect(called).toMatchObject({
+        minsAgo: expect.any(Number),
+        spd: expect.any(Number),
+        dir: expect.any(Number),
+      })
+    })
+
+    it('clears hover point on pointer up', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+
+      if (svg) {
+        fireEvent.pointerUp(svg)
+      }
+
+      expect(handleHoverChange).toHaveBeenCalledWith(null)
+    })
+  })
+
+  describe('Crosshairs rendering', () => {
+    it('renders crosshair radial line when hoverPoint is provided', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const hoverPoint = data[0]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={hoverPoint}
+        />
+      )
+
+      // Count lines before and after adding hover
+      // With hover, should have an additional crosshair radial line with specific stroke-dasharray
+      const lines = container.querySelectorAll('line')
+      const crosshairLine = Array.from(lines).find(line => {
+        const dasharray = line.getAttribute('stroke-dasharray')
+        const strokeWidth = line.getAttribute('stroke-width')
+        // Crosshair line has distinctive dasharray and wider stroke
+        return dasharray === '4 2' && strokeWidth === '1.5'
+      })
+
+      expect(crosshairLine).toBeTruthy()
+    })
+
+    it('renders crosshair circular ring when hoverPoint is provided', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const hoverPoint = data[0]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={hoverPoint}
+        />
+      )
+
+      // Should have a distinctive crosshair ring
+      const circles = container.querySelectorAll('circle')
+      const crosshairRing = Array.from(circles).find(circle => {
+        const strokeWidth = circle.getAttribute('stroke-width')
+        const strokeDasharray = circle.getAttribute('stroke-dasharray')
+        // Crosshair ring has distinctive styling
+        return strokeWidth === '2' && strokeDasharray === '4 2'
+      })
+
+      expect(crosshairRing).toBeTruthy()
+    })
+
+    it('does not render crosshairs when hoverPoint is null', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={null}
+        />
+      )
+
+      const lines = container.querySelectorAll('line')
+      const crosshairLine = Array.from(lines).find(line => {
+        const dasharray = line.getAttribute('stroke-dasharray')
+        return dasharray === '4 2'
+      })
+
+      expect(crosshairLine).toBeFalsy()
+    })
+  })
+
+  describe('Reference point highlighting', () => {
+    it('highlights most recent data point when not hovering', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },   // Most recent (should be highlighted)
+        { minsAgo: 30, spd: 10, dir: 180 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={null}
+        />
+      )
+
+      // Should have a blue ring around the reference point
+      const circles = container.querySelectorAll('circle')
+      const referenceRing = Array.from(circles).find(circle => {
+        const stroke = circle.getAttribute('stroke')
+        const fill = circle.getAttribute('fill')
+        const strokeWidth = circle.getAttribute('stroke-width')
+        // Reference ring: blue stroke, no fill, specific width
+        return stroke && stroke.includes('0,68,204') && fill === 'none' && strokeWidth === '2.5'
+      })
+
+      expect(referenceRing).toBeTruthy()
+
+      // Should have a center dot at the reference point
+      const referenceDot = Array.from(circles).find(circle => {
+        const fill = circle.getAttribute('fill')
+        const r = circle.getAttribute('r')
+        // Reference dot: blue fill, small radius
+        return fill && fill.includes('0,68,204') && r === '3'
+      })
+
+      expect(referenceDot).toBeTruthy()
+    })
+
+    it('does not highlight reference point when hovering', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+        { minsAgo: 30, spd: 10, dir: 180 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={data[1]} // Hovering over different point
+        />
+      )
+
+      // Should not have the reference ring (crosshair instead)
+      const circles = container.querySelectorAll('circle')
+      const referenceRing = Array.from(circles).find(circle => {
+        const stroke = circle.getAttribute('stroke')
+        const fill = circle.getAttribute('fill')
+        const strokeWidth = circle.getAttribute('stroke-width')
+        return stroke && stroke.includes('0,68,204') && fill === 'none' && strokeWidth === '2.5'
+      })
+
+      // Reference ring should not be present when hovering
+      expect(referenceRing).toBeFalsy()
     })
   })
 })

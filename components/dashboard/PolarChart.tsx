@@ -11,6 +11,8 @@ interface PolarChartProps {
   buoyId: string
   timeWindowMinutes: number
   referenceTime?: Date
+  hoverPoint?: MinuteDataPoint | null
+  onHoverChange?: (point: MinuteDataPoint | null) => void
 }
 
 const SIZE = 360
@@ -39,7 +41,40 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
   return [x, y]
 }
 
-export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarChartProps) {
+function findNearestPoint(
+  clientX: number,
+  clientY: number,
+  dataPoints: Array<MinuteDataPoint & { x: number; y: number }>,
+  svgElement: SVGSVGElement
+): MinuteDataPoint | null {
+  if (dataPoints.length === 0) return null
+
+  // Convert client coordinates to SVG coordinates
+  const rect = svgElement.getBoundingClientRect()
+  const svgX = ((clientX - rect.left) / rect.width) * SIZE
+  const svgY = ((clientY - rect.top) / rect.height) * SIZE
+
+  // Find nearest data point
+  let nearest = dataPoints[0]
+  let minDist = Infinity
+
+  for (const point of dataPoints) {
+    const dist = Math.sqrt((point.x - svgX) ** 2 + (point.y - svgY) ** 2)
+    if (dist < minDist) {
+      minDist = dist
+      nearest = point
+    }
+  }
+
+  // Return only the original MinuteDataPoint properties
+  return {
+    minsAgo: nearest.minsAgo,
+    spd: nearest.spd,
+    dir: nearest.dir,
+  }
+}
+
+export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint, onHoverChange }: PolarChartProps) {
   // Get time scale configuration
   const timeScale = useMemo(() => {
     const scaleEntry = Object.entries(TIME_SCALES).find(
@@ -140,9 +175,30 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
     return segments
   }, [dataPoints])
 
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!onHoverChange) return
+
+    const svgElement = e.currentTarget
+    const nearest = findNearestPoint(e.clientX, e.clientY, dataPoints, svgElement)
+    onHoverChange(nearest)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!onHoverChange) return
+
+    const svgElement = e.currentTarget
+    const nearest = findNearestPoint(e.clientX, e.clientY, dataPoints, svgElement)
+    onHoverChange(nearest)
+  }
+
+  const handlePointerUp = () => {
+    if (!onHoverChange) return
+    onHoverChange(null)
+  }
+
   return (
     <div>
-      <svg viewBox="0 0 360 360">
+      <svg viewBox="0 0 360 360" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
         {/* Background gradients */}
         <defs>
           <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
@@ -324,6 +380,70 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
             />
           )
         })}
+
+        {/* Crosshairs when hovering */}
+        {hoverPoint && timeWindowMinutes > 0 && (() => {
+          // Calculate position of hover point
+          const r01 = 1 - (hoverPoint.minsAgo / timeWindowMinutes)
+          const [hx, hy] = polarToXY(hoverPoint.dir, r01, CENTER_X, CENTER_Y, R)
+          const hoverRadius = r01 * R
+
+          return (
+            <g>
+              {/* Radial line from center to hover point */}
+              <line
+                x1={CENTER_X}
+                y1={CENTER_Y}
+                x2={hx}
+                y2={hy}
+                stroke="rgba(0,68,204,0.6)"
+                strokeWidth={1.5}
+                strokeDasharray="4 2"
+              />
+              {/* Circular ring at hover radius */}
+              <circle
+                cx={CENTER_X}
+                cy={CENTER_Y}
+                r={Math.max(0, hoverRadius)}
+                fill="none"
+                stroke="rgba(0,68,204,0.6)"
+                strokeWidth={2}
+                strokeDasharray="4 2"
+              />
+            </g>
+          )
+        })()}
+
+        {/* Reference point highlighting (current point when not hovering) */}
+        {!hoverPoint && dataPoints.length > 0 && (() => {
+          // Find most recent data point (minsAgo = 0)
+          const referencePoint = dataPoints.find(p => p.minsAgo === 0)
+          if (!referencePoint) return null
+
+          const r01 = 1 - (referencePoint.minsAgo / timeWindowMinutes)
+          const [rx, ry] = polarToXY(referencePoint.dir, r01, CENTER_X, CENTER_Y, R)
+
+          return (
+            <g>
+              {/* Blue ring around reference point */}
+              <circle
+                cx={rx}
+                cy={ry}
+                r={6}
+                fill="none"
+                stroke="rgba(0,68,204,0.7)"
+                strokeWidth={2.5}
+              />
+              {/* Blue center dot */}
+              <circle
+                cx={rx}
+                cy={ry}
+                r={3}
+                fill="rgba(0,68,204,0.8)"
+              />
+            </g>
+          )
+        })()}
 
         {/* Center dot */}
         <circle cx={CENTER_X} cy={CENTER_Y} r={2.5} fill="rgba(0,0,0,0.5)" />

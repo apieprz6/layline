@@ -19,9 +19,29 @@ jest.mock('../ScaleControl', () => ({
 
 jest.mock('../PolarChart', () => ({
   __esModule: true,
-  default: ({ data, buoyId }: { data: unknown[]; buoyId: string }) => (
+  default: ({ data, buoyId, hoverPoint, onHoverChange }: {
+    data: unknown[]
+    buoyId: string
+    hoverPoint?: unknown
+    onHoverChange?: (point: unknown) => void
+  }) => (
     <div data-testid="polar-chart">
       PolarChart: {data.length} points, buoy: {buoyId}
+      {hoverPoint && <span data-testid="hover-active">Hovering</span>}
+      {onHoverChange && (
+        <button onClick={() => onHoverChange({ minsAgo: 10, spd: 12, dir: 180 })}>
+          Simulate Hover
+        </button>
+      )}
+    </div>
+  ),
+}))
+
+jest.mock('../WindReadout', () => ({
+  __esModule: true,
+  default: ({ point }: { point: { minsAgo: number; spd: number; dir: number } }) => (
+    <div data-testid="wind-readout">
+      WindReadout: {point.spd}kts at {point.dir}°, {point.minsAgo}m ago
     </div>
   ),
 }))
@@ -153,6 +173,44 @@ describe('StationDetailView', () => {
       await user.click(screen.getByRole('button', { name: '30m' }))
 
       expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
+    })
+  })
+
+  describe('hover state management', () => {
+    it('does not show WindReadout when no point is hovered', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      expect(screen.queryByTestId('wind-readout')).not.toBeInTheDocument()
+    })
+
+    it('shows WindReadout when a point is hovered', async () => {
+      const user = userEvent.setup()
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      await user.click(screen.getByRole('button', { name: 'Simulate Hover' }))
+
+      expect(screen.getByTestId('wind-readout')).toBeInTheDocument()
+      expect(screen.getByText(/12kts at 180°/)).toBeInTheDocument()
+    })
+
+    it('passes hoverPoint to PolarChart', async () => {
+      const user = userEvent.setup()
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      // Initially no hover
+      expect(screen.queryByTestId('hover-active')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Simulate Hover' }))
+
+      // After hover callback
+      expect(screen.getByTestId('hover-active')).toBeInTheDocument()
+    })
+
+    it('passes onHoverChange callback to PolarChart', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      // Check that callback is passed (button exists)
+      expect(screen.getByRole('button', { name: 'Simulate Hover' })).toBeInTheDocument()
     })
   })
 })
