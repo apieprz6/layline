@@ -2,7 +2,7 @@ import type { BuoyDataResult } from '@/types'
 import WindArrow from './WindArrow'
 import { getWindColorHex } from '@/lib/utils/wind'
 import { averageDirections } from '@/lib/utils/statistics'
-import { radius, spacing } from '@/lib/utils/design'
+import { spacing } from '@/lib/utils/design'
 
 interface SummaryBarProps {
   buoys: BuoyDataResult[]

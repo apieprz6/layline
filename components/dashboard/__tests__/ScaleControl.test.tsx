@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ScaleControl from '../ScaleControl'
-import type { TimeScale } from '@/lib/utils/windowing'
 
 describe('ScaleControl', () => {
   const mockOnScaleChange = jest.fn()

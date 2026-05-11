@@ -36,7 +36,7 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
   return [x, y]
 }
 
-export default function PolarChart({ data, buoyId, referenceTime }: PolarChartProps) {
+export default function PolarChart({ data, buoyId }: PolarChartProps) {
   // Calculate the time scale (oldest to newest)
   const oldestTime = useMemo(() => {
     if (data.length === 0) return 0

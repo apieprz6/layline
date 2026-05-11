@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import type { UserPreferences, Profile } from '@/types'
+import type { UserPreferences } from '@/types'
 
 /**
  * Default user preferences when no profile exists.
@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
     let preferences: unknown
     try {
       preferences = await request.json()
-    } catch (parseError) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid JSON payload' },
         { status: 400 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import type { BuoyHistoryData } from '@/types'
-import { computeWindStats } from '@/lib/utils/statistics'
 
 interface StationCardExpandedProps {
   buoyId: string

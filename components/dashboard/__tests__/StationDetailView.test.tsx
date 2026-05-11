@@ -6,7 +6,7 @@ import type { MinuteDataPoint } from '@/types'
 // Mock child components
 jest.mock('../ScaleControl', () => ({
   __esModule: true,
-  default: ({ activeScale, onScaleChange }: any) => (
+  default: ({ activeScale, onScaleChange }: { activeScale: string; onScaleChange: (scale: string) => void }) => (
     <div data-testid="scale-control">
       {['30m', '1h', '6h', '24h', '72h'].map(scale => (
         <button key={scale} onClick={() => onScaleChange(scale)}>
@@ -19,7 +19,7 @@ jest.mock('../ScaleControl', () => ({
 
 jest.mock('../PolarChart', () => ({
   __esModule: true,
-  default: ({ data, buoyId }: any) => (
+  default: ({ data, buoyId }: { data: unknown[]; buoyId: string }) => (
     <div data-testid="polar-chart">
       PolarChart: {data.length} points, buoy: {buoyId}
     </div>

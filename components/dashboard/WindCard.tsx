@@ -1,6 +1,5 @@
 'use client'
 
-import WindCompass from './WindCompass'
 import WindArrow from './WindArrow'
 import { getWindCondition } from '@/lib/utils/wind'
 import { spacing } from '@/lib/utils/design'
