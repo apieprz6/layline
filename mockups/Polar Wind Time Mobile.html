@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Layline — Polar wind × time (mobile)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --page-bg: #F0EDE6;
+    --page-bg-2: #E8E4DC;
+    --card-bg: #FFFFFF;
+    --card-el: #F5F2EC;
+    --border: rgba(0,0,0,0.12);
+    --border-strong: rgba(0,0,0,0.22);
+    --divider: rgba(0,0,0,0.08);
+    --text: #0A0A0A;
+    --text-2: #2C2C2C;
+    --muted: #666666;
+    --accent: #0044CC;
+    --accent-soft: rgba(0,68,204,0.10);
+    --w-light: #007A52;
+    --w-medium: #0055BB;
+    --w-heavy: #C47000;
+    --w-storm: #CC1100;
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100vh; }
+  body {
+    background: #E5E1D6;
+    background-image:
+      radial-gradient(circle at 30% 20%, #EEEAE0 0%, transparent 50%),
+      radial-gradient(circle at 70% 80%, #E2DDD0 0%, transparent 50%);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding: 40px 16px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+  }
+  #root { display: flex; justify-content: center; }
+
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .label-cap {
+    font-family: var(--font-body);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* phone surface (inside iOS frame the bg is var(--page-bg)) */
+  .phone-screen {
+    background: var(--page-bg);
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 24px;
+  }
+  .phone-screen::-webkit-scrollbar { width: 0; display: none; }
+
+  /* sticky top header */
+  .top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: rgba(240,237,230,0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--divider);
+    padding: 60px 16px 12px 16px;
+  }
+
+  /* card */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.05);
+  }
+
+  /* segmented scale */
+  .seg-mobile {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--card-el);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg-mobile button {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    padding: 7px 0;
+    cursor: pointer;
+    transition: all 150ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .seg-mobile button.active {
+    background: var(--card-bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+
+  .btn {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--card-el);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--text);
+    transition: all 150ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { transform: scale(0.96); background: #EEE9E0; }
+  .btn-accent {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+
+  /* mobile scrubber */
+  .scrubber-m {
+    position: relative;
+    height: 44px;
+    touch-action: none;
+    user-select: none;
+    cursor: pointer;
+  }
+  .scrubber-m-rail {
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    height: 8px;
+    background: var(--card-el);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .scrubber-m-rail-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, rgba(0,68,204,0.10), rgba(0,68,204,0.35));
+    border-radius: 999px;
+  }
+  .scrubber-m-handle {
+    position: absolute;
+    top: 50%;
+    width: 22px; height: 32px;
+    border-radius: 5px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--accent);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.20);
+    pointer-events: none;
+  }
+  .scrubber-m-handle::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 2px; height: 14px;
+    background: var(--accent);
+    transform: translate(-50%, -50%);
+    border-radius: 1px;
+  }
+  .scrubber-m-tick {
+    position: absolute;
+    top: 4px;
+    width: 1px;
+    height: 6px;
+    background: rgba(0,0,0,0.18);
+  }
+  .scrubber-m-label {
+    position: absolute;
+    bottom: 4px;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* tab switcher */
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--card-el);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .tabs button {
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    padding: 9px 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabs button.active {
+    background: var(--card-bg);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+
+  select.scale-select {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--card-el);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 32px 8px 12px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ── DATA ─────────────────────────────────────────────────────────
+const NOW_REAL = new Date('2026-05-13T19:42:00');
+const SAMPLE_INTERVAL_MIN = 5;
+const TOTAL_HOURS = 72;
+const N_POINTS = (TOTAL_HOURS * 60) / SAMPLE_INTERVAL_MIN;
+
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(2024);
+
+const SERIES = (() => {
+  const out = [];
+  let dir = 235, spd = 11;
+  for (let i = 0; i < N_POINTS; i++) {
+    const minutesAgo = (N_POINTS - 1 - i) * SAMPLE_INTERVAL_MIN;
+    const t = i / N_POINTS;
+    const sineDir = 235 + 20 * Math.sin(t * Math.PI * 2 * 2.5) + 10 * Math.sin(t * Math.PI * 2 * 7);
+    const veer = i > N_POINTS * 0.85 ? (i - N_POINTS * 0.85) / (N_POINTS * 0.15) * 25 : 0;
+    dir = sineDir + veer + (rng() - 0.5) * 14;
+    if (dir < 0) dir += 360; if (dir >= 360) dir -= 360;
+    const sineSpd = 11 + 5 * Math.sin(t * Math.PI * 2 * 2) + 2.5 * Math.sin(t * Math.PI * 2 * 11);
+    spd = Math.max(2, sineSpd + (rng() - 0.5) * 3);
+    const time = new Date(NOW_REAL.getTime() - minutesAgo * 60 * 1000);
+    out.push({ time, dir, spd, minutesAgo });
+  }
+  return out;
+})();
+
+const SCALES = [
+  { id: '30m', label: 'Last 30 min',   minutes: 30,   ticks: [0, 5, 10, 15, 20, 25, 30] },
+  { id: '1h',  label: 'Last hour',     minutes: 60,   ticks: [0, 15, 30, 45, 60] },
+  { id: '6h',  label: 'Last 6 hours',  minutes: 360,  ticks: [0, 60, 120, 180, 240, 300, 360] },
+  { id: '24h', label: 'Last 24 hours', minutes: 1440, ticks: [0, 240, 480, 720, 960, 1200, 1440] },
+  { id: '72h', label: 'Last 72 hours', minutes: 4320, ticks: [0, 720, 1440, 2160, 2880, 3600, 4320] },
+];
+
+function fmtOffset(absMin) {
+  if (absMin <= 0) return 'now';
+  if (absMin < 60) return `−${Math.round(absMin)}m`;
+  const h = absMin / 60;
+  if (Math.abs(h - Math.round(h)) < 0.01) return `−${Math.round(h)}h`;
+  return `−${h.toFixed(1)}h`;
+}
+function windColor(kts) {
+  if (kts <= 8)  return '#007A52';
+  if (kts <= 15) return '#0055BB';
+  if (kts <= 22) return '#C47000';
+  return '#CC1100';
+}
+function windBand(kts) {
+  if (kts <= 8)  return 'Light';
+  if (kts <= 15) return 'Medium';
+  if (kts <= 22) return 'Heavy';
+  return 'Storm';
+}
+function fmtHM(d) { return d.toTimeString().slice(0,5); }
+function fmtDM(d) {
+  const opts = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false };
+  return d.toLocaleDateString('en-US', opts);
+}
+function fmtAgo(min) {
+  if (min < 1) return 'now';
+  if (min < 60) return `${Math.round(min)} min ago`;
+  const h = min / 60;
+  if (h < 24) return `${h.toFixed(h < 10 ? 1 : 0)} h ago`;
+  return `${(h/24).toFixed(1)} d ago`;
+}
+function compass(deg) {
+  const pts = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return pts[Math.round(deg / 22.5) % 16];
+}
+function polarToXY(angleDeg, r0to1, cx, cy, R) {
+  const a = (angleDeg - 90) * Math.PI / 180;
+  return [cx + r0to1 * R * Math.cos(a), cy + r0to1 * R * Math.sin(a)];
+}
+function xyToPolar(x, y, cx, cy, R) {
+  const dx = x - cx, dy = y - cy;
+  const r = Math.sqrt(dx*dx + dy*dy);
+  let a = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+  if (a < 0) a += 360; if (a >= 360) a -= 360;
+  return { angle: a, r01: r / R };
+}
+
+// ── POLAR CHART (mobile-tuned) ──────────────────────────────────
+function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) {
+  // mobile: tighter padding, smaller labels, touch support
+  const SIZE = 360;
+  const PAD = 42;
+  const cx = SIZE / 2, cy = SIZE / 2;
+  const R = (SIZE - PAD * 2) / 2;
+  const svgRef = useRef(null);
+
+  const visible = useMemo(() => {
+    const startAgo = nowOffsetMin;
+    const endAgo = nowOffsetMin + scaleMin;
+    const pts = [];
+    for (const d of data) {
+      if (d.minutesAgo >= startAgo && d.minutesAgo <= endAgo) {
+        const r01 = 1 - (d.minutesAgo - startAgo) / scaleMin;
+        pts.push({ ...d, r01 });
+      }
+    }
+    return pts.sort((a, b) => a.minutesAgo - b.minutesAgo);
+  }, [data, scaleMin, nowOffsetMin]);
+
+  const scaleObj = useMemo(() => SCALES.find(s => s.minutes === scaleMin) || SCALES[2], [scaleMin]);
+
+  const segments = [];
+  for (let i = 0; i < visible.length - 1; i++) {
+    const a = visible[i], b = visible[i + 1];
+    const [x1, y1] = polarToXY(a.dir, a.r01, cx, cy, R);
+    const [x2, y2] = polarToXY(b.dir, b.r01, cx, cy, R);
+    const angDiff = Math.abs(((a.dir - b.dir + 540) % 360) - 180);
+    if (angDiff > 90) continue;
+    const midR = (a.r01 + b.r01) / 2;
+    const op = 0.08 + 0.92 * Math.pow(midR, 1.5);
+    const col = windColor((a.spd + b.spd) / 2);
+    segments.push({ x1, y1, x2, y2, op, col });
+  }
+
+  const angleTicks = [];
+  for (let a = 0; a < 360; a += 10) angleTicks.push(a);
+  const cardinalAngles = { 0:'N', 45:'NE', 90:'E', 135:'SE', 180:'S', 225:'SW', 270:'W', 315:'NW' };
+
+  const radialTicks = scaleObj.ticks.map(m => ({
+    minutes: m,
+    absMin: nowOffsetMin + m,
+    r01: 1 - m / scaleMin,
+    label: fmtOffset(nowOffsetMin + m),
+  })).filter(t => t.r01 >= -0.001 && t.r01 <= 1.001);
+
+  function pickFromXY(clientX, clientY) {
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = (clientX - rect.left) * (SIZE / rect.width);
+    const y = (clientY - rect.top) * (SIZE / rect.height);
+    const { angle, r01 } = xyToPolar(x, y, cx, cy, R);
+    if (r01 > 1.10) { onHoverPoint && onHoverPoint(null); return; }
+    let best = null, bestD = Infinity;
+    for (const p of visible) {
+      const angDist = Math.abs(((p.dir - angle + 540) % 360) - 180);
+      const rDist = Math.abs(p.r01 - r01);
+      const d = angDist / 30 + rDist * 4;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    if (best) onHoverPoint && onHoverPoint(best);
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    pickFromXY(e.clientX, e.clientY);
+    e.target.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e) {
+    if (e.buttons === 0 && e.pointerType === 'mouse') return;
+    pickFromXY(e.clientX, e.clientY);
+  }
+  function onPointerUp(e) {
+    onHoverPoint && onHoverPoint(null);
+  }
+
+  const now = visible[0];
+  const nowXY = now ? polarToXY(now.dir, now.r01, cx, cy, R) : null;
+
+  // resolve hover position
+  let hoverXY = null;
+  if (hoverPoint) {
+    const vp = visible.find(p => p.minutesAgo === hoverPoint.minutesAgo);
+    if (vp) hoverXY = polarToXY(vp.dir, vp.r01, cx, cy, R);
+  }
+
+  return (
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'none' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <defs>
+        <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#F0EDE6" stopOpacity="1" />
+          <stop offset="70%" stopColor="#EFEBE2" stopOpacity="1" />
+          <stop offset="100%" stopColor="#E8E2D2" stopOpacity="1" />
+        </radialGradient>
+        <radialGradient id="outerHalo" cx="50%" cy="50%" r="50%">
+          <stop offset="92%" stopColor="rgba(0,68,204,0)" />
+          <stop offset="100%" stopColor="rgba(0,68,204,0.12)" />
+        </radialGradient>
+      </defs>
+
+      <circle cx={cx} cy={cy} r={R + 6} fill="url(#bgWash)" />
+      <circle cx={cx} cy={cy} r={R + 6} fill="url(#outerHalo)" />
+
+      {angleTicks.map(a => {
+        const [x2, y2] = polarToXY(a, 1, cx, cy, R);
+        const isCardinal = a % 90 === 0;
+        const isIntercardinal = a % 45 === 0;
+        const isCoarse = a % 30 === 0;
+        const stroke = isCardinal ? 'rgba(0,0,0,0.32)' :
+                       isIntercardinal ? 'rgba(0,0,0,0.18)' :
+                       isCoarse ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.04)';
+        const w = isCardinal ? 1 : isCoarse ? 0.75 : 0.5;
+        if (!isCoarse) {
+          const [x1, y1] = polarToXY(a, 0.965, cx, cy, R);
+          return <line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={w} />;
+        }
+        return <line key={a} x1={cx} y1={cy} x2={x2} y2={y2} stroke={stroke} strokeWidth={w} />;
+      })}
+
+      {radialTicks.map(t => {
+        const isOuterRef = t.minutes === 0;
+        return (
+          <circle key={t.minutes} cx={cx} cy={cy}
+            r={Math.max(0, t.r01 * R)}
+            fill="none"
+            stroke={isOuterRef ? 'rgba(0,68,204,0.55)' : 'rgba(0,0,0,0.12)'}
+            strokeWidth={isOuterRef ? 1.5 : 0.75}
+            strokeDasharray={isOuterRef ? '0' : '2 4'}
+          />
+        );
+      })}
+
+      {/* Radial tick labels — on mobile: only outermost + 2-3 inner ones, smaller */}
+      {radialTicks.map((t, i) => {
+        // Filter: show outer ring, last ring (innermost), and ~2 mid rings
+        const n = radialTicks.length;
+        const showThis = i === 0 || i === n - 1 || i === Math.floor(n / 2) ||
+                         (n >= 5 && (i === Math.floor(n / 4) || i === Math.floor(3 * n / 4)));
+        if (!showThis) return null;
+        if (t.r01 < 0.06 && i !== n - 1) return null;
+        const [lx, ly] = polarToXY(0, t.r01, cx, cy, R);
+        const isOuterRef = t.minutes === 0;
+        const isLiveNow = t.absMin <= 0;
+        const accent = isLiveNow || isOuterRef;
+        const w = Math.max(24, 6.2 * t.label.length);
+        return (
+          <g key={t.minutes} transform={`translate(${lx + 5}, ${ly + 2})`}>
+            <rect x={-3} y={-8} width={w} height={11} rx={2}
+                  fill={accent ? 'rgba(0,68,204,0.10)' : 'rgba(240,237,230,0.95)'} />
+            <text x={0} y={0}
+                  fontFamily="JetBrains Mono"
+                  fontSize={8.5}
+                  fontWeight={accent ? 600 : 500}
+                  fill={accent ? '#0044CC' : '#666666'}>
+              {t.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {Object.entries(cardinalAngles).map(([a, lbl]) => {
+        const ang = Number(a);
+        const [lx, ly] = polarToXY(ang, 1.13, cx, cy, R);
+        const isCardinal = ang % 90 === 0;
+        return (
+          <text key={a} x={lx} y={ly}
+            textAnchor="middle" dominantBaseline="middle"
+            fontFamily={isCardinal ? 'Space Grotesk' : 'Inter'}
+            fontSize={isCardinal ? 13 : 9.5}
+            fontWeight={isCardinal ? 700 : 500}
+            letterSpacing={isCardinal ? '0.04em' : '0.08em'}
+            fill={isCardinal ? '#0A0A0A' : '#666666'}>
+            {lbl}
+          </text>
+        );
+      })}
+
+      {segments.map((s, i) => (
+        <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
+              stroke={s.col} strokeWidth={2.5} strokeOpacity={s.op}
+              strokeLinecap="round" />
+      ))}
+
+      {visible.map((p, i) => {
+        const step = Math.max(1, Math.floor(visible.length / 28));
+        if (i % step !== 0 && i !== 0) return null;
+        const [px, py] = polarToXY(p.dir, p.r01, cx, cy, R);
+        const op = 0.15 + 0.85 * Math.pow(p.r01, 1.2);
+        return <circle key={i} cx={px} cy={py} r={2.2} fill={windColor(p.spd)} opacity={op} />;
+      })}
+
+      {now && nowXY && (
+        <g>
+          <line x1={cx} y1={cy} x2={nowXY[0]} y2={nowXY[1]}
+                stroke="rgba(0,68,204,0.30)" strokeWidth={1} strokeDasharray="3 3" />
+          <circle cx={nowXY[0]} cy={nowXY[1]} r={9} fill="white" stroke="#0044CC" strokeWidth={2} />
+          <circle cx={nowXY[0]} cy={nowXY[1]} r={4} fill="#0044CC" />
+        </g>
+      )}
+
+      {hoverPoint && hoverXY && (
+        <g pointerEvents="none">
+          <line x1={cx} y1={cy}
+                x2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[0]}
+                y2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[1]}
+                stroke="rgba(0,0,0,0.42)" strokeWidth={1} strokeDasharray="2 3" />
+          <circle cx={cx} cy={cy}
+                  r={(1 - (hoverPoint.minutesAgo - nowOffsetMin) / scaleMin) * R}
+                  fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth={1} strokeDasharray="2 3" />
+          <circle cx={hoverXY[0]} cy={hoverXY[1]} r={7}
+                  fill="white" stroke={windColor(hoverPoint.spd)} strokeWidth={2.5} />
+        </g>
+      )}
+
+      <circle cx={cx} cy={cy} r={2.5} fill="rgba(0,0,0,0.5)" />
+      <text x={cx} y={cy + 14}
+            textAnchor="middle" fontFamily="JetBrains Mono"
+            fontSize={8.5} fill="rgba(0,0,0,0.4)">
+        {fmtOffset(nowOffsetMin + scaleObj.minutes)}
+      </text>
+    </svg>
+  );
+}
+
+// ── SCRUBBER ─────────────────────────────────────────────────────
+function Scrubber({ value, max, scaleMin, onChange }) {
+  const trackRef = useRef(null);
+  const TOTAL = TOTAL_HOURS * 60;
+  const handlePct = ((TOTAL - value) / TOTAL) * 100;
+  const bandWidthPct = (scaleMin / TOTAL) * 100;
+  const bandLeftPct = Math.max(0, handlePct - bandWidthPct);
+
+  function pickFromClientX(clientX) {
+    const rect = trackRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    let newValue = Math.round((1 - pct) * TOTAL);
+    newValue = Math.max(0, Math.min(max, newValue));
+    return newValue;
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    onChange(pickFromClientX(e.clientX));
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e) {
+    if (e.buttons === 0) return;
+    onChange(pickFromClientX(e.clientX));
+  }
+
+  const ticks = [];
+  for (let h = 0; h <= TOTAL_HOURS; h += 12) {
+    const pct = (1 - h * 60 / TOTAL) * 100;
+    ticks.push({ h, pct });
+  }
+
+  return (
+    <div>
+      <div ref={trackRef} className="scrubber-m"
+           onPointerDown={onPointerDown}
+           onPointerMove={onPointerMove}>
+        <div className="scrubber-m-rail">
+          <div className="scrubber-m-rail-fill"
+               style={{ left: `${bandLeftPct}%`, width: `${handlePct - bandLeftPct}%` }} />
+        </div>
+        {ticks.map(t => (
+          <div key={t.h} className="scrubber-m-tick" style={{ left: `${t.pct}%` }} />
+        ))}
+        <div className="scrubber-m-handle" style={{ left: `${handlePct}%` }} />
+      </div>
+      <div style={{ position: 'relative', height: 14, marginTop: 0 }}>
+        {ticks.map(t => (
+          <div key={t.h} className="scrubber-m-label" style={{ left: `${t.pct}%` }}>
+            {t.h === 0 ? 'now' : `−${t.h}h`}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── STATS / LEGEND / JUMP-TO ─────────────────────────────────────
+function WindowStats({ data, nowOffsetMin, scaleMin }) {
+  const stats = useMemo(() => {
+    const vis = data.filter(p => p.minutesAgo >= nowOffsetMin && p.minutesAgo <= nowOffsetMin + scaleMin);
+    if (vis.length === 0) return null;
+    let sx = 0, sy = 0, spdSum = 0, spdMin = Infinity, spdMax = -Infinity;
+    for (const p of vis) {
+      const a = p.dir * Math.PI / 180;
+      sx += Math.cos(a); sy += Math.sin(a);
+      spdSum += p.spd;
+      if (p.spd < spdMin) spdMin = p.spd;
+      if (p.spd > spdMax) spdMax = p.spd;
+    }
+    let meanDir = Math.atan2(sy / vis.length, sx / vis.length) * 180 / Math.PI;
+    if (meanDir < 0) meanDir += 360;
+    let dirs = vis.map(p => {
+      let d = p.dir - meanDir;
+      while (d > 180) d -= 360;
+      while (d < -180) d += 360;
+      return d;
+    });
+    const spread = Math.max(...dirs) - Math.min(...dirs);
+    return { meanDir, meanSpd: spdSum / vis.length, spdMin, spdMax, spread, n: vis.length };
+  }, [data, nowOffsetMin, scaleMin]);
+
+  if (!stats) return <div style={{ color: 'var(--muted)', fontSize: 12 }}>No data in window.</div>;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <Stat label="Mean dir"   big={`${Math.round(stats.meanDir)}°`} sub={compass(stats.meanDir)} />
+      <Stat label="Mean spd"   big={`${stats.meanSpd.toFixed(1)}`}   sub="kts" />
+      <Stat label="Range"      big={`${stats.spdMin.toFixed(0)}–${stats.spdMax.toFixed(0)}`} sub="kts" />
+      <Stat label="Veer/back"  big={`${stats.spread.toFixed(0)}°`}   sub="spread" />
+    </div>
+  );
+}
+function Stat({ label, big, sub }) {
+  return (
+    <div>
+      <div className="label-cap" style={{ marginBottom: 2 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span className="mono" style={{ fontSize: 19, fontWeight: 600 }}>{big}</span>
+        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{sub}</span>
+      </div>
+    </div>
+  );
+}
+function WindLegend() {
+  const bands = [
+    { c: '#007A52', lbl: 'Light',  rng: '0–8 kts' },
+    { c: '#0055BB', lbl: 'Medium', rng: '9–15' },
+    { c: '#C47000', lbl: 'Heavy',  rng: '16–22' },
+    { c: '#CC1100', lbl: 'Storm',  rng: '23+' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+      {bands.map(b => (
+        <div key={b.lbl} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 16, height: 3, background: b.c, borderRadius: 2, flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>{b.lbl}</span>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{b.rng}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── APP ─────────────────────────────────────────────────────────
+function MobileApp() {
+  const [scaleId, setScaleId] = useState('6h');
+  const scaleObj = useMemo(() => SCALES.find(s => s.id === scaleId), [scaleId]);
+  const scaleMin = scaleObj.minutes;
+  const [nowOffset, setNowOffset] = useState(0);
+  const [hoverPoint, setHoverPoint] = useState(null);
+  const [tab, setTab] = useState('stats');
+
+  const maxOffset = TOTAL_HOURS * 60 - scaleMin;
+  useEffect(() => {
+    if (nowOffset > maxOffset) setNowOffset(maxOffset);
+  }, [maxOffset]);
+
+  const referenceTime = new Date(NOW_REAL.getTime() - nowOffset * 60 * 1000);
+  const windowStart = new Date(NOW_REAL.getTime() - (nowOffset + scaleMin) * 60 * 1000);
+
+  const currentPoint = useMemo(() => {
+    let best = SERIES[0], bestD = Infinity;
+    for (const p of SERIES) {
+      const d = Math.abs(p.minutesAgo - nowOffset);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }, [nowOffset]);
+
+  const display = hoverPoint || currentPoint;
+  const isLive = nowOffset === 0;
+
+  return (
+    <div className="phone-screen">
+      {/* Sticky header */}
+      <div className="top-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 11, letterSpacing: '0.10em', color: 'var(--accent)' }}>
+            LAYLINE
+          </span>
+          <span style={{ color: 'var(--muted)', fontSize: 11 }}>/</span>
+          <span className="label-cap" style={{ fontSize: 9 }}>Wind history</span>
+          <span style={{ flex: 1 }} />
+          <span style={{
+            fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
+            padding: '3px 7px', borderRadius: 4,
+            background: isLive ? 'rgba(0,122,47,0.10)' : 'rgba(0,68,204,0.10)',
+            color: isLive ? '#007A2F' : '#0044CC',
+            border: `1px solid ${isLive ? 'rgba(0,122,47,0.35)' : 'rgba(0,68,204,0.35)'}`,
+            textTransform: 'uppercase',
+          }}>
+            {isLive ? '● Live' : fmtAgo(nowOffset)}
+          </span>
+        </div>
+        <h1 style={{ fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+          Wind direction × time
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <span className="mono" style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+            {fmtDM(referenceTime)}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>· outer ring</span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: '14px 16px 0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* Scale segmented control */}
+        <div className="seg-mobile">
+          {SCALES.map(s => (
+            <button key={s.id} className={s.id === scaleId ? 'active' : ''}
+                    onClick={() => setScaleId(s.id)}>{s.id}</button>
+          ))}
+        </div>
+
+        {/* Polar chart card */}
+        <div className="card" style={{ padding: 10, paddingBottom: 6 }}>
+          <PolarChart data={SERIES} scaleMin={scaleMin} nowOffsetMin={nowOffset}
+                      onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} />
+          <div style={{ display: 'flex', justifyContent: 'space-between',
+                        padding: '4px 6px 2px 6px',
+                        borderTop: '1px solid var(--divider)',
+                        marginTop: 4,
+                        paddingTop: 8 }}>
+            <span className="label-cap" style={{ fontSize: 9 }}>0° N · CW</span>
+            <span className="label-cap" style={{ fontSize: 9 }}>Outer = {fmtOffset(nowOffset)}</span>
+            <span className="label-cap" style={{ fontSize: 9 }}>{scaleObj.label}</span>
+          </div>
+        </div>
+
+        {/* Readout: current/at-cursor */}
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span className="label-cap">{hoverPoint ? 'At touch' : 'At reference'}</span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {fmtHM(display.time)} · {display.minutesAgo === 0 ? 'now' :
+                 (display.minutesAgo < 60 ? `−${display.minutesAgo}m` : `−${(display.minutesAgo/60).toFixed(1)}h`)}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 12 }}>
+            {/* Direction */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span className="mono" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                  {Math.round(display.dir)}°
+                </span>
+                <span style={{ fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: 600, color: 'var(--accent)' }}>
+                  {compass(display.dir)}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Direction (from)</div>
+            </div>
+            {/* Speed */}
+            <div style={{ borderLeft: '1px solid var(--divider)', paddingLeft: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span className="mono" style={{ fontSize: 28, fontWeight: 600, color: windColor(display.spd), lineHeight: 1 }}>
+                  {display.spd.toFixed(1)}
+                </span>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>kts</span>
+              </div>
+              <div style={{ fontSize: 11, color: windColor(display.spd), fontWeight: 500, marginTop: 4 }}>
+                {windBand(display.spd)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scrubber card */}
+        <div className="card" style={{ padding: '12px 14px 10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span className="label-cap">Time scrubber</span>
+            <button className="btn btn-accent" onClick={() => setNowOffset(0)} disabled={isLive}
+                    style={{ opacity: isLive ? 0.45 : 1, fontSize: 11, padding: '6px 10px' }}>
+              Return to live
+            </button>
+          </div>
+          <Scrubber value={nowOffset} max={maxOffset} scaleMin={scaleMin} onChange={setNowOffset} />
+          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+            {fmtDM(windowStart)} → {fmtDM(referenceTime)}
+          </div>
+        </div>
+
+        {/* Tabbed bottom: Stats / Jump / Legend */}
+        <div className="card" style={{ padding: 14 }}>
+          <div className="tabs" style={{ marginBottom: 14 }}>
+            <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>Stats</button>
+            <button className={tab === 'jump' ? 'active' : ''} onClick={() => setTab('jump')}>Jump to</button>
+            <button className={tab === 'legend' ? 'active' : ''} onClick={() => setTab('legend')}>Legend</button>
+          </div>
+
+          {tab === 'stats' && (
+            <WindowStats data={SERIES} nowOffsetMin={nowOffset} scaleMin={scaleMin} />
+          )}
+
+          {tab === 'jump' && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button className="btn" onClick={() => setNowOffset(0)}>Live</button>
+              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 30))}>30m ago</button>
+              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60))}>1h ago</button>
+              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 6))}>6h ago</button>
+              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 24))}>Yesterday</button>
+              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 48))}>2d ago</button>
+            </div>
+          )}
+
+          {tab === 'legend' && (
+            <div>
+              <WindLegend />
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--divider)',
+                            fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Outer ring = your reference time. Trail fades toward center (older). Drag on the chart
+                to read a specific point; drag the scrubber to set the reference time.
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 9.5, color: 'var(--muted)', textAlign: 'center', letterSpacing: '0.06em', padding: '4px 0' }}>
+          LAYLINE · DATA: NOAA + LAKE MICHIGAN BUOYS
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <IOSDevice width={402} height={874}>
+      <MobileApp />
+    </IOSDevice>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

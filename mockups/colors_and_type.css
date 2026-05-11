@@ -1,17 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-@import "tailwindcss";
-
 /* ============================================================
    LAYLINE DESIGN SYSTEM — Colors & Typography
    Solar High Contrast theme | Version 1.0
    ============================================================ */
 
-@layer base {
-  /* ============================================================
-     COLOR TOKENS — Base Palette
-     ============================================================ */
-  :root {
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ============================================================
+   COLOR TOKENS — Base Palette
+   ============================================================ */
+:root {
   /* Sand / warm neutral spectrum — page backgrounds */
   --sand-950: #1a1814;
   --sand-900: #2C2C2C;
@@ -40,27 +37,6 @@
   --wind-medium:   #0055BB;   /* 9–15 kts — blue */
   --wind-heavy:    #C47000;   /* 16–22 kts — amber */
   --wind-storm:    #CC1100;   /* 23+ kts — red */
-
-  /* Semantic — trend colors (wind analysis badges) */
-  --trend-building:       #007A52;   /* Speed increasing — green (reuses wind-light) */
-  --trend-building-bg:    rgba(0, 122, 82, 0.08);
-  --trend-building-border: rgba(0, 122, 82, 0.25);
-
-  --trend-easing:         #C47000;   /* Speed decreasing — amber (reuses wind-heavy) */
-  --trend-easing-bg:      rgba(196, 112, 0, 0.08);
-  --trend-easing-border:  rgba(196, 112, 0, 0.25);
-
-  --trend-steady:         #666666;   /* No significant change — gray */
-  --trend-steady-bg:      transparent;
-  --trend-steady-border:  transparent;
-
-  --trend-veering:        #0044CC;   /* Direction shifting clockwise — blue (reuses blue-500) */
-  --trend-veering-bg:     rgba(0, 68, 204, 0.07);
-  --trend-veering-border: rgba(0, 68, 204, 0.20);
-
-  --trend-backing:        #CC1100;   /* Direction shifting counter-clockwise — red (reuses wind-storm) */
-  --trend-backing-bg:     rgba(204, 17, 0, 0.07);
-  --trend-backing-border: rgba(204, 17, 0, 0.20);
 
   /* Semantic — UI states */
   --state-success: #007A2F;
@@ -207,38 +183,11 @@
 
   /* Focus ring */
   --focus-ring: 0 0 0 2px var(--blue-500);
-
-  /* Accent alias for convenience */
-  --accent: var(--blue-500);
-
-  /* Aliases for Tailwind */
-  --background: var(--page-bg);
-  --foreground: var(--page-fg);
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  html {
-    background: #F0EDE6;
-    color: #0A0A0A;
-  }
-
-  body {
-    background: #F0EDE6;
-    color: #0A0A0A;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    margin: 0;
-    padding: 0;
-  }
 }
 
-@layer components {
-  /* Typography utility classes */
+/* ============================================================
+   SEMANTIC TYPE CLASSES
+   ============================================================ */
 .h1, h1 {
   font-family: var(--font-display);
   font-size: var(--text-4xl);
@@ -326,10 +275,16 @@
   color: var(--blue-600);
 }
 
-.data-mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-accent);
+/* ============================================================
+   BASE RESET FOR LAYLINE CONTEXTS
+   ============================================================ */
+.layline-root {
+  background-color: var(--page-bg);
+  color: var(--page-fg);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
 }
 
 .layline-card {
@@ -340,9 +295,8 @@
   padding: var(--card-padding);
 }
 
-  .layline-divider {
-    border: none;
-    border-top: 1px solid var(--surface-divider);
-    margin: var(--space-4) 0;
-  }
+.layline-divider {
+  border: none;
+  border-top: 1px solid var(--surface-divider);
+  margin: var(--space-4) 0;
 }
