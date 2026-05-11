@@ -1,7 +1,7 @@
 import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
-import { getWindCondition } from '@/lib/utils/wind'
+import { getWindCondition, getWindColorHex } from '@/lib/utils/wind'
 import { radius, spacing } from '@/lib/utils/design'
 
 interface StationRowProps {
@@ -34,6 +34,7 @@ export default function StationRow({
 
   const statusColor = getStatusColor(status)
   const wc = getWindCondition(windSpeed)
+  const windColorHex = getWindColorHex(windSpeed)
 
   return (
     <div
@@ -88,7 +89,7 @@ export default function StationRow({
 
       {/* Wind arrow + speed + gust */}
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing(2), flexShrink: 0 }}>
-        <WindArrow deg={windDirection} kts={windSpeed} size={16} color={wc.color} />
+        <WindArrow deg={windDirection} kts={windSpeed} size={16} color={windColorHex} />
         <div style={{ textAlign: 'right' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
             <span
