@@ -9,13 +9,13 @@ import type { BuoyHistoryData } from '@/types'
 export const dynamic = 'force-dynamic'
 
 interface StationPageProps {
-  params: { buoyId: string }
+  params: Promise<{ buoyId: string }>
 }
 
 const VALID_BUOY_IDS = ['CHII2', '45198']
 
 export default async function StationPage({ params }: StationPageProps) {
-  const { buoyId } = params
+  const { buoyId } = await params
 
   // Validate buoyId against known stations
   if (!buoyId || !VALID_BUOY_IDS.includes(buoyId)) {

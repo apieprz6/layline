@@ -31,7 +31,9 @@ const COMPASS_LABELS = [
 
 function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radius: number): [number, number] {
   const rad = ((angleDeg - 90) * Math.PI) / 180
-  return [cx + r0to1 * radius * Math.cos(rad), cy + r0to1 * radius * Math.sin(rad)]
+  const x = Math.round((cx + r0to1 * radius * Math.cos(rad)) * 1e6) / 1e6
+  const y = Math.round((cy + r0to1 * radius * Math.sin(rad)) * 1e6) / 1e6
+  return [x, y]
 }
 
 export default function PolarChart({ data, buoyId, referenceTime }: PolarChartProps) {
@@ -51,7 +53,7 @@ export default function PolarChart({ data, buoyId, referenceTime }: PolarChartPr
         const r01 = 1 - (point.minsAgo / oldestTime)
         const [x, y] = polarToXY(point.dir, r01, CENTER_X, CENTER_Y, R)
         const color = getWindColorHex(point.spd)
-        const opacity = 0.15 + 0.85 * Math.pow(r01, 1.2)
+        const opacity = Math.round((0.15 + 0.85 * Math.pow(r01, 1.2)) * 1e6) / 1e6
 
         return { ...point, x, y, r01, color, opacity }
       })
@@ -81,7 +83,7 @@ export default function PolarChart({ data, buoyId, referenceTime }: PolarChartPr
 
       // Calculate midpoint radius for opacity
       const midR = (a.r01 + b.r01) / 2
-      const opacity = 0.08 + 0.92 * Math.pow(midR, 1.5)
+      const opacity = Math.round((0.08 + 0.92 * Math.pow(midR, 1.5)) * 1e6) / 1e6
 
       // Use average speed for color
       const avgSpeed = (a.spd + b.spd) / 2
