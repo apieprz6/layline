@@ -1,55 +1,14 @@
 import type { BuoyDataResult } from '@/types'
-import WindArrow from './WindArrow'
+import StationRow from './StationRow'
 import StationCardExpanded from './StationCardExpanded'
+import { getWindCondition } from '@/lib/utils/wind'
+import { getStationInfo, getStatusColor, getStatusLabel } from '@/lib/config/stations'
+import { radius, spacing } from '@/lib/utils/design'
 
 interface StationCardProps {
   buoyResult: BuoyDataResult
   isExpanded: boolean
   onToggleExpand: () => void
-}
-
-// Station location info per CONTEXT.md
-const STATION_INFO = {
-  CHII2: {
-    name: 'Harrison Dever Crib',
-    location: '2.2mi offshore · 85ft elevation',
-  },
-  '45198': {
-    name: 'Purdue Buoy',
-    location: '2.8mi offshore · surface',
-  },
-}
-
-// Status dot color based on DataSourceStatus
-function getStatusColor(status: BuoyDataResult['status']): string {
-  switch (status) {
-    case 'online':
-      return 'var(--state-success)' // green
-    case 'recent':
-      return 'var(--state-warning)' // amber
-    case 'stale':
-    case 'offline':
-    case 'error':
-    default:
-      return 'var(--state-neutral)' // gray
-  }
-}
-
-function getStatusLabel(status: BuoyDataResult['status']): string {
-  switch (status) {
-    case 'online':
-      return 'Online'
-    case 'recent':
-      return 'Recent'
-    case 'stale':
-      return 'Stale'
-    case 'offline':
-      return 'Offline'
-    case 'error':
-      return 'Error'
-    default:
-      return 'Unknown'
-  }
 }
 
 export default function StationCard({ buoyResult, isExpanded, onToggleExpand }: StationCardProps) {
@@ -60,22 +19,14 @@ export default function StationCard({ buoyResult, isExpanded, onToggleExpand }: 
     return null
   }
 
-  const stationInfo = STATION_INFO[data.buoyId as keyof typeof STATION_INFO]
+  const stationInfo = getStationInfo(data.buoyId)
   if (!stationInfo) {
     return null
   }
 
   const statusColor = getStatusColor(status)
   const statusLabel = getStatusLabel(status)
-
-  const windCondition = (kts: number) => {
-    if (kts <= 8) return '#007A52' // light
-    if (kts <= 15) return '#0055BB' // medium
-    if (kts <= 22) return '#C47000' // heavy
-    return '#CC1100' // storm
-  }
-
-  const speedColor = windCondition(data.windSpeed)
+  const wc = getWindCondition(data.windSpeed)
 
   // Format timestamp
   const timestamp = new Date(data.timestamp).toLocaleTimeString('en-US', {
@@ -85,118 +36,31 @@ export default function StationCard({ buoyResult, isExpanded, onToggleExpand }: 
 
   return (
     <div
-      className="layline-card"
       style={{
+        borderRadius: radius('md'),
+        border: `1px solid ${isExpanded ? wc.border : 'var(--card-border)'}`,
+        background: 'var(--card-bg)',
+        overflow: 'hidden',
+        transition: 'border-color 200ms',
         cursor: 'pointer',
-        transition: 'all 150ms',
       }}
-      onClick={onToggleExpand}
     >
       {/* Collapsed Header */}
-      <div
-        style={{
-          padding: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-        }}
-      >
-        {/* Status dot */}
-        <div
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: statusColor,
-            boxShadow: `0 0 6px ${statusColor}88`,
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Station name + location */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontWeight: 'var(--weight-semibold)',
-              fontSize: '14px',
-              color: 'var(--text-primary)',
-              marginBottom: '2px',
-            }}
-          >
-            {stationInfo.name}
-          </div>
-          <div
-            style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '10px',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {stationInfo.location}
-          </div>
-        </div>
-
-        {/* Wind arrow + speed + gust */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <WindArrow deg={data.windDirection} kts={data.windSpeed} size={18} color={speedColor} />
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
-              <span
-                className="data-mono"
-                style={{
-                  fontSize: '18px',
-                  color: speedColor,
-                  fontWeight: 'var(--weight-bold)',
-                }}
-              >
-                {Math.round(data.windSpeed)}
-              </span>
-              <span
-                className="data-mono"
-                style={{
-                  fontSize: '10px',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                kts
-              </span>
-            </div>
-            {data.windGust && (
-              <div
-                className="data-mono"
-                style={{
-                  fontSize: '9px',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                g{Math.round(data.windGust)}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Expand/collapse icon */}
-        <div
-          style={{
-            flexShrink: 0,
-            color: 'var(--text-muted)',
-            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 200ms',
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </div>
-      </div>
+      <StationRow
+        buoyId={data.buoyId}
+        windSpeed={data.windSpeed}
+        windDirection={data.windDirection}
+        windGust={data.windGust}
+        status={status}
+        onClick={onToggleExpand}
+      />
 
       {/* Expanded Content */}
       {isExpanded && (
         <div
           style={{
             borderTop: '1px solid var(--surface-border)',
-            padding: '14px',
+            padding: spacing(4),
           }}
         >
           {/* Status and timestamp row */}
@@ -205,14 +69,14 @@ export default function StationCard({ buoyResult, isExpanded, onToggleExpand }: 
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '12px',
+              marginBottom: spacing(3),
             }}
           >
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: spacing(2),
               }}
             >
               <div
@@ -245,21 +109,21 @@ export default function StationCard({ buoyResult, isExpanded, onToggleExpand }: 
           {data.buoyId === 'CHII2' && (
             <div
               style={{
-                marginTop: '12px',
-                padding: '8px 10px',
+                marginTop: spacing(3),
+                padding: `${spacing(2)} 10px`,
                 background: 'rgba(196, 112, 0, 0.1)',
                 border: '1px solid rgba(196, 112, 0, 0.3)',
-                borderRadius: '6px',
+                borderRadius: radius('sm'),
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: spacing(2),
               }}
             >
               <span style={{ fontSize: '12px' }}>⚠️</span>
               <div
                 style={{
                   fontSize: '10px',
-                  color: '#C47000',
+                  color: 'var(--wind-heavy)',
                   fontFamily: 'var(--font-body)',
                 }}
               >

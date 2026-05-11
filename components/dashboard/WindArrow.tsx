@@ -1,5 +1,7 @@
 'use client'
 
+import { getWindColorHex } from '@/lib/utils/wind'
+
 interface WindArrowProps {
   deg: number
   kts: number
@@ -8,14 +10,7 @@ interface WindArrowProps {
 }
 
 export default function WindArrow({ deg, kts, size = 32, color }: WindArrowProps) {
-  const windColor = (kts: number): string => {
-    if (kts <= 8) return '#007A52'
-    if (kts <= 15) return '#0055BB'
-    if (kts <= 22) return '#C47000'
-    return '#CC1100'
-  }
-
-  const c = color || windColor(kts)
+  const c = color || getWindColorHex(kts)
 
   return (
     <svg width={size} height={size} viewBox="-14 -14 28 28">

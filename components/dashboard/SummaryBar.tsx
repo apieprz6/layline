@@ -1,38 +1,11 @@
 import type { BuoyDataResult } from '@/types'
 import WindArrow from './WindArrow'
+import { getWindColorHex } from '@/lib/utils/wind'
+import { averageDirections } from '@/lib/utils/statistics'
+import { radius, spacing } from '@/lib/utils/design'
 
 interface SummaryBarProps {
   buoys: BuoyDataResult[]
-}
-
-// Calculate consensus direction from multiple angles
-// Handles wraparound (e.g., average of 350° and 10° should be 0°, not 180°)
-function averageDirections(directions: number[]): number {
-  if (directions.length === 0) return 0
-
-  // Convert to radians and calculate mean of sin/cos components
-  let sumSin = 0
-  let sumCos = 0
-
-  directions.forEach((deg) => {
-    const rad = (deg * Math.PI) / 180
-    sumSin += Math.sin(rad)
-    sumCos += Math.cos(rad)
-  })
-
-  const avgSin = sumSin / directions.length
-  const avgCos = sumCos / directions.length
-
-  // Convert back to degrees
-  let avgRad = Math.atan2(avgSin, avgCos)
-  let avgDeg = (avgRad * 180) / Math.PI
-
-  // Normalize to 0-360
-  if (avgDeg < 0) {
-    avgDeg += 360
-  }
-
-  return Math.round(avgDeg)
 }
 
 export default function SummaryBar({ buoys }: SummaryBarProps) {
@@ -70,29 +43,21 @@ export default function SummaryBar({ buoys }: SummaryBarProps) {
     minute: '2-digit',
   })
 
-  // Wind condition color
-  const windCondition = (kts: number) => {
-    if (kts <= 8) return '#007A52' // light
-    if (kts <= 15) return '#0055BB' // medium
-    if (kts <= 22) return '#C47000' // heavy
-    return '#CC1100' // storm
-  }
-
-  const speedColor = windCondition(avgWindSpeed)
+  const speedColor = getWindColorHex(avgWindSpeed)
   const statusColor = hasOnlineStations ? 'var(--state-success)' : 'var(--state-neutral)'
 
   return (
     <div
       className="layline-card"
       style={{
-        padding: '14px',
+        padding: spacing(4),
       }}
     >
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: spacing(3),
         }}
       >
         {/* Status dot */}
@@ -102,7 +67,7 @@ export default function SummaryBar({ buoys }: SummaryBarProps) {
             height: '9px',
             borderRadius: '50%',
             background: statusColor,
-            boxShadow: `0 0 8px ${statusColor}`,
+            filter: `drop-shadow(0 0 8px ${statusColor})`,
             flexShrink: 0,
           }}
         />

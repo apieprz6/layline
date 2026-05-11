@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import type { BuoyDataResult } from '@/types'
 import SummaryBar from './SummaryBar'
 import StationCard from './StationCard'
+import { spacing } from '@/lib/utils/design'
 
 interface WindDataContentProps {
   buoys: BuoyDataResult[]
@@ -16,7 +17,7 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
   const [expandedStationId, setExpandedStationId] = useState<string | null>(null)
 
   // Determine default expanded station on mount
-  useMemo(() => {
+  useEffect(() => {
     const purdue = buoys.find((b) => b.data?.buoyId === '45198')
     const chii2 = buoys.find((b) => b.data?.buoyId === 'CHII2')
 
@@ -43,16 +44,16 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
         style={{
           background: 'var(--surface-raised)',
           borderBottom: '1px solid var(--surface-border)',
-          padding: '16px',
+          padding: `${spacing(4)} ${spacing(4)} 0`,
         }}
       >
         <h1
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: '24px',
+            fontSize: '16px',
             fontWeight: 'var(--weight-bold)',
             color: 'var(--text-primary)',
-            marginBottom: '14px',
+            marginBottom: spacing(3),
           }}
         >
           Wind Data
@@ -62,25 +63,24 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
         <div
           style={{
             display: 'flex',
-            gap: '8px',
-            background: 'var(--surface-sunken)',
-            padding: '4px',
-            borderRadius: '8px',
+            gap: 0,
           }}
         >
           <button
             onClick={() => setActiveTab('live')}
             style={{
               flex: 1,
-              padding: '8px 12px',
-              fontSize: '13px',
-              fontWeight: 'var(--weight-semibold)',
-              color: activeTab === 'live' ? 'var(--text-primary)' : 'var(--text-muted)',
-              background: activeTab === 'live' ? 'var(--card-bg)' : 'transparent',
-              border: activeTab === 'live' ? '1px solid var(--surface-border)' : 'none',
-              borderRadius: '6px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'live' ? '2px solid var(--accent)' : '2px solid transparent',
+              padding: '7px 0',
               cursor: 'pointer',
+              fontFamily: 'var(--font-body)',
+              fontSize: '11px',
+              fontWeight: activeTab === 'live' ? 'var(--weight-semibold)' : 'var(--weight-normal)',
+              color: activeTab === 'live' ? 'var(--accent)' : 'var(--text-muted)',
               transition: 'all 150ms',
+              letterSpacing: '0.01em',
             }}
           >
             Live & Historical
@@ -89,15 +89,17 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
             onClick={() => setActiveTab('forecast')}
             style={{
               flex: 1,
-              padding: '8px 12px',
-              fontSize: '13px',
-              fontWeight: 'var(--weight-semibold)',
-              color: activeTab === 'forecast' ? 'var(--text-primary)' : 'var(--text-muted)',
-              background: activeTab === 'forecast' ? 'var(--card-bg)' : 'transparent',
-              border: activeTab === 'forecast' ? '1px solid var(--surface-border)' : 'none',
-              borderRadius: '6px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'forecast' ? '2px solid var(--accent)' : '2px solid transparent',
+              padding: '7px 0',
               cursor: 'pointer',
+              fontFamily: 'var(--font-body)',
+              fontSize: '11px',
+              fontWeight: activeTab === 'forecast' ? 'var(--weight-semibold)' : 'var(--weight-normal)',
+              color: activeTab === 'forecast' ? 'var(--accent)' : 'var(--text-muted)',
               transition: 'all 150ms',
+              letterSpacing: '0.01em',
             }}
           >
             Model Forecast
@@ -106,14 +108,14 @@ export default function WindDataContent({ buoys }: WindDataContentProps) {
       </div>
 
       {/* Content */}
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: spacing(4) }}>
         {activeTab === 'live' ? (
           <>
             {/* Summary Bar */}
             <SummaryBar buoys={buoys} />
 
             {/* Station Cards */}
-            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ marginTop: spacing(4), display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
               {buoys.map((buoy) => {
                 if (!buoy.data) return null
                 const buoyId = buoy.data.buoyId

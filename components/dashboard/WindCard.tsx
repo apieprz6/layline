@@ -2,6 +2,8 @@
 
 import WindCompass from './WindCompass'
 import WindArrow from './WindArrow'
+import { getWindCondition } from '@/lib/utils/wind'
+import { spacing } from '@/lib/utils/design'
 
 interface WindCardProps {
   current: {
@@ -16,18 +18,11 @@ interface WindCardProps {
 }
 
 export default function WindCard({ current, forecast }: WindCardProps) {
-  const windCondition = (kts: number) => {
-    if (kts <= 8) return { label: 'Light', color: '#007A52' }
-    if (kts <= 15) return { label: 'Medium', color: '#0055BB' }
-    if (kts <= 22) return { label: 'Heavy', color: '#C47000' }
-    return { label: 'Storm', color: '#CC1100' }
-  }
-
-  const condition = windCondition(current.speed)
+  const condition = getWindCondition(current.speed)
 
   return (
     <div className="layline-card">
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between" style={{ marginBottom: spacing(4) }}>
         <div>
           <div className="label" style={{ color: 'var(--text-muted)' }}>Current wind</div>
           <div className="flex items-baseline gap-2 mt-2">
