@@ -579,19 +579,20 @@ function aggregateToHourly(
 }
 
 /**
- * Filter to 10-minute intervals for last 2 hours
- * Returns ~12 data points
+ * Filter to 10-minute intervals for specified hours back
+ * Returns ~6 data points per hour (e.g., ~12 points for 2h, ~432 points for 72h)
  */
 function filterToTenMinuteIntervals(
-  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>
+  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>,
+  hoursBack: number = 2
 ): MinuteDataPoint[] {
   if (dataPoints.length === 0) return []
 
   const now = new Date()
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+  const cutoffTime = new Date(now.getTime() - hoursBack * 60 * 60 * 1000)
 
-  // Filter to last 2 hours
-  const recentPoints = dataPoints.filter((p) => p.timestamp >= twoHoursAgo)
+  // Filter to specified time range
+  const recentPoints = dataPoints.filter((p) => p.timestamp >= cutoffTime)
 
   // Group by 10-minute buckets
   const tenMinBuckets = new Map<
@@ -603,7 +604,7 @@ function filterToTenMinuteIntervals(
     const minutesAgo = Math.floor((now.getTime() - point.timestamp.getTime()) / (60 * 1000))
     const bucketKey = Math.floor(minutesAgo / 10) * 10 // Round down to nearest 10
 
-    if (bucketKey > 120) return // Only last 2 hours
+    if (bucketKey > hoursBack * 60) return // Only specified time range
 
     if (!tenMinBuckets.has(bucketKey)) {
       tenMinBuckets.set(bucketKey, [])
@@ -689,13 +690,15 @@ async function fetchBuoyHistory(
     }
 
     const hourlyHistory = aggregateToHourly(dataPoints)
-    const minuteHistory = filterToTenMinuteIntervals(dataPoints)
+    const minuteHistory = filterToTenMinuteIntervals(dataPoints, 2)
+    const extendedHistory = filterToTenMinuteIntervals(dataPoints, 72)
 
     const historyData: BuoyHistoryData = {
       buoyId: config.stationId,
       name: config.name,
       hourlyHistory,
       minuteHistory,
+      extendedHistory,
       status: 'online',
       fetchedAt: new Date(now).toISOString(),
     }
@@ -711,6 +714,7 @@ async function fetchBuoyHistory(
       name: BUOY_CONFIGS[stationId].name,
       hourlyHistory: null,
       minuteHistory: null,
+      extendedHistory: null,
       status: 'error',
       fetchedAt: new Date(now).toISOString(),
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -732,4 +736,11 @@ export async function fetchCHII2History(): Promise<BuoyHistoryData> {
  */
 export async function fetchPurdueBuoyHistory(): Promise<BuoyHistoryData> {
   return fetchBuoyHistory('45198')
+}
+
+/**
+ * Clear history cache for testing
+ */
+export function clearHistoryCache(): void {
+  historyCache.clear()
 }
