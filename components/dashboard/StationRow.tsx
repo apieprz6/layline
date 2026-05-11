@@ -5,7 +5,7 @@ import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
 import { getWindCondition, getWindColorHex } from '@/lib/utils/wind'
-import { radius, spacing } from '@/lib/utils/design'
+import { spacing } from '@/lib/utils/design'
 
 interface StationRowProps {
   buoyId: string

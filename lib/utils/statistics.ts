@@ -97,7 +97,7 @@ export function averageDirections(directions: number[]): number {
   const avgCos = sumCos / directions.length
 
   // Convert back to degrees
-  let avgRad = Math.atan2(avgSin, avgCos)
+  const avgRad = Math.atan2(avgSin, avgCos)
   let avgDeg = (avgRad * 180) / Math.PI
 
   // Normalize to 0-360

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { fetchCHII2History, fetchPurdueBuoyHistory } from '@/services/buoys/ndbc'
 import { getStationInfo } from '@/lib/config/stations'
 import StationHeader from '@/components/dashboard/StationHeader'
-import PolarChart from '@/components/dashboard/PolarChart'
+import StationDetailView from '@/components/dashboard/StationDetailView'
 import type { BuoyHistoryData } from '@/types'
 
 // Force dynamic rendering for fresh data on every request
@@ -60,29 +60,9 @@ export default async function StationPage({ params }: StationPageProps) {
           <p>Fetched at: {new Date(historyData.fetchedAt).toLocaleString()}</p>
         </div>
 
-        {/* Polar chart visualization */}
+        {/* Polar chart visualization with time scale control */}
         {historyData.extendedHistory && historyData.extendedHistory.length > 0 && (
-          <div
-            style={{
-              background: 'var(--card-bg)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              padding: '16px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.05)',
-            }}
-          >
-            <h2
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '18px',
-                fontWeight: '600',
-                marginBottom: '12px',
-              }}
-            >
-              Wind Direction × Time
-            </h2>
-            <PolarChart data={historyData.extendedHistory} buoyId={buoyId} />
-          </div>
+          <StationDetailView data={historyData.extendedHistory} buoyId={buoyId} />
         )}
       </div>
     </div>

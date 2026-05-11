@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import type { BuoyDataResult } from '@/types'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
 /**
