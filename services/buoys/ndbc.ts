@@ -441,8 +441,7 @@ export function getCacheStatus(): Record<
  * Returns array of data points from most recent to oldest
  */
 function parseNDBCHistoricalRows(
-  text: string,
-  stationId: string
+  text: string
 ): Array<{ timestamp: Date; windSpeed: number; windDirection: number }> {
   const lines = text.trim().split('\n')
 
@@ -683,7 +682,7 @@ async function fetchBuoyHistory(
     }
 
     const text = await response.text()
-    const dataPoints = parseNDBCHistoricalRows(text, config.stationId)
+    const dataPoints = parseNDBCHistoricalRows(text)
 
     if (dataPoints.length === 0) {
       throw new Error('No historical data available')

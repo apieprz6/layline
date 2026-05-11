@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import type { BuoyHistoryData } from '@/types'
 import { fetchCHII2History, fetchPurdueBuoyHistory } from '@/services/buoys/ndbc'
 
 /**

@@ -29,11 +29,17 @@ export default async function DashboardPage() {
   const buoyData = [chii2Result, purdueResult]
 
   // Mock race time - Wednesday 7:00 PM
-  const raceTime = new Date()
-  raceTime.setHours(19, 0, 0, 0)
-  if (raceTime.getTime() < Date.now()) {
-    raceTime.setDate(raceTime.getDate() + 7)
+  function getNextRaceTime(): Date {
+    // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
+    const now = Date.now()
+    const raceTime = new Date()
+    raceTime.setHours(19, 0, 0, 0)
+    if (raceTime.getTime() < now) {
+      raceTime.setDate(raceTime.getDate() + 7)
+    }
+    return raceTime
   }
+  const raceTime = getNextRaceTime()
 
   // Mock data - in production, this would come from your API
   const currentWind = {
