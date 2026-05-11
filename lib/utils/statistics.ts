@@ -10,12 +10,15 @@ export interface WindStats {
   speedTrend: {
     type: 'building' | 'easing' | 'steady'
     delta: number // Absolute change in knots
+    signedDelta: number // Signed change (+ = building, - = easing)
   }
   directionTrend: {
     type: 'veering' | 'backing' | 'steady'
     delta: number // Absolute change in degrees
+    signedDelta: number // Signed change (+ = veering, - = backing)
   }
   oscillation: number // ±X° range (half of std dev)
+  oscillationRange: number // Full oscillation range in degrees
   gustFactor: number // Percentage difference between gust and average
   gustFactorLabel: 'Puffy' | 'Moderate' | 'Smooth'
   variability: number // Speed standard deviation
@@ -165,12 +168,15 @@ export function computeWindStats(
     speedTrend: {
       type: speedTrendType,
       delta: Math.abs(speedDelta),
+      signedDelta: speedDelta,
     },
     directionTrend: {
       type: dirTrendType,
       delta: Math.abs(dirDelta),
+      signedDelta: dirDelta,
     },
     oscillation,
+    oscillationRange: dirStdDev, // Full range for display
     gustFactor,
     gustFactorLabel,
     variability: speedStdDev,
