@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { MinuteDataPoint } from '@/types'
 import { getWindColorHex } from '@/lib/utils/wind'
-import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
+import { TIME_SCALES } from '@/lib/utils/windowing'
 import { formatTimeOffset } from '@/lib/utils/time'
 
 interface PolarChartProps {
@@ -43,7 +43,7 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
   // Get time scale configuration
   const timeScale = useMemo(() => {
     const scaleEntry = Object.entries(TIME_SCALES).find(
-      ([_, config]) => config.minutes === timeWindowMinutes
+      ([, config]) => config.minutes === timeWindowMinutes
     )
     return scaleEntry ? scaleEntry[1] : null
   }, [timeWindowMinutes])
@@ -208,7 +208,7 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
         })}
 
         {/* Radial time rings at tick intervals */}
-        {radialRings.map((ring, i) => (
+        {radialRings.map((ring) => (
           <circle
             key={`ring-${ring.minutes}`}
             cx={CENTER_X}

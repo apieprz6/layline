@@ -35,7 +35,7 @@ describe('TIME_SCALES configuration', () => {
   })
 
   it('has ticks that start at 0 and end at minutes value', () => {
-    Object.entries(TIME_SCALES).forEach(([scaleId, config]) => {
+    Object.entries(TIME_SCALES).forEach(([, config]) => {
       expect(config.ticks[0]).toBe(0)
       expect(config.ticks[config.ticks.length - 1]).toBe(config.minutes)
     })
