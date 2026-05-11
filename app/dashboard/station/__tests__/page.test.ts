@@ -23,7 +23,7 @@ describe('Station Detail Page - Route Validation', () => {
     const StationPage = (await import('../[buoyId]/page')).default
 
     // Call with invalid buoyId - expect it to throw
-    await expect(StationPage({ params: { buoyId: 'INVALID' } })).rejects.toThrow('NEXT_NOT_FOUND')
+    await expect(StationPage({ params: Promise.resolve({ buoyId: 'INVALID' }) })).rejects.toThrow('NEXT_NOT_FOUND')
 
     // Verify notFound() was called
     expect(notFound).toHaveBeenCalled()
@@ -32,7 +32,7 @@ describe('Station Detail Page - Route Validation', () => {
   it('returns 404 for empty buoyId', async () => {
     const StationPage = (await import('../[buoyId]/page')).default
 
-    await expect(StationPage({ params: { buoyId: '' } })).rejects.toThrow('NEXT_NOT_FOUND')
+    await expect(StationPage({ params: Promise.resolve({ buoyId: '' }) })).rejects.toThrow('NEXT_NOT_FOUND')
 
     expect(notFound).toHaveBeenCalled()
   })
@@ -63,7 +63,7 @@ describe('Station Detail Page - Data Fetching', () => {
     ;(fetchCHII2History as jest.Mock).mockResolvedValue(mockHistoryData)
 
     const StationPage = (await import('../[buoyId]/page')).default
-    await StationPage({ params: { buoyId: 'CHII2' } })
+    await StationPage({ params: Promise.resolve({ buoyId: 'CHII2' }) })
 
     expect(fetchCHII2History).toHaveBeenCalled()
   })
@@ -86,7 +86,7 @@ describe('Station Detail Page - Data Fetching', () => {
     ;(fetchPurdueBuoyHistory as jest.Mock).mockResolvedValue(mockHistoryData)
 
     const StationPage = (await import('../[buoyId]/page')).default
-    await StationPage({ params: { buoyId: '45198' } })
+    await StationPage({ params: Promise.resolve({ buoyId: '45198' }) })
 
     expect(fetchPurdueBuoyHistory).toHaveBeenCalled()
   })
