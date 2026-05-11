@@ -172,6 +172,7 @@ export interface BuoyHistoryData {
   name: string
   hourlyHistory: HourlyDataPoint[] | null // 6 hourly points, null if unavailable
   minuteHistory: MinuteDataPoint[] | null // ~12 10-min points (last 2h), null if unavailable
+  extendedHistory: MinuteDataPoint[] | null // ~432 10-min points (last 72h), null if unavailable
   status: DataSourceStatus
   fetchedAt: string
   error?: string
