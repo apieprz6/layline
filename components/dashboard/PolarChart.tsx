@@ -5,12 +5,15 @@ import type { MinuteDataPoint } from '@/types'
 import { getWindColorHex } from '@/lib/utils/wind'
 import { TIME_SCALES } from '@/lib/utils/windowing'
 import { formatTimeOffset } from '@/lib/utils/time'
+import { findPointByRadius } from '@/lib/utils/radialSelection'
 
 interface PolarChartProps {
   data: MinuteDataPoint[]
   buoyId: string
   timeWindowMinutes: number
   referenceTime?: Date
+  hoverPoint?: MinuteDataPoint | null
+  onHoverChange?: (point: MinuteDataPoint | null) => void
 }
 
 const SIZE = 360
@@ -39,7 +42,10 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
   return [x, y]
 }
 
-export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarChartProps) {
+// Note: Replaced by findPointByRadius from radialSelection module
+// Old cartesian-distance based selection removed in favor of time-prioritized radial selection
+
+export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint, onHoverChange }: PolarChartProps) {
   // Get time scale configuration
   const timeScale = useMemo(() => {
     const scaleEntry = Object.entries(TIME_SCALES).find(
@@ -140,9 +146,45 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
     return segments
   }, [dataPoints])
 
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!onHoverChange) return
+
+    e.preventDefault() // Prevent page scrolling on touch
+
+    const svgElement = e.currentTarget
+    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
+    onHoverChange(nearest)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!onHoverChange) return
+
+    // Only process move if pointer is down (buttons !== 0) or it's a touch event
+    if (e.buttons === 0 && e.pointerType !== 'touch') return
+
+    e.preventDefault() // Prevent page scrolling on touch drag
+
+    const svgElement = e.currentTarget
+    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
+    onHoverChange(nearest)
+  }
+
+  const handlePointerUp = () => {
+    if (!onHoverChange) return
+    onHoverChange(null)
+  }
+
   return (
     <div>
-      <svg viewBox="0 0 360 360">
+      <svg
+        viewBox="0 0 360 360"
+        style={{ touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
         {/* Background gradients */}
         <defs>
           <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
@@ -324,6 +366,70 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes }: PolarCha
             />
           )
         })}
+
+        {/* Crosshairs and dotted circle when hovering */}
+        {hoverPoint && timeWindowMinutes > 0 && (() => {
+          // Calculate position of hover point
+          const r01 = 1 - (hoverPoint.minsAgo / timeWindowMinutes)
+          const [hx, hy] = polarToXY(hoverPoint.dir, r01, CENTER_X, CENTER_Y, R)
+          const hoverRadius = r01 * R
+
+          return (
+            <g>
+              {/* Radial line from center to hover point */}
+              <line
+                x1={CENTER_X}
+                y1={CENTER_Y}
+                x2={hx}
+                y2={hy}
+                stroke="rgba(0,68,204,0.6)"
+                strokeWidth={1.5}
+                strokeDasharray="4 2"
+              />
+              {/* Dotted circle at hover time radius (new visual feedback) */}
+              <circle
+                cx={CENTER_X}
+                cy={CENTER_Y}
+                r={Math.max(0, hoverRadius)}
+                fill="none"
+                stroke="rgba(0,0,0,0.22)"
+                strokeWidth={1}
+                strokeDasharray="2 3"
+              />
+            </g>
+          )
+        })()}
+
+        {/* Reference point highlighting (current point when not hovering) */}
+        {!hoverPoint && dataPoints.length > 0 && (() => {
+          // Find most recent data point (minsAgo = 0)
+          const referencePoint = dataPoints.find(p => p.minsAgo === 0)
+          if (!referencePoint) return null
+
+          const r01 = 1 - (referencePoint.minsAgo / timeWindowMinutes)
+          const [rx, ry] = polarToXY(referencePoint.dir, r01, CENTER_X, CENTER_Y, R)
+
+          return (
+            <g>
+              {/* Blue ring around reference point */}
+              <circle
+                cx={rx}
+                cy={ry}
+                r={6}
+                fill="none"
+                stroke="rgba(0,68,204,0.7)"
+                strokeWidth={2.5}
+              />
+              {/* Blue center dot */}
+              <circle
+                cx={rx}
+                cy={ry}
+                r={3}
+                fill="rgba(0,68,204,0.8)"
+              />
+            </g>
+          )
+        })()}
 
         {/* Center dot */}
         <circle cx={CENTER_X} cy={CENTER_Y} r={2.5} fill="rgba(0,0,0,0.5)" />

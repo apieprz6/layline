@@ -15,3 +15,12 @@ export function formatTimeOffset(minutes: number): string {
 
   return `−${hours.toFixed(1)}h`
 }
+
+/**
+ * Format Date object to HH:MM time string
+ * @param date - Date object to format
+ * @returns Time string in HH:MM format (e.g., "19:42")
+ */
+export function formatTime(date: Date): string {
+  return date.toTimeString().slice(0, 5)
+}
