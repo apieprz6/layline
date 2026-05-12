@@ -24,3 +24,20 @@ export function formatTimeOffset(minutes: number): string {
 export function formatTime(date: Date): string {
   return date.toTimeString().slice(0, 5)
 }
+
+/**
+ * Format Date object to abbreviated weekday + time string
+ * @param date - Date object to format
+ * @returns Formatted string like "Wed 19:30"
+ */
+export function formatDateTimeRange(date: Date): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }
+  const formatted = date.toLocaleString('en-US', opts)
+  // Remove comma: "Wed, 19:30" → "Wed 19:30"
+  return formatted.replace(',', '')
+}

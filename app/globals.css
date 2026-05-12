@@ -84,6 +84,23 @@
   --surface-border:    rgba(0, 0, 0, 0.15);
   --surface-border-hover: rgba(0, 0, 0, 0.25);
   --surface-divider:   rgba(0, 0, 0, 0.10);
+
+  /* Dock-specific surfaces (mobile bottom controls) */
+  --surface-dock-bg:   rgba(240, 237, 230, 0.94);
+  --surface-dock-blur: blur(14px) saturate(160%);
+}
+
+/* ============================================================
+   SHADOW TOKENS
+   ============================================================ */
+:root {
+  /* Standard elevation shadows */
+  --shadow-sm:     0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-md:     0 2px 6px rgba(0,0,0,0.08);
+  --shadow-lg:     0 4px 12px rgba(0,0,0,0.12);
+
+  /* Dock-specific shadow (upward for fixed bottom element) */
+  --shadow-dock:   0 -4px 20px rgba(0,0,0,0.06);
 }
 
 /* ============================================================
