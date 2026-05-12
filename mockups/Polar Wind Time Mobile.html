@@ -98,7 +98,62 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--divider);
-    padding: 60px 16px 12px 16px;
+    padding: 56px 16px 12px 16px;
+  }
+  .back-btn {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+    margin-left: -8px;
+  }
+  .back-btn:active { background: rgba(0,0,0,0.06); }
+  .live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 8px;
+    border-radius: 999px;
+    border: 1.25px solid var(--live-border, rgba(0,122,47,0.45));
+    background: var(--live-bg, rgba(0,122,47,0.06));
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    color: var(--live-fg, #007A2F);
+    text-transform: uppercase;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+  }
+  .live-pill .dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  .live-pill.is-live .dot { animation: pulseDot 2s ease-out infinite; }
+  @keyframes pulseDot {
+    0%   { box-shadow: 0 0 0 0 rgba(0,122,47,0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(0,122,47,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,122,47,0); }
+  }
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .meta-dot {
+    width: 3px; height: 3px; border-radius: 999px;
+    background: rgba(0,0,0,0.28);
+    flex-shrink: 0;
   }
 
   /* card */
@@ -277,6 +332,7 @@
 <script type="text/babel" src="ios-frame.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel">
+
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accentColor": "#0044CC",
   "chartSize": 380,
@@ -285,8 +341,11 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "dotDensity": 30,
   "showRangeBand": true,
   "showRadialLabels": true,
+  "showSpeedChart": true,
+  "showOverlayStats": true,
+  "speedFill": true,
   "defaultBottomTab": "stats"
-}/*EDITMODE-END*/;
+} /*EDITMODE-END*/;
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
@@ -294,10 +353,10 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const NOW_REAL = new Date('2026-05-13T19:42:00');
 const SAMPLE_INTERVAL_MIN = 5;
 const TOTAL_HOURS = 72;
-const N_POINTS = (TOTAL_HOURS * 60) / SAMPLE_INTERVAL_MIN;
+const N_POINTS = TOTAL_HOURS * 60 / SAMPLE_INTERVAL_MIN;
 
 function mulberry32(seed) {
-  return function() {
+  return function () {
     let t = seed += 0x6D2B79F5;
     t = Math.imul(t ^ t >>> 15, t | 1);
     t ^= t + Math.imul(t ^ t >>> 7, t | 61);
@@ -308,14 +367,14 @@ const rng = mulberry32(2024);
 
 const SERIES = (() => {
   const out = [];
-  let dir = 235, spd = 11;
+  let dir = 235,spd = 11;
   for (let i = 0; i < N_POINTS; i++) {
     const minutesAgo = (N_POINTS - 1 - i) * SAMPLE_INTERVAL_MIN;
     const t = i / N_POINTS;
     const sineDir = 235 + 20 * Math.sin(t * Math.PI * 2 * 2.5) + 10 * Math.sin(t * Math.PI * 2 * 7);
     const veer = i > N_POINTS * 0.85 ? (i - N_POINTS * 0.85) / (N_POINTS * 0.15) * 25 : 0;
     dir = sineDir + veer + (rng() - 0.5) * 14;
-    if (dir < 0) dir += 360; if (dir >= 360) dir -= 360;
+    if (dir < 0) dir += 360;if (dir >= 360) dir -= 360;
     const sineSpd = 11 + 5 * Math.sin(t * Math.PI * 2 * 2) + 2.5 * Math.sin(t * Math.PI * 2 * 11);
     spd = Math.max(2, sineSpd + (rng() - 0.5) * 3);
     const time = new Date(NOW_REAL.getTime() - minutesAgo * 60 * 1000);
@@ -325,12 +384,12 @@ const SERIES = (() => {
 })();
 
 const SCALES = [
-  { id: '30m', label: 'Last 30 min',   minutes: 30,   ticks: [0, 5, 10, 15, 20, 25, 30] },
-  { id: '1h',  label: 'Last hour',     minutes: 60,   ticks: [0, 15, 30, 45, 60] },
-  { id: '6h',  label: 'Last 6 hours',  minutes: 360,  ticks: [0, 60, 120, 180, 240, 300, 360] },
-  { id: '24h', label: 'Last 24 hours', minutes: 1440, ticks: [0, 240, 480, 720, 960, 1200, 1440] },
-  { id: '72h', label: 'Last 72 hours', minutes: 4320, ticks: [0, 720, 1440, 2160, 2880, 3600, 4320] },
-];
+{ id: '30m', label: 'Last 30 min', minutes: 30, ticks: [0, 5, 10, 15, 20, 25, 30] },
+{ id: '1h', label: 'Last hour', minutes: 60, ticks: [0, 15, 30, 45, 60] },
+{ id: '6h', label: 'Last 6 hours', minutes: 360, ticks: [0, 60, 120, 180, 240, 300, 360] },
+{ id: '24h', label: 'Last 24 hours', minutes: 1440, ticks: [0, 240, 480, 720, 960, 1200, 1440] },
+{ id: '72h', label: 'Last 72 hours', minutes: 4320, ticks: [0, 720, 1440, 2160, 2880, 3600, 4320] }];
+
 
 function fmtOffset(absMin) {
   if (absMin <= 0) return 'now';
@@ -340,18 +399,18 @@ function fmtOffset(absMin) {
   return `−${h.toFixed(1)}h`;
 }
 function windColor(kts) {
-  if (kts <= 8)  return '#007A52';
+  if (kts <= 8) return '#007A52';
   if (kts <= 15) return '#0055BB';
   if (kts <= 22) return '#C47000';
   return '#CC1100';
 }
 function windBand(kts) {
-  if (kts <= 8)  return 'Light';
+  if (kts <= 8) return 'Light';
   if (kts <= 15) return 'Medium';
   if (kts <= 22) return 'Heavy';
   return 'Storm';
 }
-function fmtHM(d) { return d.toTimeString().slice(0,5); }
+function fmtHM(d) {return d.toTimeString().slice(0, 5);}
 function fmtDM(d) {
   const opts = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false };
   return d.toLocaleDateString('en-US', opts);
@@ -361,10 +420,10 @@ function fmtAgo(min) {
   if (min < 60) return `${Math.round(min)} min ago`;
   const h = min / 60;
   if (h < 24) return `${h.toFixed(h < 10 ? 1 : 0)} h ago`;
-  return `${(h/24).toFixed(1)} d ago`;
+  return `${(h / 24).toFixed(1)} d ago`;
 }
 function compass(deg) {
-  const pts = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  const pts = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   return pts[Math.round(deg / 22.5) % 16];
 }
 function polarToXY(angleDeg, r0to1, cx, cy, R) {
@@ -372,10 +431,10 @@ function polarToXY(angleDeg, r0to1, cx, cy, R) {
   return [cx + r0to1 * R * Math.cos(a), cy + r0to1 * R * Math.sin(a)];
 }
 function xyToPolar(x, y, cx, cy, R) {
-  const dx = x - cx, dy = y - cy;
-  const r = Math.sqrt(dx*dx + dy*dy);
+  const dx = x - cx,dy = y - cy;
+  const r = Math.sqrt(dx * dx + dy * dy);
   let a = Math.atan2(dy, dx) * 180 / Math.PI + 90;
-  if (a < 0) a += 360; if (a >= 360) a -= 360;
+  if (a < 0) a += 360;if (a >= 360) a -= 360;
   return { angle: a, r01: r / R };
 }
 
@@ -384,7 +443,7 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
   // mobile: tighter padding, smaller labels, touch support
   const SIZE = tweaks.chartSize;
   const PAD = 42;
-  const cx = SIZE / 2, cy = SIZE / 2;
+  const cx = SIZE / 2,cy = SIZE / 2;
   const R = (SIZE - PAD * 2) / 2;
   const svgRef = useRef(null);
 
@@ -401,14 +460,14 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
     return pts.sort((a, b) => a.minutesAgo - b.minutesAgo);
   }, [data, scaleMin, nowOffsetMin]);
 
-  const scaleObj = useMemo(() => SCALES.find(s => s.minutes === scaleMin) || SCALES[2], [scaleMin]);
+  const scaleObj = useMemo(() => SCALES.find((s) => s.minutes === scaleMin) || SCALES[2], [scaleMin]);
 
   const segments = [];
   for (let i = 0; i < visible.length - 1; i++) {
-    const a = visible[i], b = visible[i + 1];
+    const a = visible[i],b = visible[i + 1];
     const [x1, y1] = polarToXY(a.dir, a.r01, cx, cy, R);
     const [x2, y2] = polarToXY(b.dir, b.r01, cx, cy, R);
-    const angDiff = Math.abs(((a.dir - b.dir + 540) % 360) - 180);
+    const angDiff = Math.abs((a.dir - b.dir + 540) % 360 - 180);
     if (angDiff > 90) continue;
     const midR = (a.r01 + b.r01) / 2;
     const op = 0.08 + 0.92 * Math.pow(midR, 1.5);
@@ -418,27 +477,27 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
 
   const angleTicks = [];
   for (let a = 0; a < 360; a += 10) angleTicks.push(a);
-  const cardinalAngles = { 0:'N', 45:'NE', 90:'E', 135:'SE', 180:'S', 225:'SW', 270:'W', 315:'NW' };
+  const cardinalAngles = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
 
-  const radialTicks = scaleObj.ticks.map(m => ({
+  const radialTicks = scaleObj.ticks.map((m) => ({
     minutes: m,
     absMin: nowOffsetMin + m,
     r01: 1 - m / scaleMin,
-    label: fmtOffset(nowOffsetMin + m),
-  })).filter(t => t.r01 >= -0.001 && t.r01 <= 1.001);
+    label: fmtOffset(nowOffsetMin + m)
+  })).filter((t) => t.r01 >= -0.001 && t.r01 <= 1.001);
 
   function pickFromXY(clientX, clientY) {
     const rect = svgRef.current.getBoundingClientRect();
     const x = (clientX - rect.left) * (SIZE / rect.width);
     const y = (clientY - rect.top) * (SIZE / rect.height);
     const { angle, r01 } = xyToPolar(x, y, cx, cy, R);
-    if (r01 > 1.10) { onHoverPoint && onHoverPoint(null); return; }
-    let best = null, bestD = Infinity;
+    if (r01 > 1.10) {onHoverPoint && onHoverPoint(null);return;}
+    let best = null,bestD = Infinity;
     for (const p of visible) {
-      const angDist = Math.abs(((p.dir - angle + 540) % 360) - 180);
+      const angDist = Math.abs((p.dir - angle + 540) % 360 - 180);
       const rDist = Math.abs(p.r01 - r01);
       const d = angDist / 30 + rDist * 4;
-      if (d < bestD) { bestD = d; best = p; }
+      if (d < bestD) {bestD = d;best = p;}
     }
     if (best) onHoverPoint && onHoverPoint(best);
   }
@@ -462,7 +521,7 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
   // resolve hover position
   let hoverXY = null;
   if (hoverPoint) {
-    const vp = visible.find(p => p.minutesAgo === hoverPoint.minutesAgo);
+    const vp = visible.find((p) => p.minutesAgo === hoverPoint.minutesAgo);
     if (vp) hoverXY = polarToXY(vp.dir, vp.r01, cx, cy, R);
   }
 
@@ -474,8 +533,8 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-    >
+      onPointerCancel={onPointerUp}>
+      
       <defs>
         <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#F0EDE6" stopOpacity="1" />
@@ -491,14 +550,14 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
       <circle cx={cx} cy={cy} r={R + 6} fill="url(#bgWash)" />
       <circle cx={cx} cy={cy} r={R + 6} fill="url(#outerHalo)" />
 
-      {angleTicks.map(a => {
+      {angleTicks.map((a) => {
         const [x2, y2] = polarToXY(a, 1, cx, cy, R);
         const isCardinal = a % 90 === 0;
         const isIntercardinal = a % 45 === 0;
         const isCoarse = a % 30 === 0;
         const stroke = isCardinal ? 'rgba(0,0,0,0.32)' :
-                       isIntercardinal ? 'rgba(0,0,0,0.18)' :
-                       isCoarse ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.04)';
+        isIntercardinal ? 'rgba(0,0,0,0.18)' :
+        isCoarse ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.04)';
         const w = isCardinal ? 1 : isCoarse ? 0.75 : 0.5;
         if (!isCoarse) {
           const [x1, y1] = polarToXY(a, 0.965, cx, cy, R);
@@ -507,18 +566,18 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
         return <line key={a} x1={cx} y1={cy} x2={x2} y2={y2} stroke={stroke} strokeWidth={w} />;
       })}
 
-      {radialTicks.map(t => {
+      {radialTicks.map((t) => {
         const isOuterRef = t.minutes === 0;
         return (
           <circle key={t.minutes} cx={cx} cy={cy}
-            r={Math.max(0, t.r01 * R)}
-            fill="none"
-            stroke={isOuterRef ? tweaks.accentColor : 'rgba(0,0,0,0.12)'}
-            strokeOpacity={isOuterRef ? 0.55 : 1}
-            strokeWidth={isOuterRef ? 1.5 : 0.75}
-            strokeDasharray={isOuterRef ? '0' : '2 4'}
-          />
-        );
+          r={Math.max(0, t.r01 * R)}
+          fill="none"
+          stroke={isOuterRef ? tweaks.accentColor : 'rgba(0,0,0,0.12)'}
+          strokeOpacity={isOuterRef ? 0.55 : 1}
+          strokeWidth={isOuterRef ? 1.5 : 0.75}
+          strokeDasharray={isOuterRef ? '0' : '2 4'} />);
+
+
       })}
 
       {/* Radial tick labels — on mobile: only outermost + 2-3 inner ones, smaller */}
@@ -526,7 +585,7 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
         // Filter: show outer ring, last ring (innermost), and ~2 mid rings
         const n = radialTicks.length;
         const showThis = i === 0 || i === n - 1 || i === Math.floor(n / 2) ||
-                         (n >= 5 && (i === Math.floor(n / 4) || i === Math.floor(3 * n / 4)));
+        n >= 5 && (i === Math.floor(n / 4) || i === Math.floor(3 * n / 4));
         if (!showThis) return null;
         if (t.r01 < 0.06 && i !== n - 1) return null;
         const [lx, ly] = polarToXY(0, t.r01, cx, cy, R);
@@ -537,17 +596,17 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
         return (
           <g key={t.minutes} transform={`translate(${lx + 5}, ${ly + 2})`}>
             <rect x={-3} y={-8} width={w} height={11} rx={2}
-                  fill={accent ? tweaks.accentColor : 'rgba(240,237,230,0.95)'}
-                  fillOpacity={accent ? 0.10 : 1} />
+            fill={accent ? tweaks.accentColor : 'rgba(240,237,230,0.95)'}
+            fillOpacity={accent ? 0.10 : 1} />
             <text x={0} y={0}
-                  fontFamily="JetBrains Mono"
-                  fontSize={8.5}
-                  fontWeight={accent ? 600 : 500}
-                  fill={accent ? tweaks.accentColor : '#666666'}>
+            fontFamily="JetBrains Mono"
+            fontSize={8.5}
+            fontWeight={accent ? 600 : 500}
+            fill={accent ? tweaks.accentColor : '#666666'}>
               {t.label}
             </text>
-          </g>
-        );
+          </g>);
+
       })}
 
       {Object.entries(cardinalAngles).map(([a, lbl]) => {
@@ -556,22 +615,22 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
         const isCardinal = ang % 90 === 0;
         return (
           <text key={a} x={lx} y={ly}
-            textAnchor="middle" dominantBaseline="middle"
-            fontFamily={isCardinal ? 'Space Grotesk' : 'Inter'}
-            fontSize={isCardinal ? 13 : 9.5}
-            fontWeight={isCardinal ? 700 : 500}
-            letterSpacing={isCardinal ? '0.04em' : '0.08em'}
-            fill={isCardinal ? '#0A0A0A' : '#666666'}>
+          textAnchor="middle" dominantBaseline="middle"
+          fontFamily={isCardinal ? 'Space Grotesk' : 'Inter'}
+          fontSize={isCardinal ? 13 : 9.5}
+          fontWeight={isCardinal ? 700 : 500}
+          letterSpacing={isCardinal ? '0.04em' : '0.08em'}
+          fill={isCardinal ? '#0A0A0A' : '#666666'}>
             {lbl}
-          </text>
-        );
+          </text>);
+
       })}
 
-      {segments.map((s, i) => (
-        <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
-              stroke={s.col} strokeWidth={tweaks.trailWidth} strokeOpacity={s.op}
-              strokeLinecap="round" />
-      ))}
+      {segments.map((s, i) =>
+      <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
+      stroke={s.col} strokeWidth={tweaks.trailWidth} strokeOpacity={s.op}
+      strokeLinecap="round" />
+      )}
 
       {tweaks.showTrailDots && visible.map((p, i) => {
         const step = Math.max(1, Math.floor(visible.length / tweaks.dotDensity));
@@ -581,45 +640,172 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tw
         return <circle key={i} cx={px} cy={py} r={2.2} fill={windColor(p.spd)} opacity={op} />;
       })}
 
-      {now && nowXY && (
-        <g>
+      {now && nowXY &&
+      <g>
           <line x1={cx} y1={cy} x2={nowXY[0]} y2={nowXY[1]}
-                stroke={tweaks.accentColor} strokeOpacity={0.30} strokeWidth={1} strokeDasharray="3 3" />
+        stroke={tweaks.accentColor} strokeOpacity={0.30} strokeWidth={1} strokeDasharray="3 3" />
           <circle cx={nowXY[0]} cy={nowXY[1]} r={9} fill="white" stroke={tweaks.accentColor} strokeWidth={2} />
           <circle cx={nowXY[0]} cy={nowXY[1]} r={4} fill={tweaks.accentColor} />
         </g>
-      )}
+      }
 
-      {hoverPoint && hoverXY && (
-        <g pointerEvents="none">
+      {hoverPoint && hoverXY &&
+      <g pointerEvents="none">
           <line x1={cx} y1={cy}
-                x2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[0]}
-                y2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[1]}
-                stroke="rgba(0,0,0,0.42)" strokeWidth={1} strokeDasharray="2 3" />
+        x2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[0]}
+        y2={polarToXY(hoverPoint.dir, 1.0, cx, cy, R)[1]}
+        stroke="rgba(0,0,0,0.42)" strokeWidth={1} strokeDasharray="2 3" />
           <circle cx={cx} cy={cy}
-                  r={(1 - (hoverPoint.minutesAgo - nowOffsetMin) / scaleMin) * R}
-                  fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth={1} strokeDasharray="2 3" />
+        r={(1 - (hoverPoint.minutesAgo - nowOffsetMin) / scaleMin) * R}
+        fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth={1} strokeDasharray="2 3" />
           <circle cx={hoverXY[0]} cy={hoverXY[1]} r={7}
-                  fill="white" stroke={windColor(hoverPoint.spd)} strokeWidth={2.5} />
+        fill="white" stroke={windColor(hoverPoint.spd)} strokeWidth={2.5} />
         </g>
-      )}
+      }
 
       <circle cx={cx} cy={cy} r={2.5} fill="rgba(0,0,0,0.5)" />
       <text x={cx} y={cy + 14}
-            textAnchor="middle" fontFamily="JetBrains Mono"
-            fontSize={8.5} fill="rgba(0,0,0,0.4)">
+      textAnchor="middle" fontFamily="JetBrains Mono"
+      fontSize={8.5} fill="rgba(0,0,0,0.4)">
         {fmtOffset(nowOffsetMin + scaleObj.minutes)}
       </text>
-    </svg>
-  );
+    </svg>);
+
+}
+
+// ── SPEED LINE CHART ─────────────────────────────────────────────
+function SpeedLineChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tweaks, height = 130 }) {
+  const W = 360,H = height;
+  const PAD_L = 26,PAD_R = 10,PAD_T = 14,PAD_B = 20;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+  const svgRef = useRef(null);
+
+  const visible = useMemo(() => data.
+  filter((d) => d.minutesAgo >= nowOffsetMin && d.minutesAgo <= nowOffsetMin + scaleMin).
+  sort((a, b) => b.minutesAgo - a.minutesAgo), [data, scaleMin, nowOffsetMin]);
+
+  const maxSpd = useMemo(() => {
+    const m = visible.reduce((a, p) => Math.max(a, p.spd), 8);
+    return Math.ceil((m + 2) / 5) * 5;
+  }, [visible]);
+
+  const xFor = (minAgo) => PAD_L + (1 - (minAgo - nowOffsetMin) / scaleMin) * innerW;
+  const yFor = (s) => PAD_T + (1 - s / maxSpd) * innerH;
+
+  const pts = visible.map((p) => [xFor(p.minutesAgo), yFor(p.spd)]);
+  const linePath = pts.length ? 'M' + pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' L') : '';
+  const areaPath = pts.length ? linePath +
+  ` L${pts[pts.length - 1][0].toFixed(1)},${(PAD_T + innerH).toFixed(1)}` +
+  ` L${pts[0][0].toFixed(1)},${(PAD_T + innerH).toFixed(1)} Z` : '';
+
+  const yStep = maxSpd > 20 ? 10 : 5;
+  const yTicks = [];for (let v = 0; v <= maxSpd; v += yStep) yTicks.push(v);
+  const bandLines = [8, 15, 22].filter((v) => v <= maxSpd);
+
+  function pickFromX(clientX) {
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = (clientX - rect.left) * (W / rect.width);
+    const t = Math.max(0, Math.min(1, (x - PAD_L) / innerW));
+    const target = nowOffsetMin + (1 - t) * scaleMin;
+    let best = null,bd = Infinity;
+    for (const p of visible) {const d = Math.abs(p.minutesAgo - target);if (d < bd) {bd = d;best = p;}}
+    if (best) onHoverPoint && onHoverPoint(best);
+  }
+  const onPD = (e) => {e.preventDefault();pickFromX(e.clientX);e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);};
+  const onPM = (e) => {if (e.buttons === 0 && e.pointerType === 'mouse') return;pickFromX(e.clientX);};
+  const onPU = () => onHoverPoint && onHoverPoint(null);
+
+  const hv = hoverPoint ? visible.find((p) => p.minutesAgo === hoverPoint.minutesAgo) : null;
+  const hxy = hv ? [xFor(hv.minutesAgo), yFor(hv.spd)] : null;
+  const refPt = visible[visible.length - 1];
+  const refXY = refPt ? [xFor(refPt.minutesAgo), yFor(refPt.spd)] : null;
+
+  const xFracs = scaleMin >= 360 ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1];
+  const gradId = `spdg-${tweaks.accentColor.replace('#', '')}`;
+
+  return (
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+    style={{ width: '100%', height: H, display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+    onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={tweaks.accentColor} stopOpacity="0.30" />
+          <stop offset="100%" stopColor={tweaks.accentColor} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {yTicks.map((v) =>
+      <g key={`y${v}`}>
+          <line x1={PAD_L} y1={yFor(v)} x2={PAD_L + innerW} y2={yFor(v)}
+        stroke="rgba(0,0,0,0.08)" strokeWidth={0.75}
+        strokeDasharray={v === 0 ? '0' : '2 4'} />
+          <text x={PAD_L - 5} y={yFor(v) + 3} textAnchor="end"
+        fontFamily="JetBrains Mono" fontSize={9} fill="#666">{v}</text>
+        </g>
+      )}
+      {bandLines.map((v) =>
+      <line key={`b${v}`} x1={PAD_L} y1={yFor(v)} x2={PAD_L + innerW} y2={yFor(v)}
+      stroke={windColor(v - 0.1)} strokeWidth={0.75} strokeOpacity={0.22}
+      strokeDasharray="1 3" />
+      )}
+      {xFracs.map((f, i) => {
+        const x = PAD_L + f * innerW;
+        const minAgo = nowOffsetMin + (1 - f) * scaleMin;
+        return (
+          <g key={`x${i}`}>
+            <line x1={x} y1={PAD_T + innerH} x2={x} y2={PAD_T + innerH + 3}
+            stroke="rgba(0,0,0,0.25)" strokeWidth={0.75} />
+            <text x={x} y={H - 5}
+            textAnchor={i === 0 ? 'start' : i === xFracs.length - 1 ? 'end' : 'middle'}
+            fontFamily="JetBrains Mono" fontSize={9} fill="#666">
+              {fmtOffset(minAgo)}
+            </text>
+          </g>);
+
+      })}
+      <text x={2} y={PAD_T - 3} fontFamily="Inter" fontSize={8.5}
+      fontWeight={600} letterSpacing="0.10em" fill="#666">KTS</text>
+      {tweaks.speedFill && areaPath && <path d={areaPath} fill={`url(#${gradId})`} />}
+      {pts.length > 1 && visible.slice(0, -1).map((p, i) => {
+        const b = visible[i + 1];
+        return <line key={`s${i}`} x1={xFor(p.minutesAgo)} y1={yFor(p.spd)}
+        x2={xFor(b.minutesAgo)} y2={yFor(b.spd)}
+        stroke={windColor((p.spd + b.spd) / 2)} strokeWidth={1.75}
+        strokeLinecap="round" strokeLinejoin="round" />;
+      })}
+      {refXY &&
+      <g>
+          <line x1={refXY[0]} y1={PAD_T} x2={refXY[0]} y2={PAD_T + innerH}
+        stroke={tweaks.accentColor} strokeOpacity={0.3}
+        strokeWidth={1} strokeDasharray="3 3" />
+          <circle cx={refXY[0]} cy={refXY[1]} r={4.5} fill="white"
+        stroke={tweaks.accentColor} strokeWidth={1.75} />
+        </g>
+      }
+      {hxy &&
+      <g pointerEvents="none">
+          <line x1={hxy[0]} y1={PAD_T} x2={hxy[0]} y2={PAD_T + innerH}
+        stroke="rgba(0,0,0,0.45)" strokeWidth={1} strokeDasharray="2 3" />
+          <circle cx={hxy[0]} cy={hxy[1]} r={5} fill="white"
+        stroke={windColor(hoverPoint.spd)} strokeWidth={2} />
+          <g transform={`translate(${hxy[0]}, ${Math.max(PAD_T + 11, hxy[1] - 9)})`}>
+            <rect x={-21} y={-13} width={42} height={14} rx={3} fill="#0A0A0A" />
+            <text x={0} y={-3} textAnchor="middle"
+          fontFamily="JetBrains Mono" fontSize={9.5}
+          fontWeight={600} fill="white">{hoverPoint.spd.toFixed(1)} kt</text>
+          </g>
+        </g>
+      }
+    </svg>);
+
 }
 
 // ── SCRUBBER ─────────────────────────────────────────────────────
 function Scrubber({ value, max, scaleMin, onChange }) {
   const trackRef = useRef(null);
   const TOTAL = TOTAL_HOURS * 60;
-  const handlePct = ((TOTAL - value) / TOTAL) * 100;
-  const bandWidthPct = (scaleMin / TOTAL) * 100;
+  const handlePct = (TOTAL - value) / TOTAL * 100;
+  const bandWidthPct = scaleMin / TOTAL * 100;
   const bandLeftPct = Math.max(0, handlePct - bandWidthPct);
 
   function pickFromClientX(clientX) {
@@ -649,44 +835,44 @@ function Scrubber({ value, max, scaleMin, onChange }) {
   return (
     <div>
       <div ref={trackRef} className="scrubber-m"
-           onPointerDown={onPointerDown}
-           onPointerMove={onPointerMove}>
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}>
         <div className="scrubber-m-rail">
           <div className="scrubber-m-rail-fill"
-               style={{ left: `${bandLeftPct}%`, width: `${handlePct - bandLeftPct}%` }} />
+          style={{ left: `${bandLeftPct}%`, width: `${handlePct - bandLeftPct}%` }} />
         </div>
-        {ticks.map(t => (
-          <div key={t.h} className="scrubber-m-tick" style={{ left: `${t.pct}%` }} />
-        ))}
+        {ticks.map((t) =>
+        <div key={t.h} className="scrubber-m-tick" style={{ left: `${t.pct}%` }} />
+        )}
         <div className="scrubber-m-handle" style={{ left: `${handlePct}%` }} />
       </div>
       <div style={{ position: 'relative', height: 14, marginTop: 0 }}>
-        {ticks.map(t => (
-          <div key={t.h} className="scrubber-m-label" style={{ left: `${t.pct}%` }}>
+        {ticks.map((t) =>
+        <div key={t.h} className="scrubber-m-label" style={{ left: `${t.pct}%` }}>
             {t.h === 0 ? 'now' : `−${t.h}h`}
           </div>
-        ))}
+        )}
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
 // ── STATS / LEGEND / JUMP-TO ─────────────────────────────────────
 function WindowStats({ data, nowOffsetMin, scaleMin }) {
   const stats = useMemo(() => {
-    const vis = data.filter(p => p.minutesAgo >= nowOffsetMin && p.minutesAgo <= nowOffsetMin + scaleMin);
+    const vis = data.filter((p) => p.minutesAgo >= nowOffsetMin && p.minutesAgo <= nowOffsetMin + scaleMin);
     if (vis.length === 0) return null;
-    let sx = 0, sy = 0, spdSum = 0, spdMin = Infinity, spdMax = -Infinity;
+    let sx = 0,sy = 0,spdSum = 0,spdMin = Infinity,spdMax = -Infinity;
     for (const p of vis) {
       const a = p.dir * Math.PI / 180;
-      sx += Math.cos(a); sy += Math.sin(a);
+      sx += Math.cos(a);sy += Math.sin(a);
       spdSum += p.spd;
       if (p.spd < spdMin) spdMin = p.spd;
       if (p.spd > spdMax) spdMax = p.spd;
     }
     let meanDir = Math.atan2(sy / vis.length, sx / vis.length) * 180 / Math.PI;
     if (meanDir < 0) meanDir += 360;
-    let dirs = vis.map(p => {
+    let dirs = vis.map((p) => {
       let d = p.dir - meanDir;
       while (d > 180) d -= 360;
       while (d < -180) d += 360;
@@ -700,12 +886,12 @@ function WindowStats({ data, nowOffsetMin, scaleMin }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-      <Stat label="Mean dir"   big={`${Math.round(stats.meanDir)}°`} sub={compass(stats.meanDir)} />
-      <Stat label="Mean spd"   big={`${stats.meanSpd.toFixed(1)}`}   sub="kts" />
-      <Stat label="Range"      big={`${stats.spdMin.toFixed(0)}–${stats.spdMax.toFixed(0)}`} sub="kts" />
-      <Stat label="Veer/back"  big={`${stats.spread.toFixed(0)}°`}   sub="spread" />
-    </div>
-  );
+      <Stat label="Mean dir" big={`${Math.round(stats.meanDir)}°`} sub={compass(stats.meanDir)} />
+      <Stat label="Mean spd" big={`${stats.meanSpd.toFixed(1)}`} sub="kts" />
+      <Stat label="Range" big={`${stats.spdMin.toFixed(0)}–${stats.spdMax.toFixed(0)}`} sub="kts" />
+      <Stat label="Veer/back" big={`${stats.spread.toFixed(0)}°`} sub="spread" />
+    </div>);
+
 }
 function Stat({ label, big, sub }) {
   return (
@@ -715,34 +901,44 @@ function Stat({ label, big, sub }) {
         <span className="mono" style={{ fontSize: 19, fontWeight: 600 }}>{big}</span>
         <span style={{ fontSize: 11, color: 'var(--muted)' }}>{sub}</span>
       </div>
-    </div>
-  );
+    </div>);
+
 }
 function WindLegend() {
   const bands = [
-    { c: '#007A52', lbl: 'Light',  rng: '0–8 kts' },
-    { c: '#0055BB', lbl: 'Medium', rng: '9–15' },
-    { c: '#C47000', lbl: 'Heavy',  rng: '16–22' },
-    { c: '#CC1100', lbl: 'Storm',  rng: '23+' },
-  ];
+  { c: '#007A52', lbl: 'Light', rng: '0–8 kts' },
+  { c: '#0055BB', lbl: 'Medium', rng: '9–15' },
+  { c: '#C47000', lbl: 'Heavy', rng: '16–22' },
+  { c: '#CC1100', lbl: 'Storm', rng: '23+' }];
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-      {bands.map(b => (
-        <div key={b.lbl} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {bands.map((b) =>
+      <div key={b.lbl} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 16, height: 3, background: b.c, borderRadius: 2, flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>{b.lbl}</span>
           <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{b.rng}</span>
         </div>
-      ))}
-    </div>
-  );
+      )}
+    </div>);
+
 }
 
 // ── APP ─────────────────────────────────────────────────────────
+const STATION = { name: 'Harrison Dever Crib', code: 'CHII2' };
+
+function fmtFetchAgo(sec) {
+  if (sec < 5) return 'just now';
+  if (sec < 60) return `${Math.round(sec)} sec ago`;
+  const m = sec / 60;
+  if (m < 60) return `${Math.round(m)} min ago`;
+  return `${(m / 60).toFixed(1)} h ago`;
+}
+
 function MobileApp() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [scaleId, setScaleId] = useState('6h');
-  const scaleObj = useMemo(() => SCALES.find(s => s.id === scaleId), [scaleId]);
+  const scaleObj = useMemo(() => SCALES.find((s) => s.id === scaleId), [scaleId]);
   const scaleMin = scaleObj.minutes;
   const [nowOffset, setNowOffset] = useState(0);
   const [hoverPoint, setHoverPoint] = useState(null);
@@ -757,16 +953,28 @@ function MobileApp() {
   const windowStart = new Date(NOW_REAL.getTime() - (nowOffset + scaleMin) * 60 * 1000);
 
   const currentPoint = useMemo(() => {
-    let best = SERIES[0], bestD = Infinity;
+    let best = SERIES[0],bestD = Infinity;
     for (const p of SERIES) {
       const d = Math.abs(p.minutesAgo - nowOffset);
-      if (d < bestD) { bestD = d; best = p; }
+      if (d < bestD) {bestD = d;best = p;}
     }
     return best;
   }, [nowOffset]);
 
   const display = hoverPoint || currentPoint;
   const isLive = nowOffset === 0;
+
+  // "Last data fetch" + ticking "sec ago" — fake but realistic for the demo.
+  const [lastFetchAt, setLastFetchAt] = useState(() => new Date(NOW_REAL.getTime() - 12 * 1000));
+  const [nowTick, setNowTick] = useState(NOW_REAL.getTime());
+  useEffect(() => {
+    const tick = setInterval(() => setNowTick((v) => v + 1000), 1000);
+    const fetch = setInterval(() => setLastFetchAt(new Date(Date.now())), 60 * 1000);
+    return () => { clearInterval(tick); clearInterval(fetch); };
+  }, []);
+  const fetchSecAgo = Math.max(0, (nowTick - lastFetchAt.getTime()) / 1000);
+  // "Latest reading" — newest sample in the series
+  const latestSample = SERIES[SERIES.length - 1];
 
   // Expose accent color as a CSS variable so the whole UI tracks the tweak
   const screenStyle = { ['--accent']: t.accentColor, ['--accent-soft']: t.accentColor + '1A' };
@@ -776,90 +984,137 @@ function MobileApp() {
       <div className="phone-scroll">
         {/* Sticky header */}
         <div className="top-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 11, letterSpacing: '0.10em', color: t.accentColor }}>
-              LAYLINE
-            </span>
-            <span style={{ color: 'var(--muted)', fontSize: 11 }}>/</span>
-            <span className="label-cap" style={{ fontSize: 9 }}>Wind history</span>
-            <span style={{ flex: 1 }} />
-            <span style={{
-              fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
-              padding: '3px 7px', borderRadius: 4,
-              background: isLive ? 'rgba(0,122,47,0.10)' : t.accentColor + '1A',
-              color: isLive ? '#007A2F' : t.accentColor,
-              border: `1px solid ${isLive ? 'rgba(0,122,47,0.35)' : t.accentColor + '59'}`,
-              textTransform: 'uppercase',
-            }}>
-              {isLive ? '● Live' : fmtAgo(nowOffset)}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="back-btn" aria-label="Back">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M12.5 4L6.5 10L12.5 16" stroke="currentColor"
+                      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{
+                fontFamily: 'Space Grotesk', fontSize: 19, fontWeight: 700,
+                letterSpacing: '-0.015em', lineHeight: 1.1, color: 'var(--text)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {STATION.name}
+              </h1>
+              <div className="mono" style={{
+                fontSize: 11, color: 'var(--muted)', marginTop: 2,
+                letterSpacing: '0.08em',
+              }}>
+                {STATION.code}
+              </div>
+            </div>
+            <button
+              className={`live-pill ${isLive ? 'is-live' : ''}`}
+              onClick={() => setNowOffset(0)}
+              style={isLive ? {} : {
+                ['--live-fg']: t.accentColor,
+                ['--live-bg']: t.accentColor + '0F',
+                ['--live-border']: t.accentColor + '66',
+              }}
+              aria-label={isLive ? 'Live' : 'Return to live'}
+            >
+              <span className="dot" />
+              <span>{isLive ? 'Live' : fmtAgo(nowOffset)}</span>
+            </button>
           </div>
-          <h1 style={{ fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-            Wind direction × time
-          </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-              {fmtDM(referenceTime)}
+
+          {/* Meta: latest reading + last fetch */}
+          <div className="meta-row" style={{ marginTop: 10 }}>
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <span style={{ color: 'var(--muted)', opacity: 0.7 }}>Latest </span>
+              <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>{fmtHM(latestSample.time)}</span>
             </span>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>· outer ring</span>
+            <span className="meta-dot" />
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <span style={{ color: 'var(--muted)', opacity: 0.7 }}>Fetched </span>
+              <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>{fmtFetchAgo(fetchSecAgo)}</span>
+            </span>
+            <span style={{ flex: 1 }} />
+            {!isLive && (
+              <span style={{ color: t.accentColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                viewing {fmtAgo(nowOffset)}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Content */}
         <div style={{ padding: '14px 16px 0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Polar chart card */}
-          <div className="card" style={{ padding: 10, paddingBottom: 6 }}>
+          {/* Polar chart card — with at-reference stats overlaid on top corners */}
+          <div className="card" style={{ padding: 10, paddingBottom: 6, position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '2px 4px 4px 4px' }}>
+              <span className="label-cap" style={{
+                fontSize: 9, color: hoverPoint ? t.accentColor : 'var(--muted)'
+              }}>{hoverPoint ? '● At touch' : 'At reference'}</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                {fmtHM(display.time)} · {display.minutesAgo === 0 ? 'now' :
+                display.minutesAgo < 60 ? `−${display.minutesAgo}m` : `−${(display.minutesAgo / 60).toFixed(1)}h`}
+              </span>
+            </div>
+
+            {t.showOverlayStats &&
+            <>
+                <div style={{ position: 'absolute', top: 52, left: 14,
+                pointerEvents: 'none', zIndex: 2 }}>
+                  <div className="label-cap" style={{ fontSize: 8.5, marginBottom: 1 }}>Direction</div>
+                  <div className="mono" style={{
+                  fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em',
+                  lineHeight: 1, color: 'var(--text)'
+                }}>{Math.round(display.dir)}°</div>
+                  <div style={{ fontFamily: 'Space Grotesk', fontSize: 12, fontWeight: 600,
+                  color: t.accentColor, marginTop: 1 }}>
+                    {compass(display.dir)}
+                  </div>
+                </div>
+                <div style={{ position: 'absolute', top: 52, right: 14,
+                pointerEvents: 'none', zIndex: 2, textAlign: 'right' }}>
+                  <div className="label-cap" style={{ fontSize: 8.5, marginBottom: 1 }}>Speed</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, justifyContent: 'flex-end' }}>
+                    <span className="mono" style={{ fontSize: 26, fontWeight: 600,
+                    lineHeight: 1, color: windColor(display.spd) }}>
+                      {display.spd.toFixed(1)}
+                    </span>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>kts</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 1,
+                  color: windColor(display.spd) }}>
+                    {windBand(display.spd)}
+                  </div>
+                </div>
+              </>
+            }
+
             <PolarChart data={SERIES} scaleMin={scaleMin} nowOffsetMin={nowOffset}
-                        onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} tweaks={t} />
+            onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} tweaks={t} />
             <div style={{ display: 'flex', justifyContent: 'space-between',
-                          padding: '4px 6px 2px 6px',
-                          borderTop: '1px solid var(--divider)',
-                          marginTop: 4,
-                          paddingTop: 8 }}>
+              padding: '4px 6px 2px 6px',
+              borderTop: '1px solid var(--divider)',
+              marginTop: 4, paddingTop: 8 }}>
               <span className="label-cap" style={{ fontSize: 9 }}>0° N · CW</span>
               <span className="label-cap" style={{ fontSize: 9 }}>Outer = {fmtOffset(nowOffset)}</span>
               <span className="label-cap" style={{ fontSize: 9 }}>{scaleObj.label}</span>
             </div>
           </div>
 
-          {/* Readout: current/at-cursor */}
-          <div className="card" style={{ padding: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span className="label-cap">{hoverPoint ? 'At touch' : 'At reference'}</span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {fmtHM(display.time)} · {display.minutesAgo === 0 ? 'now' :
-                   (display.minutesAgo < 60 ? `−${display.minutesAgo}m` : `−${(display.minutesAgo/60).toFixed(1)}h`)}
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 12 }}>
-              {/* Direction */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>
-                    {Math.round(display.dir)}°
-                  </span>
-                  <span style={{ fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: 600, color: t.accentColor }}>
-                    {compass(display.dir)}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Direction (from)</div>
+          {/* Wind speed line chart — interactive, shares hoverPoint with polar */}
+          {t.showSpeedChart &&
+          <div className="card" style={{ padding: '12px 10px 6px 10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0 6px 4px 6px' }}>
+                <span className="label-cap">Wind speed</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                  {scaleObj.label}
+                </span>
               </div>
-              {/* Speed */}
-              <div style={{ borderLeft: '1px solid var(--divider)', paddingLeft: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span className="mono" style={{ fontSize: 28, fontWeight: 600, color: windColor(display.spd), lineHeight: 1 }}>
-                    {display.spd.toFixed(1)}
-                  </span>
-                  <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>kts</span>
-                </div>
-                <div style={{ fontSize: 11, color: windColor(display.spd), fontWeight: 500, marginTop: 4 }}>
-                  {windBand(display.spd)}
-                </div>
-              </div>
+              <SpeedLineChart data={SERIES} scaleMin={scaleMin} nowOffsetMin={nowOffset}
+            onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} tweaks={t} />
             </div>
-          </div>
+          }
 
           {/* Tabbed: Stats / Jump / Legend */}
           <div className="card" style={{ padding: 14 }}>
@@ -869,12 +1124,12 @@ function MobileApp() {
               <button className={tab === 'legend' ? 'active' : ''} onClick={() => setTab('legend')}>Legend</button>
             </div>
 
-            {tab === 'stats' && (
-              <WindowStats data={SERIES} nowOffsetMin={nowOffset} scaleMin={scaleMin} />
-            )}
+            {tab === 'stats' &&
+            <WindowStats data={SERIES} nowOffsetMin={nowOffset} scaleMin={scaleMin} />
+            }
 
-            {tab === 'jump' && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {tab === 'jump' &&
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <button className="btn" onClick={() => setNowOffset(0)}>Live</button>
                 <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 30))}>30m ago</button>
                 <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60))}>1h ago</button>
@@ -882,18 +1137,18 @@ function MobileApp() {
                 <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 24))}>Yesterday</button>
                 <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 48))}>2d ago</button>
               </div>
-            )}
+            }
 
-            {tab === 'legend' && (
-              <div>
+            {tab === 'legend' &&
+            <div>
                 <WindLegend />
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--divider)',
-                              fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
                   Outer ring = your reference time. Trail fades toward center (older). Drag on the chart
                   to read a specific point; drag the scrubber below to set the reference time.
                 </div>
               </div>
-            )}
+            }
           </div>
 
           <div style={{ fontSize: 9.5, color: 'var(--muted)', textAlign: 'center', letterSpacing: '0.06em', padding: '4px 0' }}>
@@ -908,10 +1163,10 @@ function MobileApp() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span className="label-cap" style={{ fontSize: 9, flexShrink: 0 }}>Scale</span>
           <div className="seg-mobile" style={{ flex: 1 }}>
-            {SCALES.map(s => (
-              <button key={s.id} className={s.id === scaleId ? 'active' : ''}
-                      onClick={() => setScaleId(s.id)}>{s.id}</button>
-            ))}
+            {SCALES.map((s) =>
+            <button key={s.id} className={s.id === scaleId ? 'active' : ''}
+            onClick={() => setScaleId(s.id)}>{s.id}</button>
+            )}
           </div>
         </div>
 
@@ -919,7 +1174,7 @@ function MobileApp() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
           <span className="label-cap" style={{ fontSize: 9 }}>Time scrubber</span>
           <button className="btn btn-accent" onClick={() => setNowOffset(0)} disabled={isLive}
-                  style={{ opacity: isLive ? 0.45 : 1, fontSize: 11, padding: '5px 9px' }}>
+          style={{ opacity: isLive ? 0.45 : 1, fontSize: 11, padding: '5px 9px' }}>
             ← Live
           </button>
         </div>
@@ -933,36 +1188,43 @@ function MobileApp() {
       <TweaksPanel>
         <TweakSection label="Theme" />
         <TweakColor label="Accent" value={t.accentColor}
-                    options={['#0044CC', '#0E7C66', '#C0392B', '#5A2A82', '#0A0A0A']}
-                    onChange={(v) => setTweak('accentColor', v)} />
+        options={['#0044CC', '#0E7C66', '#C0392B', '#5A2A82', '#0A0A0A']}
+        onChange={(v) => setTweak('accentColor', v)} />
         <TweakSection label="Chart" />
         <TweakSlider label="Chart size" value={t.chartSize} min={280} max={420} step={10} unit="px"
-                     onChange={(v) => setTweak('chartSize', v)} />
+        onChange={(v) => setTweak('chartSize', v)} />
         <TweakSlider label="Trail width" value={t.trailWidth} min={1} max={5} step={0.25} unit="px"
-                     onChange={(v) => setTweak('trailWidth', v)} />
+        onChange={(v) => setTweak('trailWidth', v)} />
         <TweakToggle label="Trail dots" value={t.showTrailDots}
-                     onChange={(v) => setTweak('showTrailDots', v)} />
-        {t.showTrailDots && (
-          <TweakSlider label="Dot density" value={t.dotDensity} min={8} max={60} step={2}
-                       onChange={(v) => setTweak('dotDensity', v)} />
-        )}
+        onChange={(v) => setTweak('showTrailDots', v)} />
+        {t.showTrailDots &&
+        <TweakSlider label="Dot density" value={t.dotDensity} min={8} max={60} step={2}
+        onChange={(v) => setTweak('dotDensity', v)} />
+        }
         <TweakToggle label="Radial labels" value={t.showRadialLabels}
-                     onChange={(v) => setTweak('showRadialLabels', v)} />
+        onChange={(v) => setTweak('showRadialLabels', v)} />
+        <TweakToggle label="Overlay stats on polar" value={t.showOverlayStats}
+        onChange={(v) => setTweak('showOverlayStats', v)} />
+        <TweakSection label="Speed chart" />
+        <TweakToggle label="Show speed chart" value={t.showSpeedChart}
+        onChange={(v) => setTweak('showSpeedChart', v)} />
+        <TweakToggle label="Area fill" value={t.speedFill}
+        onChange={(v) => setTweak('speedFill', v)} />
         <TweakSection label="Layout" />
         <TweakRadio label="Default tab" value={t.defaultBottomTab}
-                    options={['stats', 'jump', 'legend']}
-                    onChange={(v) => { setTweak('defaultBottomTab', v); setTab(v); }} />
+        options={['stats', 'jump', 'legend']}
+        onChange={(v) => {setTweak('defaultBottomTab', v);setTab(v);}} />
       </TweaksPanel>
-    </div>
-  );
+    </div>);
+
 }
 
 function App() {
   return (
     <IOSDevice width={402} height={874}>
       <MobileApp />
-    </IOSDevice>
-  );
+    </IOSDevice>);
+
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
