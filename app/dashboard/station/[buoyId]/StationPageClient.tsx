@@ -6,7 +6,6 @@ import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import MobileStationLayout from '@/components/dashboard/MobileStationLayout'
 import StationHeader from '@/components/dashboard/StationHeader'
 import PolarChart from '@/components/dashboard/PolarChart'
-import WindReadout from '@/components/dashboard/WindReadout'
 import BottomControlsDock from '@/components/dashboard/BottomControlsDock'
 
 interface StationPageClientProps {
@@ -96,42 +95,16 @@ export default function StationPageClient({
     >
       {/* Polar chart card */}
       {data && data.length > 0 && (
-        <div
-          style={{
-            background: 'var(--surface-raised)',
-            border: '1px solid var(--surface-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            marginBottom: '14px',
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          <h2
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '18px',
-              fontWeight: '600',
-              marginBottom: '12px',
-            }}
-          >
-            Wind Direction × Time
-          </h2>
-          <PolarChart
-            data={data}
-            buoyId={buoyId}
-            timeWindowMinutes={timeWindowMinutes}
-            nowOffsetMinutes={nowOffset}
-            hoverPoint={hoverPoint}
-            onHoverChange={setHoverPoint}
-          />
-        </div>
-      )}
-
-      {/* Wind readout card */}
-      {displayPoint && (
-        <div>
-          <WindReadout point={displayPoint} mode={mode} buoyId={buoyId} />
-        </div>
+        <PolarChart
+          data={data}
+          buoyId={buoyId}
+          timeWindowMinutes={timeWindowMinutes}
+          nowOffsetMinutes={nowOffset}
+          hoverPoint={hoverPoint}
+          onHoverChange={setHoverPoint}
+          displayPoint={displayPoint}
+          mode={mode}
+        />
       )}
     </MobileStationLayout>
   )

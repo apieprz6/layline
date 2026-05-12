@@ -2,9 +2,9 @@
 
 import { useMemo } from 'react'
 import type { MinuteDataPoint } from '@/types'
-import { getWindColorHex } from '@/lib/utils/wind'
+import { getWindColorHex, getWindCondition, getCompassDirection } from '@/lib/utils/wind'
 import { TIME_SCALES } from '@/lib/utils/windowing'
-import { formatTimeOffset } from '@/lib/utils/time'
+import { formatTimeOffset, formatTime } from '@/lib/utils/time'
 import { findPointByRadius } from '@/lib/utils/radialSelection'
 
 interface PolarChartProps {
@@ -15,6 +15,8 @@ interface PolarChartProps {
   referenceTime?: Date
   hoverPoint?: MinuteDataPoint | null
   onHoverChange?: (point: MinuteDataPoint | null) => void
+  displayPoint?: MinuteDataPoint // NEW: Data point to display in overlays
+  mode?: 'reference' | 'touch' // NEW: Display mode for header label
 }
 
 const SIZE = 360
@@ -53,6 +55,8 @@ export default function PolarChart({
   nowOffsetMinutes = 0,
   hoverPoint,
   onHoverChange,
+  displayPoint,
+  mode = 'reference',
 }: PolarChartProps) {
   // Get time scale configuration
   const timeScale = useMemo(() => {
@@ -197,9 +201,169 @@ export default function PolarChart({
     onHoverChange(null)
   }
 
+  // Calculate timestamp for header
+  const headerTimestamp = useMemo(() => {
+    if (!displayPoint) return ''
+    const now = new Date()
+    const pointTime = new Date(now.getTime() - displayPoint.minsAgo * 60 * 1000)
+    const timeString = formatTime(pointTime)
+    const offsetString = formatTimeOffset(displayPoint.minsAgo)
+    return `${timeString} · ${offsetString}`
+  }, [displayPoint])
+
   return (
-    <div>
-      <svg
+    <div
+      style={{
+        background: 'var(--surface-raised)',
+        border: '1px solid var(--surface-border)',
+        borderRadius: '12px',
+        padding: '10px',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      {/* Header row */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '4px',
+          fontFamily: 'var(--font-body)',
+          fontSize: '12px',
+        }}
+      >
+        <span
+          style={{
+            fontWeight: '600',
+            color: mode === 'reference' ? 'var(--text-muted)' : 'var(--accent-blue)',
+          }}
+        >
+          {mode === 'reference' ? 'At reference' : '● At touch'}
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {headerTimestamp}
+        </span>
+      </div>
+
+      {/* Chart container with overlays */}
+      <div style={{ position: 'relative' }}>
+        {/* Left overlay: Direction */}
+        {displayPoint && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '15%',
+              left: '5%',
+              zIndex: 2,
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '8.5px',
+                fontWeight: '600',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                marginBottom: '1px',
+              }}
+            >
+              Direction
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '26px',
+                fontWeight: '600',
+                letterSpacing: '-0.02em',
+                lineHeight: '1',
+                color: 'var(--text-primary)',
+              }}
+            >
+              {Math.round(displayPoint.dir)}°
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: 'var(--accent-blue)',
+                marginTop: '1px',
+              }}
+            >
+              {getCompassDirection(displayPoint.dir)}
+            </div>
+          </div>
+        )}
+
+        {/* Right overlay: Speed */}
+        {displayPoint && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '15%',
+              right: '5%',
+              zIndex: 2,
+              pointerEvents: 'none',
+              textAlign: 'right',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '8.5px',
+                fontWeight: '600',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                marginBottom: '1px',
+              }}
+            >
+              Speed
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', justifyContent: 'flex-end' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '26px',
+                  fontWeight: '600',
+                  lineHeight: '1',
+                  color: getWindColorHex(displayPoint.spd),
+                }}
+              >
+                {displayPoint.spd.toFixed(1)}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                kts
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: '10.5px',
+                fontWeight: '500',
+                marginTop: '1px',
+                color: getWindColorHex(displayPoint.spd),
+              }}
+            >
+              {getWindCondition(displayPoint.spd).label}
+            </div>
+          </div>
+        )}
+
+        <svg
         viewBox="0 0 360 360"
         style={{ touchAction: 'none' }}
         onPointerDown={handlePointerDown}
@@ -459,21 +623,29 @@ export default function PolarChart({
         {/* Center dot */}
         <circle cx={CENTER_X} cy={CENTER_Y} r={2.5} fill="rgba(0,0,0,0.5)" />
       </svg>
+      </div>
 
-      {/* CHII2 elevation reminder */}
-      {buoyId === 'CHII2' && (
-        <div
-          style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '11px',
-            color: 'var(--muted)',
-            marginTop: '8px',
-            textAlign: 'center',
-          }}
-        >
-          Wind measured at 85ft elevation (typically 20-30% higher than surface)
-        </div>
-      )}
+      {/* Footer row */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: '4px 6px 2px 6px',
+          borderTop: '1px solid var(--divider)',
+          marginTop: '4px',
+          paddingTop: '8px',
+          fontFamily: 'var(--font-body)',
+          fontSize: '9px',
+          fontWeight: '600',
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+        }}
+      >
+        <span>0° N · CW</span>
+        <span>Outer = {formatTimeOffset(nowOffsetMinutes)}</span>
+        <span>{timeScale?.label || `${timeWindowMinutes}m`}</span>
+      </div>
     </div>
   )
 }
