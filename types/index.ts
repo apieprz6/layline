@@ -177,3 +177,13 @@ export interface BuoyHistoryData {
   fetchedAt: string
   error?: string
 }
+
+// Window statistics for aggregate wind analysis
+export interface WindowStats {
+  meanDir: number // Vector-averaged direction (0-360°)
+  meanSpd: number // Arithmetic mean speed (knots)
+  spdMin: number // Minimum speed in window
+  spdMax: number // Maximum speed in window
+  spread: number // Veer/back angular spread (degrees)
+  count: number // Number of data points
+}
