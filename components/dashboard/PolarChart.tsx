@@ -11,6 +11,7 @@ interface PolarChartProps {
   data: MinuteDataPoint[]
   buoyId: string
   timeWindowMinutes: number
+  nowOffsetMinutes?: number // Minutes ago from current time (0 = live, 60 = 1h ago)
   referenceTime?: Date
   hoverPoint?: MinuteDataPoint | null
   onHoverChange?: (point: MinuteDataPoint | null) => void
@@ -45,7 +46,14 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
 // Note: Replaced by findPointByRadius from radialSelection module
 // Old cartesian-distance based selection removed in favor of time-prioritized radial selection
 
-export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint, onHoverChange }: PolarChartProps) {
+export default function PolarChart({
+  data,
+  buoyId,
+  timeWindowMinutes,
+  nowOffsetMinutes = 0,
+  hoverPoint,
+  onHoverChange,
+}: PolarChartProps) {
   // Get time scale configuration
   const timeScale = useMemo(() => {
     const scaleEntry = Object.entries(TIME_SCALES).find(
@@ -70,7 +78,7 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
     const n = radialRings.length
     if (n === 0) return []
 
-    return radialRings.filter((ring, i) => {
+    return radialRings.filter((_ring, i) => {
       // Always show outer (i === 0) and inner (i === n-1)
       if (i === 0 || i === n - 1) return true
 
@@ -90,11 +98,19 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
   const dataPoints = useMemo(() => {
     if (timeWindowMinutes === 0) return []
 
+    // Define the time window based on nowOffsetMinutes
+    // nowOffset = 0 (live): show minsAgo [0, timeWindowMinutes]
+    // nowOffset = 60 (1h ago): show minsAgo [60, 60 + timeWindowMinutes]
+    const windowStart = nowOffsetMinutes
+    const windowEnd = nowOffsetMinutes + timeWindowMinutes
+
     return data
-      .filter(point => point.minsAgo <= timeWindowMinutes) // Filter to time window
+      .filter(point => point.minsAgo >= windowStart && point.minsAgo <= windowEnd)
       .map(point => {
-        // r01: 1 = now (outer ring), 0 = oldest time in window (center)
-        const r01 = 1 - (point.minsAgo / timeWindowMinutes)
+        // r01: 1 = reference time (outer ring), 0 = oldest time in window (center)
+        // Relative position within the current window
+        const relativeAge = point.minsAgo - windowStart
+        const r01 = 1 - (relativeAge / timeWindowMinutes)
         const [x, y] = polarToXY(point.dir, r01, CENTER_X, CENTER_Y, R)
         const color = getWindColorHex(point.spd)
         const opacity = Math.round((0.15 + 0.85 * Math.pow(r01, 1.2)) * 1e6) / 1e6
@@ -102,7 +118,7 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
         return { ...point, x, y, r01, color, opacity }
       })
       .sort((a, b) => a.minsAgo - b.minsAgo) // Sort oldest to newest
-  }, [data, timeWindowMinutes])
+  }, [data, timeWindowMinutes, nowOffsetMinutes])
 
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
@@ -152,7 +168,9 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
     e.preventDefault() // Prevent page scrolling on touch
 
     const svgElement = e.currentTarget
-    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const windowStart = nowOffsetMinutes
+    const windowEnd = nowOffsetMinutes + timeWindowMinutes
+    const rawDataPoints = data.filter(point => point.minsAgo >= windowStart && point.minsAgo <= windowEnd)
     const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
     onHoverChange(nearest)
   }
@@ -166,7 +184,9 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
     e.preventDefault() // Prevent page scrolling on touch drag
 
     const svgElement = e.currentTarget
-    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const windowStart = nowOffsetMinutes
+    const windowEnd = nowOffsetMinutes + timeWindowMinutes
+    const rawDataPoints = data.filter(point => point.minsAgo >= windowStart && point.minsAgo <= windowEnd)
     const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
     onHoverChange(nearest)
   }

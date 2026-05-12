@@ -27,12 +27,12 @@ jest.mock('../PolarChart', () => ({
   }) => (
     <div data-testid="polar-chart">
       PolarChart: {data.length} points, buoy: {buoyId}
-      {hoverPoint && <span data-testid="hover-active">Hovering</span>}
-      {onHoverChange && (
+      {hoverPoint ? <span data-testid="hover-active">Hovering</span> : null}
+      {onHoverChange ? (
         <button onClick={() => onHoverChange({ minsAgo: 10, spd: 12, dir: 180 })}>
           Simulate Hover
         </button>
-      )}
+      ) : null}
     </div>
   ),
 }))
@@ -42,6 +42,20 @@ jest.mock('../WindReadout', () => ({
   default: ({ point, mode }: { point: { minsAgo: number; spd: number; dir: number }; mode: string }) => (
     <div data-testid="wind-readout">
       WindReadout: {point.spd}kts at {point.dir}°, {point.minsAgo}m ago (mode: {mode})
+    </div>
+  ),
+}))
+
+jest.mock('../TimeScrubber', () => ({
+  __esModule: true,
+  default: ({ value, max, scaleMinutes, onChange }: {
+    value: number
+    max: number
+    scaleMinutes: number
+    onChange: (value: number) => void
+  }) => (
+    <div data-testid="time-scrubber">
+      TimeScrubber: value={value}, max={max}, scale={scaleMinutes}
     </div>
   ),
 }))
@@ -240,6 +254,29 @@ describe('StationDetailView', () => {
 
       // Check that callback is passed (button exists)
       expect(screen.getByRole('button', { name: 'Simulate Hover' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Time scrubber integration', () => {
+    it('renders TimeScrubber component', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const scrubber = screen.getByTestId('time-scrubber')
+      expect(scrubber).toBeInTheDocument()
+    })
+
+    it('renders "Return to live" button', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const button = screen.getByRole('button', { name: /return to live/i })
+      expect(button).toBeInTheDocument()
+    })
+
+    it('"Return to live" button is disabled when at live (nowOffset = 0)', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const button = screen.getByRole('button', { name: /return to live/i })
+      expect(button).toBeDisabled()
     })
   })
 })
