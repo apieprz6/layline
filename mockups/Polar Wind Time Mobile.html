@@ -64,11 +64,30 @@
   .phone-screen {
     background: var(--page-bg);
     height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-scroll {
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-bottom: 24px;
+    /* leaves room for the pinned scrubber dock */
+    padding-bottom: 16px;
   }
-  .phone-screen::-webkit-scrollbar { width: 0; display: none; }
+  .phone-screen::-webkit-scrollbar,
+  .phone-scroll::-webkit-scrollbar { width: 0; display: none; }
+
+  /* pinned bottom scrubber dock */
+  .scrubber-dock {
+    flex-shrink: 0;
+    background: rgba(240,237,230,0.94);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border-top: 1px solid var(--divider);
+    padding: 12px 16px calc(34px + 12px) 16px; /* clear the home indicator */
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+  }
 
   /* sticky top header */
   .top-bar {
@@ -96,9 +115,10 @@
     grid-template-columns: repeat(5, 1fr);
     background: var(--card-el);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 9px;
     padding: 3px;
     gap: 2px;
+    width: 100%;
   }
   .seg-mobile button {
     font-family: var(--font-body);
@@ -255,7 +275,19 @@
 <div id="root"></div>
 
 <script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#0044CC",
+  "chartSize": 380,
+  "trailWidth": 2.5,
+  "showTrailDots": true,
+  "dotDensity": 30,
+  "showRangeBand": true,
+  "showRadialLabels": true,
+  "defaultBottomTab": "stats"
+}/*EDITMODE-END*/;
+
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 // ── DATA ─────────────────────────────────────────────────────────
@@ -348,9 +380,9 @@ function xyToPolar(x, y, cx, cy, R) {
 }
 
 // ── POLAR CHART (mobile-tuned) ──────────────────────────────────
-function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) {
+function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint, tweaks }) {
   // mobile: tighter padding, smaller labels, touch support
-  const SIZE = 360;
+  const SIZE = tweaks.chartSize;
   const PAD = 42;
   const cx = SIZE / 2, cy = SIZE / 2;
   const R = (SIZE - PAD * 2) / 2;
@@ -451,8 +483,8 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
           <stop offset="100%" stopColor="#E8E2D2" stopOpacity="1" />
         </radialGradient>
         <radialGradient id="outerHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="92%" stopColor="rgba(0,68,204,0)" />
-          <stop offset="100%" stopColor="rgba(0,68,204,0.12)" />
+          <stop offset="92%" stopColor={tweaks.accentColor} stopOpacity="0" />
+          <stop offset="100%" stopColor={tweaks.accentColor} stopOpacity="0.12" />
         </radialGradient>
       </defs>
 
@@ -481,7 +513,8 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
           <circle key={t.minutes} cx={cx} cy={cy}
             r={Math.max(0, t.r01 * R)}
             fill="none"
-            stroke={isOuterRef ? 'rgba(0,68,204,0.55)' : 'rgba(0,0,0,0.12)'}
+            stroke={isOuterRef ? tweaks.accentColor : 'rgba(0,0,0,0.12)'}
+            strokeOpacity={isOuterRef ? 0.55 : 1}
             strokeWidth={isOuterRef ? 1.5 : 0.75}
             strokeDasharray={isOuterRef ? '0' : '2 4'}
           />
@@ -489,7 +522,7 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
       })}
 
       {/* Radial tick labels — on mobile: only outermost + 2-3 inner ones, smaller */}
-      {radialTicks.map((t, i) => {
+      {tweaks.showRadialLabels && radialTicks.map((t, i) => {
         // Filter: show outer ring, last ring (innermost), and ~2 mid rings
         const n = radialTicks.length;
         const showThis = i === 0 || i === n - 1 || i === Math.floor(n / 2) ||
@@ -504,12 +537,13 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
         return (
           <g key={t.minutes} transform={`translate(${lx + 5}, ${ly + 2})`}>
             <rect x={-3} y={-8} width={w} height={11} rx={2}
-                  fill={accent ? 'rgba(0,68,204,0.10)' : 'rgba(240,237,230,0.95)'} />
+                  fill={accent ? tweaks.accentColor : 'rgba(240,237,230,0.95)'}
+                  fillOpacity={accent ? 0.10 : 1} />
             <text x={0} y={0}
                   fontFamily="JetBrains Mono"
                   fontSize={8.5}
                   fontWeight={accent ? 600 : 500}
-                  fill={accent ? '#0044CC' : '#666666'}>
+                  fill={accent ? tweaks.accentColor : '#666666'}>
               {t.label}
             </text>
           </g>
@@ -535,12 +569,12 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
 
       {segments.map((s, i) => (
         <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
-              stroke={s.col} strokeWidth={2.5} strokeOpacity={s.op}
+              stroke={s.col} strokeWidth={tweaks.trailWidth} strokeOpacity={s.op}
               strokeLinecap="round" />
       ))}
 
-      {visible.map((p, i) => {
-        const step = Math.max(1, Math.floor(visible.length / 28));
+      {tweaks.showTrailDots && visible.map((p, i) => {
+        const step = Math.max(1, Math.floor(visible.length / tweaks.dotDensity));
         if (i % step !== 0 && i !== 0) return null;
         const [px, py] = polarToXY(p.dir, p.r01, cx, cy, R);
         const op = 0.15 + 0.85 * Math.pow(p.r01, 1.2);
@@ -550,9 +584,9 @@ function PolarChart({ data, scaleMin, nowOffsetMin, onHoverPoint, hoverPoint }) 
       {now && nowXY && (
         <g>
           <line x1={cx} y1={cy} x2={nowXY[0]} y2={nowXY[1]}
-                stroke="rgba(0,68,204,0.30)" strokeWidth={1} strokeDasharray="3 3" />
-          <circle cx={nowXY[0]} cy={nowXY[1]} r={9} fill="white" stroke="#0044CC" strokeWidth={2} />
-          <circle cx={nowXY[0]} cy={nowXY[1]} r={4} fill="#0044CC" />
+                stroke={tweaks.accentColor} strokeOpacity={0.30} strokeWidth={1} strokeDasharray="3 3" />
+          <circle cx={nowXY[0]} cy={nowXY[1]} r={9} fill="white" stroke={tweaks.accentColor} strokeWidth={2} />
+          <circle cx={nowXY[0]} cy={nowXY[1]} r={4} fill={tweaks.accentColor} />
         </g>
       )}
 
@@ -706,12 +740,13 @@ function WindLegend() {
 
 // ── APP ─────────────────────────────────────────────────────────
 function MobileApp() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [scaleId, setScaleId] = useState('6h');
   const scaleObj = useMemo(() => SCALES.find(s => s.id === scaleId), [scaleId]);
   const scaleMin = scaleObj.minutes;
   const [nowOffset, setNowOffset] = useState(0);
   const [hoverPoint, setHoverPoint] = useState(null);
-  const [tab, setTab] = useState('stats');
+  const [tab, setTab] = useState(t.defaultBottomTab || 'stats');
 
   const maxOffset = TOTAL_HOURS * 60 - scaleMin;
   useEffect(() => {
@@ -733,157 +768,191 @@ function MobileApp() {
   const display = hoverPoint || currentPoint;
   const isLive = nowOffset === 0;
 
+  // Expose accent color as a CSS variable so the whole UI tracks the tweak
+  const screenStyle = { ['--accent']: t.accentColor, ['--accent-soft']: t.accentColor + '1A' };
+
   return (
-    <div className="phone-screen">
-      {/* Sticky header */}
-      <div className="top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 11, letterSpacing: '0.10em', color: 'var(--accent)' }}>
-            LAYLINE
-          </span>
-          <span style={{ color: 'var(--muted)', fontSize: 11 }}>/</span>
-          <span className="label-cap" style={{ fontSize: 9 }}>Wind history</span>
-          <span style={{ flex: 1 }} />
-          <span style={{
-            fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
-            padding: '3px 7px', borderRadius: 4,
-            background: isLive ? 'rgba(0,122,47,0.10)' : 'rgba(0,68,204,0.10)',
-            color: isLive ? '#007A2F' : '#0044CC',
-            border: `1px solid ${isLive ? 'rgba(0,122,47,0.35)' : 'rgba(0,68,204,0.35)'}`,
-            textTransform: 'uppercase',
-          }}>
-            {isLive ? '● Live' : fmtAgo(nowOffset)}
-          </span>
-        </div>
-        <h1 style={{ fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-          Wind direction × time
-        </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <span className="mono" style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-            {fmtDM(referenceTime)}
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>· outer ring</span>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{ padding: '14px 16px 0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-        {/* Scale segmented control */}
-        <div className="seg-mobile">
-          {SCALES.map(s => (
-            <button key={s.id} className={s.id === scaleId ? 'active' : ''}
-                    onClick={() => setScaleId(s.id)}>{s.id}</button>
-          ))}
-        </div>
-
-        {/* Polar chart card */}
-        <div className="card" style={{ padding: 10, paddingBottom: 6 }}>
-          <PolarChart data={SERIES} scaleMin={scaleMin} nowOffsetMin={nowOffset}
-                      onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} />
-          <div style={{ display: 'flex', justifyContent: 'space-between',
-                        padding: '4px 6px 2px 6px',
-                        borderTop: '1px solid var(--divider)',
-                        marginTop: 4,
-                        paddingTop: 8 }}>
-            <span className="label-cap" style={{ fontSize: 9 }}>0° N · CW</span>
-            <span className="label-cap" style={{ fontSize: 9 }}>Outer = {fmtOffset(nowOffset)}</span>
-            <span className="label-cap" style={{ fontSize: 9 }}>{scaleObj.label}</span>
-          </div>
-        </div>
-
-        {/* Readout: current/at-cursor */}
-        <div className="card" style={{ padding: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span className="label-cap">{hoverPoint ? 'At touch' : 'At reference'}</span>
-            <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {fmtHM(display.time)} · {display.minutesAgo === 0 ? 'now' :
-                 (display.minutesAgo < 60 ? `−${display.minutesAgo}m` : `−${(display.minutesAgo/60).toFixed(1)}h`)}
+    <div className="phone-screen" style={screenStyle}>
+      <div className="phone-scroll">
+        {/* Sticky header */}
+        <div className="top-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 11, letterSpacing: '0.10em', color: t.accentColor }}>
+              LAYLINE
+            </span>
+            <span style={{ color: 'var(--muted)', fontSize: 11 }}>/</span>
+            <span className="label-cap" style={{ fontSize: 9 }}>Wind history</span>
+            <span style={{ flex: 1 }} />
+            <span style={{
+              fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em',
+              padding: '3px 7px', borderRadius: 4,
+              background: isLive ? 'rgba(0,122,47,0.10)' : t.accentColor + '1A',
+              color: isLive ? '#007A2F' : t.accentColor,
+              border: `1px solid ${isLive ? 'rgba(0,122,47,0.35)' : t.accentColor + '59'}`,
+              textTransform: 'uppercase',
+            }}>
+              {isLive ? '● Live' : fmtAgo(nowOffset)}
             </span>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 12 }}>
-            {/* Direction */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span className="mono" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>
-                  {Math.round(display.dir)}°
-                </span>
-                <span style={{ fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: 600, color: 'var(--accent)' }}>
-                  {compass(display.dir)}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Direction (from)</div>
-            </div>
-            {/* Speed */}
-            <div style={{ borderLeft: '1px solid var(--divider)', paddingLeft: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                <span className="mono" style={{ fontSize: 28, fontWeight: 600, color: windColor(display.spd), lineHeight: 1 }}>
-                  {display.spd.toFixed(1)}
-                </span>
-                <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>kts</span>
-              </div>
-              <div style={{ fontSize: 11, color: windColor(display.spd), fontWeight: 500, marginTop: 4 }}>
-                {windBand(display.spd)}
-              </div>
-            </div>
+          <h1 style={{ fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+            Wind direction × time
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span className="mono" style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+              {fmtDM(referenceTime)}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>· outer ring</span>
           </div>
         </div>
 
-        {/* Scrubber card */}
-        <div className="card" style={{ padding: '12px 14px 10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span className="label-cap">Time scrubber</span>
-            <button className="btn btn-accent" onClick={() => setNowOffset(0)} disabled={isLive}
-                    style={{ opacity: isLive ? 0.45 : 1, fontSize: 11, padding: '6px 10px' }}>
-              Return to live
-            </button>
-          </div>
-          <Scrubber value={nowOffset} max={maxOffset} scaleMin={scaleMin} onChange={setNowOffset} />
-          <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-            {fmtDM(windowStart)} → {fmtDM(referenceTime)}
-          </div>
-        </div>
+        {/* Content */}
+        <div style={{ padding: '14px 16px 0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        {/* Tabbed bottom: Stats / Jump / Legend */}
-        <div className="card" style={{ padding: 14 }}>
-          <div className="tabs" style={{ marginBottom: 14 }}>
-            <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>Stats</button>
-            <button className={tab === 'jump' ? 'active' : ''} onClick={() => setTab('jump')}>Jump to</button>
-            <button className={tab === 'legend' ? 'active' : ''} onClick={() => setTab('legend')}>Legend</button>
-          </div>
-
-          {tab === 'stats' && (
-            <WindowStats data={SERIES} nowOffsetMin={nowOffset} scaleMin={scaleMin} />
-          )}
-
-          {tab === 'jump' && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <button className="btn" onClick={() => setNowOffset(0)}>Live</button>
-              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 30))}>30m ago</button>
-              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60))}>1h ago</button>
-              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 6))}>6h ago</button>
-              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 24))}>Yesterday</button>
-              <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 48))}>2d ago</button>
+          {/* Polar chart card */}
+          <div className="card" style={{ padding: 10, paddingBottom: 6 }}>
+            <PolarChart data={SERIES} scaleMin={scaleMin} nowOffsetMin={nowOffset}
+                        onHoverPoint={setHoverPoint} hoverPoint={hoverPoint} tweaks={t} />
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+                          padding: '4px 6px 2px 6px',
+                          borderTop: '1px solid var(--divider)',
+                          marginTop: 4,
+                          paddingTop: 8 }}>
+              <span className="label-cap" style={{ fontSize: 9 }}>0° N · CW</span>
+              <span className="label-cap" style={{ fontSize: 9 }}>Outer = {fmtOffset(nowOffset)}</span>
+              <span className="label-cap" style={{ fontSize: 9 }}>{scaleObj.label}</span>
             </div>
-          )}
+          </div>
 
-          {tab === 'legend' && (
-            <div>
-              <WindLegend />
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--divider)',
-                            fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Outer ring = your reference time. Trail fades toward center (older). Drag on the chart
-                to read a specific point; drag the scrubber to set the reference time.
+          {/* Readout: current/at-cursor */}
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span className="label-cap">{hoverPoint ? 'At touch' : 'At reference'}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                {fmtHM(display.time)} · {display.minutesAgo === 0 ? 'now' :
+                   (display.minutesAgo < 60 ? `−${display.minutesAgo}m` : `−${(display.minutesAgo/60).toFixed(1)}h`)}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 12 }}>
+              {/* Direction */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span className="mono" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                    {Math.round(display.dir)}°
+                  </span>
+                  <span style={{ fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: 600, color: t.accentColor }}>
+                    {compass(display.dir)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Direction (from)</div>
+              </div>
+              {/* Speed */}
+              <div style={{ borderLeft: '1px solid var(--divider)', paddingLeft: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span className="mono" style={{ fontSize: 28, fontWeight: 600, color: windColor(display.spd), lineHeight: 1 }}>
+                    {display.spd.toFixed(1)}
+                  </span>
+                  <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>kts</span>
+                </div>
+                <div style={{ fontSize: 11, color: windColor(display.spd), fontWeight: 500, marginTop: 4 }}>
+                  {windBand(display.spd)}
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div style={{ fontSize: 9.5, color: 'var(--muted)', textAlign: 'center', letterSpacing: '0.06em', padding: '4px 0' }}>
-          LAYLINE · DATA: NOAA + LAKE MICHIGAN BUOYS
+          {/* Tabbed: Stats / Jump / Legend */}
+          <div className="card" style={{ padding: 14 }}>
+            <div className="tabs" style={{ marginBottom: 14 }}>
+              <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>Stats</button>
+              <button className={tab === 'jump' ? 'active' : ''} onClick={() => setTab('jump')}>Jump to</button>
+              <button className={tab === 'legend' ? 'active' : ''} onClick={() => setTab('legend')}>Legend</button>
+            </div>
+
+            {tab === 'stats' && (
+              <WindowStats data={SERIES} nowOffsetMin={nowOffset} scaleMin={scaleMin} />
+            )}
+
+            {tab === 'jump' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button className="btn" onClick={() => setNowOffset(0)}>Live</button>
+                <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 30))}>30m ago</button>
+                <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60))}>1h ago</button>
+                <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 6))}>6h ago</button>
+                <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 24))}>Yesterday</button>
+                <button className="btn" onClick={() => setNowOffset(Math.min(maxOffset, 60 * 48))}>2d ago</button>
+              </div>
+            )}
+
+            {tab === 'legend' && (
+              <div>
+                <WindLegend />
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--divider)',
+                              fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                  Outer ring = your reference time. Trail fades toward center (older). Drag on the chart
+                  to read a specific point; drag the scrubber below to set the reference time.
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontSize: 9.5, color: 'var(--muted)', textAlign: 'center', letterSpacing: '0.06em', padding: '4px 0' }}>
+            LAYLINE · DATA: NOAA + LAKE MICHIGAN BUOYS
+          </div>
         </div>
       </div>
+
+      {/* PINNED bottom dock: scale + scrubber */}
+      <div className="scrubber-dock">
+        {/* Scale segmented control */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span className="label-cap" style={{ fontSize: 9, flexShrink: 0 }}>Scale</span>
+          <div className="seg-mobile" style={{ flex: 1 }}>
+            {SCALES.map(s => (
+              <button key={s.id} className={s.id === scaleId ? 'active' : ''}
+                      onClick={() => setScaleId(s.id)}>{s.id}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Scrubber row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+          <span className="label-cap" style={{ fontSize: 9 }}>Time scrubber</span>
+          <button className="btn btn-accent" onClick={() => setNowOffset(0)} disabled={isLive}
+                  style={{ opacity: isLive ? 0.45 : 1, fontSize: 11, padding: '5px 9px' }}>
+            ← Live
+          </button>
+        </div>
+        <Scrubber value={nowOffset} max={maxOffset} scaleMin={scaleMin} onChange={setNowOffset} />
+        <div style={{ marginTop: 2, fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+          {fmtDM(windowStart)} → {fmtDM(referenceTime)}
+        </div>
+      </div>
+
+      {/* Tweaks panel */}
+      <TweaksPanel>
+        <TweakSection label="Theme" />
+        <TweakColor label="Accent" value={t.accentColor}
+                    options={['#0044CC', '#0E7C66', '#C0392B', '#5A2A82', '#0A0A0A']}
+                    onChange={(v) => setTweak('accentColor', v)} />
+        <TweakSection label="Chart" />
+        <TweakSlider label="Chart size" value={t.chartSize} min={280} max={420} step={10} unit="px"
+                     onChange={(v) => setTweak('chartSize', v)} />
+        <TweakSlider label="Trail width" value={t.trailWidth} min={1} max={5} step={0.25} unit="px"
+                     onChange={(v) => setTweak('trailWidth', v)} />
+        <TweakToggle label="Trail dots" value={t.showTrailDots}
+                     onChange={(v) => setTweak('showTrailDots', v)} />
+        {t.showTrailDots && (
+          <TweakSlider label="Dot density" value={t.dotDensity} min={8} max={60} step={2}
+                       onChange={(v) => setTweak('dotDensity', v)} />
+        )}
+        <TweakToggle label="Radial labels" value={t.showRadialLabels}
+                     onChange={(v) => setTweak('showRadialLabels', v)} />
+        <TweakSection label="Layout" />
+        <TweakRadio label="Default tab" value={t.defaultBottomTab}
+                    options={['stats', 'jump', 'legend']}
+                    onChange={(v) => { setTweak('defaultBottomTab', v); setTab(v); }} />
+      </TweaksPanel>
     </div>
   );
 }
