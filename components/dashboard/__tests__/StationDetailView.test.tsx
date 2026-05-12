@@ -26,13 +26,13 @@ jest.mock('../PolarChart', () => ({
     onHoverChange?: (point: unknown) => void
   }) => (
     <div data-testid="polar-chart">
-      PolarChart: {data.length} points, buoy: {buoyId}
-      {hoverPoint && <span data-testid="hover-active">Hovering</span>}
-      {onHoverChange && (
+      PolarChart: {data?.length ?? 0} points, buoy: {buoyId}
+      {hoverPoint ? <span data-testid="hover-active">Hovering</span> : null}
+      {onHoverChange ? (
         <button onClick={() => onHoverChange({ minsAgo: 10, spd: 12, dir: 180 })}>
           Simulate Hover
         </button>
-      )}
+      ) : null}
     </div>
   ),
 }))
@@ -42,6 +42,20 @@ jest.mock('../WindReadout', () => ({
   default: ({ point, mode }: { point: { minsAgo: number; spd: number; dir: number }; mode: string }) => (
     <div data-testid="wind-readout">
       WindReadout: {point.spd}kts at {point.dir}°, {point.minsAgo}m ago (mode: {mode})
+    </div>
+  ),
+}))
+
+jest.mock('../TimeScrubber', () => ({
+  __esModule: true,
+  default: ({ value, max, scaleMinutes }: {
+    value: number
+    max: number
+    scaleMinutes: number
+    onChange: (value: number) => void
+  }) => (
+    <div data-testid="time-scrubber">
+      TimeScrubber: value={value}, max={max}, scale={scaleMinutes}
     </div>
   ),
 }))
@@ -65,11 +79,11 @@ describe('StationDetailView', () => {
       expect(screen.getByText(/1h \(active\)/)).toBeInTheDocument()
     })
 
-    it('filters data to 1h window by default', () => {
+    it('passes all data to PolarChart (filtering happens inside chart)', () => {
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
-      // Should show 4 points (0, 10, 30, 60 minutes ago)
-      expect(screen.getByText(/PolarChart: 4 points/)).toBeInTheDocument()
+      // Should pass all 8 points to PolarChart (chart handles window filtering internally)
+      expect(screen.getByText(/PolarChart: 8 points/)).toBeInTheDocument()
     })
 
     it('renders ScaleControl and PolarChart', () => {
@@ -87,43 +101,43 @@ describe('StationDetailView', () => {
   })
 
   describe('scale interaction', () => {
-    it('updates filtered data when scale changes to 30m', async () => {
+    it('passes timeWindowMinutes to PolarChart when scale changes to 30m', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
       await user.click(screen.getByRole('button', { name: '30m' }))
 
-      // Should show 3 points (0, 10, 30 minutes ago)
-      expect(screen.getByText(/PolarChart: 3 points/)).toBeInTheDocument()
+      // PolarChart still receives all 8 points, but timeWindowMinutes changes
+      expect(screen.getByText(/PolarChart: 8 points/)).toBeInTheDocument()
     })
 
-    it('updates filtered data when scale changes to 6h', async () => {
+    it('passes timeWindowMinutes to PolarChart when scale changes to 6h', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
       await user.click(screen.getByRole('button', { name: '6h' }))
 
-      // Should show 6 points (0, 10, 30, 60, 120, 360 minutes ago)
-      expect(screen.getByText(/PolarChart: 6 points/)).toBeInTheDocument()
+      // PolarChart still receives all 8 points, but timeWindowMinutes changes
+      expect(screen.getByText(/PolarChart: 8 points/)).toBeInTheDocument()
     })
 
-    it('updates filtered data when scale changes to 24h', async () => {
+    it('passes timeWindowMinutes to PolarChart when scale changes to 24h', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
       await user.click(screen.getByRole('button', { name: '24h' }))
 
-      // Should show 7 points (all except 4320)
-      expect(screen.getByText(/PolarChart: 7 points/)).toBeInTheDocument()
+      // PolarChart still receives all 8 points, but timeWindowMinutes changes
+      expect(screen.getByText(/PolarChart: 8 points/)).toBeInTheDocument()
     })
 
-    it('shows all data on 72h scale', async () => {
+    it('passes timeWindowMinutes to PolarChart when scale changes to 72h', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
       await user.click(screen.getByRole('button', { name: '72h' }))
 
-      // Should show all 8 points
+      // PolarChart still receives all 8 points
       expect(screen.getByText(/PolarChart: 8 points/)).toBeInTheDocument()
     })
 
@@ -161,7 +175,7 @@ describe('StationDetailView', () => {
       expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
     })
 
-    it('handles data with no points in selected window', async () => {
+    it('passes all data to PolarChart even when window contains no points', async () => {
       const futureData: MinuteDataPoint[] = [
         { minsAgo: 100, spd: 10, dir: 210 },
         { minsAgo: 200, spd: 11, dir: 220 },
@@ -172,7 +186,8 @@ describe('StationDetailView', () => {
 
       await user.click(screen.getByRole('button', { name: '30m' }))
 
-      expect(screen.getByText(/PolarChart: 0 points/)).toBeInTheDocument()
+      // PolarChart receives all 2 points (chart handles window filtering internally)
+      expect(screen.getByText(/PolarChart: 2 points/)).toBeInTheDocument()
     })
   })
 
@@ -240,6 +255,29 @@ describe('StationDetailView', () => {
 
       // Check that callback is passed (button exists)
       expect(screen.getByRole('button', { name: 'Simulate Hover' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Time scrubber integration', () => {
+    it('renders TimeScrubber component', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const scrubber = screen.getByTestId('time-scrubber')
+      expect(scrubber).toBeInTheDocument()
+    })
+
+    it('renders "Return to live" button', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const button = screen.getByRole('button', { name: /return to live/i })
+      expect(button).toBeInTheDocument()
+    })
+
+    it('"Return to live" button is disabled when at live (nowOffset = 0)', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      const button = screen.getByRole('button', { name: /return to live/i })
+      expect(button).toBeDisabled()
     })
   })
 })

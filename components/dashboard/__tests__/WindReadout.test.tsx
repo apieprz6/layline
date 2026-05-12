@@ -80,7 +80,7 @@ describe('WindReadout', () => {
         dir: 180,
       }
 
-      const { container } = render(<WindReadout point={point} mode="reference" buoyId="CHII2" />)
+      render(<WindReadout point={point} mode="reference" buoyId="CHII2" />)
 
       // Should have colored wind speed (uses getWindColorHex)
       // Find the speed value span and check its color
