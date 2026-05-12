@@ -48,7 +48,7 @@ jest.mock('../WindReadout', () => ({
 
 jest.mock('../TimeScrubber', () => ({
   __esModule: true,
-  default: ({ value, max, scaleMinutes, onChange }: {
+  default: ({ value, max, scaleMinutes }: {
     value: number
     max: number
     scaleMinutes: number

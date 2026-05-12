@@ -27,8 +27,10 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
   const maxOffset = TOTAL_MINUTES - timeWindowMinutes
 
   // Calculate reference time and window start for display
-  const referenceTime = useMemo(() => new Date(Date.now() - nowOffset * 60 * 1000), [nowOffset])
-  const windowStart = useMemo(() => new Date(Date.now() - (nowOffset + timeWindowMinutes) * 60 * 1000), [nowOffset, timeWindowMinutes])
+  // Use state to capture current time once per render cycle
+  const [currentTime] = useState(() => Date.now())
+  const referenceTime = useMemo(() => new Date(currentTime - nowOffset * 60 * 1000), [currentTime, nowOffset])
+  const windowStart = useMemo(() => new Date(currentTime - (nowOffset + timeWindowMinutes) * 60 * 1000), [currentTime, nowOffset, timeWindowMinutes])
 
   // Format date/time for scrubber display
   const formatDateMinutes = (date: Date): string => {
