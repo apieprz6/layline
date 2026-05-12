@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { MinuteDataPoint } from '@/types'
-import { windowData, TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
+import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import ScaleControl from './ScaleControl'
 import PolarChart from './PolarChart'
 import WindReadout from './WindReadout'
@@ -21,22 +21,42 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
   const [hoverPoint, setHoverPoint] = useState<MinuteDataPoint | null>(null)
   const [nowOffset, setNowOffset] = useState<number>(0) // Minutes ago from current time (0 = live)
 
-  const filteredData = useMemo(() => {
-    return windowData(data, scaleId)
-  }, [data, scaleId])
-
   const timeWindowMinutes = TIME_SCALES[scaleId].minutes
 
   // Calculate max offset: can't go back more than TOTAL_MINUTES minus current scale
   const maxOffset = TOTAL_MINUTES - timeWindowMinutes
 
+  // Calculate reference time and window start for display
+  const referenceTime = useMemo(() => new Date(Date.now() - nowOffset * 60 * 1000), [nowOffset])
+  const windowStart = useMemo(() => new Date(Date.now() - (nowOffset + timeWindowMinutes) * 60 * 1000), [nowOffset, timeWindowMinutes])
+
+  // Format date/time for scrubber display
+  const formatDateMinutes = (date: Date): string => {
+    const opts: Intl.DateTimeFormatOptions = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }
+    return date.toLocaleDateString('en-US', opts)
+  }
+
   // Calculate display point: use hoverPoint if set, otherwise most recent data point
-  // Note: filteredData is sorted by minsAgo (ascending), so first element is most recent (minsAgo = 0)
   const displayPoint = useMemo(() => {
     if (hoverPoint) return hoverPoint
-    // Find point with minsAgo = 0, or fallback to first available point
-    return filteredData.find(p => p.minsAgo === 0) || filteredData[0]
-  }, [hoverPoint, filteredData])
+    if (!data || data.length === 0) return undefined
+
+    // Find point with minsAgo = nowOffset (reference time), or fallback to closest
+    const referencePoint = data.find(p => p.minsAgo === nowOffset)
+    if (referencePoint) return referencePoint
+
+    // Find closest point to reference time
+    let closest = data[0]
+    let minDiff = Math.abs(data[0]?.minsAgo - nowOffset)
+    for (const point of data) {
+      const diff = Math.abs(point.minsAgo - nowOffset)
+      if (diff < minDiff) {
+        minDiff = diff
+        closest = point
+      }
+    }
+    return closest
+  }, [hoverPoint, data, nowOffset])
 
   // Calculate mode: 'touch' when hovering, 'reference' when showing most recent
   const mode: 'reference' | 'touch' = hoverPoint ? 'touch' : 'reference'
@@ -68,7 +88,7 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
           Wind Direction × Time
         </h2>
         <PolarChart
-          data={filteredData}
+          data={data}
           buoyId={buoyId}
           timeWindowMinutes={timeWindowMinutes}
           nowOffsetMinutes={nowOffset}
@@ -122,9 +142,9 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
               fontSize: '11px',
               fontWeight: 500,
               padding: '6px 10px',
-              background: isLive ? 'var(--surface-card)' : 'var(--accent-primary)',
+              background: isLive ? 'var(--surface-card)' : '#0044CC',
               color: isLive ? 'var(--text-secondary)' : 'white',
-              border: '1px solid var(--surface-border)',
+              border: `1px solid ${isLive ? 'var(--surface-border)' : '#0044CC'}`,
               borderRadius: '8px',
               cursor: isLive ? 'not-allowed' : 'pointer',
               opacity: isLive ? 0.45 : 1,
@@ -139,6 +159,16 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
           scaleMinutes={timeWindowMinutes}
           onChange={setNowOffset}
         />
+        <div
+          style={{
+            marginTop: '4px',
+            fontSize: '10.5px',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {formatDateMinutes(windowStart)} → {formatDateMinutes(referenceTime)}
+        </div>
       </div>
     </div>
   )

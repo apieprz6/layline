@@ -82,18 +82,18 @@ export default function StationHeader({ stationName, buoyId, isLive }: StationHe
         {/* Live/Historical badge */}
         <div
           style={{
-            padding: '4px 8px',
+            padding: '3px 7px',
             borderRadius: '4px',
-            background: isLive ? 'rgba(0, 255, 0, 0.1)' : 'rgba(85, 85, 85, 0.1)',
-            border: `1px solid ${isLive ? 'rgba(0, 255, 0, 0.3)' : 'rgba(85, 85, 85, 0.3)'}`,
-            fontSize: '9px',
-            fontWeight: 'var(--weight-semibold)',
-            color: isLive ? '#00FF00' : 'var(--text-muted)',
+            background: isLive ? 'rgba(0,122,47,0.10)' : 'rgba(0,68,204,0.10)',
+            border: `1px solid ${isLive ? 'rgba(0,122,47,0.35)' : 'rgba(0,68,204,0.35)'}`,
+            fontSize: '9.5px',
+            fontWeight: 600,
+            color: isLive ? '#007A2F' : '#0044CC',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
+            letterSpacing: '0.08em',
           }}
         >
-          {isLive ? 'Live' : 'Historical'}
+          {isLive ? '● Live' : 'Historical'}
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ import type { MinuteDataPoint } from '@/types'
  * @param dataPoints - Array of minute data points
  * @param svgElement - SVG element reference (for coordinate conversion)
  * @param timeWindowMinutes - Total time window in minutes
+ * @param nowOffsetMinutes - Minutes ago from current time (0 = live, 60 = 1h ago)
  * @returns The data point closest to the selected radius, or null if no data available
  */
 export function findPointByRadius(
@@ -26,7 +27,8 @@ export function findPointByRadius(
   clientY: number,
   dataPoints: MinuteDataPoint[],
   svgElement: SVGSVGElement,
-  timeWindowMinutes: number
+  timeWindowMinutes: number,
+  nowOffsetMinutes: number = 0
 ): MinuteDataPoint | null {
   if (dataPoints.length === 0) return null
   if (timeWindowMinutes === 0) return null
@@ -51,10 +53,10 @@ export function findPointByRadius(
   // Normalize radius (0 = center, 1 = outer ring)
   const r01 = Math.min(1, Math.max(0, distanceFromCenter / R))
 
-  // Convert radius to time offset
-  // r01 = 1 - (minsAgo / timeWindowMinutes)
-  // Therefore: minsAgo = (1 - r01) * timeWindowMinutes
-  const targetMinsAgo = (1 - r01) * timeWindowMinutes
+  // Convert radius to time offset (absolute time from "now")
+  // r01 = 1 - ((minsAgo - nowOffsetMinutes) / timeWindowMinutes)
+  // Therefore: minsAgo = nowOffsetMinutes + (1 - r01) * timeWindowMinutes
+  const targetMinsAgo = nowOffsetMinutes + (1 - r01) * timeWindowMinutes
 
   // Find nearest data point by time offset
   let nearest = dataPoints[0]

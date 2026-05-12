@@ -68,10 +68,11 @@ export default function PolarChart({
 
     return timeScale.ticks.map((tickMinutes, index) => ({
       minutes: tickMinutes,
+      absMinutes: nowOffsetMinutes + tickMinutes, // Absolute time from "now"
       r01: 1 - (tickMinutes / timeWindowMinutes),
       isOuterRing: index === 0,
     }))
-  }, [timeScale, timeWindowMinutes])
+  }, [timeScale, timeWindowMinutes, nowOffsetMinutes])
 
   // Filter which rings get time labels (to avoid clutter)
   const labeledRings = useMemo(() => {
@@ -171,7 +172,7 @@ export default function PolarChart({
     const windowStart = nowOffsetMinutes
     const windowEnd = nowOffsetMinutes + timeWindowMinutes
     const rawDataPoints = data.filter(point => point.minsAgo >= windowStart && point.minsAgo <= windowEnd)
-    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes, nowOffsetMinutes)
     onHoverChange(nearest)
   }
 
@@ -187,7 +188,7 @@ export default function PolarChart({
     const windowStart = nowOffsetMinutes
     const windowEnd = nowOffsetMinutes + timeWindowMinutes
     const rawDataPoints = data.filter(point => point.minsAgo >= windowStart && point.minsAgo <= windowEnd)
-    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes, nowOffsetMinutes)
     onHoverChange(nearest)
   }
 
@@ -285,8 +286,10 @@ export default function PolarChart({
 
         {/* Time labels on radial rings at North (0°) */}
         {labeledRings.map(ring => {
-          const label = formatTimeOffset(ring.minutes)
-          const isNow = ring.minutes === 0
+          const label = formatTimeOffset(ring.absMinutes)
+          const isLiveNow = ring.absMinutes <= 0
+          const isOuterRef = ring.minutes === 0
+          const accent = isLiveNow || isOuterRef
           const [lx, ly] = polarToXY(0, ring.r01, CENTER_X, CENTER_Y, R)
 
           // Calculate label width for background box
@@ -301,7 +304,7 @@ export default function PolarChart({
                 width={labelWidth}
                 height={11}
                 rx={2}
-                fill={isNow ? 'rgba(0,68,204,0.10)' : 'rgba(240,237,230,0.95)'}
+                fill={accent ? 'rgba(0,68,204,0.10)' : 'rgba(240,237,230,0.95)'}
               />
               {/* Label text */}
               <text
@@ -309,8 +312,8 @@ export default function PolarChart({
                 y={0}
                 fontFamily="var(--font-mono)"
                 fontSize={8.5}
-                fontWeight={isNow ? 600 : 500}
-                fill={isNow ? '#0044CC' : '#666666'}
+                fontWeight={accent ? 600 : 500}
+                fill={accent ? '#0044CC' : '#666666'}
               >
                 {label}
               </text>
@@ -328,7 +331,7 @@ export default function PolarChart({
             fontSize={8.5}
             fill="rgba(0,0,0,0.4)"
           >
-            {formatTimeOffset(timeWindowMinutes)}
+            {formatTimeOffset(nowOffsetMinutes + timeWindowMinutes)}
           </text>
         )}
 
@@ -389,8 +392,9 @@ export default function PolarChart({
 
         {/* Crosshairs and dotted circle when hovering */}
         {hoverPoint && timeWindowMinutes > 0 && (() => {
-          // Calculate position of hover point
-          const r01 = 1 - (hoverPoint.minsAgo / timeWindowMinutes)
+          // Calculate position of hover point relative to window
+          const relativeAge = hoverPoint.minsAgo - nowOffsetMinutes
+          const r01 = 1 - (relativeAge / timeWindowMinutes)
           const [hx, hy] = polarToXY(hoverPoint.dir, r01, CENTER_X, CENTER_Y, R)
           const hoverRadius = r01 * R
 
@@ -422,11 +426,12 @@ export default function PolarChart({
 
         {/* Reference point highlighting (current point when not hovering) */}
         {!hoverPoint && dataPoints.length > 0 && (() => {
-          // Find most recent data point (minsAgo = 0)
-          const referencePoint = dataPoints.find(p => p.minsAgo === 0)
+          // Find reference point at nowOffsetMinutes (outer ring)
+          const referencePoint = dataPoints.find(p => p.minsAgo === nowOffsetMinutes)
           if (!referencePoint) return null
 
-          const r01 = 1 - (referencePoint.minsAgo / timeWindowMinutes)
+          const relativeAge = referencePoint.minsAgo - nowOffsetMinutes
+          const r01 = 1 - (relativeAge / timeWindowMinutes)
           const [rx, ry] = polarToXY(referencePoint.dir, r01, CENTER_X, CENTER_Y, R)
 
           return (
