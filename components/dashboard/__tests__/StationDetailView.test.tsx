@@ -39,9 +39,9 @@ jest.mock('../PolarChart', () => ({
 
 jest.mock('../WindReadout', () => ({
   __esModule: true,
-  default: ({ point }: { point: { minsAgo: number; spd: number; dir: number } }) => (
+  default: ({ point, mode }: { point: { minsAgo: number; spd: number; dir: number }; mode: string }) => (
     <div data-testid="wind-readout">
-      WindReadout: {point.spd}kts at {point.dir}°, {point.minsAgo}m ago
+      WindReadout: {point.spd}kts at {point.dir}°, {point.minsAgo}m ago (mode: {mode})
     </div>
   ),
 }))
@@ -176,23 +176,52 @@ describe('StationDetailView', () => {
     })
   })
 
-  describe('hover state management', () => {
-    it('does not show WindReadout when no point is hovered', () => {
+  describe('permanent WindReadout card (tracer bullet)', () => {
+    it('always renders WindReadout card, even when not hovering', () => {
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
-      expect(screen.queryByTestId('wind-readout')).not.toBeInTheDocument()
+      // WindReadout should always be visible
+      expect(screen.getByTestId('wind-readout')).toBeInTheDocument()
     })
 
-    it('shows WindReadout when a point is hovered', async () => {
+    it('displays most recent data point by default (reference mode)', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      // Should show most recent point (0 mins ago, 12kts, 220°) in reference mode
+      expect(screen.getByText(/12kts at 220°, 0m ago \(mode: reference\)/)).toBeInTheDocument()
+    })
+
+    it('switches to touch mode when hovering', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)
 
+      // Initially in reference mode
+      expect(screen.getByText(/mode: reference/)).toBeInTheDocument()
+
       await user.click(screen.getByRole('button', { name: 'Simulate Hover' }))
 
-      expect(screen.getByTestId('wind-readout')).toBeInTheDocument()
-      expect(screen.getByText(/12kts at 180°/)).toBeInTheDocument()
+      // After hover, switches to touch mode with hovered point
+      expect(screen.getByText(/mode: touch/)).toBeInTheDocument()
+      expect(screen.getByText(/12kts at 180°, 10m ago/)).toBeInTheDocument()
     })
 
+    it('calculates displayPoint from hoverPoint or most recent', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      // Default display point should be most recent (minsAgo = 0)
+      const windReadout = screen.getByTestId('wind-readout')
+      expect(windReadout.textContent).toContain('0m ago')
+    })
+
+    it('passes correct mode prop to WindReadout', () => {
+      render(<StationDetailView data={mockData} buoyId="CHII2" />)
+
+      // Should show reference mode by default
+      expect(screen.getByText(/mode: reference/)).toBeInTheDocument()
+    })
+  })
+
+  describe('hover state management', () => {
     it('passes hoverPoint to PolarChart', async () => {
       const user = userEvent.setup()
       render(<StationDetailView data={mockData} buoyId="CHII2" />)

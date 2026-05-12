@@ -5,6 +5,7 @@ import type { MinuteDataPoint } from '@/types'
 import { getWindColorHex } from '@/lib/utils/wind'
 import { TIME_SCALES } from '@/lib/utils/windowing'
 import { formatTimeOffset } from '@/lib/utils/time'
+import { findPointByRadius } from '@/lib/utils/radialSelection'
 
 interface PolarChartProps {
   data: MinuteDataPoint[]
@@ -41,38 +42,8 @@ function polarToXY(angleDeg: number, r0to1: number, cx: number, cy: number, radi
   return [x, y]
 }
 
-function findNearestPoint(
-  clientX: number,
-  clientY: number,
-  dataPoints: Array<MinuteDataPoint & { x: number; y: number }>,
-  svgElement: SVGSVGElement
-): MinuteDataPoint | null {
-  if (dataPoints.length === 0) return null
-
-  // Convert client coordinates to SVG coordinates
-  const rect = svgElement.getBoundingClientRect()
-  const svgX = ((clientX - rect.left) / rect.width) * SIZE
-  const svgY = ((clientY - rect.top) / rect.height) * SIZE
-
-  // Find nearest data point
-  let nearest = dataPoints[0]
-  let minDist = Infinity
-
-  for (const point of dataPoints) {
-    const dist = Math.sqrt((point.x - svgX) ** 2 + (point.y - svgY) ** 2)
-    if (dist < minDist) {
-      minDist = dist
-      nearest = point
-    }
-  }
-
-  // Return only the original MinuteDataPoint properties
-  return {
-    minsAgo: nearest.minsAgo,
-    spd: nearest.spd,
-    dir: nearest.dir,
-  }
-}
+// Note: Replaced by findPointByRadius from radialSelection module
+// Old cartesian-distance based selection removed in favor of time-prioritized radial selection
 
 export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint, onHoverChange }: PolarChartProps) {
   // Get time scale configuration
@@ -178,16 +149,25 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!onHoverChange) return
 
+    e.preventDefault() // Prevent page scrolling on touch
+
     const svgElement = e.currentTarget
-    const nearest = findNearestPoint(e.clientX, e.clientY, dataPoints, svgElement)
+    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
     onHoverChange(nearest)
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!onHoverChange) return
 
+    // Only process move if pointer is down (buttons !== 0) or it's a touch event
+    if (e.buttons === 0 && e.pointerType !== 'touch') return
+
+    e.preventDefault() // Prevent page scrolling on touch drag
+
     const svgElement = e.currentTarget
-    const nearest = findNearestPoint(e.clientX, e.clientY, dataPoints, svgElement)
+    const rawDataPoints = data.filter(point => point.minsAgo <= timeWindowMinutes)
+    const nearest = findPointByRadius(e.clientX, e.clientY, rawDataPoints, svgElement, timeWindowMinutes)
     onHoverChange(nearest)
   }
 
@@ -198,7 +178,13 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
 
   return (
     <div>
-      <svg viewBox="0 0 360 360" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
+      <svg
+        viewBox="0 0 360 360"
+        style={{ touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
         {/* Background gradients */}
         <defs>
           <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
@@ -381,7 +367,7 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
           )
         })}
 
-        {/* Crosshairs when hovering */}
+        {/* Crosshairs and dotted circle when hovering */}
         {hoverPoint && timeWindowMinutes > 0 && (() => {
           // Calculate position of hover point
           const r01 = 1 - (hoverPoint.minsAgo / timeWindowMinutes)
@@ -400,15 +386,15 @@ export default function PolarChart({ data, buoyId, timeWindowMinutes, hoverPoint
                 strokeWidth={1.5}
                 strokeDasharray="4 2"
               />
-              {/* Circular ring at hover radius */}
+              {/* Dotted circle at hover time radius (new visual feedback) */}
               <circle
                 cx={CENTER_X}
                 cy={CENTER_Y}
                 r={Math.max(0, hoverRadius)}
                 fill="none"
-                stroke="rgba(0,68,204,0.6)"
-                strokeWidth={2}
-                strokeDasharray="4 2"
+                stroke="rgba(0,0,0,0.22)"
+                strokeWidth={1}
+                strokeDasharray="2 3"
               />
             </g>
           )

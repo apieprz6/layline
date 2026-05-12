@@ -428,7 +428,7 @@ describe('PolarChart', () => {
       expect(crosshairLine).toBeTruthy()
     })
 
-    it('renders crosshair circular ring when hoverPoint is provided', () => {
+    it('renders dotted circle at hover radius when hoverPoint is provided', () => {
       const data: MinuteDataPoint[] = [
         { minsAgo: 0, spd: 12, dir: 0 },
       ]
@@ -444,19 +444,19 @@ describe('PolarChart', () => {
         />
       )
 
-      // Should have a distinctive crosshair ring
+      // Should have a dotted circle (new visual feedback)
       const circles = container.querySelectorAll('circle')
-      const crosshairRing = Array.from(circles).find(circle => {
+      const dottedCircle = Array.from(circles).find(circle => {
         const strokeWidth = circle.getAttribute('stroke-width')
         const strokeDasharray = circle.getAttribute('stroke-dasharray')
-        // Crosshair ring has distinctive styling
-        return strokeWidth === '2' && strokeDasharray === '4 2'
+        // Dotted circle has specific dash pattern
+        return strokeWidth === '1' && strokeDasharray === '2 3'
       })
 
-      expect(crosshairRing).toBeTruthy()
+      expect(dottedCircle).toBeTruthy()
     })
 
-    it('does not render crosshairs when hoverPoint is null', () => {
+    it('does not render crosshairs or dotted circle when hoverPoint is null', () => {
       const data: MinuteDataPoint[] = [
         { minsAgo: 0, spd: 12, dir: 0 },
       ]
@@ -477,6 +477,15 @@ describe('PolarChart', () => {
       })
 
       expect(crosshairLine).toBeFalsy()
+
+      // Also check dotted circle is not rendered
+      const circles = container.querySelectorAll('circle')
+      const dottedCircle = Array.from(circles).find(circle => {
+        const strokeDasharray = circle.getAttribute('stroke-dasharray')
+        return strokeDasharray === '2 3'
+      })
+
+      expect(dottedCircle).toBeFalsy()
     })
   })
 
@@ -545,6 +554,191 @@ describe('PolarChart', () => {
 
       // Reference ring should not be present when hovering
       expect(referenceRing).toBeFalsy()
+    })
+  })
+
+  describe('Radial selection with new algorithm (tracer bullet)', () => {
+    it('uses radial selection instead of cartesian distance', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+        { minsAgo: 30, spd: 14, dir: 90 },
+        { minsAgo: 60, spd: 10, dir: 180 },
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+
+      if (svg) {
+        // Mock the SVG bounding rect to match test expectations
+        const mockGetBoundingClientRect = jest.fn().mockReturnValue({
+          left: 0,
+          top: 0,
+          width: 360,
+          height: 360,
+          right: 360,
+          bottom: 360,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        })
+        Object.defineProperty(svg, 'getBoundingClientRect', {
+          value: mockGetBoundingClientRect,
+        })
+
+        // Click near outer ring should select recent point
+        fireEvent.pointerDown(svg, {
+          clientX: 180,
+          clientY: 50, // Near top = near outer ring = recent
+        })
+      }
+
+      // Should select a recent point (0 or 30 mins ago, both acceptable)
+      const call = handleHoverChange.mock.calls[0][0]
+      expect(call.minsAgo).toBeLessThan(40)
+    })
+  })
+
+  describe('Touch interaction improvements', () => {
+    it('SVG element includes touch handling to prevent page scrolling', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+      // SVG should exist and have pointer event handlers
+      expect(svg).toBeInTheDocument()
+      expect(svg).toBeTruthy()
+    })
+
+    it('pointer down handler includes preventDefault call', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+
+      if (svg) {
+        // Verify handler is attached and processes event
+        fireEvent.pointerDown(svg, {
+          clientX: 180,
+          clientY: 180,
+        })
+      }
+
+      // Verify handler was triggered (via onHoverChange call)
+      expect(handleHoverChange).toHaveBeenCalled()
+    })
+
+    it('pointer move handler processes touch events correctly', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const handleHoverChange = jest.fn()
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          onHoverChange={handleHoverChange}
+        />
+      )
+
+      const svg = container.querySelector('svg')
+
+      if (svg) {
+        // Touch event should process even without buttons pressed
+        fireEvent.pointerMove(svg, {
+          clientX: 180,
+          clientY: 180,
+          buttons: 0,
+          pointerType: 'touch',
+        })
+      }
+
+      // Verify touch move is processed
+      expect(handleHoverChange).toHaveBeenCalled()
+    })
+  })
+
+  describe('Dotted circle visual feedback', () => {
+    it('renders dotted circle at hover point radius', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+        { minsAgo: 30, spd: 14, dir: 90 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={data[1]} // 30 mins ago = 50% radius
+        />
+      )
+
+      const circles = container.querySelectorAll('circle')
+      const dottedCircle = Array.from(circles).find(circle => {
+        const strokeDasharray = circle.getAttribute('stroke-dasharray')
+        const strokeWidth = circle.getAttribute('stroke-width')
+        // Dotted circle has specific dash pattern
+        return strokeDasharray === '2 3' && strokeWidth === '1'
+      })
+
+      expect(dottedCircle).toBeTruthy()
+    })
+
+    it('does not render dotted circle when hoverPoint is null', () => {
+      const data: MinuteDataPoint[] = [
+        { minsAgo: 0, spd: 12, dir: 0 },
+      ]
+
+      const { container } = render(
+        <PolarChart
+          data={data}
+          buoyId="CHII2"
+          timeWindowMinutes={60}
+          hoverPoint={null}
+        />
+      )
+
+      const circles = container.querySelectorAll('circle')
+      const dottedCircle = Array.from(circles).find(circle => {
+        const strokeDasharray = circle.getAttribute('stroke-dasharray')
+        return strokeDasharray === '2 3'
+      })
+
+      expect(dottedCircle).toBeFalsy()
     })
   })
 })

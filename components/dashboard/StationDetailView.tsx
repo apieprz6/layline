@@ -22,6 +22,17 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
 
   const timeWindowMinutes = TIME_SCALES[scaleId].minutes
 
+  // Calculate display point: use hoverPoint if set, otherwise most recent data point
+  // Note: filteredData is sorted by minsAgo (ascending), so first element is most recent (minsAgo = 0)
+  const displayPoint = useMemo(() => {
+    if (hoverPoint) return hoverPoint
+    // Find point with minsAgo = 0, or fallback to first available point
+    return filteredData.find(p => p.minsAgo === 0) || filteredData[0]
+  }, [hoverPoint, filteredData])
+
+  // Calculate mode: 'touch' when hovering, 'reference' when showing most recent
+  const mode: 'reference' | 'touch' = hoverPoint ? 'touch' : 'reference'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <ScaleControl activeScale={scaleId} onScaleChange={setScaleId} />
@@ -52,13 +63,14 @@ export default function StationDetailView({ data, buoyId }: StationDetailViewPro
           hoverPoint={hoverPoint}
           onHoverChange={setHoverPoint}
         />
-
-        {hoverPoint && (
-          <div style={{ marginTop: '16px' }}>
-            <WindReadout point={hoverPoint} buoyId={buoyId} />
-          </div>
-        )}
       </div>
+
+      {/* Permanent WindReadout card - always visible */}
+      {displayPoint && (
+        <div style={{ marginTop: '14px' }}>
+          <WindReadout point={displayPoint} mode={mode} buoyId={buoyId} />
+        </div>
+      )}
     </div>
   )
 }
