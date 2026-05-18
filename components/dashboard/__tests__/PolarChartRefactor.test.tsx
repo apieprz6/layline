@@ -1,7 +1,25 @@
 import '@testing-library/jest-dom'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import PolarChart from '../PolarChart'
 import type { MinuteDataPoint } from '@/types'
+
+// Mock SVG getBoundingClientRect for overlay positioning
+beforeAll(() => {
+  Object.defineProperty(SVGSVGElement.prototype, 'getBoundingClientRect', {
+    writable: true,
+    value: jest.fn().mockReturnValue({
+      width: 360,
+      height: 360,
+      top: 0,
+      left: 0,
+      right: 360,
+      bottom: 360,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    }),
+  })
+})
 
 describe('PolarChart - Card Refactor (LAY-34)', () => {
   const mockData: MinuteDataPoint[] = [
@@ -107,7 +125,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
   })
 
   describe('Overlays', () => {
-    it('renders left overlay with direction numerals and compass heading', () => {
+    it('renders left overlay with direction numerals and compass heading', async () => {
       const point: MinuteDataPoint = {
         minsAgo: 0,
         spd: 12,
@@ -125,8 +143,9 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
         />
       )
 
+      // Wait for overlays to render after SVG dimensions are measured
       // Should show direction in degrees
-      expect(screen.getByText('180°')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByText('180°')).toBeInTheDocument())
 
       // Should show "Direction" label
       expect(screen.getByText('Direction')).toBeInTheDocument()
@@ -166,14 +185,14 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       expect(screen.getByText('Medium')).toBeInTheDocument()
     })
 
-    it('colors speed numerals based on wind condition', () => {
+    it('colors speed numerals based on wind condition', async () => {
       const lightAirPoint: MinuteDataPoint = {
         minsAgo: 0,
         spd: 7, // Light air
         dir: 180,
       }
 
-      const { container } = render(
+      render(
         <PolarChart
           data={mockData}
           buoyId="CHII2"
@@ -184,13 +203,14 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
         />
       )
 
+      // Wait for overlays to render after SVG dimensions are measured
       // Speed text should have wind condition color
       // Light air = #007A52
-      const speedText = screen.getByText('7.0')
+      const speedText = await waitFor(() => screen.getByText('7.0'))
       expect(speedText).toHaveStyle({ color: '#007A52' })
     })
 
-    it('overlays are positioned absolutely over the chart', () => {
+    it('overlays are positioned absolutely over the chart', async () => {
       const point: MinuteDataPoint = {
         minsAgo: 0,
         spd: 12,
@@ -208,9 +228,11 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
         />
       )
 
-      // Find overlay containers (should have position: absolute)
-      const overlays = container.querySelectorAll('[style*="position: absolute"]')
-      expect(overlays.length).toBeGreaterThan(0)
+      // Wait for overlays to render after SVG dimensions are measured
+      await waitFor(() => {
+        const overlays = container.querySelectorAll('[style*="position: absolute"]')
+        expect(overlays.length).toBeGreaterThan(0)
+      })
     })
   })
 
