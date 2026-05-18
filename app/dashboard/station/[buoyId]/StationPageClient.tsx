@@ -74,10 +74,28 @@ export default function StationPageClient({
   // Check if currently at live position
   const isAtLive = nowOffset === 0
 
+  // Calculate latest data time (most recent sample)
+  const latestDataTime = useMemo(() => {
+    if (!data || data.length === 0) return new Date()
+    const latestPoint = data.find((p) => p.minsAgo === 0) || data[0]
+    return new Date(currentTime - latestPoint.minsAgo * 60 * 1000)
+  }, [data, currentTime])
+
+  // For demo: use current time minus 12 seconds as lastFetchTime
+  // TODO: This should come from the API response (fetchedAt field)
+  const lastFetchTime = useMemo(() => new Date(currentTime - 12 * 1000), [currentTime])
+
   return (
     <MobileStationLayout
       header={
-        <StationHeader stationName={stationName} buoyId={buoyId} isLive={isLive} />
+        <StationHeader
+          stationName={stationName}
+          buoyId={buoyId}
+          latestDataTime={latestDataTime}
+          lastFetchTime={lastFetchTime}
+          nowOffset={nowOffset}
+          onReturnToLive={() => setNowOffset(0)}
+        />
       }
       dock={
         <BottomControlsDock
