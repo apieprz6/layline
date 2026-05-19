@@ -34,13 +34,10 @@ export default async function StationPage({ params }: StationPageProps) {
     notFound()
   }
 
-  const isLive = historyData.status === 'online' || historyData.status === 'recent'
-
   return (
     <StationPageClient
       buoyId={buoyId}
       stationName={stationInfo.name}
-      isLive={isLive}
       data={historyData.extendedHistory ?? []}
     />
   )

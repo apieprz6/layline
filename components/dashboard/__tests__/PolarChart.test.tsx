@@ -17,7 +17,7 @@ describe('PolarChart', () => {
       const sparseData: MinuteDataPoint[] = [{ minsAgo: 5, spd: 12, dir: 180 }]
 
       const { container } = render(
-        <PolarChart data={sparseData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={sparseData} timeWindowMinutes={30} />
       )
 
       // The data point circle should exist and be positioned near the outer ring
@@ -43,7 +43,7 @@ describe('PolarChart', () => {
       const currentData: MinuteDataPoint[] = [{ minsAgo: 0, spd: 12, dir: 0 }] // North
 
       const { container } = render(
-        <PolarChart data={currentData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={currentData} timeWindowMinutes={30} />
       )
 
       const circles = container.querySelectorAll('circle[fill="#0055BB"], circle[fill="#007A52"], circle[fill="#C47000"], circle[fill="#CC1100"]')
@@ -65,7 +65,7 @@ describe('PolarChart', () => {
       ]
 
       const { container } = render(
-        <PolarChart data={dataWithOldPoints} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={dataWithOldPoints} timeWindowMinutes={30} />
       )
 
       // Should only render 2 data points, not 3
@@ -76,7 +76,7 @@ describe('PolarChart', () => {
 
   describe('SVG structure', () => {
     it('renders SVG with 360x360 viewBox', () => {
-      render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
 
       const svg = document.querySelector('svg')
       expect(svg).toBeInTheDocument()
@@ -87,7 +87,7 @@ describe('PolarChart', () => {
   describe('Radial rings at tick intervals', () => {
     it('renders rings at tick positions for 30m scale', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       // 30m scale should have 7 rings: [0, 5, 10, 15, 20, 25, 30]
@@ -107,7 +107,7 @@ describe('PolarChart', () => {
 
     it('renders rings at tick positions for 1h scale', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />
+        <PolarChart data={mockData} timeWindowMinutes={60} />
       )
 
       const circles = container.querySelectorAll('circle')
@@ -125,7 +125,7 @@ describe('PolarChart', () => {
 
     it('renders outer ring with stronger styling', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       const circles = container.querySelectorAll('circle[fill="none"]')
@@ -143,7 +143,7 @@ describe('PolarChart', () => {
   describe('Time labels on radial rings', () => {
     it('renders time labels for subset of rings', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       // Should have time labels like "now", "−5m", "−15m", etc.
@@ -161,14 +161,14 @@ describe('PolarChart', () => {
     })
 
     it('renders "now" label for outer ring', () => {
-      render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={30} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={30} />)
 
       expect(screen.getByText('now')).toBeInTheDocument()
     })
 
     it('renders time offset labels with proper format', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />
+        <PolarChart data={mockData} timeWindowMinutes={60} />
       )
 
       const textElements = container.querySelectorAll('text')
@@ -183,7 +183,7 @@ describe('PolarChart', () => {
 
     it('renders center label showing oldest time in window', () => {
       const { container } = render(
-        <PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={30} />
+        <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       // Should have a center label showing oldest time (−30m for 30-minute window)
@@ -199,7 +199,7 @@ describe('PolarChart', () => {
 
   describe('Compass labels', () => {
     it('renders cardinal direction labels (N, E, S, W)', () => {
-      render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
 
       expect(screen.getByText('N')).toBeInTheDocument()
       expect(screen.getByText('E')).toBeInTheDocument()
@@ -208,7 +208,7 @@ describe('PolarChart', () => {
     })
 
     it('renders intercardinal direction labels (NE, SE, SW, NW)', () => {
-      render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
 
       expect(screen.getByText('NE')).toBeInTheDocument()
       expect(screen.getByText('SE')).toBeInTheDocument()
@@ -224,7 +224,7 @@ describe('PolarChart', () => {
         { minsAgo: 360, spd: 10, dir: 90 }, // East, 6h ago
       ]
 
-      const { container } = render(<PolarChart data={data} buoyId="CHII2" timeWindowMinutes={360} />)
+      const { container } = render(<PolarChart data={data} timeWindowMinutes={360} />)
 
       // Should have circles for data points
       const circles = container.querySelectorAll('circle')
@@ -237,7 +237,7 @@ describe('PolarChart', () => {
         { minsAgo: 10, spd: 12, dir: 45 }, // Medium air (#0055BB)
       ]
 
-      const { container } = render(<PolarChart data={data} buoyId="CHII2" timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
 
       // Check that circles have wind-speed-based colors
       const circles = container.querySelectorAll('circle')
@@ -260,7 +260,7 @@ describe('PolarChart', () => {
         { minsAgo: 20, spd: 11, dir: 175 },
       ]
 
-      const { container } = render(<PolarChart data={data} buoyId="CHII2" timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
 
       // Should have line elements connecting points
       const lines = container.querySelectorAll('line[stroke]')
@@ -274,7 +274,7 @@ describe('PolarChart', () => {
         { minsAgo: 20, spd: 12, dir: 185 }, // Near south
       ]
 
-      const { container } = render(<PolarChart data={data} buoyId="CHII2" timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
 
       // Should have 1 line segment (20→10), not 2 (0→10 should be skipped)
       const lines = container.querySelectorAll('line[stroke]')
@@ -288,14 +288,14 @@ describe('PolarChart', () => {
 
   describe('CHII2 elevation reminder (REMOVED in LAY-34)', () => {
     it('does NOT show 85ft elevation reminder for CHII2 buoy (moved to Legend tab)', () => {
-      render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
 
       // Should NOT show text about 85ft elevation (removed from this component)
       expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
     })
 
     it('does not show elevation reminder for other buoys', () => {
-      render(<PolarChart data={mockData} buoyId="45198" timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
 
       // Should not show 85ft text
       expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
@@ -314,7 +314,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -347,7 +347,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -382,7 +382,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -409,7 +409,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={hoverPoint}
         />
@@ -438,7 +438,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={hoverPoint}
         />
@@ -464,7 +464,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={null}
         />
@@ -499,7 +499,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={null}
         />
@@ -537,7 +537,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={data[1]} // Hovering over different point
         />
@@ -570,7 +570,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -617,7 +617,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
         />
       )
@@ -638,7 +638,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -668,7 +668,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -701,7 +701,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={data[1]} // 30 mins ago = 50% radius
         />
@@ -726,7 +726,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           hoverPoint={null}
         />

@@ -32,6 +32,9 @@ export default function MobileStationLayout({
           overflowX: 'hidden',
           padding: '14px 16px 0 16px',
           paddingBottom: 'calc(180px + 16px)', // Dock height (~180px) + spacing
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
         }}
       >
         <div

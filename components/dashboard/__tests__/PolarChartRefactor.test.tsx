@@ -35,7 +35,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       const { container } = render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={displayPoint}
@@ -67,7 +67,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={displayPoint}
@@ -83,7 +83,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={displayPoint}
@@ -105,7 +105,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       const { container } = render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={pointWithTime}
@@ -135,7 +135,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={point}
@@ -167,7 +167,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={point}
@@ -195,7 +195,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={lightAirPoint}
@@ -220,7 +220,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       const { container } = render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={point}
@@ -241,7 +241,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="CHII2"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={displayPoint}
@@ -257,7 +257,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       render(
         <PolarChart
           data={mockData}
-          buoyId="45198"
+          
           timeWindowMinutes={60}
           nowOffsetMinutes={0}
           displayPoint={displayPoint}
