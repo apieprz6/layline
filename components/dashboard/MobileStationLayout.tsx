@@ -30,14 +30,22 @@ export default function MobileStationLayout({
           flex: 1,
           overflowY: 'auto',
           overflowX: 'hidden',
-          padding: '16px',
+          padding: '14px 16px 0 16px',
           paddingBottom: 'calc(180px + 16px)', // Dock height (~180px) + spacing
           display: 'flex',
           flexDirection: 'column',
           gap: '14px',
         }}
       >
-        {children}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+          }}
+        >
+          {children}
+        </div>
       </div>
 
       {/* Fixed bottom dock */}
