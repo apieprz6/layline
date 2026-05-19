@@ -23,7 +23,8 @@ const jumpButtonStyle: React.CSSProperties = {
   borderRadius: '8px',
   padding: '8px 12px',
   cursor: 'pointer',
-  color: 'var(--text-primary)',
+  color: 'var(--text)',
+  transition: 'all 150ms ease-out',
 }
 
 // Wind condition band data
@@ -83,13 +84,14 @@ export default function TabbedInfoPanel({
             fontWeight: 600,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
-            color: activeTab === 'stats' ? 'var(--text-primary)' : 'var(--text-muted)',
+            color: activeTab === 'stats' ? 'var(--text)' : 'var(--muted)',
             background: activeTab === 'stats' ? 'var(--card-bg)' : 'transparent',
             border: 'none',
             borderRadius: '7px',
             padding: '9px 0',
             cursor: 'pointer',
             boxShadow: activeTab === 'stats' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
           Stats
@@ -103,13 +105,14 @@ export default function TabbedInfoPanel({
             fontWeight: 600,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
-            color: activeTab === 'jump' ? 'var(--text-primary)' : 'var(--text-muted)',
+            color: activeTab === 'jump' ? 'var(--text)' : 'var(--muted)',
             background: activeTab === 'jump' ? 'var(--card-bg)' : 'transparent',
             border: 'none',
             borderRadius: '7px',
             padding: '9px 0',
             cursor: 'pointer',
             boxShadow: activeTab === 'jump' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
           Jump to
@@ -123,13 +126,14 @@ export default function TabbedInfoPanel({
             fontWeight: 600,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
-            color: activeTab === 'legend' ? 'var(--text-primary)' : 'var(--text-muted)',
+            color: activeTab === 'legend' ? 'var(--text)' : 'var(--muted)',
             background: activeTab === 'legend' ? 'var(--card-bg)' : 'transparent',
             border: 'none',
             borderRadius: '7px',
             padding: '9px 0',
             cursor: 'pointer',
             boxShadow: activeTab === 'legend' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
           Legend
@@ -220,7 +224,7 @@ export default function TabbedInfoPanel({
                   style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: '10.5px',
-                    color: 'var(--text-muted)',
+                    color: 'var(--muted)',
                   }}
                 >
                   {band.range}
@@ -237,7 +241,7 @@ export default function TabbedInfoPanel({
                 paddingTop: '10px',
                 borderTop: '1px solid var(--divider)',
                 fontSize: '11px',
-                color: 'var(--text-muted)',
+                color: 'var(--muted)',
                 lineHeight: 1.5,
               }}
             >

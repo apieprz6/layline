@@ -7,11 +7,11 @@ import MobileStationLayout from '@/components/dashboard/MobileStationLayout'
 import StationHeader from '@/components/dashboard/StationHeader'
 import PolarChart from '@/components/dashboard/PolarChart'
 import BottomControlsDock from '@/components/dashboard/BottomControlsDock'
+import TabbedInfoPanel from '@/components/dashboard/TabbedInfoPanel'
 
 interface StationPageClientProps {
   buoyId: string
   stationName: string
-  isLive: boolean
   data: MinuteDataPoint[]
 }
 
@@ -21,7 +21,6 @@ const TOTAL_MINUTES = TOTAL_HOURS * 60
 export default function StationPageClient({
   buoyId,
   stationName,
-  isLive,
   data,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>('1h')
@@ -115,13 +114,24 @@ export default function StationPageClient({
       {data && data.length > 0 && (
         <PolarChart
           data={data}
-          buoyId={buoyId}
           timeWindowMinutes={timeWindowMinutes}
           nowOffsetMinutes={nowOffset}
           hoverPoint={hoverPoint}
           onHoverChange={setHoverPoint}
           displayPoint={displayPoint}
           mode={mode}
+        />
+      )}
+
+      {/* Tabbed info panel */}
+      {data && data.length > 0 && (
+        <TabbedInfoPanel
+          data={data}
+          timeWindowMinutes={timeWindowMinutes}
+          nowOffsetMinutes={nowOffset}
+          onOffsetChange={setNowOffset}
+          buoyId={buoyId}
+          maxOffsetMinutes={maxOffset}
         />
       )}
     </MobileStationLayout>

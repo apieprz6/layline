@@ -231,6 +231,15 @@
   /* Aliases for Tailwind */
   --background: var(--page-bg);
   --foreground: var(--page-fg);
+
+  /* Mockup-compatible shorthand aliases */
+  --text: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --muted: var(--text-muted);
+  --card-el: var(--surface-elevated);
+  --border: var(--surface-border);
+  --divider: var(--surface-divider);
+  --page-bg-2: #E8E4DC;
   }
 
   * {

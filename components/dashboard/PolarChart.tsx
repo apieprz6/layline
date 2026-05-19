@@ -13,7 +13,6 @@ import { findPointByRadius } from "@/lib/utils/radialSelection";
 
 interface PolarChartProps {
   data: MinuteDataPoint[];
-  buoyId: string;
   timeWindowMinutes: number;
   nowOffsetMinutes?: number; // Minutes ago from current time (0 = live, 60 = 1h ago)
   referenceTime?: Date;
@@ -60,7 +59,6 @@ function polarToXY(
 
 export default function PolarChart({
   data,
-  buoyId,
   timeWindowMinutes,
   nowOffsetMinutes = 0,
   hoverPoint,
@@ -311,8 +309,8 @@ export default function PolarChart({
           <div
             style={{
               position: "absolute",
-              top: `${svgDimensions.height * 0.01}px`,
-              left: `${svgDimensions.width * 0.01}px`,
+              top: `${svgDimensions.height * 0.0}px`,
+              left: `${svgDimensions.width * 0.0}px`,
               zIndex: 2,
               pointerEvents: "none",
             }}
@@ -361,8 +359,8 @@ export default function PolarChart({
           <div
             style={{
               position: "absolute",
-              top: `${svgDimensions.height * 0.01}px`,
-              right: `${svgDimensions.width * 0.01}px`,
+              top: `${svgDimensions.height * 0.0}px`,
+              right: `${svgDimensions.width * 0.0}px`,
               zIndex: 2,
               pointerEvents: "none",
               textAlign: "right",
