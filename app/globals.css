@@ -227,6 +227,7 @@
 
   /* Accent alias for convenience */
   --accent: var(--blue-500);
+  --accent-primary: var(--blue-500);   
 
   /* Aliases for Tailwind */
   --background: var(--page-bg);
