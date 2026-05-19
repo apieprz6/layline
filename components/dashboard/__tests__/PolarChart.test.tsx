@@ -286,12 +286,12 @@ describe('PolarChart', () => {
     })
   })
 
-  describe('CHII2 elevation reminder', () => {
-    it('shows 85ft elevation reminder for CHII2 buoy', () => {
+  describe('CHII2 elevation reminder (REMOVED in LAY-34)', () => {
+    it('does NOT show 85ft elevation reminder for CHII2 buoy (moved to Legend tab)', () => {
       render(<PolarChart data={mockData} buoyId="CHII2" timeWindowMinutes={60} />)
 
-      // Should show text about 85ft elevation
-      expect(screen.getByText(/85ft/i)).toBeInTheDocument()
+      // Should NOT show text about 85ft elevation (removed from this component)
+      expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
     })
 
     it('does not show elevation reminder for other buoys', () => {

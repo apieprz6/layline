@@ -7,7 +7,6 @@ import MobileStationLayout from '@/components/dashboard/MobileStationLayout'
 import StationHeader from '@/components/dashboard/StationHeader'
 import PolarChart from '@/components/dashboard/PolarChart'
 import SpeedLineChart from '@/components/dashboard/SpeedLineChart'
-import WindReadout from '@/components/dashboard/WindReadout'
 import BottomControlsDock from '@/components/dashboard/BottomControlsDock'
 
 interface StationPageClientProps {
@@ -115,35 +114,16 @@ export default function StationPageClient({
     >
       {/* Polar chart card */}
       {data && data.length > 0 && (
-        <div
-          style={{
-            background: 'var(--surface-raised)',
-            border: '1px solid var(--surface-border)',
-            borderRadius: '12px',
-            padding: '16px',
-            marginBottom: '14px',
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          <h2
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '18px',
-              fontWeight: '600',
-              marginBottom: '12px',
-            }}
-          >
-            Wind Direction × Time
-          </h2>
-          <PolarChart
-            data={data}
-            buoyId={buoyId}
-            timeWindowMinutes={timeWindowMinutes}
-            nowOffsetMinutes={nowOffset}
-            hoverPoint={hoverPoint}
-            onHoverChange={setHoverPoint}
-          />
-        </div>
+        <PolarChart
+          data={data}
+          buoyId={buoyId}
+          timeWindowMinutes={timeWindowMinutes}
+          nowOffsetMinutes={nowOffset}
+          hoverPoint={hoverPoint}
+          onHoverChange={setHoverPoint}
+          displayPoint={displayPoint}
+          mode={mode}
+        />
       )}
 
       {/* Speed line chart card */}
@@ -153,21 +133,41 @@ export default function StationPageClient({
             background: 'var(--surface-raised)',
             border: '1px solid var(--surface-border)',
             borderRadius: '12px',
-            padding: '16px',
+            padding: '12px 10px 6px 10px',
             marginBottom: '14px',
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          <h2
+          <div
             style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '18px',
-              fontWeight: '600',
-              marginBottom: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '0 6px 4px 6px',
             }}
           >
-            Wind Speed × Time
-          </h2>
+            <span
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '9.5px',
+                fontWeight: '600',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+              }}
+            >
+              Wind speed
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                color: 'var(--text-muted)',
+              }}
+            >
+              {TIME_SCALES[scaleId].label}
+            </span>
+          </div>
           <SpeedLineChart
             data={data}
             timeWindowMinutes={timeWindowMinutes}
@@ -175,13 +175,6 @@ export default function StationPageClient({
             hoverPoint={hoverPoint}
             onHoverChange={setHoverPoint}
           />
-        </div>
-      )}
-
-      {/* Wind readout card */}
-      {displayPoint && (
-        <div>
-          <WindReadout point={displayPoint} mode={mode} buoyId={buoyId} />
         </div>
       )}
     </MobileStationLayout>
