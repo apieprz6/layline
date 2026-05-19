@@ -5,7 +5,11 @@ import type { MinuteDataPoint } from '@/types'
 
 // Mock WindowStats component since it's tested separately
 jest.mock('../WindowStats', () => {
-  return function MockWindowStats(props: any) {
+  return function MockWindowStats(props: {
+    data: MinuteDataPoint[]
+    timeWindowMinutes: number
+    nowOffsetMinutes: number
+  }) {
     return (
       <div data-testid="window-stats">
         WindowStats
