@@ -33,6 +33,15 @@ export default function StationPageClient({
   // Calculate max offset: can't go back more than TOTAL_MINUTES minus current scale
   const maxOffset = TOTAL_MINUTES - timeWindowMinutes;
 
+  // Handle scale change: reset to live if current offset exceeds new scale's max
+  const handleScaleChange = (newScale: TimeScale) => {
+    const newMaxOffset = TOTAL_MINUTES - TIME_SCALES[newScale].minutes;
+    if (nowOffset > newMaxOffset) {
+      setNowOffset(0);
+    }
+    setScaleId(newScale);
+  };
+
   // Calculate reference time and window start for display
   // Use state to capture current time once per render cycle
   const [currentTime] = useState(() => Date.now());
@@ -108,7 +117,7 @@ export default function StationPageClient({
           isLive={isAtLive}
           referenceTime={referenceTime}
           windowStart={windowStart}
-          onScaleChange={setScaleId}
+          onScaleChange={handleScaleChange}
           onOffsetChange={setNowOffset}
           onReturnToLive={() => setNowOffset(0)}
         />

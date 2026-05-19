@@ -1,21 +1,21 @@
-'use client'
+"use client";
 
-import type { TimeScale } from '@/lib/utils/windowing'
-import ScaleControl from './ScaleControl'
-import TimeScrubber from './TimeScrubber'
-import { formatDateTimeRange } from '@/lib/utils/time'
+import type { TimeScale } from "@/lib/utils/windowing";
+import ScaleControl from "./ScaleControl";
+import TimeScrubber from "./TimeScrubber";
+import { formatDateTimeRange } from "@/lib/utils/time";
 
 interface BottomControlsDockProps {
-  scaleId: TimeScale
-  nowOffset: number
-  maxOffset: number
-  timeWindowMinutes: number
-  isLive: boolean
-  referenceTime: Date
-  windowStart: Date
-  onScaleChange: (scale: TimeScale) => void
-  onOffsetChange: (offset: number) => void
-  onReturnToLive: () => void
+  scaleId: TimeScale;
+  nowOffset: number;
+  maxOffset: number;
+  timeWindowMinutes: number;
+  isLive: boolean;
+  referenceTime: Date;
+  windowStart: Date;
+  onScaleChange: (scale: TimeScale) => void;
+  onOffsetChange: (offset: number) => void;
+  onReturnToLive: () => void;
 }
 
 export default function BottomControlsDock({
@@ -33,37 +33,37 @@ export default function BottomControlsDock({
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         bottom: 0,
         left: 0,
         right: 0,
         zIndex: 10,
-        background: 'var(--surface-dock-bg)',
-        backdropFilter: 'var(--surface-dock-blur)',
-        WebkitBackdropFilter: 'var(--surface-dock-blur)',
-        borderTop: '1px solid var(--surface-divider)',
-        padding: '12px 16px',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 34px) + 12px)',
-        boxShadow: 'var(--shadow-dock)',
+        background: "var(--surface-dock-bg)",
+        backdropFilter: "var(--surface-dock-blur)",
+        WebkitBackdropFilter: "var(--surface-dock-blur)",
+        borderTop: "1px solid var(--surface-divider)",
+        padding: "12px 16px",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 34px) + 12px)",
+        boxShadow: "var(--shadow-dock)",
       }}
     >
       {/* Scale selector */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginBottom: '10px',
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "10px",
         }}
       >
         <span
           style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '9.5px',
+            fontFamily: "var(--font-body)",
+            fontSize: "9.5px",
             fontWeight: 600,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--text-muted)",
             flexShrink: 0,
           }}
         >
@@ -77,20 +77,20 @@ export default function BottomControlsDock({
       {/* Scrubber row with label and button */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2px',
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "2px",
         }}
       >
         <span
           style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '9.5px',
+            fontFamily: "var(--font-body)",
+            fontSize: "9.5px",
             fontWeight: 600,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--text-muted)",
           }}
         >
           Time scrubber
@@ -99,19 +99,19 @@ export default function BottomControlsDock({
           onClick={onReturnToLive}
           disabled={isLive}
           style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '11px',
+            fontFamily: "var(--font-body)",
+            fontSize: "11px",
             fontWeight: 500,
-            padding: '5px 9px',
-            background: isLive ? 'var(--surface-elevated)' : 'var(--accent-primary)',
-            color: isLive ? 'var(--text-muted)' : 'white',
-            border: `1px solid ${isLive ? 'var(--surface-border)' : 'var(--accent-primary)'}`,
-            borderRadius: '8px',
-            cursor: isLive ? 'not-allowed' : 'pointer',
+            padding: "5px 9px",
+            background: "var(--accent-primary)",
+            color: "white",
+            border: "1px solid var(--accent-primary)",
+            borderRadius: "8px",
+            cursor: isLive ? "not-allowed" : "pointer",
             opacity: isLive ? 0.45 : 1,
           }}
         >
-          ← Live
+          Live →
         </button>
       </div>
 
@@ -126,15 +126,16 @@ export default function BottomControlsDock({
       {/* Date/time range display */}
       <div
         style={{
-          marginTop: '2px',
-          fontSize: '10px',
-          color: 'var(--text-muted)',
-          fontFamily: 'var(--font-mono)',
-          textAlign: 'center',
+          marginTop: "2px",
+          fontSize: "10px",
+          color: "var(--text-muted)",
+          fontFamily: "var(--font-mono)",
+          textAlign: "center",
         }}
       >
-        {formatDateTimeRange(windowStart)} → {formatDateTimeRange(referenceTime)}
+        {formatDateTimeRange(windowStart)} →{" "}
+        {formatDateTimeRange(referenceTime)}
       </div>
     </div>
-  )
+  );
 }
