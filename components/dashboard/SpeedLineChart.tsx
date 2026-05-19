@@ -322,9 +322,31 @@ export default function SpeedLineChart({
               cy={y}
               r={5}
               fill="white"
-              stroke="#0044CC"
+              stroke={windColor(hoverPoint.spd)}
               strokeWidth={2}
             />
+            {/* Speed label tooltip */}
+            <g transform={`translate(${x}, ${Math.max(PAD_T + 11, y - 14)})`}>
+              <rect
+                x={-21}
+                y={-13}
+                width={42}
+                height={14}
+                rx={3}
+                fill="#0A0A0A"
+              />
+              <text
+                x={0}
+                y={-3}
+                textAnchor="middle"
+                fontFamily="JetBrains Mono"
+                fontSize={9.5}
+                fontWeight={600}
+                fill="white"
+              >
+                {hoverPoint.spd.toFixed(1)} kt
+              </text>
+            </g>
           </g>
         )
       })()}
