@@ -94,6 +94,24 @@ export default function SpeedLineChart({
   // Band lines at wind condition thresholds
   const bandLines = [8, 15, 22].filter((v) => v <= maxSpeed)
 
+  // Helper for X coordinate
+  const xFor = (minsAgo: number) => {
+    const t = 1 - (minsAgo - nowOffsetMinutes) / timeWindowMinutes
+    return PAD_L + t * innerW
+  }
+
+  // Format time offset label
+  function fmtOffset(absMin: number) {
+    if (absMin <= 0) return 'now'
+    if (absMin < 60) return `−${Math.round(absMin)}m`
+    const h = absMin / 60
+    if (Math.abs(h - Math.round(h)) < 0.01) return `−${Math.round(h)}h`
+    return `−${h.toFixed(1)}h`
+  }
+
+  // X-axis tick positions
+  const xFracs = timeWindowMinutes >= 360 ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.5, 1]
+
   // Hover detection - find nearest point by X coordinate
   function pickFromX(clientX: number) {
     if (!svgRef.current) return
@@ -189,6 +207,47 @@ export default function SpeedLineChart({
           strokeDasharray="1 3"
         />
       ))}
+
+      {/* X-axis ticks and labels */}
+      {xFracs.map((f, i) => {
+        const x = PAD_L + f * innerW
+        const minAgo = nowOffsetMinutes + (1 - f) * timeWindowMinutes
+        return (
+          <g key={`x${i}`}>
+            <line
+              x1={x}
+              y1={PAD_T + innerH}
+              x2={x}
+              y2={PAD_T + innerH + 3}
+              stroke="rgba(0,0,0,0.25)"
+              strokeWidth={0.75}
+            />
+            <text
+              x={x}
+              y={HEIGHT - 5}
+              textAnchor={i === 0 ? 'start' : i === xFracs.length - 1 ? 'end' : 'middle'}
+              fontFamily="JetBrains Mono"
+              fontSize={9}
+              fill="#666"
+            >
+              {fmtOffset(minAgo)}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Y-axis unit label */}
+      <text
+        x={2}
+        y={PAD_T - 3}
+        fontFamily="Inter"
+        fontSize={8.5}
+        fontWeight={600}
+        letterSpacing="0.10em"
+        fill="#666"
+      >
+        KTS
+      </text>
 
       {/* Gradient definition for area fill */}
       <defs>

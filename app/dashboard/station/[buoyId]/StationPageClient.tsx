@@ -134,7 +134,6 @@ export default function StationPageClient({
             border: '1px solid var(--surface-border)',
             borderRadius: '12px',
             padding: '12px 10px 6px 10px',
-            marginBottom: '14px',
             boxShadow: 'var(--shadow-sm)',
           }}
         >
