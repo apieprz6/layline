@@ -7,11 +7,27 @@ Layline fetches real-time weather data from multiple sources to provide sailors 
 ### Data Sources
 
 **Buoy**:
-A physical weather monitoring station on Lake Michigan that provides real-time wind, wave, and environmental measurements.
+A physical weather monitoring station on Lake Michigan that provides real-time wind, wave, and environmental measurements. One type of **Data Source**.
 _Avoid_: Weather station, sensor, source (too generic)
 
+**Weather Model**:
+Numerical weather prediction system providing forecast data. Each model has a different **Forecast Horizon** (how far into the future it predicts) and **Update Frequency** (how often new runs are published). One type of **Data Source**.
+
+Supported models:
+- **GFS** (Global Forecast System): US global model, 16-day horizon, 6-hour updates
+- **HRRR** (High-Resolution Rapid Refresh): US regional model, 18-48h horizon, hourly updates
+- **ECMWF** (European Centre): European global model, 10-day horizon, 12-hour updates
+- **NAM** (North American Mesoscale): US regional model, 84-hour horizon (planned)
+- **HRDPS** (High Resolution Deterministic Prediction System): Canadian regional model (planned)
+
+_Avoid_: Forecast model, prediction model
+
+**Forecast Horizon**:
+Maximum time range a weather model provides predictions for. Varies by model (e.g., HRRR: 18-48h, GFS: 16 days, ECMWF: 10 days).
+_Avoid_: Forecast window, prediction range
+
 **Data Source**:
-Any provider of weather information (buoys, forecasts, models). Buoys are one type of data source.
+Any provider of weather information. Encompasses both **Buoys** (observations) and **Weather Models** (forecasts).
 _Avoid_: API, service, endpoint
 
 **CHII2 (Harrison Dever Crib)**:
@@ -96,10 +112,35 @@ Pill-shaped indicator showing speed or direction trend (e.g., "↑ Building +1.5
 **Wind History**:
 Time-series of wind measurements from a buoy. NDBC provides 10-minute interval readings (up to 72 hours). Each point: `{ timestamp, spd, dir }` where timestamp is ISO 8601 format. UI components filter to needed time ranges (last hour, last 6h, last 72h, etc.) and calculate relative time offsets at render time to prevent timestamp drift.
 
+**Forecast Point**:
+Single timestamped prediction from a weather model (timestamp, wind speed, direction, optional gust).
+
+**Weather Model Result**:
+Complete forecast dataset from a single model run. Contains array of **Forecast Points**, **Data Source Status**, and **Forecast Location**.
+
+**Forecast Location**:
+Geographic coordinate for weather model forecasts. Primary location is **COLYC Race Circle** (41.8528333°N, -87.55683333°W) for Wednesday night races.
+
+**Model Run Time**:
+Timestamp when a weather model execution began (e.g., "2026-05-21T12:00Z"). Models update on schedules (HRRR hourly, GFS every 6h, ECMWF every 12h).
+
+### API Structure
+
+**Weather Model Endpoints**:
+Individual endpoints per model allow parallel fetching and progressive loading:
+- `GET /api/weather/models/gfs` - GFS forecast data
+- `GET /api/weather/models/hrrr` - HRRR forecast data  
+- `GET /api/weather/models/ecmwf` - ECMWF forecast data
+
+Each endpoint returns a **Weather Model Result** with forecasts for **COLYC Race Circle** location.
+
+
 ## Relationships
 
-- A **Buoy** is a type of **Data Source**
-- Each **Buoy** has one **Data Source Status** at any given time
+- **Buoy** and **Weather Model** are both types of **Data Source**
+- Each **Data Source** has one **Data Source Status** at any given time
+- Each **Weather Model** has a **Forecast Horizon** (how far ahead it predicts) and **Model Run Time** schedule
+- Weather models are fetched from Open-Meteo via individual API endpoints (`/api/weather/models/{modelId}`)
 - **CHII2** is always operational (never seasonally offline)
 - **Purdue Buoy** is seasonal (May-October only)
 - **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL

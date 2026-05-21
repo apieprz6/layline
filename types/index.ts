@@ -1,15 +1,48 @@
 // Weather and wind data types
-export interface WindForecast {
-  source: string // 'NOAA', 'Windy', 'PredictWind', etc.
-  timestamp: string
-  speed: number // knots
-  direction: number // degrees
-  gust?: number // knots
-  confidence?: number // 0-1
-}
 
 // Data source status states
 export type DataSourceStatus = 'online' | 'recent' | 'stale' | 'offline' | 'error'
+
+// Weather model identifiers
+export type ModelId = 'gfs' | 'hrrr' | 'ecmwf'
+
+// Forecast location for weather models
+export interface ForecastLocation {
+  name: string
+  latitude: number
+  longitude: number
+  description?: string
+}
+
+// Single timestamped forecast prediction from a weather model
+export interface ForecastPoint {
+  timestamp: string // ISO 8601 forecast valid time
+  speed: number // knots
+  direction: number // degrees
+  gust?: number // knots (if model provides)
+  temperature?: number // °F (if model provides)
+  confidence?: number // 0-1 (optional)
+}
+
+// Complete forecast dataset from a single model run
+export interface WeatherModelResult {
+  modelId: ModelId
+  modelName: string // Display name: 'GFS' | 'HRRR' | 'ECMWF'
+  forecasts: ForecastPoint[]
+  status: DataSourceStatus
+  fetchedAt: string // ISO timestamp of API call
+  runTime: string | null // Model run time (e.g., "2026-05-21T12:00Z"), null if unavailable
+  horizon: number // Hours ahead this model provides
+  location: ForecastLocation
+  error?: string
+}
+
+// In-memory cache entry for weather models
+export interface WeatherModelCacheEntry {
+  data: WeatherModelResult
+  fetchedAt: number // Unix timestamp in milliseconds
+  expiresAt: number // Unix timestamp when cache expires (next model run)
+}
 
 // Buoy metadata for context (never modify raw data)
 export interface BuoyMetadata {
@@ -67,11 +100,6 @@ export interface BuoyCacheEntry {
   fetchedAt: number // Unix timestamp in milliseconds
 }
 
-export interface WeatherModel {
-  name: string
-  windForecasts: WindForecast[]
-  lastUpdated: string
-}
 
 // Race strategy types
 export interface CourseRecommendation {
