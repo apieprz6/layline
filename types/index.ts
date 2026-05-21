@@ -204,3 +204,40 @@ export interface WindowStats {
   spread: number // Veer/back angular spread (degrees)
   count: number // Number of data points
 }
+
+// Weather model forecast types
+
+// Supported weather model identifiers
+export type ModelId = 'gfs' | 'hrrr' | 'ecmwf'
+
+// Geographic location for weather forecasts
+export interface ForecastLocation {
+  latitude: number
+  longitude: number
+  name: string
+}
+
+// Single forecast data point
+export interface ForecastPoint {
+  timestamp: string // ISO 8601 format
+  windSpeed: number // knots
+  windDirection: number // degrees (0-360)
+  windGust?: number // knots
+  temperature?: number // fahrenheit
+  pressure?: number // mb
+}
+
+// Complete weather model forecast result
+export interface WeatherModelResult {
+  modelId: ModelId
+  location: ForecastLocation
+  forecastPoints: ForecastPoint[]
+  generatedAt: string // Model run time (ISO 8601)
+  fetchedAt: string // API fetch time (ISO 8601)
+}
+
+// In-memory cache entry for weather model forecasts
+export interface WeatherModelCacheEntry {
+  data: WeatherModelResult
+  fetchedAt: number // Unix timestamp in milliseconds
+}
