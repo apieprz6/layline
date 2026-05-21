@@ -1,24 +1,24 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect } from "react";
-import type { MinuteDataPoint } from "@/types";
+import type { WindDataPoint, WindDataPointWithOffset } from "@/types";
 import {
   getWindColorHex,
   getWindCondition,
   getCompassDirection,
 } from "@/lib/utils/wind";
 import { TIME_SCALES } from "@/lib/utils/windowing";
-import { formatTimeOffset, formatTime } from "@/lib/utils/time";
+import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 
 interface PolarChartProps {
-  data: MinuteDataPoint[];
+  data: WindDataPoint[];
   timeWindowMinutes: number;
   nowOffsetMinutes?: number; // Minutes ago from current time (0 = live, 60 = 1h ago)
   referenceTime?: Date;
-  hoverPoint?: MinuteDataPoint | null;
-  onHoverChange?: (point: MinuteDataPoint | null) => void;
-  displayPoint?: MinuteDataPoint; // NEW: Data point to display in overlays
+  hoverPoint?: WindDataPointWithOffset | null;
+  onHoverChange?: (point: WindDataPointWithOffset | null) => void;
+  displayPoint?: WindDataPointWithOffset; // NEW: Data point to display in overlays
   mode?: "reference" | "touch"; // NEW: Display mode for header label
 }
 
@@ -61,6 +61,7 @@ export default function PolarChart({
   data,
   timeWindowMinutes,
   nowOffsetMinutes = 0,
+  referenceTime,
   hoverPoint,
   onHoverChange,
   displayPoint,
@@ -68,6 +69,17 @@ export default function PolarChart({
 }: PolarChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
+
+  // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
+  const now = referenceTime || new Date();
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
+    () =>
+      data.map((point) => ({
+        ...point,
+        minsAgo: getMinutesAgo(point.timestamp, now),
+      })),
+    [data, now]
+  );
 
   // Measure SVG dimensions for overlay positioning
   useEffect(() => {
@@ -137,7 +149,7 @@ export default function PolarChart({
     const windowStart = nowOffsetMinutes;
     const windowEnd = nowOffsetMinutes + timeWindowMinutes;
 
-    return data
+    return dataWithOffset
       .filter(
         (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
       )
@@ -154,7 +166,7 @@ export default function PolarChart({
         return { ...point, x, y, r01, color, opacity };
       })
       .sort((a, b) => a.minsAgo - b.minsAgo); // Sort oldest to newest
-  }, [data, timeWindowMinutes, nowOffsetMinutes]);
+  }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes]);
 
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
@@ -206,7 +218,7 @@ export default function PolarChart({
 
     const windowStart = nowOffsetMinutes;
     const windowEnd = nowOffsetMinutes + timeWindowMinutes;
-    const rawDataPoints = data.filter(
+    const rawDataPoints = dataWithOffset.filter(
       (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
     );
     const nearest = findPointByRadius(
@@ -230,7 +242,7 @@ export default function PolarChart({
 
     const windowStart = nowOffsetMinutes;
     const windowEnd = nowOffsetMinutes + timeWindowMinutes;
-    const rawDataPoints = data.filter(
+    const rawDataPoints = dataWithOffset.filter(
       (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
     );
     const nearest = findPointByRadius(

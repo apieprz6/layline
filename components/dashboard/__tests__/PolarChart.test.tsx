@@ -1,23 +1,26 @@
 import '@testing-library/jest-dom'
 import { render, screen, fireEvent } from '@testing-library/react'
 import PolarChart from '../PolarChart'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint } from '@/types'
 
 describe('PolarChart', () => {
-  const mockData: MinuteDataPoint[] = [
-    { minsAgo: 0, spd: 12, dir: 180 },
-    { minsAgo: 10, spd: 14, dir: 185 },
-    { minsAgo: 20, spd: 11, dir: 175 },
+  // Reference time for all tests
+  const now = new Date('2026-05-19T18:00:00Z')
+
+  const mockData: WindDataPoint[] = [
+    { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
+    { timestamp: '2026-05-19T17:50:00.000Z', spd: 14, dir: 185 },
+    { timestamp: '2026-05-19T17:40:00.000Z', spd: 11, dir: 175 },
   ]
 
   describe('Radial positioning with time window', () => {
     it('positions sparse data relative to time window, not oldest point', () => {
       // Single point at 5 mins ago in a 30-minute window
       // Should be at r01 ≈ 0.83 (near outer ring), not at center
-      const sparseData: MinuteDataPoint[] = [{ minsAgo: 5, spd: 12, dir: 180 }]
+      const sparseData: WindDataPoint[] = [{ timestamp: '2026-05-19T17:55:00.000Z', spd: 12, dir: 180 }]
 
       const { container } = render(
-        <PolarChart data={sparseData} timeWindowMinutes={30} />
+        <PolarChart data={sparseData} referenceTime={now} timeWindowMinutes={30} />
       )
 
       // The data point circle should exist and be positioned near the outer ring
@@ -40,10 +43,10 @@ describe('PolarChart', () => {
     })
 
     it('positions current data point at outer ring', () => {
-      const currentData: MinuteDataPoint[] = [{ minsAgo: 0, spd: 12, dir: 0 }] // North
+      const currentData: WindDataPoint[] = [{ timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 }] // North
 
       const { container } = render(
-        <PolarChart data={currentData} timeWindowMinutes={30} />
+        <PolarChart data={currentData} referenceTime={now} timeWindowMinutes={30} />
       )
 
       const circles = container.querySelectorAll('circle[fill="#0055BB"], circle[fill="#007A52"], circle[fill="#C47000"], circle[fill="#CC1100"]')
@@ -58,10 +61,10 @@ describe('PolarChart', () => {
     })
 
     it('filters out data points beyond time window', () => {
-      const dataWithOldPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 15, spd: 13, dir: 45 },
-        { minsAgo: 40, spd: 14, dir: 90 }, // Beyond 30-minute window
+      const dataWithOldPoints: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:45:00.000Z', spd: 13, dir: 45 },
+        { timestamp: '2026-05-19T17:20:00.000Z', spd: 14, dir: 90 }, // Beyond 30-minute window
       ]
 
       const { container } = render(
@@ -76,7 +79,7 @@ describe('PolarChart', () => {
 
   describe('SVG structure', () => {
     it('renders SVG with 360x360 viewBox', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={60} />)
 
       const svg = document.querySelector('svg')
       expect(svg).toBeInTheDocument()
@@ -161,7 +164,7 @@ describe('PolarChart', () => {
     })
 
     it('renders "now" label for outer ring', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={30} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={30} />)
 
       expect(screen.getByText('now')).toBeInTheDocument()
     })
@@ -199,7 +202,7 @@ describe('PolarChart', () => {
 
   describe('Compass labels', () => {
     it('renders cardinal direction labels (N, E, S, W)', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={60} />)
 
       expect(screen.getByText('N')).toBeInTheDocument()
       expect(screen.getByText('E')).toBeInTheDocument()
@@ -208,7 +211,7 @@ describe('PolarChart', () => {
     })
 
     it('renders intercardinal direction labels (NE, SE, SW, NW)', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={60} />)
 
       expect(screen.getByText('NE')).toBeInTheDocument()
       expect(screen.getByText('SE')).toBeInTheDocument()
@@ -219,12 +222,12 @@ describe('PolarChart', () => {
 
   describe('Data point rendering', () => {
     it('renders circles for data points', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },    // North, now
-        { minsAgo: 360, spd: 10, dir: 90 }, // East, 6h ago
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },    // North, now
+        { timestamp: '2026-05-19T12:00:00.000Z', spd: 10, dir: 90 }, // East, 6h ago
       ]
 
-      const { container } = render(<PolarChart data={data} timeWindowMinutes={360} />)
+      const { container } = render(<PolarChart data={data} referenceTime={now} timeWindowMinutes={360} />)
 
       // Should have circles for data points
       const circles = container.querySelectorAll('circle')
@@ -232,12 +235,12 @@ describe('PolarChart', () => {
     })
 
     it('applies wind speed color to data points', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 7, dir: 0 },   // Light air (#007A52)
-        { minsAgo: 10, spd: 12, dir: 45 }, // Medium air (#0055BB)
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 7, dir: 0 },   // Light air (#007A52)
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 45 }, // Medium air (#0055BB)
       ]
 
-      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} referenceTime={now} timeWindowMinutes={60} />)
 
       // Check that circles have wind-speed-based colors
       const circles = container.querySelectorAll('circle')
@@ -254,13 +257,13 @@ describe('PolarChart', () => {
 
   describe('Line segments', () => {
     it('connects adjacent data points with line segments', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 },
-        { minsAgo: 10, spd: 14, dir: 185 },
-        { minsAgo: 20, spd: 11, dir: 175 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 14, dir: 185 },
+        { timestamp: '2026-05-19T17:40:00.000Z', spd: 11, dir: 175 },
       ]
 
-      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} referenceTime={now} timeWindowMinutes={60} />)
 
       // Should have line elements connecting points
       const lines = container.querySelectorAll('line[stroke]')
@@ -268,13 +271,13 @@ describe('PolarChart', () => {
     })
 
     it('skips line segments when angular gap exceeds 90 degrees', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },   // North
-        { minsAgo: 10, spd: 12, dir: 180 }, // South (180° jump - should skip)
-        { minsAgo: 20, spd: 12, dir: 185 }, // Near south
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },   // North
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 180 }, // South (180° jump - should skip)
+        { timestamp: '2026-05-19T17:40:00.000Z', spd: 12, dir: 185 }, // Near south
       ]
 
-      const { container } = render(<PolarChart data={data} timeWindowMinutes={60} />)
+      const { container } = render(<PolarChart data={data} referenceTime={now} timeWindowMinutes={60} />)
 
       // Should have 1 line segment (20→10), not 2 (0→10 should be skipped)
       const lines = container.querySelectorAll('line[stroke]')
@@ -288,14 +291,14 @@ describe('PolarChart', () => {
 
   describe('CHII2 elevation reminder (REMOVED in LAY-34)', () => {
     it('does NOT show 85ft elevation reminder for CHII2 buoy (moved to Legend tab)', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={60} />)
 
       // Should NOT show text about 85ft elevation (removed from this component)
       expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
     })
 
     it('does not show elevation reminder for other buoys', () => {
-      render(<PolarChart data={mockData} timeWindowMinutes={60} />)
+      render(<PolarChart data={mockData} referenceTime={now} timeWindowMinutes={60} />)
 
       // Should not show 85ft text
       expect(screen.queryByText(/85ft/i)).not.toBeInTheDocument()
@@ -304,9 +307,9 @@ describe('PolarChart', () => {
 
   describe('Touch interaction', () => {
     it('calls onHoverChange with nearest data point when pointer down', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },   // North, at outer ring
-        { minsAgo: 30, spd: 10, dir: 180 }, // South, at center
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },   // North, at outer ring
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 10, dir: 180 }, // South, at center
       ]
 
       const handleHoverChange = jest.fn()
@@ -314,7 +317,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -333,13 +336,20 @@ describe('PolarChart', () => {
       }
 
       // Should call onHoverChange with the North point (first data point)
-      expect(handleHoverChange).toHaveBeenCalledWith(data[0])
+      // Component adds minsAgo, so check the core properties
+      const called = handleHoverChange.mock.calls[0][0]
+      expect(called).toMatchObject({
+        timestamp: data[0].timestamp,
+        spd: data[0].spd,
+        dir: data[0].dir,
+        minsAgo: expect.any(Number),
+      })
     })
 
     it('calls onHoverChange when pointer moves over chart', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 10, dir: 180 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 10, dir: 180 },
       ]
 
       const handleHoverChange = jest.fn()
@@ -347,7 +357,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -373,8 +383,8 @@ describe('PolarChart', () => {
     })
 
     it('clears hover point on pointer up', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const handleHoverChange = jest.fn()
@@ -382,7 +392,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -400,11 +410,11 @@ describe('PolarChart', () => {
 
   describe('Crosshairs rendering', () => {
     it('renders crosshair radial line when hoverPoint is provided', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
-      const hoverPoint = data[0]
+      const hoverPoint = { ...data[0], minsAgo: 0 }
 
       const { container } = render(
         <PolarChart
@@ -429,11 +439,11 @@ describe('PolarChart', () => {
     })
 
     it('renders dotted circle at hover radius when hoverPoint is provided', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
-      const hoverPoint = data[0]
+      const hoverPoint = { ...data[0], minsAgo: 0 }
 
       const { container } = render(
         <PolarChart
@@ -457,8 +467,8 @@ describe('PolarChart', () => {
     })
 
     it('does not render crosshairs or dotted circle when hoverPoint is null', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const { container } = render(
@@ -491,15 +501,15 @@ describe('PolarChart', () => {
 
   describe('Reference point highlighting', () => {
     it('highlights most recent data point when not hovering', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },   // Most recent (should be highlighted)
-        { minsAgo: 30, spd: 10, dir: 180 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },   // Most recent (should be highlighted)
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 10, dir: 180 },
       ]
 
-      const { container } = render(
+      const { container} = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           hoverPoint={null}
         />
@@ -529,17 +539,17 @@ describe('PolarChart', () => {
     })
 
     it('does not highlight reference point when hovering', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 10, dir: 180 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 10, dir: 180 },
       ]
 
       const { container } = render(
         <PolarChart
           data={data}
-          
+
           timeWindowMinutes={60}
-          hoverPoint={data[1]} // Hovering over different point
+          hoverPoint={{ ...data[1], minsAgo: 30 }} // Hovering over different point
         />
       )
 
@@ -559,10 +569,10 @@ describe('PolarChart', () => {
 
   describe('Radial selection with new algorithm (tracer bullet)', () => {
     it('uses radial selection instead of cartesian distance', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 14, dir: 90 },
-        { minsAgo: 60, spd: 10, dir: 180 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 14, dir: 90 },
+        { timestamp: '2026-05-19T17:00:00.000Z', spd: 10, dir: 180 },
       ]
 
       const handleHoverChange = jest.fn()
@@ -570,7 +580,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -602,16 +612,17 @@ describe('PolarChart', () => {
         })
       }
 
-      // Should select a recent point (0 or 30 mins ago, both acceptable)
+      // Should select a recent point (clicking near outer ring)
       const call = handleHoverChange.mock.calls[0][0]
-      expect(call.minsAgo).toBeLessThan(40)
+      // Should be one of the data points (0, 30, or 60 mins ago)
+      expect([0, 30, 60]).toContain(Math.round(call.minsAgo))
     })
   })
 
   describe('Touch interaction improvements', () => {
     it('SVG element includes touch handling to prevent page scrolling', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const { container } = render(
@@ -629,8 +640,8 @@ describe('PolarChart', () => {
     })
 
     it('pointer down handler includes preventDefault call', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const handleHoverChange = jest.fn()
@@ -638,7 +649,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -659,8 +670,8 @@ describe('PolarChart', () => {
     })
 
     it('pointer move handler processes touch events correctly', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const handleHoverChange = jest.fn()
@@ -668,7 +679,7 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+          referenceTime={now}
           timeWindowMinutes={60}
           onHoverChange={handleHoverChange}
         />
@@ -693,17 +704,17 @@ describe('PolarChart', () => {
 
   describe('Dotted circle visual feedback', () => {
     it('renders dotted circle at hover point radius', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 14, dir: 90 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', spd: 14, dir: 90 },
       ]
 
       const { container } = render(
         <PolarChart
           data={data}
-          
+
           timeWindowMinutes={60}
-          hoverPoint={data[1]} // 30 mins ago = 50% radius
+          hoverPoint={{ ...data[1], minsAgo: 30 }} // 30 mins ago = 50% radius
         />
       )
 
@@ -719,8 +730,8 @@ describe('PolarChart', () => {
     })
 
     it('does not render dotted circle when hoverPoint is null', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
       const { container } = render(

@@ -1,4 +1,5 @@
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint } from '@/types'
+import { getMinutesAgo } from './time'
 
 export type TimeScale = '30m' | '1h' | '6h' | '24h' | '72h'
 
@@ -39,17 +40,22 @@ export const TIME_SCALES: Record<TimeScale, TimeScaleConfig> = {
 
 /**
  * Filter wind history data to a specific time window
- * @param fullHistory - All available wind data points
+ * @param fullHistory - All available wind data points with absolute timestamps
  * @param scale - Time scale to filter to ('30m', '1h', '6h', '24h', '72h')
+ * @param referenceTime - Reference time for calculating age (defaults to current time)
  * @returns Filtered data points within the time window
  */
 export function windowData(
-  fullHistory: MinuteDataPoint[] | undefined | null,
-  scale: TimeScale
-): MinuteDataPoint[] {
+  fullHistory: WindDataPoint[] | undefined | null,
+  scale: TimeScale,
+  referenceTime: Date = new Date()
+): WindDataPoint[] {
   if (!fullHistory) {
     return []
   }
   const maxMinutes = TIME_SCALES[scale].minutes
-  return fullHistory.filter(point => point.minsAgo <= maxMinutes)
+  return fullHistory.filter(point => {
+    const minsAgo = getMinutesAgo(point.timestamp, referenceTime)
+    return minsAgo <= maxMinutes
+  })
 }

@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { render, screen, waitFor } from '@testing-library/react'
 import PolarChart from '../PolarChart'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
 
 // Mock SVG getBoundingClientRect for overlay positioning
 beforeAll(() => {
@@ -22,13 +22,13 @@ beforeAll(() => {
 })
 
 describe('PolarChart - Card Refactor (LAY-34)', () => {
-  const mockData: MinuteDataPoint[] = [
-    { minsAgo: 0, spd: 12, dir: 180 },
-    { minsAgo: 10, spd: 14, dir: 185 },
-    { minsAgo: 20, spd: 11, dir: 175 },
+  const mockData: WindDataPoint[] = [
+    { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
+    { timestamp: '2026-05-19T17:50:00.000Z', spd: 14, dir: 185 },
+    { timestamp: '2026-05-19T17:40:00.000Z', spd: 11, dir: 175 },
   ]
 
-  const displayPoint: MinuteDataPoint = mockData[0]
+  const displayPoint: WindDataPointWithOffset = { ...mockData[0], minsAgo: 0 }
 
   describe('Card structure', () => {
     it('renders complete card structure with header, SVG, and footer', () => {
@@ -96,7 +96,8 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
     })
 
     it('displays timestamp in HH:MM · offset format when displayPoint is provided', () => {
-      const pointWithTime: MinuteDataPoint = {
+      const pointWithTime: WindDataPointWithOffset = {
+        timestamp: '2026-05-19T17:30:00.000Z',
         minsAgo: 30,
         spd: 12,
         dir: 180,
@@ -126,7 +127,8 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
 
   describe('Overlays', () => {
     it('renders left overlay with direction numerals and compass heading', async () => {
-      const point: MinuteDataPoint = {
+      const point: WindDataPointWithOffset = {
+        timestamp: '2026-05-19T18:00:00.000Z',
         minsAgo: 0,
         spd: 12,
         dir: 180, // South
@@ -158,7 +160,8 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
     })
 
     it('renders right overlay with speed numerals and condition label', () => {
-      const point: MinuteDataPoint = {
+      const point: WindDataPointWithOffset = {
+        timestamp: '2026-05-19T18:00:00.000Z',
         minsAgo: 0,
         spd: 12, // Medium air
         dir: 180,
@@ -186,7 +189,8 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
     })
 
     it('colors speed numerals based on wind condition', async () => {
-      const lightAirPoint: MinuteDataPoint = {
+      const lightAirPoint: WindDataPointWithOffset = {
+        timestamp: '2026-05-19T18:00:00.000Z',
         minsAgo: 0,
         spd: 7, // Light air
         dir: 180,
@@ -211,7 +215,8 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
     })
 
     it('overlays are positioned absolutely over the chart', async () => {
-      const point: MinuteDataPoint = {
+      const point: WindDataPointWithOffset = {
+        timestamp: '2026-05-19T18:00:00.000Z',
         minsAgo: 0,
         spd: 12,
         dir: 180,

@@ -1,4 +1,51 @@
-import { formatTimeOffset, formatDateTimeRange } from '../time'
+import { formatTimeOffset, formatDateTimeRange, getMinutesAgo } from '../time'
+
+describe('getMinutesAgo', () => {
+  it('calculates correct minutes for timestamp 30 minutes ago', () => {
+    const now = new Date('2026-05-19T18:00:00Z')
+    const timestamp = '2026-05-19T17:30:00Z'
+
+    expect(getMinutesAgo(timestamp, now)).toBe(30)
+  })
+
+  it('calculates correct minutes for timestamp 1 hour ago', () => {
+    const now = new Date('2026-05-19T18:00:00Z')
+    const timestamp = '2026-05-19T17:00:00Z'
+
+    expect(getMinutesAgo(timestamp, now)).toBe(60)
+  })
+
+  it('calculates correct minutes for timestamp 72 hours ago', () => {
+    const now = new Date('2026-05-19T18:00:00Z')
+    const timestamp = '2026-05-16T18:00:00Z'
+
+    expect(getMinutesAgo(timestamp, now)).toBe(4320)
+  })
+
+  it('returns 0 for current time', () => {
+    const now = new Date('2026-05-19T18:00:00Z')
+    const timestamp = '2026-05-19T18:00:00Z'
+
+    expect(getMinutesAgo(timestamp, now)).toBe(0)
+  })
+
+  it('uses current Date when referenceTime is not provided', () => {
+    const recentTimestamp = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
+    const result = getMinutesAgo(recentTimestamp)
+
+    // Should be approximately 5 minutes (allow small tolerance for test execution time)
+    expect(result).toBeGreaterThanOrEqual(4.9)
+    expect(result).toBeLessThanOrEqual(5.1)
+  })
+
+  it('handles fractional minutes correctly', () => {
+    const now = new Date('2026-05-19T18:00:00Z')
+    const timestamp = '2026-05-19T17:57:30Z' // 2.5 minutes ago
+
+    expect(getMinutesAgo(timestamp, now)).toBeCloseTo(2.5, 1)
+  })
+})
 
 describe('formatTimeOffset', () => {
   it('formats zero minutes as now', () => {

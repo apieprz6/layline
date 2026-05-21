@@ -1,14 +1,18 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TabbedInfoPanel from '../TabbedInfoPanel'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint } from '@/types'
+
+// Reference time for tests
+const referenceTime = new Date('2026-05-19T18:00:00Z')
 
 // Mock WindowStats component since it's tested separately
 jest.mock('../WindowStats', () => {
   return function MockWindowStats(props: {
-    data: MinuteDataPoint[]
+    data: WindDataPoint[]
     timeWindowMinutes: number
     nowOffsetMinutes: number
+    referenceTime?: Date
   }) {
     return (
       <div data-testid="window-stats">
@@ -19,16 +23,17 @@ jest.mock('../WindowStats', () => {
   }
 })
 
-const mockData: MinuteDataPoint[] = [
-  { minsAgo: 0, spd: 12, dir: 220 },
-  { minsAgo: 10, spd: 14, dir: 225 },
-  { minsAgo: 20, spd: 13, dir: 230 },
+const mockData: WindDataPoint[] = [
+  { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 220 }, // now
+  { timestamp: '2026-05-19T17:50:00Z', spd: 14, dir: 225 }, // 10 mins ago
+  { timestamp: '2026-05-19T17:40:00Z', spd: 13, dir: 230 }, // 20 mins ago
 ]
 
 const defaultProps = {
   data: mockData,
   timeWindowMinutes: 60,
   nowOffsetMinutes: 0,
+  referenceTime,
   onOffsetChange: jest.fn(),
   buoyId: 'CHII2',
   maxOffsetMinutes: 4320, // 72 hours
@@ -196,7 +201,14 @@ describe('TabbedInfoPanel', () => {
     const propsElement = screen.getByTestId('window-stats-props')
     const props = JSON.parse(propsElement.textContent || '{}')
 
-    expect(props.data).toEqual(mockData)
+    // Component transforms WindDataPoint[] to WindDataPointWithOffset[]
+    // by calculating minsAgo from timestamps
+    const expectedData = mockData.map((point, i) => ({
+      ...point,
+      minsAgo: i * 10, // 0, 10, 20 minutes ago
+    }))
+
+    expect(props.data).toEqual(expectedData)
     expect(props.timeWindowMinutes).toBe(60)
     expect(props.nowOffsetMinutes).toBe(0)
   })

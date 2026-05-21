@@ -8,7 +8,7 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
   })
 
   describe('fetchCHII2History', () => {
-    it('returns extendedHistory with ~432 data points covering 72 hours', async () => {
+    it('returns history with ~432 data points covering 72 hours', async () => {
       // Mock NDBC response with 72 hours of 10-minute interval data
       const mockNDBCResponse = generateMockNDBCResponse(72)
 
@@ -19,42 +19,32 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
 
       const result = await fetchCHII2History()
 
-      expect(result.extendedHistory).not.toBeNull()
-      expect(result.extendedHistory).toHaveLength(432) // 72 hours * 6 points/hour
+      expect(result.history).not.toBeNull()
+      expect(result.history).toHaveLength(432) // 72 hours * 6 points/hour
+
+      // Verify points have absolute timestamps (not minsAgo)
+      const oldestPoint = result.history![result.history!.length - 1]
+      const newestPoint = result.history![0]
+
+      expect(oldestPoint.timestamp).toBeTruthy()
+      expect(newestPoint.timestamp).toBeTruthy()
+
+      // Verify timestamps are ISO 8601 format
+      expect(() => new Date(oldestPoint.timestamp)).not.toThrow()
+      expect(() => new Date(newestPoint.timestamp)).not.toThrow()
 
       // Verify time range covers 72 hours
-      const oldestPoint = result.extendedHistory![result.extendedHistory!.length - 1]
-      const newestPoint = result.extendedHistory![0]
+      const oldestTime = new Date(oldestPoint.timestamp).getTime()
+      const newestTime = new Date(newestPoint.timestamp).getTime()
+      const hoursDiff = (newestTime - oldestTime) / (1000 * 60 * 60)
 
-      expect(oldestPoint.minsAgo).toBeGreaterThanOrEqual(4310) // ~71.8 hours
-      expect(newestPoint.minsAgo).toBeLessThanOrEqual(10) // Most recent bucket
-    })
-
-    it('maintains backward compatibility: minuteHistory still returns ~12 points for 2 hours', async () => {
-      const mockNDBCResponse = generateMockNDBCResponse(72)
-
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        text: async () => mockNDBCResponse,
-      } as Response)
-
-      const result = await fetchCHII2History()
-
-      expect(result.minuteHistory).not.toBeNull()
-      expect(result.minuteHistory).toHaveLength(12) // 2 hours * 6 points/hour
-
-      // Verify time range covers only 2 hours
-      const oldestPoint = result.minuteHistory![result.minuteHistory!.length - 1]
-      const newestPoint = result.minuteHistory![0]
-
-      expect(oldestPoint.minsAgo).toBeGreaterThanOrEqual(110) // ~1.83 hours
-      expect(oldestPoint.minsAgo).toBeLessThanOrEqual(120) // Max 2 hours
-      expect(newestPoint.minsAgo).toBeLessThanOrEqual(10) // Most recent bucket
+      expect(hoursDiff).toBeGreaterThanOrEqual(71)
+      expect(hoursDiff).toBeLessThanOrEqual(72)
     })
   })
 
   describe('fetchPurdueBuoyHistory', () => {
-    it('returns extendedHistory with ~432 data points covering 72 hours', async () => {
+    it('returns history with ~432 data points covering 72 hours', async () => {
       const mockNDBCResponse = generateMockNDBCResponse(72)
 
       global.fetch = jest.fn().mockResolvedValue({
@@ -64,42 +54,24 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
 
       const result = await fetchPurdueBuoyHistory()
 
-      expect(result.extendedHistory).not.toBeNull()
-      expect(result.extendedHistory).toHaveLength(432) // 72 hours * 6 points/hour
+      expect(result.history).not.toBeNull()
+      expect(result.history).toHaveLength(432) // 72 hours * 6 points/hour
 
-      // Verify time range covers 72 hours
-      const oldestPoint = result.extendedHistory![result.extendedHistory!.length - 1]
-      const newestPoint = result.extendedHistory![0]
+      // Verify points have absolute timestamps
+      const oldestPoint = result.history![result.history!.length - 1]
+      const newestPoint = result.history![0]
 
-      expect(oldestPoint.minsAgo).toBeGreaterThanOrEqual(4310) // ~71.8 hours
-      expect(newestPoint.minsAgo).toBeLessThanOrEqual(10) // Most recent bucket
-    })
+      expect(oldestPoint.timestamp).toBeTruthy()
+      expect(newestPoint.timestamp).toBeTruthy()
 
-    it('maintains backward compatibility: minuteHistory still returns ~12 points for 2 hours', async () => {
-      const mockNDBCResponse = generateMockNDBCResponse(72)
-
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        text: async () => mockNDBCResponse,
-      } as Response)
-
-      const result = await fetchPurdueBuoyHistory()
-
-      expect(result.minuteHistory).not.toBeNull()
-      expect(result.minuteHistory).toHaveLength(12) // 2 hours * 6 points/hour
-
-      // Verify time range covers only 2 hours
-      const oldestPoint = result.minuteHistory![result.minuteHistory!.length - 1]
-      const newestPoint = result.minuteHistory![0]
-
-      expect(oldestPoint.minsAgo).toBeGreaterThanOrEqual(110) // ~1.83 hours
-      expect(oldestPoint.minsAgo).toBeLessThanOrEqual(120) // Max 2 hours
-      expect(newestPoint.minsAgo).toBeLessThanOrEqual(10) // Most recent bucket
+      // Verify timestamps are ISO 8601 format
+      expect(() => new Date(oldestPoint.timestamp)).not.toThrow()
+      expect(() => new Date(newestPoint.timestamp)).not.toThrow()
     })
   })
 
   describe('Cache behavior', () => {
-    it('respects 15-minute cache TTL for extended history', async () => {
+    it('respects 10-minute cache TTL for history', async () => {
       const mockNDBCResponse = generateMockNDBCResponse(72)
       const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
@@ -111,12 +83,12 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       // First call - should fetch from NDBC
       const result1 = await fetchCHII2History()
       expect(fetchMock).toHaveBeenCalledTimes(1)
-      expect(result1.extendedHistory).toHaveLength(432)
+      expect(result1.history).toHaveLength(432)
 
       // Second call immediately after - should use cache
       const result2 = await fetchCHII2History()
       expect(fetchMock).toHaveBeenCalledTimes(1) // Still only 1 call
-      expect(result2.extendedHistory).toHaveLength(432)
+      expect(result2.history).toHaveLength(432)
 
       // Verify both results have the same data
       expect(result1.fetchedAt).toBe(result2.fetchedAt)
@@ -124,14 +96,13 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
   })
 
   describe('Error handling', () => {
-    it('returns null for extendedHistory when fetch fails', async () => {
+    it('returns null for history when fetch fails', async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'))
 
       const result = await fetchCHII2History()
 
       expect(result.status).toBe('error')
-      expect(result.extendedHistory).toBeNull()
-      expect(result.minuteHistory).toBeNull()
+      expect(result.history).toBeNull()
       expect(result.error).toBe('Network error')
     })
   })

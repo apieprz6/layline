@@ -5,14 +5,13 @@ import { fetchCHII2History, fetchPurdueBuoyHistory } from '@/services/buoys/ndbc
  * GET /api/weather/buoys/history
  *
  * Returns historical buoy data for CHII2 and Purdue Buoy
- * - hourlyHistory: 6 data points (hourly, last 6 hours)
- * - minuteHistory: ~12 data points (10-min intervals, last 2 hours)
+ * - history: WindDataPoint[] with absolute timestamps (10-min intervals, up to 72h)
  *
- * Cached with 15-minute TTL
+ * Cached with 10-minute TTL (aligned with NDBC update frequency)
  */
 export async function GET() {
   try {
-    // Fetch historical data from both buoys (uses internal 15-minute cache)
+    // Fetch historical data from both buoys (uses internal 10-minute cache)
     const [chii2History, purdueHistory] = await Promise.all([
       fetchCHII2History(),
       fetchPurdueBuoyHistory(),
@@ -27,8 +26,8 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          // Cache for 15 minutes (900 seconds)
-          'Cache-Control': 'public, max-age=900, s-maxage=900',
+          // Cache for 10 minutes (600 seconds) - aligned with NDBC update frequency
+          'Cache-Control': 'public, max-age=600, s-maxage=600',
         },
       }
     )

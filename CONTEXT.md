@@ -23,10 +23,10 @@ Secondary buoy with surface-level measurements. Seasonal (May-October). Best on-
 ### Data Status
 
 **Online**:
-Data source successfully fetched within the last 2 minutes. Trustworthy for racing decisions.
+Data source successfully fetched within the last 15 minutes (aligned with NDBC's 10-minute update frequency). Trustworthy for racing decisions.
 
 **Recent**:
-Data source fetch failed, but cached data is 2-30 minutes old. Still usable for racing decisions with caution.
+Data source fetch failed, but cached data is 15-30 minutes old. Still usable for racing decisions with caution.
 
 **Stale**:
 Cached data is 30-120 minutes old. Questionable reliability, use with caution.
@@ -44,7 +44,7 @@ Fresh API call bypassing cache. Used on dedicated live data pages with auto-refr
 _Avoid_: Real-time, uncached
 
 **Cached Fetch**:
-Returns cached data if within TTL (15 minutes). Used on dashboard for performance.
+Returns cached data if within TTL (10 minutes for history data, aligned with NDBC's update frequency). Used on dashboard for performance.
 _Avoid_: Standard fetch, normal fetch
 
 **Staleness**:
@@ -93,11 +93,8 @@ Pill-shaped indicator showing speed or direction trend (e.g., "↑ Building +1.5
 
 ### Data Structures
 
-**Hourly History**:
-6-hour wind data aggregated to hourly intervals for sparkline charts. Each point: `{ time, spd, dir }`.
-
-**Minute History**:
-Fine-grained wind data (10-minute intervals, last 2 hours) used for trend calculations. Each point: `{ minsAgo, spd, dir }`.
+**Wind History**:
+Time-series of wind measurements from a buoy. NDBC provides 10-minute interval readings (up to 72 hours). Each point: `{ timestamp, spd, dir }` where timestamp is ISO 8601 format. UI components filter to needed time ranges (last hour, last 6h, last 72h, etc.) and calculate relative time offsets at render time to prevent timestamp drift.
 
 ## Relationships
 
@@ -108,8 +105,8 @@ Fine-grained wind data (10-minute intervals, last 2 hours) used for trend calcul
 - **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
 - **Staleness** determines **Data Source Status** (online → recent → stale → offline)
 - **Station Card** has collapsed (dashboard) and expanded (Wind Data page) states
-- **Hourly History** feeds sparkline charts, **Minute History** feeds trend calculations
-- **Speed Trend** calculated from **Minute History** (20min avg vs 2h avg)
+- **Wind History** provides 10-minute interval data that UI components filter by time range
+- **Speed Trend** calculated from filtered **Wind History** (20min avg vs 2h avg)
 - **Veering** is positive direction delta, **Backing** is negative direction delta
 - **Summary Bar** only averages wind from **Online** stations (excludes recent/stale/offline)
 
@@ -122,13 +119,13 @@ Fine-grained wind data (10-minute intervals, last 2 hours) used for trend calcul
 > **Domain expert:** "No — that's expected. Mark it **Offline** with a note that it's seasonal. **Error** is for unexpected failures."
 
 > **Dev:** "What's the difference between **Live Fetch** and **Cached Fetch**?"
-> **Domain expert:** "**Cached Fetch** is for the dashboard where 15-minute-old data is fine. **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
+> **Domain expert:** "**Cached Fetch** is for the dashboard where 10-minute-old data is fine (NDBC updates every 10 minutes anyway). **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
 
 > **Dev:** "The wind direction changed from 230° to 250°. Is that **veering** or **backing**?"
 > **Domain expert:** "That's **veering** — clockwise rotation. If it went from 250° to 230°, that would be **backing**."
 
 > **Dev:** "Should the **Summary Bar** include **Recent** stations in the average wind calculation?"
-> **Domain expert:** "No — only average **Online** stations. If data is older than 2 minutes, it's not representative of current conditions."
+> **Domain expert:** "No — only average **Online** stations. If data is older than 15 minutes, it's not representative of current conditions."
 
 > **Dev:** "What's a good **Gust Factor** threshold for showing a warning?"
 > **Domain expert:** "Above 30% is **puffy** — that's when sailors need to be ready for significant speed variations. Below 15% is **smooth**, easy to manage."

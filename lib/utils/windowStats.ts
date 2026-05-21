@@ -3,7 +3,7 @@
  * Aggregate statistical calculations for wind data within a time window
  */
 
-import type { MinuteDataPoint, WindowStats } from '@/types'
+import type { WindDataPointWithOffset, WindowStats } from '@/types'
 
 // Re-export for convenience
 export type { WindowStats }
@@ -12,10 +12,10 @@ export type { WindowStats }
  * Calculate aggregate statistics for a window of wind data points
  * Uses vector averaging for direction to handle wraparound correctly
  *
- * @param points - Array of minute-level data points
+ * @param points - Array of wind data points with time offsets
  * @returns WindowStats object or null if insufficient data (< 3 points)
  */
-export function calculateWindowStats(points: MinuteDataPoint[]): WindowStats | null {
+export function calculateWindowStats(points: WindDataPointWithOffset[]): WindowStats | null {
   if (points.length < 3) return null
 
   // Vector averaging for direction (handles wraparound)

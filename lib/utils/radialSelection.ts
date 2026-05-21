@@ -3,7 +3,7 @@
  * Converts user touch/click coordinates to time-based data point selection
  */
 
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPointWithOffset } from '@/types'
 
 /**
  * Find the data point closest to a given radius (time offset) on the polar chart
@@ -16,7 +16,7 @@ import type { MinuteDataPoint } from '@/types'
  *
  * @param clientX - Client X coordinate from pointer event
  * @param clientY - Client Y coordinate from pointer event
- * @param dataPoints - Array of minute data points
+ * @param dataPoints - Array of wind data points with time offsets
  * @param svgElement - SVG element reference (for coordinate conversion)
  * @param timeWindowMinutes - Total time window in minutes
  * @param nowOffsetMinutes - Minutes ago from current time (0 = live, 60 = 1h ago)
@@ -25,11 +25,11 @@ import type { MinuteDataPoint } from '@/types'
 export function findPointByRadius(
   clientX: number,
   clientY: number,
-  dataPoints: MinuteDataPoint[],
+  dataPoints: WindDataPointWithOffset[],
   svgElement: SVGSVGElement,
   timeWindowMinutes: number,
   nowOffsetMinutes: number = 0
-): MinuteDataPoint | null {
+): WindDataPointWithOffset | null {
   if (dataPoints.length === 0) return null
   if (timeWindowMinutes === 0) return null
 

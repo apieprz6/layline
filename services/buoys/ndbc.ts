@@ -5,8 +5,7 @@ import type {
   BuoyCacheEntry,
   DataSourceStatus,
   BuoyHistoryData,
-  HourlyDataPoint,
-  MinuteDataPoint,
+  WindDataPoint,
 } from '@/types'
 
 // In-memory cache
@@ -14,7 +13,7 @@ const cache: Map<string, BuoyCacheEntry> = new Map()
 
 // Status thresholds (in milliseconds)
 const STATUS_THRESHOLDS = {
-  ONLINE: 2 * 60 * 1000, // 2 minutes
+  ONLINE: 15 * 60 * 1000, // 15 minutes (NDBC updates every 10 minutes)
   RECENT: 30 * 60 * 1000, // 30 minutes
   STALE: 120 * 60 * 1000, // 120 minutes
 }
@@ -508,140 +507,9 @@ function parseNDBCHistoricalRows(
   return dataPoints
 }
 
-/**
- * Aggregate data points to hourly intervals
- * Returns last 6 hours of data
- */
-function aggregateToHourly(
-  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>
-): HourlyDataPoint[] {
-  if (dataPoints.length === 0) return []
-
-  const now = new Date()
-  const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000)
-
-  // Group by hour
-  const hourlyBuckets = new Map<
-    string,
-    Array<{ windSpeed: number; windDirection: number }>
-  >()
-
-  dataPoints.forEach((point) => {
-    if (point.timestamp < sixHoursAgo) return
-
-    const hourKey = point.timestamp.toISOString().slice(0, 13) // YYYY-MM-DDTHH
-    if (!hourlyBuckets.has(hourKey)) {
-      hourlyBuckets.set(hourKey, [])
-    }
-    hourlyBuckets.get(hourKey)!.push({
-      windSpeed: point.windSpeed,
-      windDirection: point.windDirection,
-    })
-  })
-
-  // Calculate averages for each hour
-  const hourlyData: HourlyDataPoint[] = []
-
-  Array.from(hourlyBuckets.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-6) // Take last 6 hours
-    .forEach(([hourKey, points]) => {
-      const avgSpeed = points.reduce((sum, p) => sum + p.windSpeed, 0) / points.length
-
-      // Average directions using vector math
-      let sumSin = 0
-      let sumCos = 0
-      points.forEach((p) => {
-        const rad = (p.windDirection * Math.PI) / 180
-        sumSin += Math.sin(rad)
-        sumCos += Math.cos(rad)
-      })
-      let avgDir = (Math.atan2(sumSin, sumCos) * 180) / Math.PI
-      if (avgDir < 0) avgDir += 360
-
-      const hour = new Date(hourKey + ':00:00Z')
-      const timeStr = hour.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'UTC',
-      })
-
-      hourlyData.push({
-        time: timeStr,
-        spd: Math.round(avgSpeed * 10) / 10,
-        dir: Math.round(avgDir),
-      })
-    })
-
-  return hourlyData
-}
-
-/**
- * Filter to 10-minute intervals for specified hours back
- * Returns ~6 data points per hour (e.g., ~12 points for 2h, ~432 points for 72h)
- */
-function filterToTenMinuteIntervals(
-  dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }>,
-  hoursBack: number = 2
-): MinuteDataPoint[] {
-  if (dataPoints.length === 0) return []
-
-  const now = new Date()
-  const cutoffTime = new Date(now.getTime() - hoursBack * 60 * 60 * 1000)
-
-  // Filter to specified time range
-  const recentPoints = dataPoints.filter((p) => p.timestamp >= cutoffTime)
-
-  // Group by 10-minute buckets
-  const tenMinBuckets = new Map<
-    number,
-    Array<{ windSpeed: number; windDirection: number }>
-  >()
-
-  recentPoints.forEach((point) => {
-    const minutesAgo = Math.floor((now.getTime() - point.timestamp.getTime()) / (60 * 1000))
-    const bucketKey = Math.floor(minutesAgo / 10) * 10 // Round down to nearest 10
-
-    if (bucketKey > hoursBack * 60) return // Only specified time range
-
-    if (!tenMinBuckets.has(bucketKey)) {
-      tenMinBuckets.set(bucketKey, [])
-    }
-    tenMinBuckets.get(bucketKey)!.push({
-      windSpeed: point.windSpeed,
-      windDirection: point.windDirection,
-    })
-  })
-
-  // Calculate averages for each bucket
-  const minuteData: MinuteDataPoint[] = []
-
-  Array.from(tenMinBuckets.entries())
-    .sort((a, b) => a[0] - b[0])
-    .forEach(([minsAgo, points]) => {
-      const avgSpeed = points.reduce((sum, p) => sum + p.windSpeed, 0) / points.length
-
-      // Average directions using vector math
-      let sumSin = 0
-      let sumCos = 0
-      points.forEach((p) => {
-        const rad = (p.windDirection * Math.PI) / 180
-        sumSin += Math.sin(rad)
-        sumCos += Math.cos(rad)
-      })
-      let avgDir = (Math.atan2(sumSin, sumCos) * 180) / Math.PI
-      if (avgDir < 0) avgDir += 360
-
-      minuteData.push({
-        minsAgo,
-        spd: Math.round(avgSpeed * 10) / 10,
-        dir: Math.round(avgDir),
-      })
-    })
-
-  return minuteData
-}
+// REMOVED: aggregateToHourly() and filterToTenMinuteIntervals()
+// NDBC already provides 10-minute interval data - no bucketing needed
+// Store absolute timestamps to prevent drift
 
 // History cache
 const historyCache: Map<
@@ -649,10 +517,11 @@ const historyCache: Map<
   { data: BuoyHistoryData; fetchedAt: number }
 > = new Map()
 
-const HISTORY_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
+const HISTORY_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (aligned with NDBC update frequency)
 
 /**
  * Fetch buoy historical data from NDBC
+ * Returns wind data with absolute timestamps (no bucketing - NDBC already provides 10-min intervals)
  */
 async function fetchBuoyHistory(
   stationId: keyof typeof BUOY_CONFIGS
@@ -682,22 +551,27 @@ async function fetchBuoyHistory(
     }
 
     const text = await response.text()
-    const dataPoints = parseNDBCHistoricalRows(text)
+    const parsedData = parseNDBCHistoricalRows(text)
 
-    if (dataPoints.length === 0) {
+    if (parsedData.length === 0) {
       throw new Error('No historical data available')
     }
 
-    const hourlyHistory = aggregateToHourly(dataPoints)
-    const minuteHistory = filterToTenMinuteIntervals(dataPoints, 2)
-    const extendedHistory = filterToTenMinuteIntervals(dataPoints, 72)
+    // Filter to 72-hour window
+    const cutoffTime = new Date(now - 72 * 60 * 60 * 1000)
+    const recentData = parsedData.filter((p) => p.timestamp >= cutoffTime)
+
+    // Convert to WindDataPoint[] with ISO timestamps
+    const history: WindDataPoint[] = recentData.map((p) => ({
+      timestamp: p.timestamp.toISOString(),
+      spd: Math.round(p.windSpeed * 10) / 10,
+      dir: Math.round(p.windDirection),
+    }))
 
     const historyData: BuoyHistoryData = {
       buoyId: config.stationId,
       name: config.name,
-      hourlyHistory,
-      minuteHistory,
-      extendedHistory,
+      history,
       status: 'online',
       fetchedAt: new Date(now).toISOString(),
     }
@@ -711,9 +585,7 @@ async function fetchBuoyHistory(
     const historyData: BuoyHistoryData = {
       buoyId: BUOY_CONFIGS[stationId].stationId,
       name: BUOY_CONFIGS[stationId].name,
-      hourlyHistory: null,
-      minuteHistory: null,
-      extendedHistory: null,
+      history: null,
       status: 'error',
       fetchedAt: new Date(now).toISOString(),
       error: error instanceof Error ? error.message : 'Unknown error',

@@ -1,4 +1,19 @@
 /**
+ * Calculate minutes elapsed between timestamp and reference time
+ * @param timestamp - ISO 8601 timestamp string
+ * @param referenceTime - Reference time (defaults to current time)
+ * @returns Minutes elapsed (positive number)
+ */
+export function getMinutesAgo(
+  timestamp: string,
+  referenceTime: Date = new Date()
+): number {
+  const targetTime = new Date(timestamp)
+  const diffMs = referenceTime.getTime() - targetTime.getTime()
+  return diffMs / (60 * 1000)
+}
+
+/**
  * Format time offset in minutes to human-readable string
  * @param minutes - Minutes ago (positive number)
  * @returns Formatted string like "now", "−5m", "−1h", "−1.5h"
