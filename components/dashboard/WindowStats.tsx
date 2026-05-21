@@ -1,12 +1,12 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPointWithOffset } from '@/types'
 import { calculateWindowStats } from '@/lib/utils/windowStats'
 import { getCompassDirection } from '@/lib/utils/wind'
 
 interface WindowStatsProps {
-  data: MinuteDataPoint[]
+  data: WindDataPointWithOffset[]
   timeWindowMinutes: number
   nowOffsetMinutes: number
 }

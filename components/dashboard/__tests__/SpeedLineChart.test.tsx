@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { render, fireEvent, createEvent } from '@testing-library/react'
 import SpeedLineChart from '../SpeedLineChart'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint } from '@/types'
 
 // Mock SVG getBoundingClientRect for coordinate calculations
 beforeAll(() => {
@@ -22,12 +22,15 @@ beforeAll(() => {
 })
 
 describe('SpeedLineChart', () => {
-  const mockData: MinuteDataPoint[] = [
-    { minsAgo: 0, spd: 12, dir: 180 },
-    { minsAgo: 10, spd: 14, dir: 185 },
-    { minsAgo: 20, spd: 11, dir: 175 },
-    { minsAgo: 40, spd: 16, dir: 190 },
-    { minsAgo: 60, spd: 9, dir: 170 },
+  // Reference time for all tests
+  const referenceTime = new Date('2026-05-19T18:00:00Z')
+
+  const mockData: WindDataPoint[] = [
+    { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 }, // now
+    { timestamp: '2026-05-19T17:50:00Z', spd: 14, dir: 185 }, // 10 mins ago
+    { timestamp: '2026-05-19T17:40:00Z', spd: 11, dir: 175 }, // 20 mins ago
+    { timestamp: '2026-05-19T17:20:00Z', spd: 16, dir: 190 }, // 40 mins ago
+    { timestamp: '2026-05-19T17:00:00Z', spd: 9, dir: 170 },  // 60 mins ago
   ]
 
   describe('Data filtering to time window', () => {
@@ -37,6 +40,7 @@ describe('SpeedLineChart', () => {
           data={mockData}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -46,12 +50,11 @@ describe('SpeedLineChart', () => {
       expect(svg).toBeInTheDocument()
 
       // With 30-minute window at nowOffset=0, should include:
-      // - minsAgo: 0 (in window)
-      // - minsAgo: 10 (in window)
-      // - minsAgo: 20 (in window)
-      // - minsAgo: 40 (outside window)
-      // - minsAgo: 60 (outside window)
-      // Should render area fill and line segments
+      // - 18:00:00Z (0 mins ago - in window)
+      // - 17:50:00Z (10 mins ago - in window)
+      // - 17:40:00Z (20 mins ago - in window)
+      // - 17:20:00Z (40 mins ago - outside window)
+      // - 17:00:00Z (60 mins ago - outside window)
       // Should render area fill and line segments
       const lines = container.querySelectorAll('line[stroke-linecap="round"]')
       expect(lines.length).toBe(2) // 2 segments for 3 points
@@ -63,6 +66,7 @@ describe('SpeedLineChart', () => {
           data={mockData}
           timeWindowMinutes={30}
           nowOffsetMinutes={30}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -70,10 +74,10 @@ describe('SpeedLineChart', () => {
 
       // With 30-minute window at nowOffset=30, window is [30, 60] minutes ago
       // Should include:
-      // - minsAgo: 40 (in window)
-      // - minsAgo: 60 (in window)
+      // - 17:20:00Z (40 mins ago - in window)
+      // - 17:00:00Z (60 mins ago - in window)
       // Should NOT include:
-      // - minsAgo: 0, 10, 20 (before window start)
+      // - 18:00:00Z, 17:50:00Z, 17:40:00Z (before window start)
       // Should render 1 line segment for 2 points
       const lines = container.querySelectorAll('line[stroke-linecap="round"]')
       expect(lines.length).toBe(1)
@@ -85,6 +89,7 @@ describe('SpeedLineChart', () => {
           data={mockData}
           timeWindowMinutes={5}
           nowOffsetMinutes={100}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -98,9 +103,9 @@ describe('SpeedLineChart', () => {
 
   describe('Dynamic Y-axis scaling', () => {
     it('scales Y-axis to nearest 5 kts above max speed', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 }, // Max = 12
-        { minsAgo: 10, spd: 9, dir: 185 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 }, // Max = 12
+        { timestamp: '2026-05-19T17:50:00Z', spd: 9, dir: 185 },
       ]
 
       const { container } = render(
@@ -108,6 +113,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -121,9 +127,9 @@ describe('SpeedLineChart', () => {
     })
 
     it('uses minimum Y-axis of 8 kts for light air conditions', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 5, dir: 180 }, // Light air
-        { minsAgo: 10, spd: 6, dir: 185 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 5, dir: 180 }, // Light air
+        { timestamp: '2026-05-19T17:50:00Z', spd: 6, dir: 185 },
       ]
 
       const { container } = render(
@@ -131,6 +137,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -145,9 +152,9 @@ describe('SpeedLineChart', () => {
     })
 
     it('uses 10 kts step when max speed is 20 or less', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 18, dir: 180 },
-        { minsAgo: 10, spd: 16, dir: 185 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 18, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00Z', spd: 16, dir: 185 },
       ]
 
       const { container } = render(
@@ -155,6 +162,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -172,9 +180,9 @@ describe('SpeedLineChart', () => {
     })
 
     it('uses 10 kts step when max speed exceeds 20', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 28, dir: 180 },
-        { minsAgo: 10, spd: 24, dir: 185 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 28, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00Z', spd: 24, dir: 185 },
       ]
 
       const { container } = render(
@@ -182,6 +190,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -200,19 +209,20 @@ describe('SpeedLineChart', () => {
 
   describe('Hover visualization', () => {
     it('renders hover highlight when hoverPoint is provided', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 },
-        { minsAgo: 15, spd: 14, dir: 185 },
-        { minsAgo: 30, spd: 10, dir: 175 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:45:00Z', spd: 14, dir: 185 },
+        { timestamp: '2026-05-19T17:30:00Z', spd: 10, dir: 175 },
       ]
 
-      const hoverPoint = data[1] // Middle point
+      const hoverPoint = { ...data[1], minsAgo: 15 } // Middle point with minsAgo
 
       const { container } = render(
         <SpeedLineChart
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={hoverPoint}
           onHoverChange={() => {}}
         />
@@ -229,9 +239,9 @@ describe('SpeedLineChart', () => {
     })
 
     it('renders hover circle at hoverPoint position', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 },
-        { minsAgo: 15, spd: 14, dir: 185 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:45:00Z', spd: 14, dir: 185 },
       ]
 
       const { container } = render(
@@ -239,7 +249,8 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
-          hoverPoint={data[0]}
+          referenceTime={referenceTime}
+          hoverPoint={{ ...data[0], minsAgo: 0 }}
           onHoverChange={() => {}}
         />
       )
@@ -250,8 +261,8 @@ describe('SpeedLineChart', () => {
     })
 
     it('does not render crosshair when hoverPoint is null', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 },
       ]
 
       const { container } = render(
@@ -259,6 +270,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -277,8 +289,8 @@ describe('SpeedLineChart', () => {
 
   describe('Wind condition band lines', () => {
     it('renders dashed lines at 8, 15, 22 kts thresholds', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 25, dir: 180 }, // Force max to include all bands
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 25, dir: 180 }, // Force max to include all bands
       ]
 
       const { container } = render(
@@ -286,6 +298,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -308,8 +321,8 @@ describe('SpeedLineChart', () => {
     })
 
     it('only renders band lines below maxSpeed', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 }, // Max will be 15
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 }, // Max will be 15
       ]
 
       const { container } = render(
@@ -317,6 +330,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -336,10 +350,10 @@ describe('SpeedLineChart', () => {
 
   describe('Line segment coloring', () => {
     it('renders line segments colored by wind conditions', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 7, dir: 180 },  // Light
-        { minsAgo: 10, spd: 12, dir: 185 }, // Medium
-        { minsAgo: 20, spd: 18, dir: 175 }, // Heavy
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 7, dir: 180 },  // Light
+        { timestamp: '2026-05-19T17:50:00Z', spd: 12, dir: 185 }, // Medium
+        { timestamp: '2026-05-19T17:40:00Z', spd: 18, dir: 175 }, // Heavy
       ]
 
       const { container } = render(
@@ -347,6 +361,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />
@@ -360,9 +375,9 @@ describe('SpeedLineChart', () => {
 
   describe('Area fill gradient', () => {
     it('renders area fill path with gradient', () => {
-      const data: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 180 },
-        { minsAgo: 30, spd: 10, dir: 175 },
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:30:00Z', spd: 10, dir: 175 },
       ]
 
       const { container } = render(
@@ -370,6 +385,7 @@ describe('SpeedLineChart', () => {
           data={data}
           timeWindowMinutes={30}
           nowOffsetMinutes={0}
+          referenceTime={referenceTime}
           hoverPoint={null}
           onHoverChange={() => {}}
         />

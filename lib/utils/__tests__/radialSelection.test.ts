@@ -1,5 +1,5 @@
 import { findPointByRadius } from '../radialSelection'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPointWithOffset } from '@/types'
 
 describe('findPointByRadius', () => {
   // Mock SVG element with getBoundingClientRect
@@ -26,10 +26,10 @@ describe('findPointByRadius', () => {
   describe('Tracer bullet: radial time-based selection', () => {
     it('selects data point at midpoint of time window when clicking at 50% radius', () => {
       // Setup: 60-minute window with data at 0, 30, and 60 minutes ago
-      const dataPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },   // Now (outer ring)
-        { minsAgo: 30, spd: 14, dir: 90 }, // 30 mins ago (middle)
-        { minsAgo: 60, spd: 10, dir: 180 }, // 60 mins ago (center)
+      const dataPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },   // Now (outer ring)
+        { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 14, dir: 90 }, // 30 mins ago (middle)
+        { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 }, // 60 mins ago (center)
       ]
 
       const svg = createMockSVG()
@@ -48,17 +48,17 @@ describe('findPointByRadius', () => {
       const result = findPointByRadius(clickX, clickY, dataPoints, svg, timeWindowMinutes)
 
       // Should return the 30-minute data point (closest to 50% of time window)
-      expect(result).toEqual({ minsAgo: 30, spd: 14, dir: 90 })
+      expect(result).toEqual({ timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 14, dir: 90 })
     })
   })
 
   describe('Radial selection at different time offsets', () => {
-    const dataPoints: MinuteDataPoint[] = [
-      { minsAgo: 0, spd: 12, dir: 0 },
-      { minsAgo: 15, spd: 13, dir: 45 },
-      { minsAgo: 30, spd: 14, dir: 90 },
-      { minsAgo: 45, spd: 11, dir: 135 },
-      { minsAgo: 60, spd: 10, dir: 180 },
+    const dataPoints: WindDataPointWithOffset[] = [
+      { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },
+      { timestamp: '2026-05-19T17:45:00.000Z', minsAgo: 15, spd: 13, dir: 45 },
+      { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 14, dir: 90 },
+      { timestamp: '2026-05-19T17:15:00.000Z', minsAgo: 45, spd: 11, dir: 135 },
+      { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 },
     ]
     const svg = createMockSVG()
     const timeWindowMinutes = 60
@@ -103,10 +103,10 @@ describe('findPointByRadius', () => {
 
   describe('Angle-independent selection (time-prioritized)', () => {
     it('selects same time point regardless of click angle', () => {
-      const dataPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 14, dir: 90 },
-        { minsAgo: 60, spd: 10, dir: 180 },
+      const dataPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 14, dir: 90 },
+        { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 },
       ]
       const svg = createMockSVG()
       const timeWindowMinutes = 60
@@ -154,11 +154,11 @@ describe('findPointByRadius', () => {
 
   describe('Nearest neighbor matching', () => {
     it('finds nearest data point when exact time does not exist', () => {
-      const dataPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 20, spd: 13, dir: 45 },
-        { minsAgo: 40, spd: 14, dir: 90 },
-        { minsAgo: 60, spd: 10, dir: 180 },
+      const dataPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 13, dir: 45 },
+        { timestamp: '2026-05-19T17:20:00.000Z', minsAgo: 40, spd: 14, dir: 90 },
+        { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 },
       ]
       const svg = createMockSVG()
       const timeWindowMinutes = 60
@@ -188,21 +188,21 @@ describe('findPointByRadius', () => {
     })
 
     it('returns null when time window is zero', () => {
-      const dataPoints: MinuteDataPoint[] = [{ minsAgo: 0, spd: 12, dir: 0 }]
+      const dataPoints: WindDataPointWithOffset[] = [{ timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 }]
       const result = findPointByRadius(180, 180, dataPoints, svg, 0)
       expect(result).toBeNull()
     })
 
     it('returns single data point when only one point exists', () => {
-      const dataPoints: MinuteDataPoint[] = [{ minsAgo: 15, spd: 12, dir: 90 }]
+      const dataPoints: WindDataPointWithOffset[] = [{ timestamp: '2026-05-19T17:45:00.000Z', minsAgo: 15, spd: 12, dir: 90 }]
       const result = findPointByRadius(180, 180, dataPoints, svg, timeWindowMinutes)
-      expect(result).toEqual({ minsAgo: 15, spd: 12, dir: 90 })
+      expect(result).toEqual({ timestamp: '2026-05-19T17:45:00.000Z', minsAgo: 15, spd: 12, dir: 90 })
     })
 
     it('clamps radius to 0-1 range when clicking outside chart bounds', () => {
-      const dataPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 60, spd: 10, dir: 180 },
+      const dataPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 },
       ]
 
       // Click far outside chart (beyond 100% radius)
@@ -215,10 +215,10 @@ describe('findPointByRadius', () => {
 
   describe('Responsive sizing', () => {
     it('handles different SVG element sizes correctly', () => {
-      const dataPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12, dir: 0 },
-        { minsAgo: 30, spd: 14, dir: 90 },
-        { minsAgo: 60, spd: 10, dir: 180 },
+      const dataPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12, dir: 0 },
+        { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 14, dir: 90 },
+        { timestamp: '2026-05-19T17:00:00.000Z', minsAgo: 60, spd: 10, dir: 180 },
       ]
       const timeWindowMinutes = 60
 

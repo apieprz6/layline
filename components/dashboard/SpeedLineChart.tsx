@@ -1,23 +1,36 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
+import { getMinutesAgo } from '@/lib/utils/time'
 
 interface SpeedLineChartProps {
-  data: MinuteDataPoint[]
+  data: WindDataPoint[]
   timeWindowMinutes: number
   nowOffsetMinutes: number
-  hoverPoint: MinuteDataPoint | null
-  onHoverChange: (point: MinuteDataPoint | null) => void
+  referenceTime?: Date
+  hoverPoint: WindDataPointWithOffset | null
+  onHoverChange: (point: WindDataPointWithOffset | null) => void
 }
 
 export default function SpeedLineChart({
   data,
   timeWindowMinutes,
   nowOffsetMinutes,
+  referenceTime,
   hoverPoint,
   onHoverChange,
 }: SpeedLineChartProps) {
+  // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
+  const now = referenceTime || new Date()
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
+    () =>
+      data.map((point) => ({
+        ...point,
+        minsAgo: getMinutesAgo(point.timestamp, now),
+      })),
+    [data, now]
+  )
   // Constants for chart dimensions
   const WIDTH = 360
   const HEIGHT = 130
@@ -33,12 +46,12 @@ export default function SpeedLineChart({
     const windowStart = nowOffsetMinutes
     const windowEnd = nowOffsetMinutes + timeWindowMinutes
 
-    return data
+    return dataWithOffset
       .filter(
         (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd
       )
       .sort((a, b) => b.minsAgo - a.minsAgo) // Sort newest to oldest
-  }, [data, timeWindowMinutes, nowOffsetMinutes])
+  }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes])
 
   // Calculate dynamic Y-axis max
   const maxSpeed = useMemo(() => {
@@ -124,7 +137,7 @@ export default function SpeedLineChart({
     const windowEnd = nowOffsetMinutes + timeWindowMinutes
     const targetMinsAgo = windowStart + (1 - t) * (windowEnd - windowStart)
 
-    let best: MinuteDataPoint | null = null
+    let best: WindDataPointWithOffset | null = null
     let bestDist = Infinity
 
     for (const p of visibleData) {

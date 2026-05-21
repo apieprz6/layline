@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import type { MinuteDataPoint } from '@/types'
+import { useState, useMemo } from 'react'
+import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
+import { getMinutesAgo } from '@/lib/utils/time'
 import WindowStats from './WindowStats'
 
 interface TabbedInfoPanelProps {
-  data: MinuteDataPoint[]
+  data: WindDataPoint[]
   timeWindowMinutes: number
   nowOffsetMinutes: number
   onOffsetChange: (offset: number) => void
   buoyId: string
   maxOffsetMinutes: number
+  referenceTime?: Date
 }
 
 // Common button style for Jump to tab
@@ -49,8 +51,20 @@ export default function TabbedInfoPanel({
   onOffsetChange,
   buoyId,
   maxOffsetMinutes,
+  referenceTime,
 }: TabbedInfoPanelProps) {
   const [activeTab, setActiveTab] = useState<'stats' | 'jump' | 'legend'>('stats')
+
+  // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
+  const now = referenceTime || new Date()
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
+    () =>
+      data.map((point) => ({
+        ...point,
+        minsAgo: getMinutesAgo(point.timestamp, now),
+      })),
+    [data, now]
+  )
 
   return (
     <div
@@ -143,7 +157,7 @@ export default function TabbedInfoPanel({
       {/* Tab content */}
       {activeTab === 'stats' && (
         <WindowStats
-          data={data}
+          data={dataWithOffset}
           timeWindowMinutes={timeWindowMinutes}
           nowOffsetMinutes={nowOffsetMinutes}
         />

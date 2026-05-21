@@ -1,14 +1,14 @@
 import { calculateWindowStats } from '../windowStats'
-import type { MinuteDataPoint } from '@/types'
+import type { WindDataPointWithOffset } from '@/types'
 
 describe('calculateWindowStats', () => {
   describe('Tracer bullet: vector averaging for direction', () => {
     it('averages 350° and 10° to 0°, not 180° (wraparound case)', () => {
       // Setup: Three points near north with wraparound
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 350 },
-        { minsAgo: 10, spd: 10, dir: 0 },
-        { minsAgo: 20, spd: 10, dir: 10 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 350 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 0 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 10 },
       ]
 
       const result = calculateWindowStats(points)
@@ -21,9 +21,9 @@ describe('calculateWindowStats', () => {
 
   describe('Insufficient data handling', () => {
     it('returns null for fewer than 3 points', () => {
-      const twoPoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 12, dir: 190 },
+      const twoPoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 12, dir: 190 },
       ]
 
       const result = calculateWindowStats(twoPoints)
@@ -31,10 +31,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('returns stats for exactly 3 points (boundary)', () => {
-      const threePoints: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 12, dir: 190 },
-        { minsAgo: 20, spd: 11, dir: 185 },
+      const threePoints: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 12, dir: 190 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 11, dir: 185 },
       ]
 
       const result = calculateWindowStats(threePoints)
@@ -50,10 +50,10 @@ describe('calculateWindowStats', () => {
 
   describe('Mean speed calculation', () => {
     it('calculates arithmetic mean of speeds', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 12, dir: 180 },
-        { minsAgo: 20, spd: 14, dir: 180 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 14, dir: 180 },
       ]
 
       const result = calculateWindowStats(points)
@@ -63,10 +63,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('handles decimal speeds correctly', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10.5, dir: 180 },
-        { minsAgo: 10, spd: 11.5, dir: 180 },
-        { minsAgo: 20, spd: 12.0, dir: 180 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10.5, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 11.5, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 12.0, dir: 180 },
       ]
 
       const result = calculateWindowStats(points)
@@ -78,12 +78,12 @@ describe('calculateWindowStats', () => {
 
   describe('Speed range calculation', () => {
     it('calculates min and max speeds', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 8, dir: 180 },
-        { minsAgo: 10, spd: 15, dir: 180 },
-        { minsAgo: 20, spd: 12, dir: 180 },
-        { minsAgo: 30, spd: 6, dir: 180 },
-        { minsAgo: 40, spd: 18, dir: 180 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 8, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 15, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 6, dir: 180 },
+        { timestamp: '2026-05-19T17:20:00.000Z', minsAgo: 40, spd: 18, dir: 180 },
       ]
 
       const result = calculateWindowStats(points)
@@ -93,10 +93,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('handles same speed for all points', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 10, dir: 180 },
-        { minsAgo: 20, spd: 10, dir: 180 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 180 },
       ]
 
       const result = calculateWindowStats(points)
@@ -110,10 +110,10 @@ describe('calculateWindowStats', () => {
     it('calculates full angular spread around mean direction', () => {
       // Mean direction will be 180°
       // Spread from 170° to 190° = 20° total spread
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 170 },
-        { minsAgo: 10, spd: 10, dir: 180 },
-        { minsAgo: 20, spd: 10, dir: 190 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 170 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 190 },
       ]
 
       const result = calculateWindowStats(points)
@@ -125,10 +125,10 @@ describe('calculateWindowStats', () => {
     it('handles wraparound in spread calculation', () => {
       // Mean direction will be ~0° (north)
       // Points at 350°, 0°, 10° → max deviation 10°, spread 20°
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 350 },
-        { minsAgo: 10, spd: 10, dir: 0 },
-        { minsAgo: 20, spd: 10, dir: 10 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 350 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 0 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 10 },
       ]
 
       const result = calculateWindowStats(points)
@@ -139,10 +139,10 @@ describe('calculateWindowStats', () => {
     it('handles large oscillations correctly', () => {
       // Mean direction ~225° (SW)
       // Points swing from 180° to 270° = 90° total spread
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 10, dir: 225 },
-        { minsAgo: 20, spd: 10, dir: 270 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 225 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 270 },
       ]
 
       const result = calculateWindowStats(points)
@@ -152,10 +152,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('returns zero spread when all directions identical', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 180 },
-        { minsAgo: 10, spd: 12, dir: 180 },
-        { minsAgo: 20, spd: 14, dir: 180 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 14, dir: 180 },
       ]
 
       const result = calculateWindowStats(points)
@@ -166,10 +166,10 @@ describe('calculateWindowStats', () => {
 
   describe('Additional wraparound cases for direction', () => {
     it('averages 270° and 90° to 0° (wraps through north)', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 270 },
-        { minsAgo: 10, spd: 10, dir: 0 },
-        { minsAgo: 20, spd: 10, dir: 90 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 270 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 0 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 90 },
       ]
 
       const result = calculateWindowStats(points)
@@ -179,10 +179,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('averages 90° and 270° to 180° (wraps through south)', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 90 },
-        { minsAgo: 10, spd: 10, dir: 180 },
-        { minsAgo: 20, spd: 10, dir: 270 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 90 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 180 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 270 },
       ]
 
       const result = calculateWindowStats(points)
@@ -192,10 +192,10 @@ describe('calculateWindowStats', () => {
     })
 
     it('handles directions clustered around 360°/0° boundary', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 10, dir: 359 },
-        { minsAgo: 10, spd: 10, dir: 0 },
-        { minsAgo: 20, spd: 10, dir: 1 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 10, dir: 359 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 10, dir: 0 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 10, dir: 1 },
       ]
 
       const result = calculateWindowStats(points)
@@ -207,12 +207,12 @@ describe('calculateWindowStats', () => {
 
   describe('Complete calculation integration', () => {
     it('returns all fields with correct values for realistic data', () => {
-      const points: MinuteDataPoint[] = [
-        { minsAgo: 0, spd: 12.5, dir: 225 },
-        { minsAgo: 10, spd: 14.0, dir: 230 },
-        { minsAgo: 20, spd: 13.2, dir: 220 },
-        { minsAgo: 30, spd: 11.8, dir: 235 },
-        { minsAgo: 40, spd: 15.1, dir: 228 },
+      const points: WindDataPointWithOffset[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', minsAgo: 0, spd: 12.5, dir: 225 },
+        { timestamp: '2026-05-19T17:50:00.000Z', minsAgo: 10, spd: 14.0, dir: 230 },
+        { timestamp: '2026-05-19T17:40:00.000Z', minsAgo: 20, spd: 13.2, dir: 220 },
+        { timestamp: '2026-05-19T17:30:00.000Z', minsAgo: 30, spd: 11.8, dir: 235 },
+        { timestamp: '2026-05-19T17:20:00.000Z', minsAgo: 40, spd: 15.1, dir: 228 },
       ]
 
       const result = calculateWindowStats(points)

@@ -38,7 +38,7 @@ export default async function StationPage({ params }: StationPageProps) {
     <StationPageClient
       buoyId={buoyId}
       stationName={stationInfo.name}
-      data={historyData.extendedHistory ?? []}
+      data={historyData.history ?? []}
     />
   )
 }

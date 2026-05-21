@@ -155,12 +155,27 @@ export interface Profile {
 }
 
 // Buoy history types
+
+// Canonical wind data point with absolute timestamp
+export interface WindDataPoint {
+  timestamp: string // ISO 8601 format (e.g., "2026-05-19T17:50:00Z")
+  spd: number // wind speed in knots
+  dir: number // wind direction in degrees
+}
+
+// Wind data point with calculated relative time offset (for component use)
+export interface WindDataPointWithOffset extends WindDataPoint {
+  minsAgo: number // calculated minutes ago from reference time
+}
+
+// DEPRECATED: Use WindDataPoint with absolute timestamps instead
 export interface HourlyDataPoint {
   time: string // HH:MM format (e.g., "14:00")
   spd: number // wind speed in knots
   dir: number // wind direction in degrees
 }
 
+// DEPRECATED: Use WindDataPoint with absolute timestamps instead
 export interface MinuteDataPoint {
   minsAgo: number // minutes ago from now (e.g., 0, 10, 20, ...)
   spd: number // wind speed in knots
@@ -170,12 +185,14 @@ export interface MinuteDataPoint {
 export interface BuoyHistoryData {
   buoyId: string
   name: string
-  hourlyHistory: HourlyDataPoint[] | null // 6 hourly points, null if unavailable
-  minuteHistory: MinuteDataPoint[] | null // ~12 10-min points (last 2h), null if unavailable
-  extendedHistory: MinuteDataPoint[] | null // ~432 10-min points (last 72h), null if unavailable
+  history: WindDataPoint[] | null // 10-minute interval measurements (up to 72h), null if unavailable
   status: DataSourceStatus
   fetchedAt: string
   error?: string
+  // DEPRECATED fields (maintained for backwards compatibility, will be removed in future version)
+  hourlyHistory?: HourlyDataPoint[] | null
+  minuteHistory?: MinuteDataPoint[] | null
+  extendedHistory?: MinuteDataPoint[] | null
 }
 
 // Window statistics for aggregate wind analysis

@@ -64,7 +64,7 @@ export default function StationCardExpanded({ buoyId }: StationCardExpandedProps
     )
   }
 
-  if (!history.hourlyHistory || !history.minuteHistory) {
+  if (!history.history) {
     return (
       <div
         style={{
@@ -78,6 +78,9 @@ export default function StationCardExpanded({ buoyId }: StationCardExpandedProps
       </div>
     )
   }
+
+  // Get most recent data point
+  const mostRecent = history.history[0]
 
   // For now, just show placeholder - will add charts in next iteration
   return (
@@ -101,7 +104,7 @@ export default function StationCardExpanded({ buoyId }: StationCardExpandedProps
             textAlign: 'center',
           }}
         >
-          Speed: {history.minuteHistory[0]?.spd || 0} kts
+          Speed: {mostRecent?.spd || 0} kts
         </div>
         <div
           style={{
@@ -114,7 +117,7 @@ export default function StationCardExpanded({ buoyId }: StationCardExpandedProps
             textAlign: 'center',
           }}
         >
-          Dir: {history.minuteHistory[0]?.dir || 0}°
+          Dir: {mostRecent?.dir || 0}°
         </div>
       </div>
 
@@ -132,8 +135,7 @@ export default function StationCardExpanded({ buoyId }: StationCardExpandedProps
       >
         📈 Charts coming soon<br />
         <span style={{ fontSize: '9px' }}>
-          {history.hourlyHistory.length} hourly points · {history.minuteHistory.length} minute
-          points
+          {history.history.length} data points (10-min intervals)
         </span>
       </div>
 
