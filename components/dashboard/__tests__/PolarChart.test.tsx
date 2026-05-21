@@ -414,7 +414,7 @@ describe('PolarChart', () => {
         { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
-      const hoverPoint = data[0]
+      const hoverPoint = { ...data[0], minsAgo: 0 }
 
       const { container } = render(
         <PolarChart
@@ -443,7 +443,7 @@ describe('PolarChart', () => {
         { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },
       ]
 
-      const hoverPoint = data[0]
+      const hoverPoint = { ...data[0], minsAgo: 0 }
 
       const { container } = render(
         <PolarChart
@@ -547,9 +547,9 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+
           timeWindowMinutes={60}
-          hoverPoint={data[1]} // Hovering over different point
+          hoverPoint={{ ...data[1], minsAgo: 30 }} // Hovering over different point
         />
       )
 
@@ -712,9 +712,9 @@ describe('PolarChart', () => {
       const { container } = render(
         <PolarChart
           data={data}
-          
+
           timeWindowMinutes={60}
-          hoverPoint={data[1]} // 30 mins ago = 50% radius
+          hoverPoint={{ ...data[1], minsAgo: 30 }} // 30 mins ago = 50% radius
         />
       )
 
