@@ -169,7 +169,7 @@ export async function fetchWeatherModel(
 
     cache.set(cacheKey, {
       data: result,
-      fetchedAt: expiration,
+      expiresAt: expiration,
     })
 
     return result
