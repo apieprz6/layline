@@ -96,3 +96,74 @@ export const MODEL_CONFIGS: Record<ModelId, ModelConfig> = {
     stalenessBufferMinutes: 180, // 3 hours buffer (longer processing time)
   },
 }
+
+/**
+ * Get configuration for a weather model
+ */
+export function getModelConfig(modelId: ModelId): ModelConfig {
+  return MODEL_CONFIGS[modelId]
+}
+
+/**
+ * Calculate the next model run time
+ * @param modelId - Weather model identifier
+ * @param currentTime - Current time (defaults to now)
+ * @returns Date of next model run in UTC
+ */
+export function getNextRunTime(modelId: ModelId, currentTime: Date): Date {
+  const config = getModelConfig(modelId)
+  const now = new Date(currentTime)
+
+  // Parse run times and find the next one
+  for (const runTime of config.runTimes) {
+    const [hours, minutes] = runTime.split(':').map(Number)
+
+    const candidate = new Date(now)
+    candidate.setUTCHours(hours, minutes, 0, 0)
+
+    // If this run time is in the future, it's the next run
+    if (candidate > now) {
+      return candidate
+    }
+  }
+
+  // All run times today are in the past, return first run tomorrow
+  const [hours, minutes] = config.runTimes[0].split(':').map(Number)
+  const tomorrow = new Date(now)
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  tomorrow.setUTCHours(hours, minutes, 0, 0)
+
+  return tomorrow
+}
+
+/**
+ * Calculate cache expiration time (when next model run occurs)
+ * @param modelId - Weather model identifier
+ * @param currentTime - Current time (defaults to now)
+ * @returns Unix timestamp in milliseconds when cache should expire
+ */
+export function getCacheExpiration(modelId: ModelId, currentTime: Date): number {
+  const nextRun = getNextRunTime(modelId, currentTime)
+  return nextRun.getTime()
+}
+
+/**
+ * Check if forecast data is stale based on first forecast time
+ * @param firstForecastTime - ISO timestamp of first forecast data point
+ * @param modelId - Weather model identifier
+ * @returns true if data is stale (older than expected with buffer), false otherwise
+ */
+export function isDataStale(firstForecastTime: string, modelId: ModelId): boolean {
+  const config = getModelConfig(modelId)
+  const forecastDate = new Date(firstForecastTime)
+  const now = new Date()
+
+  // Calculate how long ago this forecast was generated
+  const ageMs = now.getTime() - forecastDate.getTime()
+  const ageMinutes = ageMs / (1000 * 60)
+
+  // Data is stale if it's older than update frequency + staleness buffer
+  const staleThresholdMinutes = config.updateFrequencyHours * 60 + config.stalenessBufferMinutes
+
+  return ageMinutes > staleThresholdMinutes
+}
