@@ -241,5 +241,5 @@ export interface WeatherModelResult {
 // In-memory cache entry for weather model forecasts
 export interface WeatherModelCacheEntry {
   data: WeatherModelResult
-  fetchedAt: number // Unix timestamp in milliseconds
+  expiresAt: number // Unix timestamp when cache entry expires (milliseconds)
 }

@@ -44,7 +44,7 @@ export class InMemoryWeatherCache implements WeatherModelCache {
 
     // Check if entry has expired
     const now = Date.now()
-    if (now >= entry.fetchedAt) {
+    if (now >= entry.expiresAt) {
       this.cache.delete(key)
       return undefined
     }

@@ -109,11 +109,11 @@ describe('Type Imports', () => {
           fetchedAt: '2026-05-21T12:05:00Z',
           status: 'offline',
         },
-        fetchedAt: Date.now(),
+        expiresAt: Date.now(),
       }
 
       expect(entry.data.modelId).toBe('hrrr')
-      expect(typeof entry.fetchedAt).toBe('number')
+      expect(typeof entry.expiresAt).toBe('number')
     })
   })
 })
