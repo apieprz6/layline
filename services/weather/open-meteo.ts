@@ -249,6 +249,90 @@ export async function fetchHRRR(
 }
 
 /**
+ * Fetch ECMWF weather model forecast
+ */
+export async function fetchECMWF(
+  location: ForecastLocation
+): Promise<WeatherModelResult> {
+  // Validate coordinates
+  validateLocation(location)
+
+  const modelId = 'ecmwf'
+  const cacheKey = getCacheKey(modelId, location)
+  const now = Date.now()
+
+  // Check cache
+  const cached = cache.get(cacheKey)
+  if (cached && now < cached.fetchedAt) {
+    return cached.data
+  }
+
+  // Fetch from Open-Meteo API with error handling
+  try {
+    const apiName = MODEL_API_NAMES[modelId]
+    const url = new URL('https://api.open-meteo.com/v1/forecast')
+    url.searchParams.set('latitude', location.latitude.toString())
+    url.searchParams.set('longitude', location.longitude.toString())
+    url.searchParams.set(
+      'hourly',
+      'wind_speed_10m,wind_direction_10m,wind_gusts_10m'
+    )
+    url.searchParams.set('wind_speed_unit', 'kn')
+    url.searchParams.set('models', apiName)
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Open-Meteo API error: ${response.status} ${response.statusText}`
+      )
+    }
+
+    const data = await response.json()
+    const forecastPoints = parseOpenMeteoResponse(data)
+
+    const result: WeatherModelResult = {
+      modelId: 'ecmwf',
+      location,
+      forecastPoints,
+      generatedAt:
+        forecastPoints.length > 0 ? forecastPoints[0].timestamp : new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+    }
+
+    // Determine cache expiration based on staleness
+    let expiration: number
+    if (forecastPoints.length > 0 && isDataStale(forecastPoints[0].timestamp, modelId)) {
+      // Data is stale - set 15-minute retry window
+      expiration = now + 15 * 60 * 1000
+    } else {
+      // Data is fresh - expire at next model run
+      expiration = getCacheExpiration(modelId, new Date())
+    }
+
+    cache.set(cacheKey, {
+      data: result,
+      fetchedAt: expiration,
+    })
+
+    return result
+  } catch (error) {
+    // Return error result (mirrors buoy pattern - no throwing)
+    return {
+      modelId: 'ecmwf',
+      location,
+      forecastPoints: [],
+      generatedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+}
+
+/**
  * Clear cache for testing
  */
 export function clearCache(): void {
