@@ -3,7 +3,7 @@
  * Tests cache behavior, staleness detection, and API integration
  */
 
-import { fetchGFS, fetchECMWF, clearCache } from '../open-meteo'
+import { fetchGFS, fetchHRRR, fetchECMWF, clearCache } from '../open-meteo'
 import { DEFAULT_FORECAST_LOCATION } from '@/lib/config/locations'
 import type { WeatherModelResult } from '@/types'
 
@@ -361,6 +361,159 @@ describe('fetchGFS', () => {
 
       expect(result.modelId).toBe('gfs')
       expect(result.forecastPoints).toEqual([])
+    })
+  })
+})
+
+
+describe('fetchHRRR', () => {
+  beforeEach(() => {
+    clearCache()
+    ;(global.fetch as jest.Mock).mockReset()
+  })
+
+  describe('Cache behavior', () => {
+    it('should fetch from API when cache is empty', async () => {
+      // Mock Open-Meteo API response
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T20:00:00Z'],
+            wind_speed_10m: [12.5],
+            wind_direction_10m: [270],
+            wind_gusts_10m: [18.0],
+          },
+        }),
+      })
+
+      const result = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('api.open-meteo.com'),
+        expect.any(Object)
+      )
+      expect(result.modelId).toBe('hrrr')
+      expect(result.forecastPoints).toHaveLength(1)
+      expect(result.forecastPoints[0].windSpeed).toBe(12.5)
+      expect(result.forecastPoints[0].windDirection).toBe(270)
+    })
+
+    it('should return cached data when cache is valid', async () => {
+      // Mock Open-Meteo API response
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T20:00:00Z', '2026-05-26T21:00:00Z'],
+            wind_speed_10m: [12.5, 14.0],
+            wind_direction_10m: [270, 275],
+            wind_gusts_10m: [18.0, 19.5],
+          },
+        }),
+      })
+
+      // First call populates cache
+      const firstResult = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      // Second call should return cached data (no additional API call)
+      const secondResult = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1) // Still only 1 call
+
+      expect(secondResult).toBeDefined()
+      expect(secondResult.modelId).toBe('hrrr')
+      expect(secondResult.location).toEqual(DEFAULT_FORECAST_LOCATION)
+      expect(secondResult.forecastPoints).toHaveLength(2)
+    })
+  })
+
+  describe('Staleness detection', () => {
+    beforeEach(() => {
+      jest.useFakeTimers()
+      jest.setSystemTime(new Date('2026-05-26T20:00:00Z'))
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
+    it('should set 15-minute expiration when data is stale', async () => {
+      // Mock stale data (first forecast is 2 hours old)
+      // HRRR updates every 1 hour + 30 minute buffer = 90 minutes threshold
+      // 2 hours (120 min) > 90 minutes = STALE
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T18:00:00Z', '2026-05-26T19:00:00Z'],
+            wind_speed_10m: [12.5, 14.0],
+            wind_direction_10m: [270, 275],
+            wind_gusts_10m: [18.0, 19.5],
+          },
+        }),
+      })
+
+      const result = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+
+      // First fetch should succeed
+      expect(result.forecastPoints).toHaveLength(2)
+
+      // Advance time by 14 minutes (still within 15-minute retry window)
+      jest.advanceTimersByTime(14 * 60 * 1000)
+
+      // Second call should return cached data (no new API call)
+      const cachedResult = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1) // Still only 1 call
+
+      // Advance time by 2 more minutes (total 16 minutes, past retry window)
+      jest.advanceTimersByTime(2 * 60 * 1000)
+
+      // Mock fresh data for retry
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T20:15:00Z'],
+            wind_speed_10m: [16.0],
+            wind_direction_10m: [280],
+            wind_gusts_10m: [22.0],
+          },
+        }),
+      })
+
+      // Third call should trigger new API call (past retry window)
+      const retryResult = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(2) // New API call made
+      expect(retryResult.forecastPoints[0].windSpeed).toBe(16.0)
+    })
+
+    it('should use normal cache expiration when data is fresh', async () => {
+      // Mock fresh data (first forecast is 30 minutes old)
+      // HRRR: 1 hour + 30 minute buffer = 90 minutes threshold
+      // 30 minutes < 90 minutes = FRESH
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T19:30:00Z'],
+            wind_speed_10m: [12.5],
+            wind_direction_10m: [270],
+            wind_gusts_10m: [18.0],
+          },
+        }),
+      })
+
+      const result = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(result.forecastPoints).toHaveLength(1)
+
+      // Advance time by 20 minutes (still before next HRRR run at 21:00 UTC)
+      jest.advanceTimersByTime(20 * 60 * 1000)
+
+      // Should still return cached data (expires at next model run, not 15 min)
+      const cachedResult = await fetchHRRR(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
     })
   })
 })
