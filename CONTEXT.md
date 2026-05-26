@@ -11,7 +11,7 @@ A physical weather monitoring station on Lake Michigan that provides real-time w
 _Avoid_: Weather station, sensor, source (too generic)
 
 **Data Source**:
-Any provider of weather information (buoys, forecasts, models). Buoys are one type of data source.
+Any provider of weather information (buoys, weather models). Encompasses both real-time observations (buoys) and forecast predictions (weather models).
 _Avoid_: API, service, endpoint
 
 **CHII2 (Harrison Dever Crib)**:
@@ -19,6 +19,43 @@ Primary buoy located at Harrison Dever water crib, 85 feet above water surface. 
 
 **Purdue Buoy (45198)**:
 Secondary buoy with surface-level measurements. Seasonal (May-October). Best on-water wind speed when operational.
+
+### Weather Models
+
+**Weather Model**:
+A numerical weather prediction (NWP) system that generates forecasts by simulating atmospheric physics. Layline integrates GFS (NOAA's global model), HRRR (NOAA's high-resolution regional), and ECMWF (European global model). Future: NAM (NOAA North American), HRDPS (Canadian high-resolution).
+_Avoid_: Forecast model, prediction model (use Weather Model)
+
+**GFS (Global Forecast System)**:
+NOAA's global weather model with 384-hour (16-day) forecast horizon. Updates every 6 hours (00z, 06z, 12z, 18z UTC). Good for overall synoptic patterns and long-range planning.
+_Context_: "GFS shows light air building to 12 knots by Wednesday evening"
+
+**HRRR (High-Resolution Rapid Refresh)**:
+NOAA's regional model covering North America with 48-hour forecast horizon. Updates hourly. Best for short-term Lake Michigan forecasts due to high temporal and spatial resolution.
+_Context_: "HRRR predicts a shift from SW to W around 7:00 PM"
+
+**ECMWF (European Centre for Medium-Range Weather Forecasts)**:
+European global model with 240-hour (10-day) forecast horizon. Updates every 12 hours (00z, 12z UTC). Generally considered most accurate global model for medium-range forecasts.
+_Context_: "ECMWF agrees with GFS on the approaching front Thursday"
+
+**Forecast Horizon**:
+The maximum time period ahead that a weather model predicts. Measured in hours (e.g., HRRR: 48h, GFS: 384h, ECMWF: 240h). Forecast accuracy typically decreases with distance from model run time.
+_Avoid_: Prediction range, forecast length
+
+**Forecast Location**:
+Geographic coordinates (latitude, longitude) for which weather forecasts are requested. Layline's primary location is COLYC Race Circle (41.8528333°N, -87.55683333°W), approximately 2.5 nautical miles offshore from Navy Pier.
+_Avoid_: Forecast point (that's a specific timestamp), location (too generic)
+
+**Forecast Point**:
+A single timestamped prediction from a weather model containing wind speed, direction, gusts, and optionally temperature/pressure. Weather models generate arrays of forecast points (e.g., hourly predictions for next 48 hours).
+_Avoid_: Data point, prediction point
+
+**Weather Model Result**:
+The complete response from fetching a weather model forecast: model ID, location, array of forecast points, model run time, fetch time, data source status. Parallel to BuoyDataResult but for forecasts instead of observations.
+
+**Model Run Time**:
+The UTC time when a weather model execution began (e.g., "00z run" means model started at midnight UTC). Different models have different run schedules: HRRR runs hourly, GFS runs every 6 hours (00z/06z/12z/18z), ECMWF runs every 12 hours (00z/12z).
+_Avoid_: Generation time, model time
 
 ### Data Status
 
@@ -99,7 +136,9 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 ## Relationships
 
 - A **Buoy** is a type of **Data Source**
+- A **Weather Model** is a type of **Data Source**
 - Each **Buoy** has one **Data Source Status** at any given time
+- Each **Weather Model Result** has one **Data Source Status** at any given time
 - **CHII2** is always operational (never seasonally offline)
 - **Purdue Buoy** is seasonal (May-October only)
 - **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
@@ -109,6 +148,11 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Speed Trend** calculated from filtered **Wind History** (20min avg vs 2h avg)
 - **Veering** is positive direction delta, **Backing** is negative direction delta
 - **Summary Bar** only averages wind from **Online** stations (excludes recent/stale/offline)
+- Each **Weather Model** has a **Forecast Horizon** (HRRR: 48h, GFS: 384h, ECMWF: 240h)
+- Each **Weather Model** has **Model Run Times** (HRRR: hourly, GFS: 6h, ECMWF: 12h)
+- **Weather Model Result** contains multiple **Forecast Points** (one per timestamp)
+- All **Weather Model Results** use the same **Forecast Location** (COLYC Race Circle)
+- **Forecast Points** with null wind speed or direction are filtered out (data quality enforcement)
 
 ## Example dialogue
 
