@@ -12,6 +12,7 @@ import type { ModelId } from '@/types'
 export interface ModelConfig {
   modelId: ModelId
   name: string
+  openMeteoApiName: string // Open-Meteo API identifier (e.g., 'gfs_global', 'hrrr_conus')
   updateFrequencyHours: number // How often the model runs (e.g., every 6 hours)
   forecastHorizonHours: number // How far ahead the model predicts (e.g., 120 hours = 5 days)
   runTimes: string[] // UTC times when model runs (e.g., ['00:00', '06:00', '12:00', '18:00'])
@@ -33,6 +34,7 @@ export const MODEL_CONFIGS: Record<ModelId, ModelConfig> = {
   gfs: {
     modelId: 'gfs',
     name: 'NOAA GFS',
+    openMeteoApiName: 'gfs_global',
     updateFrequencyHours: 6,
     forecastHorizonHours: 384,
     runTimes: ['00:00', '06:00', '12:00', '18:00'],
@@ -49,6 +51,7 @@ export const MODEL_CONFIGS: Record<ModelId, ModelConfig> = {
   hrrr: {
     modelId: 'hrrr',
     name: 'NOAA HRRR',
+    openMeteoApiName: 'hrrr_conus',
     updateFrequencyHours: 1,
     forecastHorizonHours: 48,
     runTimes: [
@@ -90,6 +93,7 @@ export const MODEL_CONFIGS: Record<ModelId, ModelConfig> = {
   ecmwf: {
     modelId: 'ecmwf',
     name: 'ECMWF',
+    openMeteoApiName: 'ecmwf_ifs04',
     updateFrequencyHours: 12,
     forecastHorizonHours: 240,
     runTimes: ['00:00', '12:00'],

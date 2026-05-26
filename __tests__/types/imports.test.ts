@@ -85,10 +85,12 @@ describe('Type Imports', () => {
         ],
         generatedAt: '2026-05-21T12:00:00Z',
         fetchedAt: '2026-05-21T12:05:00Z',
+        status: 'online',
       }
 
       expect(result.modelId).toBe('gfs')
       expect(result.forecastPoints).toHaveLength(1)
+      expect(result.status).toBe('online')
     })
   })
 
@@ -105,6 +107,7 @@ describe('Type Imports', () => {
           forecastPoints: [],
           generatedAt: '2026-05-21T12:00:00Z',
           fetchedAt: '2026-05-21T12:05:00Z',
+          status: 'offline',
         },
         fetchedAt: Date.now(),
       }
