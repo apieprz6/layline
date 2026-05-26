@@ -3,7 +3,7 @@
  * Tests cache behavior, staleness detection, and API integration
  */
 
-import { fetchGFS, clearCache } from '../open-meteo'
+import { fetchGFS, fetchECMWF, clearCache } from '../open-meteo'
 import { DEFAULT_FORECAST_LOCATION } from '@/lib/config/locations'
 import type { WeatherModelResult } from '@/types'
 
@@ -360,6 +360,237 @@ describe('fetchGFS', () => {
       const result = await fetchGFS(DEFAULT_FORECAST_LOCATION)
 
       expect(result.modelId).toBe('gfs')
+      expect(result.forecastPoints).toEqual([])
+    })
+  })
+})
+
+describe('fetchECMWF', () => {
+  beforeEach(() => {
+    clearCache()
+    ;(global.fetch as jest.Mock).mockReset()
+  })
+
+  describe('Basic API integration', () => {
+    it('should fetch ECMWF forecast from Open-Meteo API', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T12:00:00Z', '2026-05-26T13:00:00Z'],
+            wind_speed_10m: [10.5, 12.3],
+            wind_direction_10m: [180, 185],
+            wind_gusts_10m: [15.2, 16.1],
+          },
+        }),
+      })
+
+      const result = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('api.open-meteo.com'),
+        expect.any(Object)
+      )
+      expect(result.modelId).toBe('ecmwf')
+      expect(result.forecastPoints).toHaveLength(2)
+      expect(result.forecastPoints[0].windSpeed).toBe(10.5)
+      expect(result.forecastPoints[0].windDirection).toBe(180)
+    })
+
+    it('should map model ID to ecmwf_ifs04 for Open-Meteo', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T12:00:00Z'],
+            wind_speed_10m: [10.5],
+            wind_direction_10m: [180],
+            wind_gusts_10m: [15.2],
+          },
+        }),
+      })
+
+      await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+
+      const callUrl = (global.fetch as jest.Mock).mock.calls[0][0]
+      expect(callUrl).toContain('models=ecmwf_ifs04')
+    })
+  })
+
+  describe('ECMWF-specific staleness detection', () => {
+    beforeEach(() => {
+      jest.useFakeTimers()
+      jest.setSystemTime(new Date('2026-05-26T16:00:00Z'))
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
+    it('should detect stale data with 12-hour update + 3-hour buffer', async () => {
+      // Mock stale data (first forecast is 16 hours old)
+      // ECMWF updates every 12 hours + 3 hour buffer = 15 hours threshold
+      // 16 hours > 15 hours = STALE
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T00:00:00Z', '2026-05-26T01:00:00Z'],
+            wind_speed_10m: [10.5, 12.3],
+            wind_direction_10m: [180, 185],
+            wind_gusts_10m: [15.2, 16.1],
+          },
+        }),
+      })
+
+      const result = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(result.forecastPoints).toHaveLength(2)
+
+      // Advance time by 14 minutes (within 15-minute retry window)
+      jest.advanceTimersByTime(14 * 60 * 1000)
+
+      // Should return cached data
+      const cachedResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      // Advance time by 2 more minutes (past retry window)
+      jest.advanceTimersByTime(2 * 60 * 1000)
+
+      // Mock fresh data
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T16:15:00Z'],
+            wind_speed_10m: [15.0],
+            wind_direction_10m: [190],
+            wind_gusts_10m: [20.0],
+          },
+        }),
+      })
+
+      // Should trigger new API call
+      const retryResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(retryResult.forecastPoints[0].windSpeed).toBe(15.0)
+    })
+
+    it('should use normal cache expiration for fresh ECMWF data', async () => {
+      // Mock fresh data (first forecast is 2 hours old)
+      // ECMWF: 12 hours + 3 hour buffer = 15 hours threshold
+      // 2 hours < 15 hours = FRESH
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T14:00:00Z'],
+            wind_speed_10m: [10.5],
+            wind_direction_10m: [180],
+            wind_gusts_10m: [15.2],
+          },
+        }),
+      })
+
+      const result = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(result.forecastPoints).toHaveLength(1)
+
+      // Advance time by 5 hours (still before next ECMWF run at 00:00 UTC)
+      jest.advanceTimersByTime(5 * 60 * 60 * 1000)
+
+      // Should still return cached data
+      const cachedResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Cache behavior', () => {
+    it('should return cached ECMWF data when cache is valid', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T12:00:00Z', '2026-05-26T13:00:00Z'],
+            wind_speed_10m: [10.5, 12.3],
+            wind_direction_10m: [180, 185],
+            wind_gusts_10m: [15.2, 16.1],
+          },
+        }),
+      })
+
+      // First call populates cache
+      const firstResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      // Second call should return cached data
+      const secondResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      expect(secondResult.modelId).toBe('ecmwf')
+      expect(secondResult.forecastPoints).toHaveLength(2)
+    })
+
+    it('should use separate cache entries for ECMWF and GFS', async () => {
+      // Mock ECMWF response
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T12:00:00Z'],
+            wind_speed_10m: [10.5],
+            wind_direction_10m: [180],
+            wind_gusts_10m: [15.2],
+          },
+        }),
+      })
+
+      const ecmwfResult = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+      expect(ecmwfResult.modelId).toBe('ecmwf')
+
+      // Mock GFS response
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hourly: {
+            time: ['2026-05-26T12:00:00Z'],
+            wind_speed_10m: [20.0],
+            wind_direction_10m: [200],
+            wind_gusts_10m: [25.0],
+          },
+        }),
+      })
+
+      const gfsResult = await fetchGFS(DEFAULT_FORECAST_LOCATION)
+      expect(gfsResult.modelId).toBe('gfs')
+
+      // Both should have made API calls (not sharing cache)
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('Error handling', () => {
+    it('should return error result when ECMWF API fails', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      })
+
+      const result = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+
+      expect(result.modelId).toBe('ecmwf')
+      expect(result.forecastPoints).toEqual([])
+      expect(result.fetchedAt).toBeDefined()
+    })
+
+    it('should return error result when network fails', async () => {
+      ;(global.fetch as jest.Mock).mockRejectedValueOnce(
+        new Error('Network failure')
+      )
+
+      const result = await fetchECMWF(DEFAULT_FORECAST_LOCATION)
+
+      expect(result.modelId).toBe('ecmwf')
       expect(result.forecastPoints).toEqual([])
     })
   })
