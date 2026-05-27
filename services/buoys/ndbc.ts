@@ -127,8 +127,8 @@ function extractLatestFromHistory(historyData: BuoyHistoryData): BuoyDataResult 
  * Fetch CHII2 buoy data from NDBC
  * Now uses history endpoint as single source of truth
  */
-export async function fetchCHII2(): Promise<BuoyDataResult> {
-  const historyData = await fetchCHII2History()
+export async function fetchCHII2(options?: { bypassCache?: boolean }): Promise<BuoyDataResult> {
+  const historyData = await fetchCHII2History(options)
   return extractLatestFromHistory(historyData)
 }
 
@@ -152,8 +152,8 @@ function isPurdueSeason(): boolean {
  * 2. Fall back to NDBC station 45198 history
  * 3. Handle seasonal offline gracefully (May-October operational)
  */
-export async function fetchPurdueBuoy(): Promise<BuoyDataResult> {
-  const historyData = await fetchPurdueBuoyHistory()
+export async function fetchPurdueBuoy(options?: { bypassCache?: boolean }): Promise<BuoyDataResult> {
+  const historyData = await fetchPurdueBuoyHistory(options)
 
   // Check if in operational season
   const isOperationalSeason = isPurdueSeason()
@@ -267,14 +267,15 @@ const HISTORY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes (same as live data cache)
  * Returns wind data with absolute timestamps (no bucketing - NDBC already provides 10-min intervals)
  */
 async function fetchBuoyHistory(
-  stationId: keyof typeof BUOY_CONFIGS
+  stationId: keyof typeof BUOY_CONFIGS,
+  options?: { bypassCache?: boolean }
 ): Promise<BuoyHistoryData> {
   const cacheKey = `${stationId}-history`
   const now = Date.now()
 
-  // Check cache first
+  // Check cache first (unless bypass is requested)
   const cached = historyCache.get(cacheKey)
-  if (cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
+  if (!options?.bypassCache && cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
     return cached.data
   }
 
@@ -345,15 +346,15 @@ async function fetchBuoyHistory(
 /**
  * Fetch CHII2 historical data
  */
-export async function fetchCHII2History(): Promise<BuoyHistoryData> {
-  return fetchBuoyHistory('CHII2')
+export async function fetchCHII2History(options?: { bypassCache?: boolean }): Promise<BuoyHistoryData> {
+  return fetchBuoyHistory('CHII2', options)
 }
 
 /**
  * Fetch Purdue Buoy historical data
  */
-export async function fetchPurdueBuoyHistory(): Promise<BuoyHistoryData> {
-  return fetchBuoyHistory('45198')
+export async function fetchPurdueBuoyHistory(options?: { bypassCache?: boolean }): Promise<BuoyHistoryData> {
+  return fetchBuoyHistory('45198', options)
 }
 
 /**
