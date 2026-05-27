@@ -13,14 +13,34 @@ interface StationRowProps {
   windDirection: number
   windGust?: number
   status: DataSourceStatus
+  timestamp?: string
   onClick?: () => void
+}
+
+/**
+ * Format timestamp to relative time string (e.g., "2m ago", "1h ago")
+ */
+function formatRelativeTime(timestamp: string): string {
+  const now = new Date()
+  const then = new Date(timestamp)
+  const diffMs = now.getTime() - then.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+
+  const diffDays = Math.floor(diffHr / 24)
+  return `${diffDays}d ago`
 }
 
 /**
  * StationRow displays a compact buoy station summary
  * Used in both StationCard (collapsed state) and LiveWindCard
  *
- * Shows: status dot, station name/location, wind arrow, speed, gust
+ * Shows: status dot, station name/location (or timestamp if provided), wind arrow, speed, gust
  */
 export default function StationRow({
   buoyId,
@@ -28,6 +48,7 @@ export default function StationRow({
   windDirection,
   windGust,
   status,
+  timestamp,
   onClick,
 }: StationRowProps) {
   const router = useRouter()
@@ -95,7 +116,7 @@ export default function StationRow({
             marginTop: '1px',
           }}
         >
-          {stationInfo.location}
+          {timestamp ? formatRelativeTime(timestamp) : stationInfo.location}
         </div>
       </div>
 

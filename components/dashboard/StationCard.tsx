@@ -30,6 +30,7 @@ export default function StationCard({ buoyResult }: StationCardProps) {
         windDirection={data.windDirection}
         windGust={data.windGust}
         status={status}
+        timestamp={data.timestamp}
       />
     </div>
   )
