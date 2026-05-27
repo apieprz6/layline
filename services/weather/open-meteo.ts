@@ -8,23 +8,16 @@ import type {
   WeatherModelResult,
   WeatherModelCacheEntry,
   ForecastPoint,
+  ModelId,
+  DataSourceStatus,
 } from '@/types'
-import { getCacheExpiration, isDataStale } from '@/lib/config/models'
-
-// In-memory cache
-const cache: Map<string, WeatherModelCacheEntry> = new Map()
-
-// Model ID to Open-Meteo API name mapping
-const MODEL_API_NAMES: Record<string, string> = {
-  gfs: 'gfs_global',
-  hrrr: 'hrrr_conus',
-  ecmwf: 'ecmwf_ifs04',
-}
+import { getModelConfig, getCacheExpiration, isDataStale } from '@/lib/config/models'
+import { getCacheAdapter } from './cache'
 
 /**
  * Generate cache key for a model and location
  */
-function getCacheKey(modelId: string, location: ForecastLocation): string {
+function getCacheKey(modelId: ModelId, location: ForecastLocation): string {
   return `${modelId}:${location.latitude}:${location.longitude}`
 }
 
@@ -66,275 +59,169 @@ function parseOpenMeteoResponse(response: {
 
 /**
  * Validate location coordinates
+ * Returns error message if invalid, null if valid
  */
-function validateLocation(location: ForecastLocation): void {
+function validateLocation(location: ForecastLocation): string | null {
   if (location.latitude < -90 || location.latitude > 90) {
-    throw new Error(
-      `Invalid latitude: ${location.latitude}. Must be between -90 and 90.`
-    )
+    return `Invalid latitude: ${location.latitude}. Must be between -90 and 90.`
   }
   if (location.longitude < -180 || location.longitude > 180) {
-    throw new Error(
-      `Invalid longitude: ${location.longitude}. Must be between -180 and 180.`
+    return `Invalid longitude: ${location.longitude}. Must be between -180 and 180.`
+  }
+  return null
+}
+
+/**
+ * Calculate data source status based on staleness
+ */
+function calculateStatus(
+  forecastPoints: ForecastPoint[],
+  modelId: ModelId,
+  hasError: boolean
+): DataSourceStatus {
+  if (hasError && forecastPoints.length === 0) return 'error'
+  if (forecastPoints.length === 0) return 'offline'
+
+  const isStale = isDataStale(forecastPoints[0].timestamp, modelId)
+  return isStale ? 'stale' : 'online'
+}
+
+/**
+ * Fetch weather model forecast from Open-Meteo API
+ * Unified implementation for all supported models (GFS, HRRR, ECMWF)
+ */
+export async function fetchWeatherModel(
+  modelId: ModelId,
+  location: ForecastLocation
+): Promise<WeatherModelResult> {
+  // Validate coordinates
+  const validationError = validateLocation(location)
+  if (validationError) {
+    return {
+      modelId,
+      location,
+      forecastPoints: [],
+      generatedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+      status: 'error',
+      error: validationError,
+    }
+  }
+
+  const cache = getCacheAdapter()
+  const cacheKey = getCacheKey(modelId, location)
+  const now = Date.now()
+
+  // Check cache
+  const cached = cache.get(cacheKey)
+  if (cached) {
+    return cached.data
+  }
+
+  // Fetch from Open-Meteo API with error handling
+  try {
+    const config = getModelConfig(modelId)
+    const url = new URL('https://api.open-meteo.com/v1/forecast')
+    url.searchParams.set('latitude', location.latitude.toString())
+    url.searchParams.set('longitude', location.longitude.toString())
+    url.searchParams.set(
+      'hourly',
+      'wind_speed_10m,wind_direction_10m,wind_gusts_10m'
     )
+    url.searchParams.set('wind_speed_unit', 'kn')
+    url.searchParams.set('models', config.openMeteoApiName)
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Open-Meteo API error: ${response.status} ${response.statusText}`
+      )
+    }
+
+    const data = await response.json()
+    const forecastPoints = parseOpenMeteoResponse(data)
+    const status = calculateStatus(forecastPoints, modelId, false)
+
+    const result: WeatherModelResult = {
+      modelId,
+      location,
+      forecastPoints,
+      generatedAt:
+        forecastPoints.length > 0 ? forecastPoints[0].timestamp : new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+      status,
+    }
+
+    // Determine cache expiration based on staleness
+    let expiration: number
+    if (status === 'stale') {
+      // Data is stale - set 15-minute retry window
+      expiration = now + 15 * 60 * 1000
+    } else {
+      // Data is fresh - expire at next model run
+      expiration = getCacheExpiration(modelId, new Date())
+    }
+
+    cache.set(cacheKey, {
+      data: result,
+      expiresAt: expiration,
+    })
+
+    return result
+  } catch (error) {
+    // Return error result (mirrors buoy pattern - no throwing)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return {
+      modelId,
+      location,
+      forecastPoints: [],
+      generatedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString(),
+      status: 'error',
+      error: errorMessage,
+    }
   }
 }
 
 /**
  * Fetch GFS weather model forecast
+ * Thin wrapper around fetchWeatherModel for backward compatibility
  */
 export async function fetchGFS(
   location: ForecastLocation
 ): Promise<WeatherModelResult> {
-  // Validate coordinates
-  validateLocation(location)
-
-  const modelId = 'gfs'
-  const cacheKey = getCacheKey(modelId, location)
-  const now = Date.now()
-
-  // Check cache
-  const cached = cache.get(cacheKey)
-  if (cached && now < cached.fetchedAt) {
-    return cached.data
-  }
-
-  // Fetch from Open-Meteo API with error handling
-  try {
-    const apiName = MODEL_API_NAMES[modelId]
-    const url = new URL('https://api.open-meteo.com/v1/forecast')
-    url.searchParams.set('latitude', location.latitude.toString())
-    url.searchParams.set('longitude', location.longitude.toString())
-    url.searchParams.set(
-      'hourly',
-      'wind_speed_10m,wind_direction_10m,wind_gusts_10m'
-    )
-    url.searchParams.set('wind_speed_unit', 'kn')
-    url.searchParams.set('models', apiName)
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(
-        `Open-Meteo API error: ${response.status} ${response.statusText}`
-      )
-    }
-
-    const data = await response.json()
-    const forecastPoints = parseOpenMeteoResponse(data)
-
-    const result: WeatherModelResult = {
-      modelId: 'gfs',
-      location,
-      forecastPoints,
-      generatedAt:
-        forecastPoints.length > 0 ? forecastPoints[0].timestamp : new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-
-    // Determine cache expiration based on staleness
-    let expiration: number
-    if (forecastPoints.length > 0 && isDataStale(forecastPoints[0].timestamp, modelId)) {
-      // Data is stale - set 15-minute retry window
-      expiration = now + 15 * 60 * 1000
-    } else {
-      // Data is fresh - expire at next model run
-      expiration = getCacheExpiration(modelId, new Date())
-    }
-
-    cache.set(cacheKey, {
-      data: result,
-      fetchedAt: expiration,
-    })
-
-    return result
-  } catch (error) {
-    // Return error result (mirrors buoy pattern - no throwing)
-    return {
-      modelId: 'gfs',
-      location,
-      forecastPoints: [],
-      generatedAt: new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-  }
+  return fetchWeatherModel('gfs', location)
 }
 
 /**
  * Fetch HRRR weather model forecast
+ * Thin wrapper around fetchWeatherModel for backward compatibility
  */
 export async function fetchHRRR(
   location: ForecastLocation
 ): Promise<WeatherModelResult> {
-  // Validate coordinates
-  validateLocation(location)
-
-  const modelId = 'hrrr'
-  const cacheKey = getCacheKey(modelId, location)
-  const now = Date.now()
-
-  // Check cache
-  const cached = cache.get(cacheKey)
-  if (cached && now < cached.fetchedAt) {
-    return cached.data
-  }
-
-  // Fetch from Open-Meteo API with error handling
-  try {
-    const apiName = MODEL_API_NAMES[modelId]
-    const url = new URL('https://api.open-meteo.com/v1/forecast')
-    url.searchParams.set('latitude', location.latitude.toString())
-    url.searchParams.set('longitude', location.longitude.toString())
-    url.searchParams.set(
-      'hourly',
-      'wind_speed_10m,wind_direction_10m,wind_gusts_10m'
-    )
-    url.searchParams.set('wind_speed_unit', 'kn')
-    url.searchParams.set('models', apiName)
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(
-        `Open-Meteo API error: ${response.status} ${response.statusText}`
-      )
-    }
-
-    const data = await response.json()
-    const forecastPoints = parseOpenMeteoResponse(data)
-
-    const result: WeatherModelResult = {
-      modelId: 'hrrr',
-      location,
-      forecastPoints,
-      generatedAt:
-        forecastPoints.length > 0 ? forecastPoints[0].timestamp : new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-
-    // Determine cache expiration based on staleness
-    let expiration: number
-    if (forecastPoints.length > 0 && isDataStale(forecastPoints[0].timestamp, modelId)) {
-      // Data is stale - set 15-minute retry window
-      expiration = now + 15 * 60 * 1000
-    } else {
-      // Data is fresh - expire at next model run
-      expiration = getCacheExpiration(modelId, new Date())
-    }
-
-    cache.set(cacheKey, {
-      data: result,
-      fetchedAt: expiration,
-    })
-
-    return result
-  } catch (error) {
-    // Return error result (mirrors buoy pattern - no throwing)
-    return {
-      modelId: 'hrrr',
-      location,
-      forecastPoints: [],
-      generatedAt: new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-  }
+  return fetchWeatherModel('hrrr', location)
 }
 
 /**
  * Fetch ECMWF weather model forecast
+ * Thin wrapper around fetchWeatherModel for backward compatibility
  */
 export async function fetchECMWF(
   location: ForecastLocation
 ): Promise<WeatherModelResult> {
-  // Validate coordinates
-  validateLocation(location)
-
-  const modelId = 'ecmwf'
-  const cacheKey = getCacheKey(modelId, location)
-  const now = Date.now()
-
-  // Check cache
-  const cached = cache.get(cacheKey)
-  if (cached && now < cached.fetchedAt) {
-    return cached.data
-  }
-
-  // Fetch from Open-Meteo API with error handling
-  try {
-    const apiName = MODEL_API_NAMES[modelId]
-    const url = new URL('https://api.open-meteo.com/v1/forecast')
-    url.searchParams.set('latitude', location.latitude.toString())
-    url.searchParams.set('longitude', location.longitude.toString())
-    url.searchParams.set(
-      'hourly',
-      'wind_speed_10m,wind_direction_10m,wind_gusts_10m'
-    )
-    url.searchParams.set('wind_speed_unit', 'kn')
-    url.searchParams.set('models', apiName)
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(
-        `Open-Meteo API error: ${response.status} ${response.statusText}`
-      )
-    }
-
-    const data = await response.json()
-    const forecastPoints = parseOpenMeteoResponse(data)
-
-    const result: WeatherModelResult = {
-      modelId: 'ecmwf',
-      location,
-      forecastPoints,
-      generatedAt:
-        forecastPoints.length > 0 ? forecastPoints[0].timestamp : new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-
-    // Determine cache expiration based on staleness
-    let expiration: number
-    if (forecastPoints.length > 0 && isDataStale(forecastPoints[0].timestamp, modelId)) {
-      // Data is stale - set 15-minute retry window
-      expiration = now + 15 * 60 * 1000
-    } else {
-      // Data is fresh - expire at next model run
-      expiration = getCacheExpiration(modelId, new Date())
-    }
-
-    cache.set(cacheKey, {
-      data: result,
-      fetchedAt: expiration,
-    })
-
-    return result
-  } catch (error) {
-    // Return error result (mirrors buoy pattern - no throwing)
-    return {
-      modelId: 'ecmwf',
-      location,
-      forecastPoints: [],
-      generatedAt: new Date().toISOString(),
-      fetchedAt: new Date().toISOString(),
-    }
-  }
+  return fetchWeatherModel('ecmwf', location)
 }
 
 /**
  * Clear cache for testing
+ * @deprecated Use setCacheAdapter() from './cache' for testing instead
  */
 export function clearCache(): void {
-  cache.clear()
+  getCacheAdapter().clear()
 }

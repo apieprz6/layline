@@ -84,6 +84,10 @@ _Avoid_: Real-time, uncached
 Returns cached data if within TTL (10 minutes for history data, aligned with NDBC's update frequency). Used on dashboard for performance.
 _Avoid_: Standard fetch, normal fetch
 
+**Cache Adapter**:
+Abstraction layer for weather model caching strategies. Implementations include InMemoryWeatherCache (default), with support for future Redis/Vercel KV backends. Allows cache strategy swapping without changing fetch logic.
+_Context_: "The cache adapter can be swapped to Redis for multi-instance deployments"
+
 **Staleness**:
 Time elapsed since data was successfully fetched. Used to determine data source status and display freshness to users.
 

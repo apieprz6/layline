@@ -234,10 +234,12 @@ export interface WeatherModelResult {
   forecastPoints: ForecastPoint[]
   generatedAt: string // Model run time (ISO 8601)
   fetchedAt: string // API fetch time (ISO 8601)
+  status: DataSourceStatus // Data source status (online/recent/stale/offline/error)
+  error?: string // Error message if status is 'error'
 }
 
 // In-memory cache entry for weather model forecasts
 export interface WeatherModelCacheEntry {
   data: WeatherModelResult
-  fetchedAt: number // Unix timestamp in milliseconds
+  expiresAt: number // Unix timestamp when cache entry expires (milliseconds)
 }
