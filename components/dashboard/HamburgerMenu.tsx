@@ -49,13 +49,6 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
-  if (!isOpen) {
-    return (
-      <nav role="navigation" style={{ display: 'none' }}>
-        {/* Menu content will go here */}
-      </nav>
-    )
-  }
 
   return (
     <>
@@ -67,7 +60,10 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.55)',
-          zIndex: 40,
+          opacity: isOpen ? 1 : 0,
+          pointerEvents: isOpen ? 'auto' : 'none',
+          transition: 'opacity 200ms ease-out',
+          zIndex: 90,
         }}
       />
 
@@ -81,17 +77,20 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
           bottom: 0,
           width: 'var(--drawer-width)',
           background: 'var(--surface-raised)',
-          zIndex: 50,
+          borderRight: '1px solid var(--surface-border)',
+          transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 250ms ease-out',
+          zIndex: 100,
           display: 'flex',
           flexDirection: 'column',
-          padding: '16px',
+          boxShadow: isOpen ? '4px 0 24px rgba(0,0,0,0.5)' : 'none',
         }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ padding: '18px 16px 16px', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>layline</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Wed Night · Navy Pier</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>layline</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Wed Night · Navy Pier</div>
           </div>
           <button
             onClick={onClose}
@@ -100,11 +99,12 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              padding: '8px',
+              padding: '4px',
               color: 'var(--text-muted)',
+              display: 'flex',
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -112,7 +112,7 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
         </div>
 
         {/* Navigation items */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+        <div style={{ padding: '10px 8px', flex: 1 }}>
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -121,36 +121,30 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
                 href={item.href}
                 onClick={onClose}
                 style={{
+                  width: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
+                  padding: '12px 12px',
+                  margin: '2px 0',
+                  borderRadius: '6px',
                   textDecoration: 'none',
                   background: isActive ? 'var(--blue-muted)' : 'transparent',
                   border: isActive ? '1px solid var(--surface-border-hover)' : '1px solid transparent',
-                  color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'all 150ms',
                 }}
               >
                 {item.icon}
-                <span style={{ fontSize: '14px', fontWeight: 500 }}>{item.label}</span>
+                <span style={{ fontFamily: 'Inter,sans-serif', fontSize: '14px', fontWeight: isActive ? 600 : 500 }}>{item.label}</span>
               </Link>
             )
           })}
         </div>
 
         {/* Footer */}
-        <div
-          style={{
-            fontSize: '10px',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginTop: '16px',
-          }}
-        >
-          v1.0 · May 2026
+        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--surface-border)' }}>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>v1.0 · May 2026</div>
         </div>
       </nav>
     </>

@@ -19,10 +19,10 @@ describe('HamburgerMenu', () => {
   it('renders closed by default', () => {
     const { container } = render(<HamburgerMenu {...defaultProps} />)
 
-    // Menu should be in DOM but not visible when closed
+    // Menu should be in DOM but transformed off-screen when closed
     const nav = container.querySelector('nav')
     expect(nav).toBeInTheDocument()
-    expect(nav).not.toBeVisible()
+    expect(nav).toHaveStyle({ transform: 'translateX(-100%)' })
   })
 
   it('opens when isOpen is true', () => {
@@ -80,7 +80,7 @@ describe('HamburgerMenu', () => {
     expect(windDataLink).toHaveStyle({ background: 'var(--blue-muted)' })
 
     // Dashboard should not have active styling
-    expect(dashboardLink).toHaveStyle({ color: 'var(--text-muted)' })
+    expect(dashboardLink).toHaveStyle({ color: 'var(--text-secondary)' })
     expect(dashboardLink).toHaveStyle({ background: 'transparent' })
   })
 

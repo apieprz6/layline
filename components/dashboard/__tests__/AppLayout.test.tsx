@@ -33,7 +33,7 @@ describe('AppLayout', () => {
     render(<AppLayout {...defaultProps} />)
 
     // Check header content
-    expect(screen.getByText(/layline/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /layline/i })).toBeInTheDocument()
     expect(screen.getByText(/12 kts/i)).toBeInTheDocument()
   })
 
@@ -47,38 +47,37 @@ describe('AppLayout', () => {
     const user = userEvent.setup({ delay: null })
     const { container } = render(<AppLayout {...defaultProps} />)
 
-    // Menu should be closed initially
+    // Menu should be closed initially (translateX(-100%))
     let nav = container.querySelector('nav')
-    expect(nav).not.toBeVisible()
+    expect(nav).toHaveStyle({ transform: 'translateX(-100%)' })
 
-    // Click hamburger button
-    const hamburgerButton = screen.getByRole('button', { name: /menu/i })
+    // Click hamburger button (not close menu button)
+    const hamburgerButton = screen.getByRole('button', { name: 'Menu' })
     await user.click(hamburgerButton)
 
-    // Menu should be visible
+    // Menu should be open (translateX(0))
     nav = screen.getByRole('navigation')
-    expect(nav).toBeVisible()
+    expect(nav).toHaveStyle({ transform: 'translateX(0)' })
   })
 
   it('closes menu when HamburgerMenu triggers onClose', async () => {
     const user = userEvent.setup({ delay: null })
-    render(<AppLayout {...defaultProps} />)
+    const { container } = render(<AppLayout {...defaultProps} />)
 
     // Open menu
-    const hamburgerButton = screen.getByRole('button', { name: /menu/i })
+    const hamburgerButton = screen.getByRole('button', { name: 'Menu' })
     await user.click(hamburgerButton)
 
     // Menu should be open
     let nav = screen.getByRole('navigation')
-    expect(nav).toBeVisible()
+    expect(nav).toHaveStyle({ transform: 'translateX(0)' })
 
     // Click overlay to close
     const overlay = screen.getByTestId('menu-overlay')
     await user.click(overlay)
 
-    // Menu should be closed (not visible)
-    const { container } = render(<AppLayout {...defaultProps} />)
+    // Menu should be closed (translateX(-100%))
     nav = container.querySelector('nav')
-    expect(nav).not.toBeVisible()
+    expect(nav).toHaveStyle({ transform: 'translateX(-100%)' })
   })
 })
