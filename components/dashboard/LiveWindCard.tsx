@@ -41,7 +41,7 @@ export default function LiveWindCard({ buoys }: LiveWindCardProps) {
           Live Wind
         </div>
         <Link
-          href="/dashboard/wind-data"
+          href="/wind-data"
           style={{
             fontSize: "10px",
             color: "var(--text-accent)",
@@ -73,6 +73,7 @@ export default function LiveWindCard({ buoys }: LiveWindCardProps) {
                 windDirection={buoy.data.windDirection}
                 windGust={buoy.data.windGust}
                 status={buoy.status}
+                timestamp={buoy.data.timestamp}
               />
             </div>
           );

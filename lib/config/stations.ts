@@ -38,6 +38,13 @@ export function getStationInfo(buoyId: string): StationMetadata | undefined {
  * Get status dot color based on data source status
  * Returns CSS variable references for consistency with design system
  *
+ * Status is computed by backend based on data age thresholds.
+ * This function only maps status values to colors:
+ * - online: green
+ * - recent: yellow/amber
+ * - stale: red
+ * - offline/error: gray
+ *
  * @param status - Data source status enum
  * @returns CSS variable string for status color
  */
@@ -46,8 +53,9 @@ export function getStatusColor(status: DataSourceStatus): string {
     case 'online':
       return 'var(--state-success)' // green
     case 'recent':
-      return 'var(--state-warning)' // amber
+      return 'var(--state-warning)' // amber/yellow
     case 'stale':
+      return 'var(--state-danger)' // red
     case 'offline':
     case 'error':
     default:

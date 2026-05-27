@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { render, fireEvent, createEvent } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import SpeedLineChart from '../SpeedLineChart'
 import type { WindDataPoint } from '@/types'
 

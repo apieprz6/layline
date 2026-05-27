@@ -151,7 +151,7 @@ export default function TimeScrubber({
       </div>
 
       {/* Tick labels below the scrubber */}
-      <div style={{ position: 'relative', height: '14px', marginTop: 0 }}>
+      <div style={{ position: 'relative', height: '14px', marginTop: 0, userSelect: 'none' }}>
         {ticks.map((tick) => (
           <div
             key={`label-${tick.hours}`}

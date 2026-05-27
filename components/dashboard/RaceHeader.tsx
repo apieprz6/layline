@@ -8,9 +8,10 @@ interface RaceHeaderProps {
     speed: number
     direction: number
   }
+  onOpenMenu?: () => void
 }
 
-export default function RaceHeader({ raceTime, currentWind }: RaceHeaderProps) {
+export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHeaderProps) {
   const [timeUntil, setTimeUntil] = useState('')
 
   useEffect(() => {
@@ -41,50 +42,78 @@ export default function RaceHeader({ raceTime, currentWind }: RaceHeaderProps) {
 
   return (
     <div
-      className="sticky top-0 z-50 px-4 py-3"
       style={{
-        background: 'var(--surface-raised)',
+        padding: '14px 14px 12px',
         borderBottom: '1px solid var(--surface-border)',
-        boxShadow: 'var(--shadow-sm)'
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: 'var(--surface-raised)',
       }}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h1
-            className="text-lg font-semibold"
+      {/* Left: Hamburger + Logo + Title */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {onOpenMenu && (
+          <button
+            onClick={onOpenMenu}
+            aria-label="Menu"
             style={{
-              fontFamily: 'var(--font-display)',
-              color: 'var(--text-primary)'
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              marginLeft: '-4px',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
             }}
           >
-            Layline
-          </h1>
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-icon.svg" width={24} height={24} alt="L" />
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            layline
+          </div>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             {timeUntil}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <div className="label" style={{ color: 'var(--text-muted)', fontSize: '9px' }}>
-              Wind now
-            </div>
-            <div className="data-mono text-sm font-semibold">
-              {currentWind.speed} kts
-            </div>
+      </div>
+
+      {/* Right: Wind info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: 'Inter,sans-serif', fontWeight: 500 }}>
+            WIND NOW
           </div>
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{
-              background: 'var(--blue-muted)',
-              border: '1px solid var(--blue-muted-40)'
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16">
-              <g transform={`rotate(${currentWind.direction} 8 8)`}>
-                <polygon points="8,3 10,10 8,9 6,10" fill="var(--blue-500)" />
-              </g>
-            </svg>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)', fontWeight: 500 }}>
+            {currentWind.speed.toFixed(1)} kts
           </div>
+        </div>
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--blue-muted)',
+            border: '1px solid var(--blue-muted-40)',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16">
+            <g transform={`rotate(${currentWind.direction} 8 8)`}>
+              <polygon points="8,3 10,10 8,9 6,10" fill="var(--blue-500)" />
+            </g>
+          </svg>
         </div>
       </div>
     </div>

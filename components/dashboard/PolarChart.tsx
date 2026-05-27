@@ -71,15 +71,13 @@ export default function PolarChart({
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
-  const now = referenceTime || new Date();
-  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
-    () =>
-      data.map((point) => ({
-        ...point,
-        minsAgo: getMinutesAgo(point.timestamp, now),
-      })),
-    [data, now]
-  );
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(() => {
+    const now = referenceTime || new Date();
+    return data.map((point) => ({
+      ...point,
+      minsAgo: getMinutesAgo(point.timestamp, now),
+    }));
+  }, [data, referenceTime]);
 
   // Measure SVG dimensions for overlay positioning
   useEffect(() => {
@@ -441,6 +439,7 @@ export default function PolarChart({
             height: "auto",
             display: "block",
             touchAction: "none",
+            userSelect: "none",
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

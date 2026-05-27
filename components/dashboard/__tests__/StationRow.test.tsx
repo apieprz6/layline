@@ -48,7 +48,7 @@ describe('StationRow - Navigation', () => {
     const row = screen.getByText('Harrison Dever Crib').closest('div')
     fireEvent.click(row!)
 
-    expect(mockPush).toHaveBeenCalledWith('/dashboard/station/CHII2')
+    expect(mockPush).toHaveBeenCalledWith('/station/CHII2')
   })
 
   it('navigates to correct buoyId for Purdue Buoy', () => {
@@ -64,6 +64,6 @@ describe('StationRow - Navigation', () => {
     const row = screen.getByText('Purdue Buoy').closest('div')
     fireEvent.click(row!)
 
-    expect(mockPush).toHaveBeenCalledWith('/dashboard/station/45198')
+    expect(mockPush).toHaveBeenCalledWith('/station/45198')
   })
 })

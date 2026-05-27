@@ -56,15 +56,13 @@ export default function TabbedInfoPanel({
   const [activeTab, setActiveTab] = useState<'stats' | 'jump' | 'legend'>('stats')
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
-  const now = referenceTime || new Date()
-  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
-    () =>
-      data.map((point) => ({
-        ...point,
-        minsAgo: getMinutesAgo(point.timestamp, now),
-      })),
-    [data, now]
-  )
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(() => {
+    const now = referenceTime || new Date()
+    return data.map((point) => ({
+      ...point,
+      minsAgo: getMinutesAgo(point.timestamp, now),
+    }))
+  }, [data, referenceTime])
 
   return (
     <div

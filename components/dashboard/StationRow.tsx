@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
@@ -13,14 +14,33 @@ interface StationRowProps {
   windDirection: number
   windGust?: number
   status: DataSourceStatus
+  timestamp?: string
   onClick?: () => void
+}
+
+/**
+ * Format timestamp to relative time string (e.g., "2m ago", "1h ago")
+ */
+function formatRelativeTime(timestamp: string, currentTime: number): string {
+  const then = new Date(timestamp)
+  const diffMs = currentTime - then.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+
+  const diffDays = Math.floor(diffHr / 24)
+  return `${diffDays}d ago`
 }
 
 /**
  * StationRow displays a compact buoy station summary
  * Used in both StationCard (collapsed state) and LiveWindCard
  *
- * Shows: status dot, station name/location, wind arrow, speed, gust
+ * Shows: status dot, station name/location (or timestamp if provided), wind arrow, speed, gust
  */
 export default function StationRow({
   buoyId,
@@ -28,10 +48,21 @@ export default function StationRow({
   windDirection,
   windGust,
   status,
+  timestamp,
   onClick,
 }: StationRowProps) {
   const router = useRouter()
   const stationInfo = getStationInfo(buoyId)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
+
+  // Update current time every minute to refresh relative timestamps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 60000) // Update every 60 seconds
+    return () => clearInterval(interval)
+  }, [])
+
   if (!stationInfo) {
     return null
   }
@@ -44,7 +75,7 @@ export default function StationRow({
     if (onClick) {
       onClick()
     } else {
-      router.push(`/dashboard/station/${buoyId}`)
+      router.push(`/station/${buoyId}`)
     }
   }
 
@@ -95,7 +126,7 @@ export default function StationRow({
             marginTop: '1px',
           }}
         >
-          {stationInfo.location}
+          {timestamp ? formatRelativeTime(timestamp, currentTime) : stationInfo.location}
         </div>
       </div>
 
