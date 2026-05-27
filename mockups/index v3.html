@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Layline — Race Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#060f18}
+  body.solar-theme{background:#c8c4bc}
+  body.nightvision-theme{background:#000000}
+  body{display:flex;justify-content:center;align-items:center;font-family:'Inter',sans-serif}
+  #root{width:390px;height:844px;overflow:hidden;position:relative;box-shadow:0 0 80px rgba(0,0,0,0.8)}
+  @media(max-width:420px){#root{width:100%;height:100%}body{align-items:flex-start}}
+  ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(128,128,128,0.3);border-radius:2px}
+  input[type=range]{width:100%;accent-color:#00E5FF}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ── THEME SYSTEM ───────────────────────────────────────────
+const THEMES = {
+  nightvision: {
+    name: 'Night Vision',
+    pageBg: '#0A0000', pageBg2: '#050000',
+    cardBg: '#120000', cardBgEl: '#1A0000',
+    cardBorder: 'rgba(180,0,0,0.25)', cardBorderEl: 'rgba(200,0,0,0.4)',
+    accent: '#CC0000', accentSoft: 'rgba(180,0,0,0.15)',
+    textPrimary: '#FF4444', textSecondary: '#AA2222', textMuted: '#661111',
+    headerBg: '#0D0000', headerBorder: 'rgba(180,0,0,0.2)',
+    divider: 'rgba(180,0,0,0.12)',
+    navBg: '#0D0000',
+    btnPrimary: '#CC0000', btnPrimaryText: '#0A0000',
+    statusGreen: '#AA2222', statusGreenBg: 'rgba(170,34,34,0.15)', statusGreenBorder: 'rgba(170,34,34,0.4)',
+    inputBg: '#0D0000',
+  },
+  solar: {
+    name: 'Solar — High Contrast',
+    pageBg: '#F0EDE6', pageBg2: '#E8E4DC',
+    cardBg: '#FFFFFF', cardBgEl: '#F5F2EC',
+    cardBorder: 'rgba(0,0,0,0.15)', cardBorderEl: 'rgba(0,0,0,0.25)',
+    accent: '#0044CC', accentSoft: 'rgba(0,68,204,0.1)',
+    textPrimary: '#0A0A0A', textSecondary: '#2C2C2C', textMuted: '#666666',
+    headerBg: '#FFFFFF', headerBorder: 'rgba(0,0,0,0.15)',
+    divider: 'rgba(0,0,0,0.1)',
+    navBg: '#FFFFFF',
+    btnPrimary: '#0044CC', btnPrimaryText: '#FFFFFF',
+    statusGreen: '#007A2F', statusGreenBg: 'rgba(0,122,47,0.1)', statusGreenBorder: 'rgba(0,122,47,0.4)',
+    inputBg: '#E8E4DC',
+  }
+};
+
+// ── WIND DATA ──────────────────────────────────────────────
+const WIND_COLORS_DARK = [
+  { color: '#64FFDA', bg: 'rgba(100,255,218,0.12)', border: 'rgba(100,255,218,0.3)', label: 'Light' },
+  { color: '#00E5FF', bg: 'rgba(0,229,255,0.12)',   border: 'rgba(0,229,255,0.3)',   label: 'Medium' },
+  { color: '#FFB300', bg: 'rgba(255,179,0,0.12)',   border: 'rgba(255,179,0,0.3)',   label: 'Heavy' },
+  { color: '#FF5252', bg: 'rgba(255,82,82,0.12)',   border: 'rgba(255,82,82,0.3)',   label: 'Storm' },
+];
+const WIND_COLORS_SOLAR = [
+  { color: '#007A52', bg: 'rgba(0,122,82,0.1)',   border: 'rgba(0,122,82,0.4)',   label: 'Light' },
+  { color: '#0055BB', bg: 'rgba(0,85,187,0.1)',   border: 'rgba(0,85,187,0.4)',   label: 'Medium' },
+  { color: '#C47000', bg: 'rgba(196,112,0,0.1)',  border: 'rgba(196,112,0,0.4)',  label: 'Heavy' },
+  { color: '#CC1100', bg: 'rgba(204,17,0,0.1)',   border: 'rgba(204,17,0,0.4)',   label: 'Storm' },
+];
+const WIND_COLORS_NIGHTVISION = [
+  { color: '#993333', bg: 'rgba(140,30,30,0.15)', border: 'rgba(140,30,30,0.4)', label: 'Light' },
+  { color: '#CC2222', bg: 'rgba(180,20,20,0.15)', border: 'rgba(180,20,20,0.4)', label: 'Medium' },
+  { color: '#EE3300', bg: 'rgba(220,40,0,0.15)',  border: 'rgba(220,40,0,0.4)',  label: 'Heavy' },
+  { color: '#FF0000', bg: 'rgba(255,0,0,0.15)',   border: 'rgba(255,0,0,0.4)',   label: 'Storm' },
+];
+let _activeThemeId = 'deepwater';
+// Night-vision model color remap (preserves relative brightness)
+const NV_MODEL_COLORS = ['#993333','#AA2222','#BB1111','#DD2200','#EE1100','#FF0000'];
+const modelColor = (originalColor, idx) => _activeThemeId === 'nightvision' ? NV_MODEL_COLORS[idx % NV_MODEL_COLORS.length] : originalColor;
+const windColor = (kts) => {
+  const palette = _activeThemeId === 'solar' ? WIND_COLORS_SOLAR
+    : _activeThemeId === 'nightvision' ? WIND_COLORS_NIGHTVISION
+    : WIND_COLORS_DARK;
+  if (kts <= 8)  return palette[0];
+  if (kts <= 15) return palette[1];
+  if (kts <= 22) return palette[2];
+  return palette[3];
+};
+
+const MODEL_DATA = [
+  { name: 'NAM',   color: '#4CAF50', spd: 11, dir: 235, gust: 14 },
+  { name: 'HRRR',  color: '#66BB6A', spd: 9,  dir: 240, gust: 12 },
+  { name: 'HRDPS', color: '#81C784', spd: 13, dir: 238, gust: 16 },
+  { name: 'MBLUE', color: '#FF8C00', spd: 11, dir: 255, gust: 15 },
+  { name: 'ICON',  color: '#FFA500', spd: 14, dir: 250, gust: 18 },
+  { name: 'GFS',   color: '#FF6B35', spd: 16, dir: 258, gust: 21 },
+];
+
+const MODEL_TIMES = ['17:00','18:00','19:00','20:00','21:00','22:00'];
+const MODEL_TIMELINE = [
+  { name:'NAM',   color:'#4CAF50', slots:[{spd:9,dir:230,gust:12},{spd:11,dir:235,gust:14},{spd:13,dir:240,gust:16},{spd:15,dir:248,gust:19},{spd:16,dir:252,gust:20},{spd:14,dir:250,gust:17}] },
+  { name:'HRRR',  color:'#66BB6A', slots:[{spd:8,dir:228,gust:11},{spd:10,dir:232,gust:13},{spd:12,dir:238,gust:15},{spd:14,dir:245,gust:18},{spd:15,dir:250,gust:19},{spd:13,dir:248,gust:16}] },
+  { name:'HRDPS', color:'#81C784', slots:[{spd:10,dir:232,gust:13},{spd:12,dir:237,gust:15},{spd:14,dir:242,gust:17},{spd:16,dir:250,gust:20},{spd:18,dir:255,gust:22},{spd:15,dir:253,gust:19}] },
+  { name:'MBLUE', color:'#FF8C00', slots:[{spd:10,dir:248,gust:13},{spd:11,dir:252,gust:14},{spd:13,dir:255,gust:16},{spd:15,dir:260,gust:19},{spd:17,dir:265,gust:21},{spd:16,dir:262,gust:20}] },
+  { name:'ICON',  color:'#FFA500', slots:[{spd:11,dir:242,gust:14},{spd:13,dir:247,gust:16},{spd:15,dir:252,gust:19},{spd:17,dir:258,gust:21},{spd:19,dir:263,gust:24},{spd:17,dir:260,gust:21}] },
+  { name:'GFS',   color:'#FF6B35', slots:[{spd:13,dir:250,gust:17},{spd:14,dir:254,gust:18},{spd:17,dir:258,gust:21},{spd:19,dir:265,gust:23},{spd:22,dir:270,gust:27},{spd:19,dir:267,gust:23}] },
+];
+
+const FORECAST = [
+  { time:'17:00', spd:10, dir:240, gust:13 },
+  { time:'18:00', spd:12, dir:245, gust:15 },
+  { time:'19:00', spd:14, dir:248, gust:17, race:true },
+  { time:'20:00', spd:16, dir:255, gust:20 },
+  { time:'21:00', spd:17, dir:260, gust:22 },
+  { time:'22:00', spd:14, dir:258, gust:17 },
+];
+
+// Generate model grid data (48h × 6 models)
+const MODEL_GRID = (() => {
+  const models = ['NAM','HRRR','GFS','ICON','MBLUE','ECMWF'];
+  const hours = [];
+  for (let h = 0; h < 48; h += 3) {
+    const d = new Date(2026,3,30,17); d.setHours(d.getHours() + h);
+    hours.push(`${String(d.getHours()).padStart(2,'0')}:00`);
+  }
+  return {
+    hours,
+    rows: models.map(m => ({
+      name: m,
+      cells: hours.map((_, i) => ({
+        spd: Math.round(8 + Math.sin(i * 0.4 + models.indexOf(m)) * 5 + Math.random() * 4),
+        dir: Math.round(230 + i * 3 + Math.random() * 20),
+      }))
+    }))
+  };
+})();
+
+// ── PRIMITIVES ─────────────────────────────────────────────
+const Label = ({ children, color }) => (
+  <div style={{ fontSize:9, letterSpacing:'0.12em', textTransform:'uppercase', color: color||'#5580a0', fontFamily:'Inter,sans-serif', fontWeight:500 }}>{children}</div>
+);
+const Mono = ({ children, size=14, color='#00E5FF', weight=500 }) => (
+  <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:size, fontVariantNumeric:'tabular-nums', color, fontWeight:weight }}>{children}</span>
+);
+const Divider = ({ t }) => <div style={{ borderTop:`1px solid ${t.divider}`, margin:'10px 0' }} />;
+
+const Card = ({ children, style={}, alert=false, elevated=false, t }) => (
+  <div style={{
+    background: alert ? 'rgba(255,179,0,0.06)' : elevated ? t.cardBgEl : t.cardBg,
+    border:`1px solid ${alert ? 'rgba(255,179,0,0.25)' : elevated ? t.cardBorderEl : t.cardBorder}`,
+    borderRadius:8, padding:16,
+    boxShadow: elevated ? '0 4px 16px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.4)',
+    ...style
+  }}>{children}</div>
+);
+
+// ── WIND ARROW (inline) ───────────────────────────────────
+const WindArrow = ({ deg, kts, size=32, color }) => {
+  const c = color || windColor(kts).color;
+  return (
+    <svg width={size} height={size} viewBox="-14 -14 28 28">
+      <g transform={`rotate(${deg})`}>
+        <polygon points="0,-11 4,-4 0,-7 -4,-4" fill={c} style={{filter:`drop-shadow(0 0 4px ${c}88)`}}/>
+        <rect x="-1.5" y="-4" width="3" height="10" rx="0.8" fill={`${c}33`}/>
+      </g>
+    </svg>
+  );
+};
+
+// ── WIND COMPASS (large) ──────────────────────────────────
+const WindCompass = ({ deg, kts, size=120, t }) => {
+  const wc = windColor(kts); const r = size/2;
+  const ringStroke = t ? t.accent : '#00E5FF';
+  const labelFill = t ? `${t.accent}99` : 'rgba(0,229,255,0.4)';
+  return (
+    <svg width={size} height={size} viewBox={`${-r} ${-r} ${size} ${size}`}>
+      <circle r={r-4} fill="none" stroke={`${ringStroke}12`} strokeWidth="1"/>
+      <circle r={r-16} fill="none" stroke={`${ringStroke}0d`} strokeWidth="1"/>
+      {[0,45,90,135,180,225,270,315].map(a => {
+        const rad=a*Math.PI/180, r1=r-16, r2=a%90===0?r-8:r-12;
+        return <line key={a} x1={Math.sin(rad)*r1} y1={-Math.cos(rad)*r1} x2={Math.sin(rad)*r2} y2={-Math.cos(rad)*r2} stroke={a%90===0?`${ringStroke}59`:`${ringStroke}26`} strokeWidth={a%90===0?1:0.5}/>;
+      })}
+      <text x="0" y={-(r-14)} textAnchor="middle" dominantBaseline="middle" fill={labelFill} fontSize="7" fontFamily="JetBrains Mono,monospace">N</text>
+      <text x={r-14} y="0" textAnchor="middle" dominantBaseline="middle" fill={labelFill} fontSize="7" fontFamily="JetBrains Mono,monospace">E</text>
+      <text x="0" y={r-14} textAnchor="middle" dominantBaseline="middle" fill={labelFill} fontSize="7" fontFamily="JetBrains Mono,monospace">S</text>
+      <text x={-(r-14)} y="0" textAnchor="middle" dominantBaseline="middle" fill={labelFill} fontSize="7" fontFamily="JetBrains Mono,monospace">W</text>
+      <g transform={`rotate(${deg})`}>
+        <polygon points="0,-28 6,-12 0,-18 -6,-12" fill={wc.color} style={{filter:`drop-shadow(0 0 8px ${wc.color})`}}/>
+        <rect x="-2" y="-12" width="4" height="22" rx="1.5" fill={`${wc.color}30`}/>
+        <circle cx="0" cy="12" r="3" fill={wc.color} opacity={0.4}/>
+      </g>
+    </svg>
+  );
+};
+
+// ── FORECAST BAR ──────────────────────────────────────────
+const ForecastBar = ({ data, t }) => {
+  const max = Math.max(...data.map(d=>d.gust));
+  return (
+    <div style={{ display:'flex', alignItems:'flex-end', gap:5, height:64 }}>
+      {data.map((d,i) => {
+        const wc=windColor(d.spd); const h=Math.round((d.spd/max)*48); const hg=Math.round((d.gust/max)*48);
+        return (
+          <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, flex:1 }}>
+            <div style={{ display:'flex', alignItems:'flex-end', gap:1, height:52 }}>
+              <div style={{ width:9, height:hg, background:`${wc.color}25`, borderRadius:'2px 2px 0 0', border:`1px solid ${wc.color}40`, borderBottom:'none' }}/>
+              <div style={{ width:9, height:h, background:wc.color, borderRadius:'2px 2px 0 0', opacity:d.race?1:0.7, boxShadow:d.race?`0 0 8px ${wc.color}88`:'none' }}/>
+            </div>
+            <div style={{ fontSize:8, color:d.race?t.accent:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>{d.time.slice(0,2)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ── WEATHER SYNOPSIS DATA ─────────────────────────────────
+const SYNOPSIS = {
+  headline: 'Building WSW breeze, veering through race window',
+  body: 'A weak surface low NW of the lake is dragging a 12–17 kt WSW flow across Navy Pier through evening. Expect a 15° veer toward WNW between 19:30 and 20:00 as the gradient tightens. Models diverge after 20:00 — GFS shows a brief 19 kt push, NAM stays steady.',
+  air: 58, water: 51, pressure: 1014, vis: 10, sky: 'Mostly clear',
+  issued: '17:52 CDT',
+};
+
+// ── SCREEN: DASHBOARD ─────────────────────────────────────
+const DashboardScreen = ({ onNav, onMenu, t }) => {
+  const race=FORECAST[2]; const rwc=windColor(race.spd);
+  const [forecastModel, setForecastModel] = useState('consensus'); // 'consensus' or model name
+  // Build forecast data based on selected model
+  const forecastData = useMemo(() => {
+    if (forecastModel === 'consensus') return FORECAST;
+    const m = MODEL_TIMELINE.find(x => x.name === forecastModel);
+    if (!m) return FORECAST;
+    return MODEL_TIMES.map((time, i) => ({
+      time, spd: m.slots[i].spd, dir: m.slots[i].dir, gust: m.slots[i].gust, race: i === 2
+    }));
+  }, [forecastModel]);
+  return (
+    <div style={{ height:'100%', overflowY:'auto', paddingBottom:24 }}>
+      {/* Header */}
+      <div style={{ padding:'14px 14px 12px', borderBottom:`1px solid ${t.headerBorder}`, display:'flex', justifyContent:'space-between', alignItems:'center', background:t.headerBg }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <button onClick={onMenu} aria-label="Menu" style={{ background:'none', border:'none', cursor:'pointer', padding:4, marginLeft:-4, color:t.textSecondary, display:'flex', alignItems:'center' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+          </button>
+          <img src="../../assets/logo-icon.svg" width={24} height={24} alt="L"/>
+          <div>
+            <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:15, color:t.textPrimary, letterSpacing:'-0.02em' }}>layline</div>
+            <div style={{ fontSize:9, color:t.textMuted, letterSpacing:'0.06em', textTransform:'uppercase' }}>Wed Night · Navy Pier</div>
+          </div>
+        </div>
+        <div style={{ background:t.statusGreenBg, border:`1px solid ${t.statusGreenBorder}`, borderRadius:9999, padding:'3px 8px', fontSize:10, color:t.statusGreen, fontWeight:600 }}>● Race On</div>
+      </div>
+
+      <div style={{ padding:'12px 14px 0' }}>
+        {/* Hero card */}
+        <Card elevated t={t} style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+              <Label color={t.accent}>Race start · 19:00 CDT</Label>
+              <div style={{ fontSize:11, color:t.textSecondary, marginTop:3 }}>Starts in <Mono size={11} color={t.textPrimary}>1h 15m</Mono></div>
+              <div style={{ marginTop:12 }}>
+                <Label color={t.textMuted}>Wind at race time</Label>
+                <div style={{ display:'flex', alignItems:'baseline', gap:6, marginTop:4 }}>
+                  <Mono size={38} color={rwc.color} weight={600}>{race.spd}</Mono>
+                  <div>
+                    <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:12, color:t.textSecondary }}>kts</div>
+                    <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:10, color:t.textMuted }}>g {race.gust}</div>
+                  </div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4 }}>
+                  <WindArrow deg={race.dir} kts={race.spd} size={20}/>
+                  <Mono size={13} color={t.textSecondary}>{race.dir}° WSW</Mono>
+                  <div style={{ background:rwc.bg, border:`1px solid ${rwc.border}`, borderRadius:4, padding:'2px 7px', fontSize:10, color:rwc.color, fontWeight:600 }}>{rwc.label}</div>
+                </div>
+              </div>
+            </div>
+            <WindCompass deg={race.dir} kts={race.spd} size={110} t={t}/>
+          </div>
+        </Card>
+
+        {/* Wind Forecast — with model selector + tap → wind rose */}
+        <Card t={t} style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+            <Label color={t.textSecondary}>Wind Forecast</Label>
+            <div style={{ fontSize:9, color:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>avg · gust bar</div>
+          </div>
+          {/* Model chip selector */}
+          <div style={{ display:'flex', gap:5, marginBottom:10, overflowX:'auto', paddingBottom:2 }}>
+            {[{name:'consensus', color:t.accent, label:'Consensus'}, ...MODEL_TIMELINE.map((m,mi)=>({name:m.name, color:modelColor(m.color,mi), label:m.name}))].map(m => {
+              const active = forecastModel === m.name;
+              return (
+                <button key={m.name} onClick={(e) => { e.stopPropagation(); setForecastModel(m.name); }}
+                  style={{ flexShrink:0, background: active ? `${m.color}22` : 'transparent', border:`1px solid ${active ? m.color : t.cardBorder}`, borderRadius:4, padding:'3px 8px', fontSize:10, fontFamily:'JetBrains Mono,monospace', fontWeight: active ? 700 : 500, color: active ? m.color : t.textMuted, cursor:'pointer', display:'flex', alignItems:'center', gap:5, transition:'all 150ms' }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', background:m.color }}/>
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+          <ForecastBar data={forecastData} t={t}/>
+          <Divider t={t}/>
+          <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+            {forecastData.map((d,i) => {
+              const wc=windColor(d.spd);
+              return <div key={i} style={{ flex:1, textAlign:'center' }}>
+                <div style={{ fontSize:9, color:d.race?t.accent:t.textMuted, fontFamily:'JetBrains Mono,monospace', marginBottom:2 }}>{d.time}</div>
+                <Mono size={11} color={d.race?wc.color:t.textSecondary}>{d.spd}</Mono>
+              </div>;
+            })}
+          </div>
+          <div onClick={() => onNav('windrose')} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0 0', borderTop:`1px solid ${t.divider}`, cursor:'pointer' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+              <span style={{ fontSize:11, color:t.textSecondary }}>Open wind rose · all models</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="1.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </Card>
+
+        {/* Weather Synopsis */}
+        <Card t={t} style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+            <Label color={t.textSecondary}>Weather Synopsis</Label>
+            <div style={{ fontSize:9, color:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>NOAA · {SYNOPSIS.issued}</div>
+          </div>
+          <div style={{ fontFamily:'Space Grotesk,sans-serif', fontSize:13, fontWeight:600, color:t.textPrimary, lineHeight:1.4, marginBottom:6 }}>{SYNOPSIS.headline}</div>
+          <div style={{ fontSize:11.5, color:t.textSecondary, lineHeight:1.55 }}>{SYNOPSIS.body}</div>
+          <Divider t={t}/>
+          <div style={{ display:'flex', gap:0 }}>
+            {[
+              { label:'Air',   val:`${SYNOPSIS.air}°`,      sub:'F' },
+              { label:'Water', val:`${SYNOPSIS.water}°`,    sub:'F' },
+              { label:'Baro',  val:`${SYNOPSIS.pressure}`,  sub:'mb' },
+              { label:'Vis',   val:`${SYNOPSIS.vis}`,       sub:'nm' },
+              { label:'Sky',   val:SYNOPSIS.sky,            sub:''   },
+            ].map((m, i, arr) => (
+              <div key={m.label} style={{ flex:1, textAlign:'center', borderRight: i < arr.length - 1 ? `1px solid ${t.divider}` : 'none' }}>
+                <Label color={t.textMuted}>{m.label}</Label>
+                <div style={{ display:'flex', alignItems:'baseline', justifyContent:'center', gap:2, marginTop:3 }}>
+                  <span style={{ fontFamily: m.label === 'Sky' ? 'Inter,sans-serif' : 'JetBrains Mono,monospace', fontSize: m.label === 'Sky' ? 10 : 13, fontWeight:600, color:t.textPrimary }}>{m.val}</span>
+                  {m.sub && <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:8, color:t.textMuted }}>{m.sub}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Rig rec */}
+        <Card t={t} style={{ marginBottom:12 }}>
+          <Label color={t.textSecondary}>Rig Setup</Label>
+          <div style={{ fontFamily:'Space Grotesk,sans-serif', fontSize:14, fontWeight:600, color:t.textPrimary, margin:'8px 0', lineHeight:1.35 }}>Full sail. Reef lines rigged — gusts may reach 20 kts after 20:00.</div>
+          <div style={{ display:'flex', gap:6 }}>
+            {['Full main','Jib #1','Kite ready'].map(tag => (
+              <div key={tag} style={{ background:t.accentSoft, border:`1px solid ${t.cardBorderEl}`, borderRadius:4, padding:'3px 8px', fontSize:10, color:t.textSecondary }}>{tag}</div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Live wind card */}
+        <Card t={t} style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:t.statusGreen, boxShadow:`0 0 6px ${t.statusGreen}88` }}/>
+              <Label color={t.textSecondary}>Live Wind</Label>
+            </div>
+            <div style={{ fontSize:10, color:t.accent, cursor:'pointer' }} onClick={() => onNav('models')}>See all →</div>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+            {LIVE_STATIONS.slice(0, 2).map(station => (
+              <StationCard key={station.id} station={station} t={t} expanded={false} onToggle={() => onNav('models')}/>
+            ))}
+          </div>
+        </Card>
+
+        {/* AI briefing */}
+        <Card elevated t={t} style={{ marginBottom:12, cursor:'pointer' }} onClick={() => onNav('briefing')}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                <Label color={t.accent}>AI Tactical Briefing</Label>
+                <div style={{ background:t.accentSoft, border:`1px solid ${t.cardBorder}`, borderRadius:9999, padding:'1px 6px', fontSize:8, color:t.accent, fontWeight:600 }}>AI</div>
+              </div>
+              <div style={{ fontSize:13, color:t.textSecondary, lineHeight:1.55 }}>"We're seeing a 15° veer to WSW through race time. Port tack favored off the line."</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={t.textMuted} strokeWidth="1.5" strokeLinecap="round" style={{ marginLeft:10, marginTop:2 }}><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <Divider t={t}/>
+          <div style={{ fontSize:10, color:t.textMuted }}>Tap to read full briefing →</div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ── SCREEN: WIND ROSE (Windy-style + time scrubber) ──────
+const WindRoseScreen = ({ onNav, t }) => {
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [timeIdx, setTimeIdx] = useState(2); // default 19:00
+  const [isPlaying, setIsPlaying] = useState(false);
+  const playRef = useRef(null);
+  const W = 310, cx = W/2, cy = W/2, innerR = 30, maxLen = 105;
+
+  // Current snapshot of all models at selected time
+  const snapshot = MODEL_TIMELINE.map((m, mi) => ({ ...m, ...m.slots[timeIdx], color: modelColor(m.color, mi) }));
+
+  // Playback
+  useEffect(() => {
+    if (isPlaying) {
+      playRef.current = setInterval(() => {
+        setTimeIdx(i => {
+          if (i >= MODEL_TIMES.length - 1) { setIsPlaying(false); return i; }
+          return i + 1;
+        });
+      }, 800);
+    } else {
+      clearInterval(playRef.current);
+    }
+    return () => clearInterval(playRef.current);
+  }, [isPlaying]);
+
+  const raceIdx = 2; // 19:00
+
+  return (
+    <div style={{ height:'100%', overflowY:'auto', paddingBottom:24, background:t.pageBg }}>
+      {/* Header */}
+      <div style={{ padding:'14px 14px 10px', borderBottom:`1px solid ${t.headerBorder}`, background:t.headerBg }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <button onClick={() => onNav('dashboard')} aria-label="Back" style={{ background:'none', border:'none', cursor:'pointer', padding:4, marginLeft:-4, color:t.textSecondary, display:'flex', alignItems:'center' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div>
+              <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:16, color:t.textPrimary }}>Wind Rose Detail</div>
+              <div style={{ fontSize:10, color:t.textMuted, marginTop:2 }}>Model spread · scrub to explore</div>
+            </div>
+          </div>
+          <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:20, fontWeight:700, color:t.accent }}>
+            {MODEL_TIMES[timeIdx]}
+            {timeIdx === raceIdx && <span style={{ fontSize:9, color:t.accent, marginLeft:6, verticalAlign:'middle', background:t.accentSoft, border:`1px solid ${t.cardBorder}`, borderRadius:9999, padding:'2px 6px' }}>Race</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Compass */}
+      <div style={{ display:'flex', justifyContent:'center', paddingTop:16 }}>
+        {(() => {
+          const isLight = _activeThemeId === 'solar';
+          const ringStroke = isLight ? 'rgba(0,0,0,0.18)' : 'rgba(128,128,128,0.12)';
+          const labelFill  = isLight ? 'rgba(0,0,0,0.5)'  : 'rgba(180,180,180,0.6)';
+          const axisStroke = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(128,128,128,0.1)';
+          const pillBg     = isLight ? t.cardBg            : 'rgba(10,10,10,0.88)';
+          const spdFill    = isLight ? 'rgba(0,0,0,0.75)'  : 'rgba(255,255,255,0.85)';
+          return (
+        <svg width={W} height={W} viewBox={`0 0 ${W} ${W}`}>
+          {/* Rings */}
+          {[0.3,0.6,1].map((f,i) => (
+            <circle key={i} cx={cx} cy={cy} r={innerR+(maxLen-innerR)*f} fill="none"
+              stroke={ringStroke} strokeWidth={i===2?1.5:0.8} strokeDasharray={i===2?'none':'3 3'}/>
+          ))}
+          {/* Speed ring labels */}
+          {[8,15,22].map((spd,i) => {
+            const r = innerR+(maxLen-innerR)*([0.3,0.6,1][i]);
+            return <text key={spd} x={cx+3} y={cy-r+5} fontSize="7" fill={labelFill} fontFamily="JetBrains Mono,monospace" fontWeight="600">{spd}kt</text>;
+          })}
+          {/* Cardinal labels */}
+          {[['N',cx,12],['S',cx,W-4],['E',W-6,cy+4],['W',10,cy+4]].map(([l,x,y]) => (
+            <text key={l} x={x} y={y} textAnchor="middle" fontSize="11" fill={labelFill} fontFamily="JetBrains Mono,monospace" fontWeight="700">{l}</text>
+          ))}
+          {/* Axis lines */}
+          {[0,90,180,270].map(a => {
+            const rad=a*Math.PI/180;
+            return <line key={a} x1={cx+Math.sin(rad)*innerR} y1={cy-Math.cos(rad)*innerR}
+              x2={cx+Math.sin(rad)*(maxLen+6)} y2={cy-Math.cos(rad)*(maxLen+6)}
+              stroke={axisStroke} strokeWidth="1"/>;
+          })}
+
+          {/* Model blades */}
+          {snapshot.map((m) => {
+            const rad = m.dir * Math.PI / 180;
+            const len = innerR + ((Math.min(m.spd,22) / 22) * (maxLen - innerR));
+            const tipX = cx + Math.sin(rad) * len;
+            const tipY = cy - Math.cos(rad) * len;
+            const baseX = cx + Math.sin(rad) * innerR;
+            const baseY = cy - Math.cos(rad) * innerR;
+            const bw = 7 + m.spd * 0.5;
+            const pr = rad + Math.PI/2;
+            const b1x = baseX+Math.cos(pr)*bw/2, b1y = baseY+Math.sin(pr)*bw/2;
+            const b2x = baseX-Math.cos(pr)*bw/2, b2y = baseY-Math.sin(pr)*bw/2;
+            const isSelected = selectedModel === m.name;
+            const labelR = len + 22;
+            const lx = cx + Math.sin(rad) * labelR;
+            const ly = cy - Math.cos(rad) * labelR;
+            const midR = innerR + (len - innerR) * 0.55;
+            return (
+              <g key={m.name} onClick={() => setSelectedModel(isSelected ? null : m.name)} style={{ cursor:'pointer' }}>
+                <polygon points={`${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`}
+                  fill={m.color} opacity={selectedModel && !isSelected ? 0.2 : 0.9}
+                  stroke={m.color} strokeWidth="1"
+                  style={{ filter:isSelected?`drop-shadow(0 0 6px ${m.color})`:'none', transition:'all 300ms ease-out' }}/>
+                <text x={cx+Math.sin(rad)*midR} y={cy-Math.cos(rad)*midR}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize="7.5" fontWeight="800" fill={spdFill} fontFamily="JetBrains Mono,monospace">{m.spd}</text>
+                <rect x={lx-17} y={ly-7} width={34} height={14} rx="3.5"
+                  fill={isSelected ? m.color : pillBg} stroke={m.color} strokeWidth="1.2"/>
+                <text x={lx} y={ly+0.5} textAnchor="middle" dominantBaseline="middle"
+                  fontSize="7.5" fontWeight="700" fill={isSelected ? (isLight?'#fff':'#000') : m.color} fontFamily="Inter,sans-serif">{m.name}</text>
+              </g>
+            );
+          })}
+
+          {/* Center */}
+          <circle cx={cx} cy={cy} r={innerR-1} fill={t.cardBg} stroke={ringStroke} strokeWidth="1.5"/>
+          <circle cx={cx} cy={cy} r={5.5} fill={t.textPrimary} opacity="0.9"/>
+          <circle cx={cx} cy={cy} r={2.5} fill={t.pageBg}/>
+        </svg>
+          );
+        })()}
+      </div>
+
+      {/* Time scrubber */}
+      <div style={{ padding:'4px 16px 8px' }}>
+        {/* Track with dots */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+          {/* Play/pause */}
+          <button onClick={() => setIsPlaying(p => !p)} style={{ background:'none', border:`1px solid ${t.cardBorder}`, borderRadius:6, width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:t.accent, flexShrink:0 }}>
+            {isPlaying
+              ? <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="3" height="8" rx="1" fill="currentColor"/><rect x="6" y="1" width="3" height="8" rx="1" fill="currentColor"/></svg>
+              : <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>}
+          </button>
+          {/* Dots */}
+          <div style={{ flex:1, display:'flex', justifyContent:'space-between', alignItems:'center', position:'relative' }}>
+            {/* Track line */}
+            <div style={{ position:'absolute', left:8, right:8, height:2, background:t.cardBg, borderRadius:1 }}>
+              <div style={{ width:`${(timeIdx/(MODEL_TIMES.length-1))*100}%`, height:'100%', background:t.accent, borderRadius:1, transition:'width 300ms ease-out' }}/>
+            </div>
+            {MODEL_TIMES.map((time, i) => {
+              const isActive = i === timeIdx;
+              const isRace = i === raceIdx;
+              return (
+                <div key={i} onClick={() => { setTimeIdx(i); setIsPlaying(false); }}
+                  style={{ position:'relative', zIndex:1, width:isActive?14:isRace?10:8, height:isActive?14:isRace?10:8,
+                    borderRadius:'50%', background: isActive ? t.accent : isRace ? t.accent : t.cardBgEl,
+                    border:`${isRace||isActive?2:1}px solid ${isActive?t.accent:isRace?t.accent:t.cardBorder}`,
+                    cursor:'pointer', transition:'all 200ms ease-out',
+                    boxShadow: isActive ? `0 0 10px ${t.accent}88` : 'none',
+                    flexShrink:0 }}/>
+              );
+            })}
+          </div>
+        </div>
+        {/* Time labels */}
+        <div style={{ display:'flex', justifyContent:'space-between', paddingLeft:38 }}>
+          {MODEL_TIMES.map((time, i) => (
+            <div key={i} style={{ fontSize:8, fontFamily:'JetBrains Mono,monospace',
+              color: i===timeIdx ? t.accent : i===raceIdx ? `${t.accent}80` : t.textMuted,
+              fontWeight: i===timeIdx ? 700 : 400, transition:'color 200ms', cursor:'pointer' }}
+              onClick={() => { setTimeIdx(i); setIsPlaying(false); }}>
+              {time}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Detail / model list */}
+      <div style={{ padding:'0 14px 14px' }}>
+        {selectedModel ? (() => {
+          const m = snapshot.find(x=>x.name===selectedModel);
+          const wc = windColor(m.spd);
+          return (
+            <Card elevated t={t} style={{ marginBottom:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                <div style={{ width:10, height:10, borderRadius:'50%', background:m.color }}/>
+                <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:15, color:t.textPrimary }}>{m.name}</div>
+                <div style={{ marginLeft:'auto', fontSize:10, color:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>{MODEL_TIMES[timeIdx]}</div>
+              </div>
+              <div style={{ display:'flex', gap:16 }}>
+                <div><Label color={t.textMuted}>Speed</Label><div style={{ display:'flex', alignItems:'baseline', gap:3, marginTop:3 }}><Mono size={22} color={wc.color} weight={700}>{m.spd}</Mono><span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:10, color:t.textMuted }}>kts</span></div></div>
+                <div><Label color={t.textMuted}>Gust</Label><div style={{ display:'flex', alignItems:'baseline', gap:3, marginTop:3 }}><Mono size={22} color={wc.color} weight={700}>{m.gust}</Mono><span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:10, color:t.textMuted }}>kts</span></div></div>
+                <div><Label color={t.textMuted}>Dir</Label><div style={{ display:'flex', alignItems:'center', gap:3, marginTop:3 }}><WindArrow deg={m.dir} kts={m.spd} size={18} color={wc.color}/><Mono size={13} color={t.textSecondary}>{m.dir}°</Mono></div></div>
+              </div>
+              {/* Mini spark for this model across time */}
+              <div style={{ marginTop:10, display:'flex', alignItems:'flex-end', gap:3, height:28 }}>
+                {MODEL_TIMELINE.find(x=>x.name===m.name).slots.map((s,i) => {
+                  const h = Math.round((s.spd/22)*24);
+                  return <div key={i} style={{ flex:1, height:h, background: i===timeIdx ? m.color : `${m.color}40`, borderRadius:'1px 1px 0 0', transition:'height 300ms ease-out' }}/>;
+                })}
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
+                {MODEL_TIMES.map((tm,i) => <div key={i} style={{ fontSize:7, color:i===timeIdx?t.accent:t.textMuted, fontFamily:'JetBrains Mono,monospace', flex:1, textAlign:'center' }}>{tm.slice(0,2)}</div>)}
+              </div>
+            </Card>
+          );
+        })() : null}
+
+        {/* Model list */}
+        <Card t={t}>
+          <Label color={t.textSecondary}>All models · {MODEL_TIMES[timeIdx]}</Label>
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:7 }}>
+            {snapshot.map(m => {
+              const wc=windColor(m.spd);
+              return (
+                <div key={m.name} onClick={() => setSelectedModel(selectedModel===m.name?null:m.name)}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 7px', borderRadius:6,
+                    background:selectedModel===m.name?t.accentSoft:'transparent',
+                    cursor:'pointer', transition:'background 150ms' }}>
+                  <div style={{ width:7, height:7, borderRadius:'50%', background:m.color, flexShrink:0 }}/>
+                  <div style={{ width:38, fontFamily:'JetBrains Mono,monospace', fontSize:10, color:t.textSecondary, fontWeight:600 }}>{m.name}</div>
+                  <div style={{ flex:1, height:3, background:t.inputBg, borderRadius:2 }}>
+                    <div style={{ width:`${(m.spd/22)*100}%`, height:'100%', background:m.color, borderRadius:2, transition:'width 300ms ease-out' }}/>
+                  </div>
+                  <WindArrow deg={m.dir} kts={m.spd} size={14} color={m.color}/>
+                  <Mono size={12} color={wc.color} weight={600}>{m.spd}</Mono>
+                  <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:8, color:t.textMuted }}>kts</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ── LIVE STATION DATA ─────────────────────────────────────
+// history: hourly readings; minuteHistory: last 120 min at 10-min intervals (for trend calcs)
+const LIVE_STATIONS = [
+  {
+    id: 'buoy45007', name: 'Buoy 45007', location: 'Chicago, 8nm offshore',
+    spd: 13, dir: 248, gust: 17, updated: '17:52',
+    status: 'live',
+    history: [
+      { time:'12:00', spd:7,  dir:220 }, { time:'13:00', spd:8,  dir:228 },
+      { time:'14:00', spd:9,  dir:232 }, { time:'15:00', spd:11, dir:238 },
+      { time:'16:00', spd:12, dir:242 }, { time:'17:00', spd:13, dir:248 },
+    ],
+    // 10-min buckets newest→oldest for trend calcs (last 2h = 12 pts)
+    minuteHistory: [
+      {minsAgo:0,   spd:13, dir:248}, {minsAgo:10,  spd:13, dir:252},
+      {minsAgo:20,  spd:12, dir:245}, {minsAgo:30,  spd:12, dir:250},
+      {minsAgo:40,  spd:12, dir:243}, {minsAgo:50,  spd:11, dir:248},
+      {minsAgo:60,  spd:11, dir:241}, {minsAgo:70,  spd:11, dir:238},
+      {minsAgo:80,  spd:10, dir:235}, {minsAgo:90,  spd:10, dir:233},
+      {minsAgo:100, spd:9,  dir:231}, {minsAgo:110, spd:8,  dir:228},
+    ],
+  },
+  {
+    id: 'belmont', name: 'Belmont Harbor', location: 'Chicago lakefront',
+    spd: 11, dir: 255, gust: 15, updated: '17:54',
+    status: 'live',
+    history: [
+      { time:'12:00', spd:5,  dir:210 }, { time:'13:00', spd:7,  dir:220 },
+      { time:'14:00', spd:8,  dir:230 }, { time:'15:00', spd:9,  dir:240 },
+      { time:'16:00', spd:10, dir:248 }, { time:'17:00', spd:11, dir:255 },
+    ],
+    minuteHistory: [
+      {minsAgo:0,   spd:11, dir:255}, {minsAgo:10,  spd:11, dir:258},
+      {minsAgo:20,  spd:10, dir:261}, {minsAgo:30,  spd:10, dir:264},
+      {minsAgo:40,  spd:10, dir:260}, {minsAgo:50,  spd:9,  dir:257},
+      {minsAgo:60,  spd:9,  dir:255}, {minsAgo:70,  spd:9,  dir:252},
+      {minsAgo:80,  spd:8,  dir:250}, {minsAgo:90,  spd:8,  dir:248},
+      {minsAgo:100, spd:8,  dir:245}, {minsAgo:110, spd:7,  dir:242},
+    ],
+  },
+  {
+    id: 'navypier', name: 'Navy Pier', location: 'ASOS station',
+    spd: 10, dir: 252, gust: 13, updated: '17:50',
+    status: 'live',
+    history: [
+      { time:'12:00', spd:6,  dir:215 }, { time:'13:00', spd:7,  dir:225 },
+      { time:'14:00', spd:8,  dir:235 }, { time:'15:00', spd:9,  dir:242 },
+      { time:'16:00', spd:9,  dir:248 }, { time:'17:00', spd:10, dir:252 },
+    ],
+    minuteHistory: [
+      {minsAgo:0,   spd:10, dir:252}, {minsAgo:10,  spd:10, dir:250},
+      {minsAgo:20,  spd:9,  dir:254}, {minsAgo:30,  spd:9,  dir:248},
+      {minsAgo:40,  spd:9,  dir:252}, {minsAgo:50,  spd:8,  dir:249},
+      {minsAgo:60,  spd:8,  dir:248}, {minsAgo:70,  spd:8,  dir:246},
+      {minsAgo:80,  spd:8,  dir:244}, {minsAgo:90,  spd:7,  dir:242},
+      {minsAgo:100, spd:7,  dir:240}, {minsAgo:110, spd:7,  dir:238},
+    ],
+  },
+  {
+    id: 'midway', name: 'Midway Airport', location: 'ASOS / 9nm SW',
+    spd: 14, dir: 262, gust: 19, updated: '17:51',
+    status: 'live',
+    history: [
+      { time:'12:00', spd:8,  dir:240 }, { time:'13:00', spd:10, dir:245 },
+      { time:'14:00', spd:11, dir:250 }, { time:'15:00', spd:12, dir:255 },
+      { time:'16:00', spd:13, dir:258 }, { time:'17:00', spd:14, dir:262 },
+    ],
+    minuteHistory: [
+      {minsAgo:0,   spd:14, dir:262}, {minsAgo:10,  spd:14, dir:261},
+      {minsAgo:20,  spd:13, dir:260}, {minsAgo:30,  spd:13, dir:259},
+      {minsAgo:40,  spd:13, dir:258}, {minsAgo:50,  spd:12, dir:257},
+      {minsAgo:60,  spd:12, dir:255}, {minsAgo:70,  spd:12, dir:254},
+      {minsAgo:80,  spd:11, dir:252}, {minsAgo:90,  spd:11, dir:250},
+      {minsAgo:100, spd:10, dir:248}, {minsAgo:110, spd:10, dir:245},
+    ],
+  },
+];
+
+// ── WIND ANALYTICS HELPERS ────────────────────────────────
+// Compute trend stats from minuteHistory
+const computeWindStats = (station) => {
+  const mh = station.minuteHistory;
+  if (!mh || mh.length < 2) return null;
+
+  // Speed: 20min avg vs 2h avg
+  const recent = mh.filter(d => d.minsAgo <= 20);
+  const longer = mh.filter(d => d.minsAgo <= 120);
+  const avg20  = recent.reduce((s,d) => s + d.spd, 0) / recent.length;
+  const avg2h  = longer.reduce((s,d) => s + d.spd, 0) / longer.length;
+  const spdDelta = avg20 - avg2h;
+
+  // Direction: veering/backing over last 2h
+  // Positive delta = veering (clockwise), negative = backing
+  const newest = mh[0].dir;
+  const oldest = mh[mh.length - 1].dir;
+  let dirDelta = newest - oldest;
+  // Normalize to [-180, 180]
+  while (dirDelta > 180) dirDelta -= 360;
+  while (dirDelta < -180) dirDelta += 360;
+
+  // Oscillation range (std dev of directions over last 1h)
+  const lastHour = mh.filter(d => d.minsAgo <= 60);
+  const meanDir = lastHour.reduce((s,d) => s + d.dir, 0) / lastHour.length;
+  const dirVariance = lastHour.reduce((s,d) => s + Math.pow(d.dir - meanDir, 2), 0) / lastHour.length;
+  const dirStdDev = Math.sqrt(dirVariance);
+  const dirMin = Math.min(...lastHour.map(d => d.dir));
+  const dirMax = Math.max(...lastHour.map(d => d.dir));
+  const oscRange = dirMax - dirMin;
+
+  // Gust factor
+  const gustFactor = ((station.gust - station.spd) / station.spd * 100);
+
+  // Speed std dev
+  const spdMean = longer.reduce((s,d) => s + d.spd, 0) / longer.length;
+  const spdStdDev = Math.sqrt(longer.reduce((s,d) => s + Math.pow(d.spd - spdMean, 2), 0) / longer.length);
+
+  return { spdDelta, avg20, avg2h, dirDelta, dirStdDev, oscRange, dirMin, dirMax, gustFactor, spdStdDev };
+};
+
+// ── DIRECTION POLAR TRAIL ─────────────────────────────────
+// Shows last N direction readings as a fading arc on a mini compass
+const DirPolarTrail = ({ station, wc, t, size = 96 }) => {
+  const mh = station.minuteHistory;
+  const stats = computeWindStats(station);
+  const r = size / 2;
+  const innerR = r * 0.22;
+  const arrowR = r * 0.62;
+  const isLight = _activeThemeId === 'solar';
+  const ringStroke = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(128,128,128,0.1)';
+  const labelFill  = isLight ? 'rgba(0,0,0,0.4)'  : 'rgba(180,180,180,0.45)';
+
+  // Last 7 readings for the trail (newest first)
+  const trail = mh.slice(0, 7);
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow:'hidden' }}>
+      {/* Compass rings */}
+      <circle cx={r} cy={r} r={r - 3}  fill="none" stroke={ringStroke} strokeWidth="0.8"/>
+      <circle cx={r} cy={r} r={innerR} fill="none" stroke={ringStroke} strokeWidth="0.6"/>
+
+      {/* Cardinal labels — N only for orientation, others are noise at this size */}
+      <text x={r} y={r - arrowR + 8} textAnchor="middle" fontSize="6.5" fill={labelFill}
+        fontFamily="JetBrains Mono,monospace" fontWeight="700">N</text>
+      {/* Cardinal tick marks */}
+      {[0, 90, 180, 270].map(a => {
+        const rad = (a - 90) * Math.PI / 180;
+        const outerT = r - 4;
+        const innerT = r - 8;
+        return (
+          <line key={a}
+            x1={r + Math.cos(rad) * innerT} y1={r + Math.sin(rad) * innerT}
+            x2={r + Math.cos(rad) * outerT} y2={r + Math.sin(rad) * outerT}
+            stroke={ringStroke} strokeWidth={a === 0 ? 1.5 : 0.8}/>
+        );
+      })}
+
+      {/* Oscillation band: shaded arc between dirMin and dirMax over last 1h */}
+      {stats && (() => {
+        const bandColor = wc.color;
+        const sweepDeg = stats.oscRange;
+        const startDeg = stats.dirMin;
+        // Draw arc sector
+        const toXY = (deg, radius) => {
+          const rad = (deg - 90) * Math.PI / 180;
+          return [r + Math.cos(rad) * radius, r + Math.sin(rad) * radius];
+        };
+        const outerR = r - 4;
+        const [ox1, oy1] = toXY(startDeg, outerR);
+        const [ox2, oy2] = toXY(startDeg + sweepDeg, outerR);
+        const [ix1, iy1] = toXY(startDeg, innerR);
+        const [ix2, iy2] = toXY(startDeg + sweepDeg, innerR);
+        const largeArc = sweepDeg > 180 ? 1 : 0;
+        return (
+          <path
+            d={`M ${ix1} ${iy1} L ${ox1} ${oy1} A ${outerR} ${outerR} 0 ${largeArc} 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 ${largeArc} 0 ${ix1} ${iy1} Z`}
+            fill={bandColor} opacity="0.10" stroke={bandColor} strokeWidth="0.5" strokeOpacity="0.25"
+          />
+        );
+      })()}
+
+      {/* Trail dots: fading older readings */}
+      {trail.slice(1).reverse().map((pt, i) => {
+        const rad = (pt.dir - 90) * Math.PI / 180;
+        const dotR = arrowR * 0.88;
+        const cx = r + Math.cos(rad) * dotR;
+        const cy = r + Math.sin(rad) * dotR;
+        const opacity = 0.12 + (i / trail.length) * 0.28;
+        return (
+          <circle key={i} cx={cx} cy={cy} r="2.5"
+            fill={wc.color} opacity={opacity}/>
+        );
+      })}
+
+      {/* Trail line connecting dots */}
+      {trail.length > 1 && (() => {
+        const pts = trail.slice(0, 5).map(pt => {
+          const rad = (pt.dir - 90) * Math.PI / 180;
+          const dotR = arrowR * 0.88;
+          return `${r + Math.cos(rad) * dotR},${r + Math.sin(rad) * dotR}`;
+        }).reverse().join(' ');
+        return (
+          <polyline points={pts} fill="none"
+            stroke={wc.color} strokeWidth="1" strokeOpacity="0.3"
+            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="2 2"/>
+        );
+      })()}
+
+      {/* Current direction arrow */}
+      {(() => {
+        const deg = station.dir;
+        const rad = (deg - 90) * Math.PI / 180;
+        const tipX = r + Math.cos(rad) * arrowR;
+        const tipY = r + Math.sin(rad) * arrowR;
+        const baseX = r + Math.cos(rad) * innerR;
+        const baseY = r + Math.sin(rad) * innerR;
+        const pr = rad + Math.PI / 2;
+        const hw = 4.5;
+        return (
+          <g>
+            <polygon
+              points={`${tipX},${tipY} ${baseX + Math.cos(pr)*hw},${baseY + Math.sin(pr)*hw} ${baseX - Math.cos(pr)*hw},${baseY - Math.sin(pr)*hw}`}
+              fill={wc.color} style={{ filter:`drop-shadow(0 0 5px ${wc.color}99)` }}
+            />
+          </g>
+        );
+      })()}
+
+      {/* Center dot */}
+      <circle cx={r} cy={r} r="2.5" fill={wc.color} opacity="0.7"/>
+    </svg>
+  );
+};
+
+// ── SPEED TREND BADGE ─────────────────────────────────────
+const SpeedTrendBadge = ({ stats, t }) => {
+  if (!stats) return null;
+  const { spdDelta, avg20, avg2h } = stats;
+  const abs = Math.abs(spdDelta);
+  const isBuilding = spdDelta > 0.3;
+  const isDying = spdDelta < -0.3;
+  const isLight = _activeThemeId === 'solar';
+
+  let label, color, bg, border;
+  if (isBuilding) {
+    label = `↑ Building +${abs.toFixed(1)} kts`;
+    color = isLight ? '#007A52' : '#64FFDA';
+    bg = 'rgba(100,255,218,0.08)';
+    border = 'rgba(100,255,218,0.25)';
+  } else if (isDying) {
+    label = `↓ Easing ${abs.toFixed(1)} kts`;
+    color = isLight ? '#C47000' : '#FFB300';
+    bg = 'rgba(255,179,0,0.08)';
+    border = 'rgba(255,179,0,0.25)';
+  } else {
+    label = `→ Steady`;
+    color = isLight ? '#666' : '#7aa0bc';
+    bg = 'transparent';
+    border = 'transparent';
+  }
+
+  return (
+    <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:bg, border:`1px solid ${border}`, borderRadius:9999, padding:'3px 9px' }}>
+      <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:9.5, color, fontWeight:600, whiteSpace:'nowrap' }}>{label}</span>
+    </div>
+  );
+};
+
+// ── DIR TREND BADGE ───────────────────────────────────────
+const DirTrendBadge = ({ stats, t }) => {
+  if (!stats) return null;
+  const { dirDelta, oscRange } = stats;
+  const isLight = _activeThemeId === 'solar';
+  const abs = Math.abs(dirDelta);
+
+  let label, color, bg, border;
+  if (abs < 3) {
+    label = `→ Steady`;
+    color = isLight ? '#666' : '#7aa0bc';
+    bg = 'transparent'; border = 'transparent';
+  } else if (dirDelta > 0) {
+    label = `↻ Veering +${Math.round(abs)}° / 2h`;
+    color = isLight ? '#0044CC' : '#00E5FF';
+    bg = 'rgba(0,229,255,0.07)'; border = 'rgba(0,229,255,0.2)';
+  } else {
+    label = `↺ Backing −${Math.round(abs)}° / 2h`;
+
+    color = isLight ? '#CC1100' : '#FF5252';
+    bg = 'rgba(255,82,82,0.07)'; border = 'rgba(255,82,82,0.2)';
+  }
+
+  return (
+    <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:bg, border:`1px solid ${border}`, borderRadius:9999, padding:'3px 9px' }}>
+      <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:9.5, color, fontWeight:600, whiteSpace:'nowrap' }}>{label}</span>
+    </div>
+  );
+};
+
+// Sparkline SVG for historical wind
+const Sparkline = ({ data, color, width=90, height=28, showYAxis=false }) => {
+  const max = Math.max(...data.map(d => d.spd), 1);
+  const yAxisW = showYAxis ? 24 : 0;
+  const chartW = width - yAxisW;
+  const pts = data.map((d, i) => {
+    const x = yAxisW + (i / (data.length - 1)) * chartW;
+    const y = height - (d.spd / max) * (height - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
+  const area = `${yAxisW},${height} ` + pts + ` ${width},${height}`;
+  // Y-axis ticks: min, mid, max
+  const minSpd = Math.min(...data.map(d => d.spd));
+  const midSpd = Math.round((minSpd + max) / 2);
+  const yTicks = [max, midSpd, minSpd];
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow:'visible' }}>
+      <defs>
+        <linearGradient id={`sg-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
+        </linearGradient>
+      </defs>
+      {/* Y-axis labels + gridlines */}
+      {showYAxis && yTicks.map((spd, i) => {
+        const y = height - (spd / max) * (height - 4) - 2;
+        return (
+          <g key={i}>
+            <line x1={yAxisW} y1={y} x2={width} y2={y} stroke={`${color}18`} strokeWidth="1" strokeDasharray="2 3"/>
+            <text x={yAxisW - 4} y={y + 3} textAnchor="end" fontSize="7" fontFamily="JetBrains Mono,monospace" fill={`${color}80`}>{spd}</text>
+          </g>
+        );
+      })}
+      <polygon points={area} fill={`url(#sg-${color.replace('#','')})`}/>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {/* Last point dot */}
+      {(() => {
+        const last = data[data.length - 1];
+        const x = width;
+        const y = height - (last.spd / max) * (height - 4) - 2;
+        return <circle cx={x} cy={y} r="2.5" fill={color}/>;
+      })()}
+    </svg>
+  );
+};
+
+// Live station card
+const StationCard = ({ station, t, expanded, onToggle }) => {
+  const wc = windColor(station.spd);
+  const isLight = _activeThemeId === 'solar';
+  return (
+    <div style={{ borderRadius:8, border:`1px solid ${expanded ? wc.border : t.cardBorder}`, background: expanded ? (isLight ? '#fff' : t.cardBg) : t.cardBg, overflow:'hidden', transition:'border-color 200ms', cursor:'pointer' }} onClick={onToggle}>
+      {/* Main row */}
+      <div style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10 }}>
+        {/* Status dot */}
+        <div style={{ width:7, height:7, borderRadius:'50%', background:t.statusGreen, boxShadow:`0 0 6px ${t.statusGreen}88`, flexShrink:0 }}/>
+        {/* Name + location */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:600, fontSize:12, color:t.textPrimary, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{station.name}</div>
+          <div style={{ fontSize:9, color:t.textMuted, fontFamily:'Inter,sans-serif', marginTop:1 }}>{station.location}</div>
+        </div>
+        {/* Current speed + dir */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+          <WindArrow deg={station.dir} kts={station.spd} size={16} color={wc.color}/>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:2 }}>
+              <Mono size={16} color={wc.color} weight={700}>{station.spd}</Mono>
+              <span style={{ fontFamily:'JetBrains Mono,monospace', fontSize:9, color:t.textMuted }}>kts</span>
+            </div>
+            <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:9, color:t.textMuted }}>g{station.gust}</div>
+          </div>
+
+        </div>
+      </div>
+      {/* Expanded: rich history + direction + analytics */}
+      {expanded && (() => {
+        const stats = computeWindStats(station);
+        const isLight = _activeThemeId === 'solar';
+
+        // Direction history sparkline data — map to {time, spd} shape reusing Sparkline
+        // We'll draw it manually as a separate SVG line
+        const dirHistory = station.history;
+        const dirMin = Math.min(...dirHistory.map(d => d.dir)) - 5;
+        const dirMax = Math.max(...dirHistory.map(d => d.dir)) + 5;
+        const CHART_W = 198;
+        const CHART_H = 44;
+        const Y_AXIS_W = 28;
+        const innerW = CHART_W - Y_AXIS_W;
+
+        const dirPts = dirHistory.map((d, i) => {
+          const x = Y_AXIS_W + (i / (dirHistory.length - 1)) * innerW;
+          const y = CHART_H - ((d.dir - dirMin) / (dirMax - dirMin)) * (CHART_H - 6) - 3;
+          return [x, y];
+        });
+        const dirPolyline = dirPts.map(([x,y]) => `${x},${y}`).join(' ');
+        const dirArea = `${Y_AXIS_W},${CHART_H} ` + dirPolyline + ` ${CHART_W},${CHART_H}`;
+
+        // Accent for direction: slightly different hue to distinguish from speed
+        const dirColor = isLight ? '#8B44CC' : '#B47EFF';
+        const dirGradId = `dg-${station.id}`;
+
+        // Gust factor label
+        const gustFactorLabel = stats ? (stats.gustFactor > 30 ? 'Puffy' : stats.gustFactor > 15 ? 'Moderate' : 'Smooth') : '–';
+
+        return (
+          <div style={{ borderTop:`1px solid ${t.divider}` }}>
+
+            {/* ── TREND BADGES ── */}
+            <div style={{ padding:'10px 12px 0', display:'flex', gap:5, flexWrap:'wrap' }}>
+              {stats && <SpeedTrendBadge stats={stats} t={t}/>}
+              {stats && <DirTrendBadge stats={stats} t={t}/>}
+            </div>
+
+            {/* ── DUAL CHART ROW ── */}
+            <div style={{ padding:'10px 12px 0', display:'flex', gap:10, alignItems:'flex-start' }}>
+
+              {/* Left: Speed history sparkline */}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                  <Label color={t.textMuted}>6-hour speed</Label>
+                  <span style={{ fontSize:9, fontFamily:'JetBrains Mono,monospace', color:t.textMuted }}>updated {station.updated}</span>
+                </div>
+                <Sparkline data={station.history} color={wc.color} width={CHART_W} height={CHART_H} showYAxis={true}/>
+                <div style={{ display:'flex', justifyContent:'space-between', marginTop:3, paddingLeft: Y_AXIS_W }}>
+                  {station.history.map((h, i) => (
+                    <div key={i} style={{ fontSize:7.5, color: i === station.history.length - 1 ? t.accent : t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>
+                      {h.time.slice(0,2)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right: Direction polar compass trail */}
+              <div style={{ flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', gap:3, width:100 }}>
+                <Label color={t.textMuted}>Direction</Label>
+                <DirPolarTrail station={station} wc={wc} t={t} size={84}/>
+                <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:9, color:t.textSecondary, textAlign:'center', lineHeight:1.4 }}>
+                  <span style={{ color:t.textPrimary, fontWeight:600 }}>{station.dir}°</span>
+                  {' '}
+                  <span style={{ color:t.textMuted }}>{
+                    station.dir >= 337.5 || station.dir < 22.5 ? 'N' :
+                    station.dir < 67.5 ? 'NE' : station.dir < 112.5 ? 'E' :
+                    station.dir < 157.5 ? 'SE' : station.dir < 202.5 ? 'S' :
+                    station.dir < 247.5 ? 'SW' : station.dir < 292.5 ? 'W' : 'NW'
+                  }</span>
+                </div>
+                {stats && (
+                  <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:8, color:dirColor, whiteSpace:'nowrap', textAlign:'center' }}>
+                    ±{Math.round(stats.oscRange / 2)}° last hr
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── DIRECTION HISTORY LINE ── */}
+            <div style={{ padding:'10px 12px 0' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                <Label color={t.textMuted}>6-hour direction</Label>
+              </div>
+              <svg width={CHART_W} height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} style={{ overflow:'visible' }}>
+                <defs>
+                  <linearGradient id={dirGradId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={dirColor} stopOpacity="0.25"/>
+                    <stop offset="100%" stopColor={dirColor} stopOpacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                {/* Y-axis ticks */}
+                {[dirMax - 5, Math.round((dirMin + dirMax) / 2), dirMin + 5].map((deg, i) => {
+                  const y = CHART_H - ((deg - dirMin) / (dirMax - dirMin)) * (CHART_H - 6) - 3;
+                  return (
+                    <g key={i}>
+                      <line x1={Y_AXIS_W} y1={y} x2={CHART_W} y2={y}
+                        stroke={`${dirColor}18`} strokeWidth="1" strokeDasharray="2 3"/>
+                      <text x={Y_AXIS_W - 4} y={y + 3} textAnchor="end"
+                        fontSize="7" fontFamily="JetBrains Mono,monospace" fill={`${dirColor}80`}>{Math.round(deg)}°</text>
+                    </g>
+                  );
+                })}
+                <polygon points={dirArea} fill={`url(#${dirGradId})`}/>
+                <polyline points={dirPolyline} fill="none" stroke={dirColor}
+                  strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+                {/* Last dot */}
+                {(() => {
+                  const [lx, ly] = dirPts[dirPts.length - 1];
+                  return <circle cx={lx} cy={ly} r="2.5" fill={dirColor}/>;
+                })()}
+              </svg>
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:3, paddingLeft: Y_AXIS_W }}>
+                {dirHistory.map((h, i) => (
+                  <div key={i} style={{ fontSize:7.5, color: i === dirHistory.length - 1 ? t.accent : t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>
+                    {h.time.slice(0,2)}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── STATS ROW ── */}
+            <div style={{ display:'flex', gap:0, margin:'10px 0 0', borderTop:`1px solid ${t.divider}`, paddingTop:10, paddingBottom:12, paddingLeft:12, paddingRight:12 }}>
+              {[
+                { label:'Speed',    val:`${station.spd} kts`,  color: wc.color },
+                { label:'Gust',     val:`${station.gust} kts`, color: wc.color },
+                { label:'Osc',      val: stats ? `±${Math.round(stats.oscRange / 2)}°` : '–', color: dirColor },
+                { label:'G-Factor', val: stats ? `${Math.round(stats.gustFactor)}%` : '–',
+                  color: stats && stats.gustFactor > 30 ? (isLight ? '#C47000' : '#FFB300') : t.textPrimary,
+                  sub: gustFactorLabel },
+                { label:'Variab σ', val: stats ? `${stats.spdStdDev.toFixed(1)}` : '–', color: t.textPrimary, sub:'kts' },
+              ].map(({ label, val, color, sub }, i, arr) => (
+                <div key={label} style={{ flex:1, textAlign:'center', borderRight: i < arr.length - 1 ? `1px solid ${t.divider}` : 'none' }}>
+                  <Label color={t.textMuted}>{label}</Label>
+                  <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:10, color, marginTop:4, fontWeight:700, lineHeight:1 }}>{val}</div>
+                  {sub && <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:8, color:t.textMuted, marginTop:2 }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
+// ── SCREEN: MODEL GRID (Windy-style, now with Live tab) ───
+const ModelGridScreen = ({ onNav, t }) => {
+  const [tab, setTab] = useState('live'); // 'live' | 'forecast'
+  const [selectedHour, setSelectedHour] = useState(2);
+  const [expandedStation, setExpandedStation] = useState('buoy45007');
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = selectedHour * 52;
+  }, [tab]);
+
+  const CELL_W = 52;
+
+  return (
+    <div style={{ height:'100%', display:'flex', flexDirection:'column', background:t.pageBg, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'14px 14px 0', borderBottom:`1px solid ${t.headerBorder}`, background:t.headerBg, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+          <button onClick={() => onNav('dashboard')} aria-label="Back" style={{ background:'none', border:'none', cursor:'pointer', padding:4, marginLeft:-4, color:t.textSecondary, display:'flex', alignItems:'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:16, color:t.textPrimary }}>Wind Data</div>
+        </div>
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:0 }}>
+          {[['live','Live & Historical'],['forecast','Model Forecast']].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} style={{ flex:1, background:'none', border:'none', borderBottom: tab===id ? `2px solid ${t.accent}` : '2px solid transparent', padding:'7px 0', cursor:'pointer', fontFamily:'Inter,sans-serif', fontSize:11, fontWeight: tab===id ? 600 : 400, color: tab===id ? t.accent : t.textMuted, transition:'all 150ms', letterSpacing:'0.01em' }}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── LIVE TAB ── */}
+      {tab === 'live' && (
+        <div style={{ flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:8 }}>
+          {/* Summary bar */}
+          <div style={{ background:t.cardBg, border:`1px solid ${t.cardBorder}`, borderRadius:8, padding:'10px 12px', display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ width:7, height:7, borderRadius:'50%', background:t.statusGreen, boxShadow:`0 0 8px ${t.statusGreen}99`, flexShrink:0 }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, color:t.textPrimary, fontWeight:600, fontFamily:'Space Grotesk,sans-serif' }}>4 stations live</div>
+              <div style={{ fontSize:9, color:t.textMuted, marginTop:1 }}>Avg wind <span style={{ color:windColor(12).color, fontFamily:'JetBrains Mono,monospace', fontWeight:700 }}>12 kts</span> · Dir 254° · Last sync 17:54</div>
+            </div>
+            {/* Consensus arrow */}
+            <WindArrow deg={254} kts={12} size={22}/>
+          </div>
+
+          {/* Station cards */}
+          {LIVE_STATIONS.map(station => (
+            <StationCard key={station.id} station={station} t={t}
+              expanded={expandedStation === station.id}
+              onToggle={() => setExpandedStation(expandedStation === station.id ? null : station.id)}/>
+          ))}
+
+          <div style={{ fontSize:9, color:t.textMuted, textAlign:'center', padding:'6px 0 4px', fontFamily:'Inter,sans-serif' }}>
+            Sources: NDBC · NOAA ASOS · Updates every 6 min
+          </div>
+        </div>
+      )}
+
+      {/* ── FORECAST TAB ── */}
+      {tab === 'forecast' && <>
+        {/* Time header scroll */}
+        <div style={{ background:t.headerBg, borderBottom:`1px solid ${t.headerBorder}`, flexShrink:0 }}>
+          <div ref={scrollRef} style={{ overflowX:'auto', display:'flex' }}>
+            <div style={{ width:64, flexShrink:0 }}/>
+            {MODEL_GRID.hours.map((h, i) => (
+              <div key={i} onClick={() => setSelectedHour(i)} style={{ width:CELL_W, flexShrink:0, textAlign:'center', padding:'8px 0', cursor:'pointer', borderBottom: i===selectedHour ? `2px solid ${t.accent}` : '2px solid transparent', transition:'border-color 150ms' }}>
+                <div style={{ fontSize:9, fontFamily:'JetBrains Mono,monospace', color: i===selectedHour ? t.accent : t.textMuted, fontWeight: i===selectedHour ? 700 : 400 }}>{h}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid body */}
+        <div style={{ flex:1, overflowY:'auto', overflowX:'hidden' }}>
+          <div style={{ overflowX:'auto' }}>
+            <div style={{ position:'relative' }}>
+              {MODEL_GRID.rows.map((row) => (
+                <div key={row.name} style={{ display:'flex', borderBottom:`1px solid ${t.divider}` }}>
+                  <div style={{ width:64, flexShrink:0, padding:'0 10px', display:'flex', alignItems:'center', borderRight:`1px solid ${t.divider}`, background:t.headerBg }}>
+                    <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:10, color:t.textSecondary, fontWeight:600 }}>{row.name}</div>
+                  </div>
+                  {row.cells.map((cell, ci) => {
+                    const wc = windColor(cell.spd);
+                    const isSelected = ci === selectedHour;
+                    return (
+                      <div key={ci} onClick={() => setSelectedHour(ci)} style={{ width:CELL_W, flexShrink:0, padding:'6px 2px', textAlign:'center', background: isSelected ? t.accentSoft : 'transparent', borderLeft: isSelected ? `1px solid ${t.accent}44` : `1px solid ${t.divider}`, cursor:'pointer', transition:'background 150ms' }}>
+                        <div style={{ display:'flex', justifyContent:'center', marginBottom:2 }}>
+                          <WindArrow deg={cell.dir} kts={cell.spd} size={14} color={wc.color}/>
+                        </div>
+                        <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:12, fontWeight:700, color:wc.color, lineHeight:1 }}>{cell.spd}</div>
+                        <div style={{ fontFamily:'JetBrains Mono,monospace', fontSize:8, color:t.textMuted, marginTop:1 }}>g{Math.round(cell.spd * 1.25)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom legend */}
+        <div style={{ background:t.headerBg, borderTop:`1px solid ${t.headerBorder}`, padding:'8px 14px', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ fontSize:10, color:t.textMuted }}>
+              <span style={{ color:t.accent, fontFamily:'JetBrains Mono,monospace', fontWeight:600 }}>{MODEL_GRID.hours[selectedHour]}</span>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              {[['64FFDA','≤8'],['00E5FF','9–15'],['FFB300','16–22'],['FF5252','23+']].map(([c,l]) => (
+                <div key={c} style={{ display:'flex', alignItems:'center', gap:3 }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', background:`#${c}` }}/>
+                  <span style={{ fontSize:8, color:t.textMuted }}>{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+};
+
+// ── SCREEN: BRIEFING ──────────────────────────────────────
+const BriefingScreen = ({ onNav, t }) => (
+  <div style={{ height:'100%', overflowY:'auto', paddingBottom:24 }}>
+    <div style={{ padding:'14px 14px 10px', borderBottom:`1px solid ${t.headerBorder}`, display:'flex', alignItems:'center', gap:10, background:t.headerBg }}>
+      <button onClick={() => onNav('dashboard')} style={{ background:'none', border:'none', cursor:'pointer', padding:4, color:t.textSecondary }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div>
+        <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:16, color:t.textPrimary }}>Race Briefing</div>
+        <div style={{ fontSize:10, color:t.textMuted }}>Wed Apr 30 · Generated 17:52</div>
+      </div>
+      <div style={{ marginLeft:'auto', background:t.accentSoft, border:`1px solid ${t.cardBorder}`, borderRadius:9999, padding:'3px 10px', fontSize:10, color:t.accent, fontWeight:600 }}>AI · High confidence</div>
+    </div>
+    <div style={{ padding:14, display:'flex', flexDirection:'column', gap:10 }}>
+      {[
+        { label:'Overview', content:"We're seeing a steady WSW flow at 12–14 kts building through race time. A 15° veer toward WNW expected between 19:30 and 20:00." },
+        { label:'Start Strategy', content:"Port tack is favored off the line. The pin end is advantaged by ~8–10°. Watch for the veer before committing to a side." },
+        { label:'Upwind Tactics', content:"Sail port tack first to get to the left side. When the veer hits, tack to starboard for a lifted approach to the weather mark." },
+        { label:'Rig Recommendation', content:"Full main and jib #1 for the start. Gusts to 17 kts — reef line rigged. GFS shows 19 kts by 20:00, reef before second upwind." },
+        { label:'Watch For', content:"Models diverge significantly after 20:00. GFS shows a potential squall line by 21:00 that NOAA does not. Watch the western horizon." },
+      ].map(({ label, content }) => (
+        <Card key={label} t={t}>
+          <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:600, fontSize:13, color:t.accent, marginBottom:6 }}>{label}</div>
+          <div style={{ fontSize:13, color:t.textSecondary, lineHeight:1.6 }}>{content}</div>
+        </Card>
+      ))}
+      <div style={{ fontSize:10, color:t.textMuted, textAlign:'center', padding:'4px 0 8px' }}>Sources: NOAA · GFS · NAM · Buoy 45007 · 17:52 CDT</div>
+    </div>
+  </div>
+);
+
+// ── SCREEN: SETTINGS ──────────────────────────────────────
+const SettingsScreen = ({ onMenu, t }) => {
+  const [threshold, setThreshold] = useState(18);
+  return (
+    <div style={{ height:'100%', overflowY:'auto', paddingBottom:24 }}>
+      <div style={{ padding:'14px 14px 10px', borderBottom:`1px solid ${t.headerBorder}`, background:t.headerBg, display:'flex', alignItems:'center', gap:8 }}>
+        <button onClick={onMenu} aria-label="Menu" style={{ background:'none', border:'none', cursor:'pointer', padding:4, marginLeft:-4, color:t.textSecondary, display:'flex', alignItems:'center' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+        <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:16, color:t.textPrimary }}>Settings</div>
+      </div>
+      <div style={{ padding:14, display:'flex', flexDirection:'column', gap:12 }}>
+        <Card t={t}>
+          <Label color={t.textSecondary}>Race Configuration</Label>
+          <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:12 }}>
+            {[['Race day','Wednesday'],['Start time','19:00 CDT'],['Home port','Belmont Harbor'],['Fleet','PHRF Division A']].map(([l,v]) => (
+              <div key={l} style={{ display:'flex', justifyContent:'space-between' }}>
+                <span style={{ fontSize:13, color:t.textSecondary }}>{l}</span>
+                <span style={{ fontSize:13, color:t.textPrimary, fontWeight:500 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card t={t}>
+          <Label color={t.textSecondary}>Wind Alert Threshold</Label>
+          <div style={{ marginTop:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+              <span style={{ fontSize:13, color:t.textSecondary }}>Alert above</span>
+              <Mono size={13} color="#FFB300">{threshold} kts</Mono>
+            </div>
+            <input type="range" min="10" max="30" value={threshold} onChange={e=>setThreshold(e.target.value)} style={{ width:'100%', accentColor:t.accent }}/>
+            <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+              <span style={{ fontSize:9, color:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>10 kts</span>
+              <span style={{ fontSize:9, color:t.textMuted, fontFamily:'JetBrains Mono,monospace' }}>30 kts</span>
+            </div>
+          </div>
+        </Card>
+        <Card t={t}>
+          <Label color={t.textSecondary}>Data Sources</Label>
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:10 }}>
+            {[['NOAA Marine Forecast',true],['GFS Model',true],['NAM Model',true],['HRRR (hourly)',true],['Buoy 45007 (Chicago)',true],['Lake Michigan Radar',false]].map(([name,enabled]) => (
+              <div key={name} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:13, color:enabled?t.textSecondary:t.textMuted }}>{name}</span>
+                <div style={{ width:36, height:20, borderRadius:10, background:enabled?t.accent:t.cardBgEl, position:'relative', transition:'background 200ms' }}>
+                  <div style={{ position:'absolute', top:2, left:enabled?18:2, width:16, height:16, borderRadius:'50%', background:enabled?t.pageBg:t.textMuted, transition:'left 200ms' }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ── NAV BAR ───────────────────────────────────────────────
+const HamburgerDrawer = ({ open, active, onNav, onClose, t }) => {
+  const items = [
+    { id:'dashboard', label:'Dashboard', icon: <><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></> },
+    { id:'settings',  label:'Settings',  icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></> },
+  ];
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none', transition:'opacity 200ms ease-out', zIndex:90 }}/>
+      <div style={{ position:'absolute', top:0, bottom:0, left:0, width:268, background:t.navBg, borderRight:`1px solid ${t.headerBorder}`, transform: open ? 'translateX(0)' : 'translateX(-100%)', transition:'transform 250ms ease-out', zIndex:100, display:'flex', flexDirection:'column', boxShadow: open ? '4px 0 24px rgba(0,0,0,0.5)' : 'none' }}>
+        <div style={{ padding:'18px 16px 16px', borderBottom:`1px solid ${t.headerBorder}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <img src="../../assets/logo-icon.svg" width={28} height={28} alt="L"/>
+            <div>
+              <div style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:700, fontSize:16, color:t.textPrimary, letterSpacing:'-0.02em' }}>layline</div>
+              <div style={{ fontSize:9, color:t.textMuted, letterSpacing:'0.06em', textTransform:'uppercase' }}>Wed Night · Navy Pier</div>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', padding:4, color:t.textMuted, display:'flex' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div style={{ padding:'10px 8px', flex:1 }}>
+          {items.map(item => {
+            const isActive = active === item.id;
+            const c = isActive ? t.accent : t.textSecondary;
+            return (
+              <button key={item.id} onClick={() => { onNav(item.id); onClose(); }}
+                style={{ width:'100%', background: isActive ? t.accentSoft : 'transparent', border:`1px solid ${isActive ? t.cardBorderEl : 'transparent'}`, borderRadius:6, padding:'12px 12px', margin:'2px 0', cursor:'pointer', display:'flex', alignItems:'center', gap:12, color:c, transition:'all 150ms', textAlign:'left' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                <span style={{ fontFamily:'Inter,sans-serif', fontSize:14, fontWeight: isActive ? 600 : 500 }}>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ padding:'14px 16px', borderTop:`1px solid ${t.headerBorder}` }}>
+          <div style={{ fontSize:9, color:t.textMuted, fontFamily:'JetBrains Mono,monospace', letterSpacing:'0.08em', textTransform:'uppercase' }}>v0.4 · build 2026.05</div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ── INLINE TWEAKS ─────────────────────────────────────────
+const useTweaksInline = (defaults) => {
+  const [tweaks, setTweaksState] = useState(defaults);
+  const setTweak = (key, val) => {
+    setTweaksState(prev => {
+      const next = { ...prev, [key]: val };
+      window.parent.postMessage({ type: '__edit_mode_set_keys', edits: next }, '*');
+      return next;
+    });
+  };
+  return { tweaks, setTweak };
+};
+
+const TweaksPanelInline = ({ show, onClose, children }) => {
+  if (!show) return null;
+  return (
+    <div style={{ position:'fixed', right:12, bottom:80, zIndex:9999, width:240, background:'rgba(15,25,38,0.97)', border:'1px solid rgba(0,229,255,0.25)', borderRadius:12, boxShadow:'0 8px 32px rgba(0,0,0,0.6)', padding:14, backdropFilter:'blur(16px)' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <span style={{ fontFamily:'Space Grotesk,sans-serif', fontWeight:600, fontSize:13, color:'#E8F4F8' }}>Tweaks</span>
+        <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#5580a0', fontSize:16, lineHeight:1 }}>×</button>
+      </div>
+      {children}
+    </div>
+  );
+};
+
+// ── APP + TWEAKS ──────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "solar"
+}/*EDITMODE-END*/;
+
+const App = () => {
+  const [screen, setScreen] = useState('dashboard');
+  const [showTweaks, setShowTweaks] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { tweaks, setTweak } = useTweaksInline(TWEAK_DEFAULTS);
+  const t = THEMES[tweaks.theme] || THEMES.deepwater;
+  _activeThemeId = tweaks.theme; // set synchronously so windColor sees correct theme on this render
+
+  useEffect(() => {
+    _activeThemeId = tweaks.theme;
+    document.body.className = tweaks.theme === 'solar' ? 'solar-theme' : tweaks.theme === 'nightvision' ? 'nightvision-theme' : '';
+    document.getElementById('root').style.boxShadow = tweaks.theme === 'solar' ? '0 0 80px rgba(0,0,0,0.3)' : '0 0 80px rgba(0,0,0,0.8)';
+  }, [tweaks.theme]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setShowTweaks(true);
+      if (e.data?.type === '__deactivate_edit_mode') setShowTweaks(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const screens = { dashboard: DashboardScreen, windrose: WindRoseScreen, models: ModelGridScreen, briefing: BriefingScreen, settings: SettingsScreen };
+  const Screen = screens[screen];
+
+  return (
+    <div style={{ width:'100%', height:'100%', position:'relative', background:t.pageBg, color:t.textPrimary, overflow:'hidden' }}>
+      <Screen onNav={setScreen} onMenu={() => setMenuOpen(true)} t={t}/>
+      <HamburgerDrawer open={menuOpen} active={screen} onNav={setScreen} onClose={() => setMenuOpen(false)} t={t}/>
+      <TweaksPanelInline show={showTweaks} onClose={() => { setShowTweaks(false); window.parent.postMessage({ type:'__edit_mode_dismissed' }, '*'); }}>
+        <div style={{ marginBottom:8 }}>
+          <div style={{ fontSize:9, letterSpacing:'0.1em', textTransform:'uppercase', color:'#5580a0', marginBottom:8 }}>Color Theme</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {[['solar','☀️ Solar — High Contrast'],['nightvision','🔴 Night Vision']].map(([val, label]) => (
+              <button key={val} onClick={() => setTweak('theme', val)} style={{ background: tweaks.theme===val ? 'rgba(0,229,255,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${tweaks.theme===val ? 'rgba(0,229,255,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius:6, padding:'8px 10px', color: tweaks.theme===val ? '#00E5FF' : '#7aa0bc', fontSize:12, fontFamily:'Inter,sans-serif', cursor:'pointer', textAlign:'left', transition:'all 150ms' }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </TweaksPanelInline>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

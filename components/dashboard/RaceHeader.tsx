@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 interface RaceHeaderProps {
   raceTime: Date
@@ -8,9 +9,10 @@ interface RaceHeaderProps {
     speed: number
     direction: number
   }
+  onOpenMenu?: () => void
 }
 
-export default function RaceHeader({ raceTime, currentWind }: RaceHeaderProps) {
+export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHeaderProps) {
   const [timeUntil, setTimeUntil] = useState('')
 
   useEffect(() => {
@@ -49,16 +51,46 @@ export default function RaceHeader({ raceTime, currentWind }: RaceHeaderProps) {
       }}
     >
       <div className="flex items-center justify-between">
-        <div>
-          <h1
-            className="text-lg font-semibold"
+        {/* Hamburger button */}
+        {onOpenMenu && (
+          <button
+            onClick={onOpenMenu}
+            aria-label="Menu"
             style={{
-              fontFamily: 'var(--font-display)',
-              color: 'var(--text-primary)'
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              marginRight: '12px',
+              color: 'var(--text-primary)',
             }}
           >
-            Layline
-          </h1>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        )}
+
+        <div>
+          <Link
+            href="/"
+            style={{
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <h1
+              className="text-lg font-semibold"
+              style={{
+                fontFamily: 'var(--font-display)',
+                color: 'var(--text-primary)'
+              }}
+            >
+              Layline
+            </h1>
+          </Link>
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
             {timeUntil}
           </div>
