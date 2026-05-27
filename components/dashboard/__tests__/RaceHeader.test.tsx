@@ -66,9 +66,9 @@ describe('RaceHeader', () => {
     expect(screen.getByText(/2h 0m until race/i)).toBeInTheDocument()
   })
 
-  it('displays current wind speed', () => {
+  it('displays current wind speed with one decimal', () => {
     render(<RaceHeader {...defaultProps} />)
 
-    expect(screen.getByText(/12 kts/i)).toBeInTheDocument()
+    expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()
   })
 })

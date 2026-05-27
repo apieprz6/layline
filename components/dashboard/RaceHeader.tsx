@@ -94,7 +94,7 @@ export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHe
             WIND NOW
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)', fontWeight: 500 }}>
-            {currentWind.speed} kts
+            {currentWind.speed.toFixed(1)} kts
           </div>
         </div>
         <div

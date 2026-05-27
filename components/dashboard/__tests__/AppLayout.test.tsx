@@ -37,8 +37,8 @@ describe('AppLayout', () => {
     expect(logo).toBeInTheDocument()
     expect(logo).toHaveAttribute('src', '/logo-icon.svg')
 
-    // Check wind display
-    expect(screen.getByText(/12 kts/i)).toBeInTheDocument()
+    // Check wind display with one decimal
+    expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()
   })
 
   it('renders children content', () => {
