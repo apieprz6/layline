@@ -441,6 +441,7 @@ export default function PolarChart({
             height: "auto",
             display: "block",
             touchAction: "none",
+            userSelect: "none",
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
