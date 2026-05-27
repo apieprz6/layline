@@ -6,7 +6,6 @@
 import type {
   ForecastLocation,
   WeatherModelResult,
-  WeatherModelCacheEntry,
   ForecastPoint,
   ModelId,
   DataSourceStatus,

@@ -4,7 +4,6 @@
  */
 
 import { COLYC_RACE_CIRCLE, DEFAULT_FORECAST_LOCATION } from '@/lib/config/locations'
-import type { ForecastLocation } from '@/types'
 
 describe('Location Configuration', () => {
   describe('COLYC_RACE_CIRCLE', () => {

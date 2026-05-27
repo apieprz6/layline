@@ -15,7 +15,6 @@ global.fetch = jest.fn()
 const modelScenarios = [
   {
     modelId: 'gfs' as ModelId,
-    name: 'GFS',
     apiName: 'gfs_global',
     updateFrequencyHours: 6,
     stalenessBufferMinutes: 120,
@@ -43,8 +42,8 @@ const modelScenarios = [
 ]
 
 describe.each(modelScenarios)(
-  'Weather model: $name',
-  ({ modelId, name, apiName, staleThresholdMinutes, fetchFunction }) => {
+  'Weather model: $apiName',
+  ({ modelId, apiName, staleThresholdMinutes, fetchFunction }) => {
     beforeEach(() => {
       // Reset cache before each test
       setCacheAdapter(new InMemoryWeatherCache())
@@ -72,7 +71,7 @@ describe.each(modelScenarios)(
         })
 
         // First call populates cache
-        const firstResult = await fetchFunction(DEFAULT_FORECAST_LOCATION)
+        await fetchFunction(DEFAULT_FORECAST_LOCATION)
         expect(global.fetch).toHaveBeenCalledTimes(1)
 
         // Second call should return cached data (no additional API call)

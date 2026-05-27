@@ -76,14 +76,6 @@ function metersPerSecondToKnots(ms: number): number {
   return ms * 1.94384
 }
 
-function celsiusToFahrenheit(c: number): number {
-  return (c * 9) / 5 + 32
-}
-
-function hPaToMillibars(hPa: number): number {
-  return hPa // hPa and mb are the same unit
-}
-
 // Removed parseNDBCResponse and apiResponseToBuoyData - now using history parser as single source of truth
 
 /**
@@ -135,9 +127,7 @@ function extractLatestFromHistory(historyData: BuoyHistoryData): BuoyDataResult 
  * Fetch CHII2 buoy data from NDBC
  * Now uses history endpoint as single source of truth
  */
-export async function fetchCHII2(options?: {
-  bypassCache?: boolean
-}): Promise<BuoyDataResult> {
+export async function fetchCHII2(): Promise<BuoyDataResult> {
   const historyData = await fetchCHII2History()
   return extractLatestFromHistory(historyData)
 }
@@ -162,9 +152,7 @@ function isPurdueSeason(): boolean {
  * 2. Fall back to NDBC station 45198 history
  * 3. Handle seasonal offline gracefully (May-October operational)
  */
-export async function fetchPurdueBuoy(options?: {
-  bypassCache?: boolean
-}): Promise<BuoyDataResult> {
+export async function fetchPurdueBuoy(): Promise<BuoyDataResult> {
   const historyData = await fetchPurdueBuoyHistory()
 
   // Check if in operational season

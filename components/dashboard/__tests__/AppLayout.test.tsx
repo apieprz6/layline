@@ -52,7 +52,7 @@ describe('AppLayout', () => {
     const { container } = render(<AppLayout {...defaultProps} />)
 
     // Menu should be closed initially (translateX(-100%))
-    let nav = container.querySelector('nav')
+    const nav = container.querySelector('nav')
     expect(nav).toHaveStyle({ transform: 'translateX(-100%)' })
 
     // Click hamburger button (not close menu button)
@@ -60,8 +60,8 @@ describe('AppLayout', () => {
     await user.click(hamburgerButton)
 
     // Menu should be open (translateX(0))
-    nav = screen.getByRole('navigation')
-    expect(nav).toHaveStyle({ transform: 'translateX(0)' })
+    const openedNav = screen.getByRole('navigation')
+    expect(openedNav).toHaveStyle({ transform: 'translateX(0)' })
   })
 
   it('closes menu when HamburgerMenu triggers onClose', async () => {
@@ -73,8 +73,8 @@ describe('AppLayout', () => {
     await user.click(hamburgerButton)
 
     // Menu should be open
-    let nav = screen.getByRole('navigation')
-    expect(nav).toHaveStyle({ transform: 'translateX(0)' })
+    const openNav = screen.getByRole('navigation')
+    expect(openNav).toHaveStyle({ transform: 'translateX(0)' })
 
     // Click overlay to close
     const overlay = screen.getByTestId('menu-overlay')
