@@ -15,6 +15,7 @@ interface StationPageClientProps {
   buoyId: string;
   stationName: string;
   data: WindDataPoint[];
+  serverTime: number;
 }
 
 const TOTAL_HOURS = 72;
@@ -24,14 +25,14 @@ export default function StationPageClient({
   buoyId,
   stationName,
   data,
+  serverTime,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>("1h");
   const [hoverPoint, setHoverPoint] = useState<WindDataPointWithOffset | null>(null);
   const [nowOffset, setNowOffset] = useState<number>(0); // Minutes ago from current time (0 = live)
 
-  // Calculate reference time once per render
-  const [currentTime] = useState(() => Date.now());
-  const now = useMemo(() => new Date(currentTime), [currentTime]);
+  // Use server-provided time to avoid hydration mismatches
+  const now = useMemo(() => new Date(serverTime), [serverTime]);
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
   const dataWithOffset: WindDataPointWithOffset[] = useMemo(
@@ -59,12 +60,12 @@ export default function StationPageClient({
 
   // Calculate reference time and window start for display
   const referenceTime = useMemo(
-    () => new Date(currentTime - nowOffset * 60 * 1000),
-    [currentTime, nowOffset],
+    () => new Date(serverTime - nowOffset * 60 * 1000),
+    [serverTime, nowOffset],
   );
   const windowStart = useMemo(
-    () => new Date(currentTime - (nowOffset + timeWindowMinutes) * 60 * 1000),
-    [currentTime, nowOffset, timeWindowMinutes],
+    () => new Date(serverTime - (nowOffset + timeWindowMinutes) * 60 * 1000),
+    [serverTime, nowOffset, timeWindowMinutes],
   );
 
   // Calculate display point: use hoverPoint if set, otherwise most recent data point
@@ -99,14 +100,14 @@ export default function StationPageClient({
   const latestDataTime = useMemo(() => {
     if (!dataWithOffset || dataWithOffset.length === 0) return new Date();
     const latestPoint = dataWithOffset.find((p) => p.minsAgo === 0) || dataWithOffset[0];
-    return new Date(currentTime - latestPoint.minsAgo * 60 * 1000);
-  }, [dataWithOffset, currentTime]);
+    return new Date(serverTime - latestPoint.minsAgo * 60 * 1000);
+  }, [dataWithOffset, serverTime]);
 
   // For demo: use current time minus 12 seconds as lastFetchTime
   // TODO: This should come from the API response (fetchedAt field)
   const lastFetchTime = useMemo(
-    () => new Date(currentTime - 12 * 1000),
-    [currentTime],
+    () => new Date(serverTime - 12 * 1000),
+    [serverTime],
   );
 
   return (
