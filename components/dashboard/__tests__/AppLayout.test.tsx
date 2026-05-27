@@ -32,8 +32,12 @@ describe('AppLayout', () => {
   it('renders RaceHeader with correct props', () => {
     render(<AppLayout {...defaultProps} />)
 
-    // Check header content
-    expect(screen.getByRole('heading', { name: /layline/i })).toBeInTheDocument()
+    // Check header content - logo should be visible
+    const logo = screen.getByAltText('L')
+    expect(logo).toBeInTheDocument()
+    expect(logo).toHaveAttribute('src', '/logo-icon.svg')
+
+    // Check wind display
     expect(screen.getByText(/12 kts/i)).toBeInTheDocument()
   })
 

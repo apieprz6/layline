@@ -47,11 +47,16 @@ describe('RaceHeader', () => {
     expect(mockOnOpenMenu).toHaveBeenCalledTimes(1)
   })
 
-  it('renders Layline text as clickable link to root', () => {
+  it('renders layline logo and title', () => {
     render(<RaceHeader {...defaultProps} />)
 
-    const laylineLink = screen.getByRole('link', { name: /layline/i })
-    expect(laylineLink).toHaveAttribute('href', '/')
+    // Check for logo image
+    const logo = screen.getByAltText('L')
+    expect(logo).toBeInTheDocument()
+    expect(logo).toHaveAttribute('src', '/logo-icon.svg')
+
+    // Check for layline text
+    expect(screen.getByText('layline')).toBeInTheDocument()
   })
 
   it('displays race countdown', () => {
