@@ -44,7 +44,7 @@ export default function StationRow({
     if (onClick) {
       onClick()
     } else {
-      router.push(`/dashboard/station/${buoyId}`)
+      router.push(`/station/${buoyId}`)
     }
   }
 
