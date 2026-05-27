@@ -81,7 +81,7 @@ describe('AppLayout', () => {
     await user.click(overlay)
 
     // Menu should be closed (translateX(-100%))
-    nav = container.querySelector('nav')
-    expect(nav).toHaveStyle({ transform: 'translateX(-100%)' })
+    const closedNav = container.querySelector('nav')
+    expect(closedNav).toHaveStyle({ transform: 'translateX(-100%)' })
   })
 })

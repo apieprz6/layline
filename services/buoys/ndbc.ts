@@ -1,21 +1,16 @@
 import type {
   BuoyData,
   BuoyDataResult,
-  BuoyApiResponse,
-  BuoyCacheEntry,
   DataSourceStatus,
   BuoyHistoryData,
   WindDataPoint,
 } from '@/types'
 
-// In-memory cache
-const cache: Map<string, BuoyCacheEntry> = new Map()
-
-// Status thresholds (in milliseconds)
+// Status thresholds (how to label data freshness)
 const STATUS_THRESHOLDS = {
-  ONLINE: 15 * 60 * 1000, // 15 minutes (NDBC updates every 10 minutes)
-  RECENT: 30 * 60 * 1000, // 30 minutes
-  STALE: 120 * 60 * 1000, // 120 minutes
+  ONLINE: 30 * 60 * 1000, // 30 minutes (NDBC updates every 10 minutes)
+  RECENT: 60 * 60 * 1000, // 60 minutes
+  STALE: 150 * 60 * 1000, // 150 minutes (2.5 hours)
 }
 
 // Buoy station configurations
@@ -44,23 +39,24 @@ const BUOY_CONFIGS = {
 }
 
 /**
- * Calculate data source status based on staleness
+ * Calculate data source status based on data timestamp staleness
+ * Status should reflect how old the actual measurement is, not when we fetched it
  */
 function calculateStatus(
-  fetchedAt: number,
-  hasData: boolean,
+  dataTimestamp: string | undefined,
   hasError: boolean
 ): DataSourceStatus {
-  if (hasError && !hasData) {
+  if (hasError && !dataTimestamp) {
     return 'error'
   }
 
-  if (!hasData) {
+  if (!dataTimestamp) {
     return 'offline'
   }
 
   const now = Date.now()
-  const ageMs = now - fetchedAt
+  const dataTime = new Date(dataTimestamp).getTime()
+  const ageMs = now - dataTime
 
   if (ageMs < STATUS_THRESHOLDS.ONLINE) {
     return 'online'
@@ -88,156 +84,65 @@ function hPaToMillibars(hPa: number): number {
   return hPa // hPa and mb are the same unit
 }
 
+// Removed parseNDBCResponse and apiResponseToBuoyData - now using history parser as single source of truth
+
 /**
- * Parse NDBC real-time text format
- * Format: space-separated values, first two lines are headers
- * Missing data indicated by 'MM' or '999' depending on field
+ * Extract latest BuoyData from BuoyHistoryData
+ * Converts the most recent wind data point to full BuoyData format
  */
-function parseNDBCResponse(
-  text: string,
-  stationId: string
-): BuoyApiResponse | null {
-  const lines = text.trim().split('\n')
-
-  if (lines.length < 3) {
-    throw new Error('Invalid NDBC response: insufficient lines')
-  }
-
-  // Line 0: field names
-  // Line 1: field units
-  // Line 2+: data rows (most recent first)
-  const headers = lines[0].split(/\s+/)
-  const dataLine = lines[2].split(/\s+/)
-
-  if (dataLine.length < headers.length) {
-    throw new Error('Invalid NDBC response: data line too short')
-  }
-
-  // Build a map of field name to value
-  const data: Record<string, string> = {}
-  headers.forEach((header, index) => {
-    data[header] = dataLine[index]
-  })
-
-  // Extract timestamp (required fields)
-  const year = data['#YY'] || data['YY']
-  const month = data['MM']
-  const day = data['DD']
-  const hour = data['hh']
-  const minute = data['mm']
-
-  if (!year || !month || !day || !hour || !minute) {
-    throw new Error('Invalid NDBC response: missing timestamp fields')
-  }
-
-  // Construct ISO timestamp
-  const timestamp = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00Z`
-
-  // Parse wind direction (required, degrees)
-  const windDirectionRaw = data['WDIR']
-  if (!windDirectionRaw || windDirectionRaw === 'MM' || windDirectionRaw === '999') {
-    throw new Error('Invalid NDBC response: missing wind direction')
-  }
-  const windDirection = parseFloat(windDirectionRaw)
-
-  // Parse wind speed (required, m/s)
-  const windSpeedRaw = data['WSPD']
-  if (!windSpeedRaw || windSpeedRaw === 'MM' || windSpeedRaw === '99.0') {
-    throw new Error('Invalid NDBC response: missing wind speed')
-  }
-  const windSpeed = parseFloat(windSpeedRaw)
-
-  // Parse optional fields (lenient - return undefined if missing)
-  const parseOptional = (field: string, invalidValues: string[]): number | undefined => {
-    const value = data[field]
-    if (!value || invalidValues.includes(value)) {
-      return undefined
+function extractLatestFromHistory(historyData: BuoyHistoryData): BuoyDataResult {
+  if (!historyData.history || historyData.history.length === 0) {
+    return {
+      data: null,
+      status: historyData.status,
+      fetchedAt: historyData.fetchedAt,
+      error: historyData.error || 'No data available',
     }
-    const parsed = parseFloat(value)
-    return isNaN(parsed) ? undefined : parsed
   }
 
-  const windGust = parseOptional('GST', ['MM', '99.0'])
-  const waveHeight = parseOptional('WVHT', ['MM', '99.0'])
-  const dominantWavePeriod = parseOptional('DPD', ['MM', '99'])
-  const airTemp = parseOptional('ATMP', ['MM', '999.0'])
-  const waterTemp = parseOptional('WTMP', ['MM', '999.0'])
-  const pressure = parseOptional('PRES', ['MM', '9999.0'])
+  const latestPoint = historyData.history[0]
+  const config = BUOY_CONFIGS[historyData.buoyId as keyof typeof BUOY_CONFIGS]
 
-  return {
-    stationId,
-    timestamp,
-    windDirection,
-    windSpeed,
-    windGust,
-    waveHeight,
-    dominantWavePeriod,
-    airTemp,
-    waterTemp,
-    pressure,
-  }
-}
-
-/**
- * Convert BuoyApiResponse to BuoyData with unit conversions and metadata
- */
-function apiResponseToBuoyData(
-  apiResponse: BuoyApiResponse,
-  stationId: keyof typeof BUOY_CONFIGS
-): BuoyData {
-  const config = BUOY_CONFIGS[stationId]
-
-  return {
-    buoyId: apiResponse.stationId,
-    name: config.name,
-    timestamp: apiResponse.timestamp,
-    windSpeed: metersPerSecondToKnots(apiResponse.windSpeed),
-    windDirection: apiResponse.windDirection,
-    windGust: apiResponse.windGust
-      ? metersPerSecondToKnots(apiResponse.windGust)
-      : undefined,
-    waveHeight: apiResponse.waveHeight
-      ? apiResponse.waveHeight * 3.28084 // meters to feet
-      : undefined,
-    wavePeriod: apiResponse.dominantWavePeriod,
-    airTemp: apiResponse.airTemp
-      ? celsiusToFahrenheit(apiResponse.airTemp)
-      : undefined,
-    waterTemp: apiResponse.waterTemp
-      ? celsiusToFahrenheit(apiResponse.waterTemp)
-      : undefined,
-    pressure: apiResponse.pressure
-      ? hPaToMillibars(apiResponse.pressure)
-      : undefined,
+  const buoyData: BuoyData = {
+    buoyId: historyData.buoyId,
+    name: historyData.name,
+    timestamp: latestPoint.timestamp,
+    windSpeed: latestPoint.spd,
+    windDirection: latestPoint.dir,
+    windGust: undefined, // History data only has speed/direction
+    waveHeight: undefined,
+    wavePeriod: undefined,
+    airTemp: undefined,
+    waterTemp: undefined,
+    pressure: undefined,
     metadata: {
-      station: config.stationId,
+      station: config?.stationId || historyData.buoyId,
       source: 'ndbc',
-      location: config.location,
-      windMeasurementHeight: config.windMeasurementHeight,
-      adjustmentNote: config.adjustmentNote,
+      location: config?.location || { latitude: 0, longitude: 0 },
+      windMeasurementHeight: config?.windMeasurementHeight || 0,
+      adjustmentNote: config?.adjustmentNote || '',
     },
+  }
+
+  return {
+    data: buoyData,
+    status: historyData.status,
+    fetchedAt: historyData.fetchedAt,
   }
 }
 
 /**
  * Fetch CHII2 buoy data from NDBC
- * Returns cached data if fresh (<2min), otherwise fetches new data
+ * Now uses history endpoint as single source of truth
  */
 export async function fetchCHII2(options?: {
   bypassCache?: boolean
 }): Promise<BuoyDataResult> {
-  return fetchBuoyData('CHII2', options)
+  const historyData = await fetchCHII2History()
+  return extractLatestFromHistory(historyData)
 }
 
-/**
- * Scaffolded IISEAGrant scraper for Purdue Buoy
- * TODO: Implement HTML scraping from https://iiseagrant.org/45198/
- * Returns null and logs warning until implementation is complete
- */
-async function scrapeIISEAGrant(): Promise<BuoyApiResponse | null> {
-  console.warn('IISEAGrant scraping not implemented - falling back to NDBC')
-  return null
-}
+// Removed scrapeIISEAGrant - TODO: implement if needed in future
 
 /**
  * Check if Purdue Buoy is in operational season (May-October)
@@ -250,189 +155,39 @@ function isPurdueSeason(): boolean {
 
 /**
  * Fetch Purdue Buoy (45198) data with primary/fallback strategy
- * Returns cached data if fresh (<2min), otherwise fetches new data
+ * Now uses history endpoint as single source of truth
  *
  * Strategy:
  * 1. Try IISEAGrant scrape (currently scaffolded, returns null with warning)
- * 2. Fall back to NDBC station 45198
+ * 2. Fall back to NDBC station 45198 history
  * 3. Handle seasonal offline gracefully (May-October operational)
  */
 export async function fetchPurdueBuoy(options?: {
   bypassCache?: boolean
 }): Promise<BuoyDataResult> {
-  const cacheKey = '45198'
-  const now = Date.now()
-
-  // Check cache first (unless bypass requested)
-  if (!options?.bypassCache) {
-    const cached = cache.get(cacheKey)
-    if (cached) {
-      const ageMs = now - cached.fetchedAt
-      if (ageMs < STATUS_THRESHOLDS.ONLINE) {
-        // Cache is fresh, return immediately
-        return {
-          data: cached.data,
-          status: calculateStatus(cached.fetchedAt, true, false),
-          fetchedAt: new Date(cached.fetchedAt).toISOString(),
-        }
-      }
-    }
-  }
+  const historyData = await fetchPurdueBuoyHistory()
 
   // Check if in operational season
   const isOperationalSeason = isPurdueSeason()
 
-  // Attempt IISEAGrant scrape first (currently scaffolded)
-  try {
-    const iisResponse = await scrapeIISEAGrant()
-
-    if (iisResponse) {
-      // IISEAGrant returned data - convert and cache
-      const buoyData = apiResponseToBuoyData(iisResponse, '45198')
-      cache.set(cacheKey, {
-        data: buoyData,
-        fetchedAt: now,
-      })
-      return {
-        data: buoyData,
-        status: 'online',
-        fetchedAt: new Date(now).toISOString(),
-      }
-    }
-  } catch (error) {
-    console.warn('IISEAGrant fetch failed, falling back to NDBC:', error)
-  }
-
-  // Fall back to NDBC station 45198
-  const ndbcResult = await fetchBuoyData('45198', options)
-
-  // If NDBC failed and we're out of season, provide context
-  if (!ndbcResult.data && !isOperationalSeason) {
+  // If history fetch failed and we're out of season, provide context
+  if (!historyData.history && !isOperationalSeason) {
     return {
       data: null,
       status: 'offline',
-      fetchedAt: new Date(now).toISOString(),
+      fetchedAt: historyData.fetchedAt,
       error: 'Purdue Buoy is seasonal (May-October only)',
     }
   }
 
-  return ndbcResult
+  return extractLatestFromHistory(historyData)
 }
 
 /**
- * Generic buoy data fetcher with caching
+ * Clear history cache for testing
  */
-async function fetchBuoyData(
-  stationId: keyof typeof BUOY_CONFIGS,
-  options?: { bypassCache?: boolean }
-): Promise<BuoyDataResult> {
-  const cacheKey = stationId
-  const now = Date.now()
-
-  // Check cache first (unless bypass requested)
-  if (!options?.bypassCache) {
-    const cached = cache.get(cacheKey)
-    if (cached) {
-      const ageMs = now - cached.fetchedAt
-      if (ageMs < STATUS_THRESHOLDS.ONLINE) {
-        // Cache is fresh, return immediately
-        return {
-          data: cached.data,
-          status: calculateStatus(cached.fetchedAt, true, false),
-          fetchedAt: new Date(cached.fetchedAt).toISOString(),
-        }
-      }
-    }
-  }
-
-  // Attempt live fetch
-  try {
-    const config = BUOY_CONFIGS[stationId]
-    const url = `https://www.ndbc.noaa.gov/data/realtime2/${config.stationId}.txt`
-
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`NDBC API error: ${response.status} ${response.statusText}`)
-    }
-
-    const text = await response.text()
-    const apiResponse = parseNDBCResponse(text, config.stationId)
-
-    if (!apiResponse) {
-      throw new Error('Failed to parse NDBC response')
-    }
-
-    const buoyData = apiResponseToBuoyData(apiResponse, stationId)
-
-    // Update cache
-    cache.set(cacheKey, {
-      data: buoyData,
-      fetchedAt: now,
-    })
-
-    return {
-      data: buoyData,
-      status: 'online',
-      fetchedAt: new Date(now).toISOString(),
-    }
-  } catch (error) {
-    // Fetch failed - return cached data if available
-    const cached = cache.get(cacheKey)
-
-    if (cached) {
-      return {
-        data: cached.data,
-        status: calculateStatus(cached.fetchedAt, true, true),
-        fetchedAt: new Date(cached.fetchedAt).toISOString(),
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }
-    }
-
-    // No cached data available
-    return {
-      data: null,
-      status: 'error',
-      fetchedAt: new Date(now).toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
-  }
-}
-
-/**
- * Clear cache for a specific buoy or all buoys
- */
-export function clearCache(stationId?: keyof typeof BUOY_CONFIGS): void {
-  if (stationId) {
-    cache.delete(stationId)
-  } else {
-    cache.clear()
-  }
-}
-
-/**
- * Get cache status for debugging
- */
-export function getCacheStatus(): Record<
-  string,
-  { hasCachedData: boolean; ageMs: number | null }
-> {
-  const now = Date.now()
-  const status: Record<string, { hasCachedData: boolean; ageMs: number | null }> = {}
-
-  Object.keys(BUOY_CONFIGS).forEach((stationId) => {
-    const cached = cache.get(stationId)
-    status[stationId] = {
-      hasCachedData: !!cached,
-      ageMs: cached ? now - cached.fetchedAt : null,
-    }
-  })
-
-  return status
+export function clearCache(): void {
+  clearHistoryCache()
 }
 
 /**
@@ -517,7 +272,7 @@ const historyCache: Map<
   { data: BuoyHistoryData; fetchedAt: number }
 > = new Map()
 
-const HISTORY_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (aligned with NDBC update frequency)
+const HISTORY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes (same as live data cache)
 
 /**
  * Fetch buoy historical data from NDBC
@@ -568,11 +323,15 @@ async function fetchBuoyHistory(
       dir: Math.round(p.windDirection),
     }))
 
+    // Calculate status based on most recent data point timestamp
+    const latestTimestamp = history.length > 0 ? history[0].timestamp : undefined
+    const status = calculateStatus(latestTimestamp, false)
+
     const historyData: BuoyHistoryData = {
       buoyId: config.stationId,
       name: config.name,
       history,
-      status: 'online',
+      status,
       fetchedAt: new Date(now).toISOString(),
     }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
@@ -20,10 +21,9 @@ interface StationRowProps {
 /**
  * Format timestamp to relative time string (e.g., "2m ago", "1h ago")
  */
-function formatRelativeTime(timestamp: string): string {
-  const now = new Date()
+function formatRelativeTime(timestamp: string, currentTime: number): string {
   const then = new Date(timestamp)
-  const diffMs = now.getTime() - then.getTime()
+  const diffMs = currentTime - then.getTime()
   const diffMin = Math.floor(diffMs / 60000)
 
   if (diffMin < 1) return 'just now'
@@ -53,6 +53,16 @@ export default function StationRow({
 }: StationRowProps) {
   const router = useRouter()
   const stationInfo = getStationInfo(buoyId)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
+
+  // Update current time every minute to refresh relative timestamps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 60000) // Update every 60 seconds
+    return () => clearInterval(interval)
+  }, [])
+
   if (!stationInfo) {
     return null
   }
@@ -116,7 +126,7 @@ export default function StationRow({
             marginTop: '1px',
           }}
         >
-          {timestamp ? formatRelativeTime(timestamp) : stationInfo.location}
+          {timestamp ? formatRelativeTime(timestamp, currentTime) : stationInfo.location}
         </div>
       </div>
 

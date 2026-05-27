@@ -15,6 +15,7 @@ interface StationPageClientProps {
   buoyId: string;
   stationName: string;
   data: WindDataPoint[];
+  fetchedAt: string;
   serverTime: number;
 }
 
@@ -25,6 +26,7 @@ export default function StationPageClient({
   buoyId,
   stationName,
   data,
+  fetchedAt,
   serverTime,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>("1h");
@@ -103,11 +105,10 @@ export default function StationPageClient({
     return new Date(serverTime - latestPoint.minsAgo * 60 * 1000);
   }, [dataWithOffset, serverTime]);
 
-  // For demo: use current time minus 12 seconds as lastFetchTime
-  // TODO: This should come from the API response (fetchedAt field)
+  // Use the actual fetch time from the API response
   const lastFetchTime = useMemo(
-    () => new Date(serverTime - 12 * 1000),
-    [serverTime],
+    () => new Date(fetchedAt),
+    [fetchedAt],
   );
 
   return (
