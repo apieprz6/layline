@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 
 interface RaceHeaderProps {
   raceTime: Date
@@ -76,6 +75,7 @@ export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHe
             </svg>
           </button>
         )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-icon.svg" width={24} height={24} alt="L" />
         <div>
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>

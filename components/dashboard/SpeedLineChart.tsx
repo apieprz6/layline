@@ -22,15 +22,13 @@ export default function SpeedLineChart({
   onHoverChange,
 }: SpeedLineChartProps) {
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
-  const now = referenceTime || new Date()
-  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
-    () =>
-      data.map((point) => ({
-        ...point,
-        minsAgo: getMinutesAgo(point.timestamp, now),
-      })),
-    [data, now]
-  )
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(() => {
+    const now = referenceTime || new Date()
+    return data.map((point) => ({
+      ...point,
+      minsAgo: getMinutesAgo(point.timestamp, now),
+    }))
+  }, [data, referenceTime])
   // Constants for chart dimensions
   const WIDTH = 360
   const HEIGHT = 130
@@ -89,7 +87,7 @@ export default function SpeedLineChart({
       return [x, y]
     })
     return 'M' + points.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' L')
-  }, [visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed])
+  }, [visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed, innerW, innerH])
 
   // Helper for Y coordinate
   const yFor = (speed: number) => {
@@ -106,12 +104,6 @@ export default function SpeedLineChart({
 
   // Band lines at wind condition thresholds
   const bandLines = [8, 15, 22].filter((v) => v <= maxSpeed)
-
-  // Helper for X coordinate
-  const xFor = (minsAgo: number) => {
-    const t = 1 - (minsAgo - nowOffsetMinutes) / timeWindowMinutes
-    return PAD_L + t * innerW
-  }
 
   // Format time offset label
   function fmtOffset(absMin: number) {
