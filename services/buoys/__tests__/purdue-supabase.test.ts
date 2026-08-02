@@ -9,10 +9,11 @@ function createMockSupabaseClient(options: {
   data?: Array<{ timestamp: string; wind_speed: number; wind_direction: number | null }>
   error?: { message: string; code: string }
 }) {
-  const orderFn = jest.fn().mockResolvedValue({
+  const returnsFn = jest.fn().mockResolvedValue({
     data: options.data ?? null,
     error: options.error ?? null,
   })
+  const orderFn = jest.fn().mockReturnValue({ returns: returnsFn })
   const notFn = jest.fn().mockReturnValue({ order: orderFn })
   const gtFn = jest.fn().mockReturnValue({ not: notFn })
   const selectFn = jest.fn().mockReturnValue({ gt: gtFn })

@@ -4,6 +4,7 @@ import type {
   DataSourceStatus,
   BuoyHistoryData,
   WindDataPoint,
+  PurdueBuoyRow,
 } from '@/types'
 import { getServiceClient } from '@/lib/supabase/service'
 
@@ -372,12 +373,6 @@ export async function fetchPurdueBuoyHistory(options?: { bypassCache?: boolean }
   return fetchBuoyHistory('45198', options)
 }
 
-interface PurdueBuoyRow {
-  timestamp: string
-  wind_speed: number
-  wind_direction: number | null
-}
-
 async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | null> {
   try {
     const supabase = getServiceClient()
@@ -389,12 +384,12 @@ async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | n
       .gt('timestamp', cutoff)
       .not('wind_speed', 'is', null)
       .order('timestamp', { ascending: false })
+      .returns<PurdueBuoyRow[]>()
 
     if (error) throw error
     if (!data || data.length === 0) return null
 
-    const rows = data as unknown as PurdueBuoyRow[]
-    const history: WindDataPoint[] = rows.map((row) => ({
+    const history: WindDataPoint[] = data.map((row) => ({
       timestamp: new Date(row.timestamp).toISOString(),
       spd: Math.round(metersPerSecondToKnots(row.wind_speed) * 10) / 10,
       dir: row.wind_direction ?? 0,
