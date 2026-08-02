@@ -5,6 +5,7 @@ import type {
   BuoyHistoryData,
   WindDataPoint,
 } from '@/types'
+import { getServiceClient } from '@/lib/supabase/service'
 
 // Status thresholds (how to label data freshness)
 const STATUS_THRESHOLDS = {
@@ -351,10 +352,67 @@ export async function fetchCHII2History(options?: { bypassCache?: boolean }): Pr
 }
 
 /**
- * Fetch Purdue Buoy historical data
+ * Fetch Purdue Buoy historical data from Supabase (primary) with NDBC fallback
  */
 export async function fetchPurdueBuoyHistory(options?: { bypassCache?: boolean }): Promise<BuoyHistoryData> {
+  const cacheKey = '45198-history'
+  const now = Date.now()
+
+  const cached = historyCache.get(cacheKey)
+  if (!options?.bypassCache && cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
+    return cached.data
+  }
+
+  const supabaseResult = await fetchPurdueFromSupabase(now)
+  if (supabaseResult) {
+    historyCache.set(cacheKey, { data: supabaseResult, fetchedAt: now })
+    return supabaseResult
+  }
+
   return fetchBuoyHistory('45198', options)
+}
+
+interface PurdueBuoyRow {
+  timestamp: string
+  wind_speed: number
+  wind_direction: number | null
+}
+
+async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | null> {
+  try {
+    const supabase = getServiceClient()
+    const cutoff = new Date(now - 72 * 60 * 60 * 1000).toISOString()
+
+    const { data, error } = await supabase
+      .from('purdue_buoy_readings')
+      .select('timestamp, wind_speed, wind_direction')
+      .gt('timestamp', cutoff)
+      .not('wind_speed', 'is', null)
+      .order('timestamp', { ascending: false })
+
+    if (error) throw error
+    if (!data || data.length === 0) return null
+
+    const rows = data as unknown as PurdueBuoyRow[]
+    const history: WindDataPoint[] = rows.map((row) => ({
+      timestamp: new Date(row.timestamp).toISOString(),
+      spd: Math.round(metersPerSecondToKnots(row.wind_speed) * 10) / 10,
+      dir: row.wind_direction ?? 0,
+    }))
+
+    const latestTimestamp = history[0].timestamp
+    const status = calculateStatus(latestTimestamp, false)
+
+    return {
+      buoyId: '45198',
+      name: 'Purdue Buoy',
+      history,
+      status,
+      fetchedAt: new Date(now).toISOString(),
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
