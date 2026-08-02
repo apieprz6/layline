@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/buoys/poll-purdue",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
