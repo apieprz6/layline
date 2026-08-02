@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 
+import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
 const VALID_XML = `<?xml version="1.0" encoding="ISO-8859-1"?>
@@ -44,6 +45,14 @@ const mockFetch = fetchIISEAGrantXML as jest.MockedFunction<
   typeof fetchIISEAGrantXML
 >
 
+function makeRequest(token?: string): NextRequest {
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['authorization'] = `Bearer ${token}`
+  }
+  return new NextRequest('http://localhost/api/buoys/poll-purdue', { headers })
+}
+
 describe('GET /api/buoys/poll-purdue', () => {
   const originalEnv = process.env
 
@@ -53,6 +62,7 @@ describe('GET /api/buoys/poll-purdue', () => {
       ...originalEnv,
       NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+      CRON_SECRET: 'test-cron-secret',
     }
     mockUpsert.mockResolvedValue({ error: null })
   })
@@ -61,10 +71,38 @@ describe('GET /api/buoys/poll-purdue', () => {
     process.env = originalEnv
   })
 
+  describe('authentication', () => {
+    it('returns 401 when no authorization header is provided', async () => {
+      const response = await GET(makeRequest())
+      const body = await response.json()
+
+      expect(response.status).toBe(401)
+      expect(body.error).toBe('Unauthorized')
+    })
+
+    it('returns 401 when token is wrong', async () => {
+      const response = await GET(makeRequest('wrong-token'))
+      const body = await response.json()
+
+      expect(response.status).toBe(401)
+      expect(body.error).toBe('Unauthorized')
+    })
+
+    it('returns 500 when CRON_SECRET is not configured', async () => {
+      delete process.env.CRON_SECRET
+
+      const response = await GET(makeRequest('any-token'))
+      const body = await response.json()
+
+      expect(response.status).toBe(500)
+      expect(body.error).toBe('Server configuration error')
+    })
+  })
+
   it('returns 200 on successful parse and insert', async () => {
     mockFetch.mockResolvedValue(VALID_XML)
 
-    const response = await GET()
+    const response = await GET(makeRequest('test-cron-secret'))
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -75,7 +113,7 @@ describe('GET /api/buoys/poll-purdue', () => {
   it('inserts parsed data into Supabase with correct fields', async () => {
     mockFetch.mockResolvedValue(VALID_XML)
 
-    await GET()
+    await GET(makeRequest('test-cron-secret'))
 
     expect(mockUpsert).toHaveBeenCalledWith(
       {
@@ -98,7 +136,7 @@ describe('GET /api/buoys/poll-purdue', () => {
   it('returns 502 on fetch failure', async () => {
     mockFetch.mockRejectedValue(new Error('Network timeout'))
 
-    const response = await GET()
+    const response = await GET(makeRequest('test-cron-secret'))
     const body = await response.json()
 
     expect(response.status).toBe(502)
@@ -108,7 +146,7 @@ describe('GET /api/buoys/poll-purdue', () => {
   it('returns 422 on malformed XML', async () => {
     mockFetch.mockResolvedValue('<garbage>not valid</garbage>')
 
-    const response = await GET()
+    const response = await GET(makeRequest('test-cron-secret'))
     const body = await response.json()
 
     expect(response.status).toBe(422)
@@ -119,10 +157,10 @@ describe('GET /api/buoys/poll-purdue', () => {
     mockFetch.mockResolvedValue(VALID_XML)
     mockUpsert.mockResolvedValue({ error: null })
 
-    const first = await GET()
+    const first = await GET(makeRequest('test-cron-secret'))
     expect(first.status).toBe(200)
 
-    const second = await GET()
+    const second = await GET(makeRequest('test-cron-secret'))
     expect(second.status).toBe(200)
     expect(mockUpsert).toHaveBeenCalledTimes(2)
     expect(mockUpsert).toHaveBeenLastCalledWith(
@@ -137,17 +175,17 @@ describe('GET /api/buoys/poll-purdue', () => {
       error: { message: 'Connection refused' },
     })
 
-    const response = await GET()
+    const response = await GET(makeRequest('test-cron-secret'))
     const body = await response.json()
 
     expect(response.status).toBe(500)
     expect(body.error).toBe('Database insert failed')
   })
 
-  it('returns 500 when env vars are missing', async () => {
+  it('returns 500 when Supabase env vars are missing', async () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    const response = await GET()
+    const response = await GET(makeRequest('test-cron-secret'))
     const body = await response.json()
 
     expect(response.status).toBe(500)
