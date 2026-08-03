@@ -253,6 +253,7 @@
   html {
     background: var(--surface-base);
     color: var(--text-primary);
+    transition: background-color 300ms ease, color 300ms ease;
   }
 
   body {
@@ -265,6 +266,80 @@
     margin: 0;
     padding: 0;
   }
+}
+
+/* ============================================================
+   NIGHT VISION THEME — Monochromatic red-on-black
+   Preserves scotopic (rod) vision for on-water use after dark.
+   Activate by adding class="theme-nightvision" to <html>.
+   ============================================================ */
+.theme-nightvision {
+  --surface-base: #0A0000;
+  --surface-raised: #120000;
+  --surface-elevated: #1A0000;
+  --surface-overlay: rgba(10, 0, 0, 0.90);
+  --surface-border: rgba(180,0,0,0.25);
+  --surface-border-hover: rgba(200,0,0,0.40);
+  --surface-divider: rgba(180,0,0,0.12);
+  --surface-dock-bg: rgba(10, 0, 0, 0.94);
+
+  --text-primary: #FF4444;
+  --text-secondary: #AA2222;
+  --text-muted: #661111;
+  --text-accent: #CC0000;
+  --text-inverse: #0A0000;
+
+  --blue-500: #CC0000;
+  --blue-400: #DD1111;
+  --blue-300: #AA0000;
+  --blue-600: #990000;
+  --blue-700: #770000;
+  --blue-muted: rgba(204, 0, 0, 0.10);
+  --blue-muted-40: rgba(204, 0, 0, 0.40);
+
+  --accent: #CC0000;
+  --accent-primary: #CC0000;
+
+  --wind-light: #993333;
+  --wind-medium: #CC2222;
+  --wind-heavy: #EE3300;
+  --wind-storm: #FF0000;
+
+  --trend-building: #BB3333;
+  --trend-building-bg: rgba(187, 51, 51, 0.08);
+  --trend-building-border: rgba(187, 51, 51, 0.25);
+
+  --trend-easing: #882222;
+  --trend-easing-bg: rgba(136, 34, 34, 0.08);
+  --trend-easing-border: rgba(136, 34, 34, 0.25);
+
+  --trend-steady: #551111;
+  --trend-steady-bg: transparent;
+  --trend-steady-border: transparent;
+
+  --trend-veering: #DD4444;
+  --trend-veering-bg: rgba(221, 68, 68, 0.07);
+  --trend-veering-border: rgba(221, 68, 68, 0.20);
+
+  --trend-backing: #FF2222;
+  --trend-backing-bg: rgba(255, 34, 34, 0.07);
+  --trend-backing-border: rgba(255, 34, 34, 0.20);
+
+  --state-success: #AA2222;
+  --state-warning: #CC3300;
+  --state-danger: #FF0000;
+  --state-info: #CC0000;
+  --state-neutral: #661111;
+
+  --shadow-sm: 0 1px 3px rgba(100, 0, 0, 0.10);
+  --shadow-md: 0 2px 8px rgba(100, 0, 0, 0.12);
+  --shadow-lg: 0 4px 16px rgba(100, 0, 0, 0.15);
+  --shadow-xl: 0 8px 32px rgba(100, 0, 0, 0.20);
+  --shadow-cyan: 0 0 12px rgba(204, 0, 0, 0.15);
+  --shadow-cyan-strong: 0 0 24px rgba(204, 0, 0, 0.25);
+  --shadow-dock: 0 -4px 20px rgba(100, 0, 0, 0.06);
+
+  --page-bg-2: #140000;
 }
 
 @layer components {
