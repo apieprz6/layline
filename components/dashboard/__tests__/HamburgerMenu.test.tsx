@@ -66,9 +66,9 @@ describe('HamburgerMenu', () => {
     expect(screen.getByRole('link', { name: /wind data/i })).toBeInTheDocument()
   })
 
-  it('highlights active route', async () => {
-    const navigation = await import('next/navigation')
-    navigation.usePathname = jest.fn(() => '/wind-data')
+  it('highlights active route', () => {
+    const { usePathname } = jest.requireMock('next/navigation')
+    usePathname.mockReturnValue('/wind-data')
 
     render(<HamburgerMenu {...defaultProps} isOpen={true} />)
 
