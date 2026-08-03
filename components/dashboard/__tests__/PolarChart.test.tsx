@@ -98,11 +98,11 @@ describe('PolarChart', () => {
       // Filter for radial ring circles (not data points, not center dot, not reference ring)
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
-        const stroke = c.getAttribute('stroke')
         const strokeWidth = c.getAttribute('stroke-width')
-        // Rings have fill="none" and stroke with rgba, and strokeWidth 0.75 or 1.5
+        const style = c.getAttribute('style') || ''
+        // Rings have fill="none", a stroke via style, and strokeWidth 0.75 or 1.5
         // Exclude reference ring (strokeWidth 2.5)
-        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
+        return fill === 'none' && style.includes('stroke') && strokeWidth !== '2.5'
       })
 
       expect(ringCircles.length).toBe(7)
@@ -116,10 +116,10 @@ describe('PolarChart', () => {
       const circles = container.querySelectorAll('circle')
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
-        const stroke = c.getAttribute('stroke')
         const strokeWidth = c.getAttribute('stroke-width')
+        const style = c.getAttribute('style') || ''
         // Exclude reference ring (strokeWidth 2.5)
-        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
+        return fill === 'none' && style.includes('stroke') && strokeWidth !== '2.5'
       })
 
       // 1h scale should have 5 rings: [0, 15, 30, 45, 60]
@@ -132,11 +132,11 @@ describe('PolarChart', () => {
       )
 
       const circles = container.querySelectorAll('circle[fill="none"]')
-      // Outer ring should have blue accent color and solid stroke
+      // Outer ring should have blue-500 accent color via style and solid stroke
       const outerRing = Array.from(circles).find(c => {
-        const stroke = c.getAttribute('stroke')
+        const style = c.getAttribute('style') || ''
         const dasharray = c.getAttribute('stroke-dasharray')
-        return stroke && stroke.includes('0,68,204') && dasharray === '0'
+        return style.includes('blue-500') && dasharray === '0'
       })
 
       expect(outerRing).toBeTruthy()
