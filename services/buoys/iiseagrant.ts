@@ -67,7 +67,8 @@ export function parseIISEAGrantXML(xml: string): PurdueBuoyReading {
 }
 
 export async function fetchIISEAGrantXML(): Promise<string> {
-  const response = await fetch(IISEAGRANT_URL, {
+  const url = `${IISEAGRANT_URL}?id=${Math.floor(Date.now() / 1000)}`
+  const response = await fetch(url, {
     cache: 'no-store',
     headers: {
       'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
