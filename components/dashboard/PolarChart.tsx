@@ -166,11 +166,12 @@ export default function PolarChart({
       .sort((a, b) => a.minsAgo - b.minsAgo); // Sort oldest to newest
   }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes]);
 
-  // Outer ring color matches the most recent data point's wind strength
+  // Outer ring color matches the displayed reference point's wind strength
   const outerRingColor = useMemo(() => {
+    if (displayPoint) return getWindColorHex(displayPoint.spd);
     if (dataPoints.length === 0) return "var(--blue-500)";
     return dataPoints[dataPoints.length - 1].color;
-  }, [dataPoints]);
+  }, [displayPoint, dataPoints]);
 
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
