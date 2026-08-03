@@ -182,6 +182,13 @@ export interface MinuteDataPoint {
   dir: number // wind direction in degrees
 }
 
+// Row shape returned by Supabase `purdue_buoy_readings` table queries
+export interface PurdueBuoyRow {
+  timestamp: string
+  wind_speed: number
+  wind_direction: number | null
+}
+
 export interface BuoyHistoryData {
   buoyId: string
   name: string
