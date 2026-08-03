@@ -6,6 +6,8 @@ import {
   parseIISEAGrantXML,
 } from '@/services/buoys/iiseagrant'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) {
