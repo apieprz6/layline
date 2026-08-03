@@ -126,17 +126,17 @@ describe('PolarChart', () => {
       expect(ringCircles.length).toBe(5)
     })
 
-    it('renders outer ring with stronger styling', () => {
+    it('renders outer ring with stronger styling matching wind color', () => {
       const { container } = render(
         <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       const circles = container.querySelectorAll('circle[fill="none"]')
-      // Outer ring should have blue-500 accent color via style and solid stroke
+      // Outer ring should have solid stroke (dasharray "0") and stronger strokeWidth
       const outerRing = Array.from(circles).find(c => {
-        const style = c.getAttribute('style') || ''
         const dasharray = c.getAttribute('stroke-dasharray')
-        return style.includes('blue-500') && dasharray === '0'
+        const strokeWidth = c.getAttribute('stroke-width')
+        return dasharray === '0' && strokeWidth === '1.5'
       })
 
       expect(outerRing).toBeTruthy()

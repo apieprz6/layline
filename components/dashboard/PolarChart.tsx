@@ -166,6 +166,12 @@ export default function PolarChart({
       .sort((a, b) => a.minsAgo - b.minsAgo); // Sort oldest to newest
   }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes]);
 
+  // Outer ring color matches the most recent data point's wind strength
+  const outerRingColor = useMemo(() => {
+    if (dataPoints.length === 0) return "var(--blue-500)";
+    return dataPoints[dataPoints.length - 1].color;
+  }, [dataPoints]);
+
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
     const segments: Array<{
@@ -445,24 +451,12 @@ export default function PolarChart({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          {/* Background circle — uses CSS variable for theme support */}
+          {/* Background circle — single flat fill for clean appearance */}
           <circle
             cx={CENTER_X}
             cy={CENTER_Y}
             r={R + 6}
-            style={{ fill: "var(--chart-bg-edge)" }}
-          />
-          <circle
-            cx={CENTER_X}
-            cy={CENTER_Y}
-            r={R * 0.7 + 6}
-            style={{ fill: "var(--chart-bg-mid)" }}
-          />
-          <circle
-            cx={CENTER_X}
-            cy={CENTER_Y}
-            r={R * 0.35 + 6}
-            style={{ fill: "var(--chart-bg-center)" }}
+            style={{ fill: "var(--chart-bg)" }}
           />
 
           {/* Angle tick lines (every 10°) */}
@@ -522,10 +516,10 @@ export default function PolarChart({
               fill="none"
               style={{
                 stroke: ring.isOuterRing
-                  ? "var(--blue-500)"
+                  ? outerRingColor
                   : "var(--chart-grid-coarse)",
               }}
-              strokeOpacity={ring.isOuterRing ? 0.55 : 1}
+              strokeOpacity={ring.isOuterRing ? 0.7 : 1}
               strokeWidth={ring.isOuterRing ? 1.5 : 0.75}
               strokeDasharray={ring.isOuterRing ? "0" : "2 4"}
             />
