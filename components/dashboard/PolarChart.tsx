@@ -451,12 +451,24 @@ export default function PolarChart({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          {/* Background circle — single flat fill for clean appearance */}
+          {/* Background circles — subtle radial shading */}
           <circle
             cx={CENTER_X}
             cy={CENTER_Y}
             r={R + 6}
-            style={{ fill: "var(--chart-bg)" }}
+            style={{ fill: "var(--chart-bg-edge)" }}
+          />
+          <circle
+            cx={CENTER_X}
+            cy={CENTER_Y}
+            r={R * 0.7 + 6}
+            style={{ fill: "var(--chart-bg-mid)" }}
+          />
+          <circle
+            cx={CENTER_X}
+            cy={CENTER_Y}
+            r={R * 0.35 + 6}
+            style={{ fill: "var(--chart-bg-center)" }}
           />
 
           {/* Angle tick lines (every 10°) */}

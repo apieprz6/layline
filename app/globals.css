@@ -90,7 +90,9 @@
   --surface-dock-blur: blur(14px) saturate(160%);
 
   /* Polar chart tokens */
-  --chart-bg:            #F0EDE6;
+  --chart-bg-center:     #F0EDE6;
+  --chart-bg-mid:        #EFEBE2;
+  --chart-bg-edge:       #E8E2D2;
   --chart-grid-cardinal: rgba(0, 0, 0, 0.32);
   --chart-grid-inter:    rgba(0, 0, 0, 0.18);
   --chart-grid-coarse:   rgba(0, 0, 0, 0.10);
@@ -352,7 +354,9 @@
   --page-bg-2: #140000;
 
   /* Polar chart tokens — night vision */
-  --chart-bg:            #120000;
+  --chart-bg-center:     #120000;
+  --chart-bg-mid:        #100000;
+  --chart-bg-edge:       #0E0000;
   --chart-grid-cardinal: rgba(180, 0, 0, 0.40);
   --chart-grid-inter:    rgba(180, 0, 0, 0.25);
   --chart-grid-coarse:   rgba(180, 0, 0, 0.15);
