@@ -572,7 +572,7 @@ export default function PolarChart({
                   fontFamily="var(--font-mono)"
                   fontSize={8.5}
                   fontWeight={accent ? 600 : 500}
-                  style={{ fill: accent ? "var(--blue-500)" : "var(--text-muted)" }}
+                  style={{ fill: "var(--text-muted)" }}
                 >
                   {label}
                 </text>
