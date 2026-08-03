@@ -251,13 +251,13 @@
   }
 
   html {
-    background: #F0EDE6;
-    color: #0A0A0A;
+    background: var(--surface-base);
+    color: var(--text-primary);
   }
 
   body {
-    background: #F0EDE6;
-    color: #0A0A0A;
+    background: var(--surface-base);
+    color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 0.875rem;
     line-height: 1.5;
