@@ -243,3 +243,18 @@ export interface WeatherModelCacheEntry {
   data: WeatherModelResult
   expiresAt: number // Unix timestamp when cache entry expires (milliseconds)
 }
+
+// Purdue Buoy (IISEAGrant) reading row
+export interface PurdueBuoyReading {
+  timestamp: Date
+  wind_speed: number | null
+  wind_direction: number | null
+  wind_gust: number | null
+  air_temp: number | null
+  water_temp: number | null
+  pressure: number | null
+  humidity: number | null
+  wave_height: number | null
+  wave_period: number | null
+  wave_direction: number | null
+}
