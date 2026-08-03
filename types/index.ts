@@ -117,10 +117,12 @@ export interface RaceBriefing {
 }
 
 // Database types
+export type UserRole = 'admin' | 'user'
+
 export interface User {
   id: string
   email: string
-  role: 'captain' | 'crew' | 'tactician' | 'trimmer'
+  role: UserRole | null
   createdAt: string
 }
 
@@ -148,7 +150,8 @@ export interface UserPreferences {
 export interface Profile {
   id: string
   user_id: string
-  role: string | null
+  display_name: string | null
+  role: UserRole | null
   preferences: UserPreferences
   created_at: string
   updated_at: string

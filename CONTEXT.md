@@ -119,6 +119,29 @@ _Avoid_: Acceleration, wind change
 Standard deviation of wind speed over a time period. Measures consistency.
 _Avoid_: Stability, consistency
 
+### Users & Authentication
+
+**Guest**:
+An unauthenticated visitor. Guests have full access to the dashboard, weather data, and all read-only features. No account required.
+_Avoid_: Anonymous user, visitor
+
+**Profile**:
+A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created on first sign-up (email/password or Google OAuth).
+
+**Display Name**:
+Human-readable name shown in the UI (e.g., avatar initials, greeting). Sourced from the sign-up form (email/password flow) or Google profile metadata (OAuth flow).
+
+**Role**:
+Flat permission level on a profile. Values: `admin` (can upload regattas, modify boat setup), `user` (can view boat performance data), or `null` (not yet assigned). Assigned after sign-up, not during.
+_Avoid_: Captain, crew, tactician, trimmer (legacy terms from initial design)
+
+**Auth Sheet**:
+Bottom sheet overlay (82% viewport height) on the dashboard. Three modes: Sign in (email + password), Sign up (name + email + password), Forgot password (email only). Includes Google OAuth in sign-in and sign-up modes. Not a dedicated route — lives inside the dashboard layout.
+_Avoid_: Login page, auth page (it's a sheet, not a page)
+
+**Account Merging**:
+When a user signs up with email/password and later authenticates via Google OAuth with the same email address, both identities resolve to the same account. Configured in Supabase auth settings.
+
 ### UI Components
 
 **Station Card**:
@@ -139,6 +162,12 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 ## Relationships
 
+- A **Guest** can use all dashboard and weather features without a **Profile**
+- A **Profile** is created on sign-up (email/password or Google OAuth)
+- A **Profile** has one **Role** (`admin`, `user`, or `null`)
+- **Account Merging** links email/password and Google OAuth identities sharing the same email
+- The **Auth Sheet** opens from the dashboard; it does not navigate to a separate route
+- The `/auth/reset-password` page is the only dedicated auth route (deep-linked from email)
 - A **Buoy** is a type of **Data Source**
 - A **Weather Model** is a type of **Data Source**
 - Each **Buoy** has one **Data Source Status** at any given time
