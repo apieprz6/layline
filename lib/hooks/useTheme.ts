@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getTimes } from 'suncalc'
 import type { ThemePreference, ResolvedTheme } from '@/types'
 
@@ -25,14 +25,6 @@ function resolveTheme(preference: ThemePreference): ResolvedTheme {
   return isNightTime() ? 'nightvision' : 'solar'
 }
 
-function applyThemeClass(theme: ResolvedTheme): void {
-  if (theme === 'nightvision') {
-    document.documentElement.classList.add('theme-nightvision')
-  } else {
-    document.documentElement.classList.remove('theme-nightvision')
-  }
-}
-
 export function useTheme(): {
   theme: ResolvedTheme
   preference: ThemePreference
@@ -47,7 +39,11 @@ export function useTheme(): {
     return 'auto'
   })
 
-  const [theme, setTheme] = useState<ResolvedTheme>(() => resolveTheme(preference))
+  const [tick, setTick] = useState(0)
+
+  // tick changes on interval to re-evaluate time-dependent resolveTheme()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const theme = useMemo(() => resolveTheme(preference), [preference, tick])
 
   const setPreference = useCallback((pref: ThemePreference) => {
     localStorage.setItem(STORAGE_KEY, pref)
@@ -55,18 +51,18 @@ export function useTheme(): {
   }, [])
 
   useEffect(() => {
-    const resolved = resolveTheme(preference)
-    setTheme(resolved)
-    applyThemeClass(resolved)
-  }, [preference])
+    if (theme === 'nightvision') {
+      document.documentElement.classList.add('theme-nightvision')
+    } else {
+      document.documentElement.classList.remove('theme-nightvision')
+    }
+  }, [theme])
 
   useEffect(() => {
     if (preference !== 'auto') return
 
     const interval = setInterval(() => {
-      const resolved = resolveTheme(preference)
-      setTheme(resolved)
-      applyThemeClass(resolved)
+      setTick(t => t + 1)
     }, REEVALUATE_INTERVAL_MS)
 
     return () => clearInterval(interval)
