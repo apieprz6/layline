@@ -251,6 +251,10 @@ export interface WeatherModelCacheEntry {
   expiresAt: number // Unix timestamp when cache entry expires (milliseconds)
 }
 
+// Theme types
+export type ThemePreference = 'auto' | 'solar' | 'nightvision'
+export type ResolvedTheme = 'solar' | 'nightvision'
+
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {
   timestamp: Date
