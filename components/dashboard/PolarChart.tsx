@@ -562,9 +562,7 @@ export default function PolarChart({
                   height={11}
                   rx={2}
                   style={{
-                    fill: accent
-                      ? "var(--blue-muted)"
-                      : "var(--chart-label-bg)",
+                    fill: "var(--chart-label-bg)",
                   }}
                 />
                 {/* Label text */}
