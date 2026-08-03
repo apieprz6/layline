@@ -3,6 +3,7 @@
 import { useState, ReactNode } from 'react'
 import RaceHeader from './RaceHeader'
 import HamburgerMenu from './HamburgerMenu'
+import { useTheme } from '@/lib/hooks/useTheme'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -15,6 +16,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children, raceTime, currentWind }: AppLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  useTheme()
 
   return (
     <div className="min-h-screen">
