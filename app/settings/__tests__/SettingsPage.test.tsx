@@ -17,16 +17,16 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ push: jest.fn() })),
 }))
 
-import SettingsPage from '../page'
+import SettingsContent from '../SettingsContent'
 
-describe('SettingsPage', () => {
+describe('SettingsContent', () => {
   beforeEach(() => {
     mockPreference = 'auto'
     mockSetPreference.mockClear()
   })
 
   it('renders three theme options: Auto, Solar, Night Vision', () => {
-    render(<SettingsPage />)
+    render(<SettingsContent />)
 
     expect(screen.getByRole('button', { name: /auto/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /solar/i })).toBeInTheDocument()
@@ -34,13 +34,13 @@ describe('SettingsPage', () => {
   })
 
   it('displays explanatory subtitle for the Auto option about civil twilight', () => {
-    render(<SettingsPage />)
+    render(<SettingsContent />)
 
     expect(screen.getByText(/civil twilight/i)).toBeInTheDocument()
   })
 
   it('visually indicates the active preference', () => {
-    render(<SettingsPage />)
+    render(<SettingsContent />)
 
     const autoButton = screen.getByRole('button', { name: /auto/i })
     expect(autoButton).toHaveAttribute('aria-pressed', 'true')
@@ -51,7 +51,7 @@ describe('SettingsPage', () => {
 
   it('clicking an option calls setPreference with the correct value', async () => {
     const user = userEvent.setup()
-    render(<SettingsPage />)
+    render(<SettingsContent />)
 
     await user.click(screen.getByRole('button', { name: /solar/i }))
     expect(mockSetPreference).toHaveBeenCalledWith('solar')
@@ -62,7 +62,7 @@ describe('SettingsPage', () => {
 
   it('updates visually when preference changes', () => {
     mockPreference = 'nightvision'
-    render(<SettingsPage />)
+    render(<SettingsContent />)
 
     const nightVisionButton = screen.getByRole('button', { name: /night vision/i })
     expect(nightVisionButton).toHaveAttribute('aria-pressed', 'true')
