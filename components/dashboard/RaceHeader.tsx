@@ -1,44 +1,47 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import useSWR from 'swr'
+import type { BuoyDataResult } from '@/types'
 
 interface RaceHeaderProps {
-  raceTime: Date
-  currentWind: {
-    speed: number
-    direction: number
-  }
   onOpenMenu?: () => void
 }
 
-export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHeaderProps) {
-  const [timeUntil, setTimeUntil] = useState('')
+const STALENESS_THRESHOLD_MS = 25 * 60 * 1000
 
+const fetcher = (url: string) => fetch(url).then(res => res.json())
+
+function useHeaderWind(): { speed: number; direction: number } | null {
+  const { data } = useSWR<{ buoys: BuoyDataResult[] }>(
+    '/api/weather/buoys',
+    fetcher,
+    { refreshInterval: 5 * 60 * 1000 }
+  )
+
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date()
-      const diff = raceTime.getTime() - now.getTime()
-
-      if (diff <= 0) {
-        setTimeUntil('Racing now')
-        return
-      }
-
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-      if (hours > 0) {
-        setTimeUntil(`${hours}h ${minutes}m until race`)
-      } else {
-        setTimeUntil(`${minutes}m until race`)
-      }
-    }
-
-    updateCountdown()
-    const interval = setInterval(updateCountdown, 60000) // Update every minute
-
+    const interval = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(interval)
-  }, [raceTime])
+  }, [])
+
+  return useMemo(() => {
+    if (!data?.buoys) return null
+
+    const purdue = data.buoys.find(b => b.data?.buoyId === '45198')
+    const chii2 = data.buoys.find(b => b.data?.buoyId === 'CHII2')
+    const preferred = purdue?.data ?? chii2?.data
+    if (!preferred) return null
+
+    const age = now - new Date(preferred.timestamp).getTime()
+    if (age > STALENESS_THRESHOLD_MS) return null
+
+    return { speed: preferred.windSpeed, direction: preferred.windDirection }
+  }, [data, now])
+}
+
+export default function RaceHeader({ onOpenMenu }: RaceHeaderProps) {
+  const currentWind = useHeaderWind()
 
   return (
     <div
@@ -77,13 +80,8 @@ export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHe
         )}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-icon.svg" width={24} height={24} alt="L" />
-        <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            layline
-          </div>
-          <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {timeUntil}
-          </div>
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+          layline
         </div>
       </div>
 
@@ -94,27 +92,30 @@ export default function RaceHeader({ raceTime, currentWind, onOpenMenu }: RaceHe
             WIND NOW
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)', fontWeight: 500 }}>
-            {currentWind.speed.toFixed(1)} kts
+            {currentWind ? `${currentWind.speed.toFixed(1)} kts` : '—'}
           </div>
         </div>
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--blue-muted)',
-            border: '1px solid var(--blue-muted-40)',
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16">
-            <g transform={`rotate(${currentWind.direction} 8 8)`}>
-              <polygon points="8,3 10,10 8,9 6,10" fill="var(--blue-500)" />
-            </g>
-          </svg>
-        </div>
+        {currentWind && (
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--blue-muted)',
+              border: '1px solid var(--blue-muted-40)',
+            }}
+          >
+            <svg width="22" height="22" viewBox="-32 -32 64 64">
+              <g transform={`rotate(${currentWind.direction})`}>
+                <rect x="-2" y="-12" width="4" height="24" rx="1.2" fill="var(--blue-500)" opacity="0.2" />
+                <polygon points="0,-28 6,-12 0,-18 -6,-12" fill="var(--blue-500)" />
+              </g>
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   )

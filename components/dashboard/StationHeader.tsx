@@ -1,9 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { spacing } from '@/lib/utils/design'
 import { formatTimeHHMM, formatFetchAge, formatOffset } from '@/lib/utils/timeFormatting'
+import { safeBack } from '@/lib/utils/navigation'
 
 interface StationHeaderProps {
   stationName: string
@@ -28,6 +29,10 @@ export default function StationHeader({
 }: StationHeaderProps) {
   const router = useRouter()
   const [nowTick, setNowTick] = useState(() => Date.now())
+
+  const handleBack = useCallback(() => {
+    safeBack(router)
+  }, [router])
 
   // Update timer every second for "Fetched X sec ago"
   useEffect(() => {
@@ -60,7 +65,7 @@ export default function StationHeader({
       >
         {/* Back button */}
         <button
-          onClick={() => router.back()}
+          onClick={handleBack}
           style={{
             background: 'none',
             border: 'none',

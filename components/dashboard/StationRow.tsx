@@ -7,6 +7,7 @@ import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
 import { getWindCondition, getWindColorHex } from '@/lib/utils/wind'
 import { spacing } from '@/lib/utils/design'
+import { markInternalNavigation } from '@/lib/utils/navigation'
 
 interface StationRowProps {
   buoyId: string
@@ -75,6 +76,7 @@ export default function StationRow({
     if (onClick) {
       onClick()
     } else {
+      markInternalNavigation()
       router.push(`/station/${buoyId}`)
     }
   }

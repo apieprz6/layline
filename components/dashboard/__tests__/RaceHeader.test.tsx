@@ -9,27 +9,37 @@ jest.mock('next/navigation', () => ({
   })),
 }))
 
+// Mock SWR
+jest.mock('swr', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
+
+import useSWR from 'swr'
+const mockUseSWR = useSWR as jest.Mock
+
 describe('RaceHeader', () => {
-  const defaultProps = {
-    raceTime: new Date('2026-05-27T19:00:00Z'),
-    currentWind: {
-      speed: 12,
-      direction: 245,
-    },
-  }
-
-  beforeAll(() => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-05-27T17:00:00Z')) // 2 hours before race
-  })
-
-  afterAll(() => {
-    jest.useRealTimers()
+  beforeEach(() => {
+    mockUseSWR.mockReturnValue({
+      data: {
+        buoys: [
+          {
+            data: {
+              buoyId: '45198',
+              windSpeed: 12,
+              windDirection: 245,
+              timestamp: new Date().toISOString(),
+            },
+            status: 'online',
+          },
+        ],
+      },
+    })
   })
 
   it('renders hamburger button when onOpenMenu is provided', () => {
     const mockOnOpenMenu = jest.fn()
-    render(<RaceHeader {...defaultProps} onOpenMenu={mockOnOpenMenu} />)
+    render(<RaceHeader onOpenMenu={mockOnOpenMenu} />)
 
     const hamburgerButton = screen.getByRole('button', { name: /menu/i })
     expect(hamburgerButton).toBeInTheDocument()
@@ -39,7 +49,7 @@ describe('RaceHeader', () => {
     const user = userEvent.setup({ delay: null })
     const mockOnOpenMenu = jest.fn()
 
-    render(<RaceHeader {...defaultProps} onOpenMenu={mockOnOpenMenu} />)
+    render(<RaceHeader onOpenMenu={mockOnOpenMenu} />)
 
     const hamburgerButton = screen.getByRole('button', { name: /menu/i })
     await user.click(hamburgerButton)
@@ -48,27 +58,25 @@ describe('RaceHeader', () => {
   })
 
   it('renders layline logo and title', () => {
-    render(<RaceHeader {...defaultProps} />)
+    render(<RaceHeader />)
 
-    // Check for logo image
     const logo = screen.getByAltText('L')
     expect(logo).toBeInTheDocument()
     expect(logo).toHaveAttribute('src', '/logo-icon.svg')
 
-    // Check for layline text
     expect(screen.getByText('layline')).toBeInTheDocument()
   })
 
-  it('displays race countdown', () => {
-    render(<RaceHeader {...defaultProps} />)
-
-    // Should show "2h 0m until race"
-    expect(screen.getByText(/2h 0m until race/i)).toBeInTheDocument()
-  })
-
   it('displays current wind speed with one decimal', () => {
-    render(<RaceHeader {...defaultProps} />)
+    render(<RaceHeader />)
 
     expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()
+  })
+
+  it('displays dash when no wind data available', () => {
+    mockUseSWR.mockReturnValue({ data: null })
+    render(<RaceHeader />)
+
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 })
