@@ -7,20 +7,15 @@ import { useTheme } from '@/lib/hooks/useTheme'
 
 interface AppLayoutProps {
   children: ReactNode
-  currentWind: {
-    speed: number
-    direction: number
-  } | null
 }
 
-export default function AppLayout({ children, currentWind }: AppLayoutProps) {
+export default function AppLayout({ children }: AppLayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   useTheme()
 
   return (
     <div className="min-h-screen">
       <RaceHeader
-        currentWind={currentWind}
         onOpenMenu={() => setMenuOpen(true)}
       />
 

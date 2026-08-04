@@ -1,14 +1,39 @@
 'use client'
 
+import useSWR from 'swr'
+import type { BuoyDataResult } from '@/types'
+
 interface RaceHeaderProps {
-  currentWind: {
-    speed: number
-    direction: number
-  } | null
   onOpenMenu?: () => void
 }
 
-export default function RaceHeader({ currentWind, onOpenMenu }: RaceHeaderProps) {
+const STALENESS_THRESHOLD_MS = 25 * 60 * 1000
+
+const fetcher = (url: string) => fetch(url).then(res => res.json())
+
+function useHeaderWind(): { speed: number; direction: number } | null {
+  const { data } = useSWR<{ buoys: BuoyDataResult[] }>(
+    '/api/weather/buoys',
+    fetcher,
+    { refreshInterval: 5 * 60 * 1000 }
+  )
+
+  if (!data?.buoys) return null
+
+  const purdue = data.buoys.find(b => b.data?.buoyId === '45198')
+  const chii2 = data.buoys.find(b => b.data?.buoyId === 'CHII2')
+  const preferred = purdue?.data ?? chii2?.data
+  if (!preferred) return null
+
+  const age = Date.now() - new Date(preferred.timestamp).getTime()
+  if (age > STALENESS_THRESHOLD_MS) return null
+
+  return { speed: preferred.windSpeed, direction: preferred.windDirection }
+}
+
+export default function RaceHeader({ onOpenMenu }: RaceHeaderProps) {
+  const currentWind = useHeaderWind()
+
   return (
     <div
       style={{

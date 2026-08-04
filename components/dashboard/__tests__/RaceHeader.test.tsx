@@ -9,17 +9,37 @@ jest.mock('next/navigation', () => ({
   })),
 }))
 
+// Mock SWR
+jest.mock('swr', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
+
+import useSWR from 'swr'
+const mockUseSWR = useSWR as jest.Mock
+
 describe('RaceHeader', () => {
-  const defaultProps = {
-    currentWind: {
-      speed: 12,
-      direction: 245,
-    } as { speed: number; direction: number } | null,
-  }
+  beforeEach(() => {
+    mockUseSWR.mockReturnValue({
+      data: {
+        buoys: [
+          {
+            data: {
+              buoyId: '45198',
+              windSpeed: 12,
+              windDirection: 245,
+              timestamp: new Date().toISOString(),
+            },
+            status: 'online',
+          },
+        ],
+      },
+    })
+  })
 
   it('renders hamburger button when onOpenMenu is provided', () => {
     const mockOnOpenMenu = jest.fn()
-    render(<RaceHeader {...defaultProps} onOpenMenu={mockOnOpenMenu} />)
+    render(<RaceHeader onOpenMenu={mockOnOpenMenu} />)
 
     const hamburgerButton = screen.getByRole('button', { name: /menu/i })
     expect(hamburgerButton).toBeInTheDocument()
@@ -29,7 +49,7 @@ describe('RaceHeader', () => {
     const user = userEvent.setup({ delay: null })
     const mockOnOpenMenu = jest.fn()
 
-    render(<RaceHeader {...defaultProps} onOpenMenu={mockOnOpenMenu} />)
+    render(<RaceHeader onOpenMenu={mockOnOpenMenu} />)
 
     const hamburgerButton = screen.getByRole('button', { name: /menu/i })
     await user.click(hamburgerButton)
@@ -38,7 +58,7 @@ describe('RaceHeader', () => {
   })
 
   it('renders layline logo and title', () => {
-    render(<RaceHeader {...defaultProps} />)
+    render(<RaceHeader />)
 
     const logo = screen.getByAltText('L')
     expect(logo).toBeInTheDocument()
@@ -48,13 +68,14 @@ describe('RaceHeader', () => {
   })
 
   it('displays current wind speed with one decimal', () => {
-    render(<RaceHeader {...defaultProps} />)
+    render(<RaceHeader />)
 
     expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()
   })
 
-  it('displays dash when wind data is null', () => {
-    render(<RaceHeader currentWind={null} />)
+  it('displays dash when no wind data available', () => {
+    mockUseSWR.mockReturnValue({ data: null })
+    render(<RaceHeader />)
 
     expect(screen.getByText('—')).toBeInTheDocument()
   })

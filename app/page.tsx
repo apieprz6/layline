@@ -15,30 +15,12 @@ const SHOW_WIND_FORECAST = false
 const SHOW_MODEL_COMPARISON = false
 const SHOW_RIG_SETUP = false
 
-const STALENESS_THRESHOLD_MS = 25 * 60 * 1000
-
 export default async function DashboardPage() {
   const [chii2Result, purdueResult] = await Promise.all([
     fetchCHII2(),
     fetchPurdueBuoy(),
   ])
   const buoyData = [chii2Result, purdueResult]
-
-  // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
-  const now = Date.now()
-
-  function getHeaderWind(): { speed: number; direction: number } | null {
-    // Prefer Purdue buoy, fall back to Harrison Dever
-    const preferred = purdueResult.data ?? chii2Result.data
-    if (!preferred) return null
-
-    const age = now - new Date(preferred.timestamp).getTime()
-    if (age > STALENESS_THRESHOLD_MS) return null
-
-    return { speed: preferred.windSpeed, direction: preferred.windDirection }
-  }
-
-  const currentWind = getHeaderWind()
 
   const forecastData = [
     { time: '17:00', speed: 10, direction: 240, gust: 13 },
@@ -75,7 +57,7 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
   ]
 
   return (
-    <AppLayout currentWind={currentWind}>
+    <AppLayout>
       <div className="p-4 space-y-4">
         {SHOW_CURRENT_WIND_CARD && (
           <WindCard

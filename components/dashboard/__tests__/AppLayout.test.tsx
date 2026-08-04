@@ -10,12 +10,28 @@ jest.mock('next/navigation', () => ({
   })),
 }))
 
+// Mock SWR (used by RaceHeader)
+jest.mock('swr', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    data: {
+      buoys: [
+        {
+          data: {
+            buoyId: '45198',
+            windSpeed: 12,
+            windDirection: 245,
+            timestamp: new Date().toISOString(),
+          },
+          status: 'online',
+        },
+      ],
+    },
+  })),
+}))
+
 describe('AppLayout', () => {
   const defaultProps = {
-    currentWind: {
-      speed: 12,
-      direction: 245,
-    } as { speed: number; direction: number } | null,
     children: <div>Page content</div>,
   }
 
