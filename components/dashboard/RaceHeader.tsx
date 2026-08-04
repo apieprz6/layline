@@ -74,10 +74,10 @@ export default function RaceHeader({ currentWind, onOpenMenu }: RaceHeaderProps)
               border: '1px solid var(--blue-muted-40)',
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16">
-              <g transform={`rotate(${currentWind.direction} 8 8)`}>
-                <rect x="7.25" y="9" width="1.5" height="5" rx="0.5" fill="var(--blue-500)" opacity="0.2" />
-                <polygon points="8,3 10,10 8,9 6,10" fill="var(--blue-500)" />
+            <svg width="16" height="16" viewBox="-32 -32 64 64">
+              <g transform={`rotate(${currentWind.direction})`}>
+                <rect x="-2" y="-12" width="4" height="24" rx="1.2" fill="var(--blue-500)" opacity="0.2" />
+                <polygon points="0,-28 6,-12 0,-18 -6,-12" fill="var(--blue-500)" />
               </g>
             </svg>
           </div>
