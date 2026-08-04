@@ -35,14 +35,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh session if expired
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Protect routes that require authentication
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
-  }
+  await supabase.auth.getUser()
 
   return supabaseResponse
 }
