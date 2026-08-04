@@ -12,22 +12,12 @@ jest.mock('next/navigation', () => ({
 
 describe('AppLayout', () => {
   const defaultProps = {
-    raceTime: new Date('2026-05-27T19:00:00Z'),
     currentWind: {
       speed: 12,
       direction: 245,
-    },
+    } as { speed: number; direction: number } | null,
     children: <div>Page content</div>,
   }
-
-  beforeAll(() => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-05-27T17:00:00Z'))
-  })
-
-  afterAll(() => {
-    jest.useRealTimers()
-  })
 
   it('renders RaceHeader with correct props', () => {
     render(<AppLayout {...defaultProps} />)

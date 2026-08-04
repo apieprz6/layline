@@ -9,33 +9,36 @@ import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
 export const dynamic = 'force-dynamic'
 
+const SHOW_CURRENT_WIND_CARD = false
+const SHOW_RACE_BRIEFING = false
+const SHOW_WIND_FORECAST = false
+const SHOW_MODEL_COMPARISON = false
+const SHOW_RIG_SETUP = false
+
+const STALENESS_THRESHOLD_MS = 25 * 60 * 1000
+
 export default async function DashboardPage() {
-  // Fetch live buoy data directly from services (uses internal cache)
   const [chii2Result, purdueResult] = await Promise.all([
     fetchCHII2(),
     fetchPurdueBuoy(),
   ])
   const buoyData = [chii2Result, purdueResult]
 
-  // Mock race time - Wednesday 7:00 PM
-  function getNextRaceTime(): Date {
-    // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
-    const now = Date.now()
-    const raceTime = new Date()
-    raceTime.setHours(19, 0, 0, 0)
-    if (raceTime.getTime() < now) {
-      raceTime.setDate(raceTime.getDate() + 7)
-    }
-    return raceTime
-  }
-  const raceTime = getNextRaceTime()
+  // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
+  const now = Date.now()
 
-  // Mock data - in production, this would come from your API
-  const currentWind = {
-    speed: 12,
-    direction: 245,
-    gust: 15
+  function getHeaderWind(): { speed: number; direction: number } | null {
+    // Prefer Purdue buoy, fall back to Harrison Dever
+    const preferred = purdueResult.data ?? chii2Result.data
+    if (!preferred) return null
+
+    const age = now - new Date(preferred.timestamp).getTime()
+    if (age > STALENESS_THRESHOLD_MS) return null
+
+    return { speed: preferred.windSpeed, direction: preferred.windDirection }
   }
+
+  const currentWind = getHeaderWind()
 
   const forecastData = [
     { time: '17:00', speed: 10, direction: 240, gust: 13 },
@@ -72,35 +75,39 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
   ]
 
   return (
-    <AppLayout raceTime={raceTime} currentWind={currentWind}>
+    <AppLayout currentWind={currentWind}>
       <div className="p-4 space-y-4">
-        {/* Current Wind */}
-        <WindCard
-          current={currentWind}
-          forecast={{ speed: 14, direction: 248 }}
-        />
+        {SHOW_CURRENT_WIND_CARD && (
+          <WindCard
+            current={{ speed: 12, direction: 245, gust: 15 }}
+            forecast={{ speed: 14, direction: 248 }}
+          />
+        )}
 
-        {/* Live Wind Card */}
         <LiveWindCard buoys={buoyData} />
 
-        {/* Tactical Briefing */}
-        <TacticalBriefing
-          briefing={briefing}
-          generatedAt={new Date()}
-        />
+        {SHOW_RACE_BRIEFING && (
+          <TacticalBriefing
+            briefing={briefing}
+            generatedAt={new Date()}
+          />
+        )}
 
-        {/* Wind Forecast Timeline */}
-        <ForecastChart data={forecastData} />
+        {SHOW_WIND_FORECAST && (
+          <ForecastChart data={forecastData} />
+        )}
 
-        {/* Model Comparison */}
-        <ModelComparison models={models} />
+        {SHOW_MODEL_COMPARISON && (
+          <ModelComparison models={models} />
+        )}
 
-        {/* Rig Recommendation */}
-        <RigRecommendation
-          condition="medium"
-          windSpeed={14}
-          recommendations={rigRecommendations}
-        />
+        {SHOW_RIG_SETUP && (
+          <RigRecommendation
+            condition="medium"
+            windSpeed={14}
+            recommendations={rigRecommendations}
+          />
+        )}
       </div>
     </AppLayout>
   )

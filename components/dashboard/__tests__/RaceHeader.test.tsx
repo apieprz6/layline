@@ -11,21 +11,11 @@ jest.mock('next/navigation', () => ({
 
 describe('RaceHeader', () => {
   const defaultProps = {
-    raceTime: new Date('2026-05-27T19:00:00Z'),
     currentWind: {
       speed: 12,
       direction: 245,
-    },
+    } as { speed: number; direction: number } | null,
   }
-
-  beforeAll(() => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-05-27T17:00:00Z')) // 2 hours before race
-  })
-
-  afterAll(() => {
-    jest.useRealTimers()
-  })
 
   it('renders hamburger button when onOpenMenu is provided', () => {
     const mockOnOpenMenu = jest.fn()
@@ -50,25 +40,22 @@ describe('RaceHeader', () => {
   it('renders layline logo and title', () => {
     render(<RaceHeader {...defaultProps} />)
 
-    // Check for logo image
     const logo = screen.getByAltText('L')
     expect(logo).toBeInTheDocument()
     expect(logo).toHaveAttribute('src', '/logo-icon.svg')
 
-    // Check for layline text
     expect(screen.getByText('layline')).toBeInTheDocument()
-  })
-
-  it('displays race countdown', () => {
-    render(<RaceHeader {...defaultProps} />)
-
-    // Should show "2h 0m until race"
-    expect(screen.getByText(/2h 0m until race/i)).toBeInTheDocument()
   })
 
   it('displays current wind speed with one decimal', () => {
     render(<RaceHeader {...defaultProps} />)
 
     expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()
+  })
+
+  it('displays dash when wind data is null', () => {
+    render(<RaceHeader currentWind={null} />)
+
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 })
