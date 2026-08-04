@@ -14,7 +14,7 @@ export default function WindArrow({ deg, kts, size = 32, color }: WindArrowProps
 
   return (
     <svg width={size} height={size} viewBox="-32 -32 64 64">
-      <g transform={`rotate(${deg + 180})`}>
+      <g transform={`rotate(${deg})`}>
         <polygon
           points="0,-28 6,-12 0,-18 -6,-12"
           fill={c}
