@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import type { BuoyDataResult } from '@/types'
 
@@ -18,17 +19,25 @@ function useHeaderWind(): { speed: number; direction: number } | null {
     { refreshInterval: 5 * 60 * 1000 }
   )
 
-  if (!data?.buoys) return null
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
-  const purdue = data.buoys.find(b => b.data?.buoyId === '45198')
-  const chii2 = data.buoys.find(b => b.data?.buoyId === 'CHII2')
-  const preferred = purdue?.data ?? chii2?.data
-  if (!preferred) return null
+  return useMemo(() => {
+    if (!data?.buoys) return null
 
-  const age = Date.now() - new Date(preferred.timestamp).getTime()
-  if (age > STALENESS_THRESHOLD_MS) return null
+    const purdue = data.buoys.find(b => b.data?.buoyId === '45198')
+    const chii2 = data.buoys.find(b => b.data?.buoyId === 'CHII2')
+    const preferred = purdue?.data ?? chii2?.data
+    if (!preferred) return null
 
-  return { speed: preferred.windSpeed, direction: preferred.windDirection }
+    const age = now - new Date(preferred.timestamp).getTime()
+    if (age > STALENESS_THRESHOLD_MS) return null
+
+    return { speed: preferred.windSpeed, direction: preferred.windDirection }
+  }, [data, now])
 }
 
 export default function RaceHeader({ onOpenMenu }: RaceHeaderProps) {
