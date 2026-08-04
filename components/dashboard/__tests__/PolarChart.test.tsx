@@ -98,11 +98,11 @@ describe('PolarChart', () => {
       // Filter for radial ring circles (not data points, not center dot, not reference ring)
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
-        const stroke = c.getAttribute('stroke')
         const strokeWidth = c.getAttribute('stroke-width')
-        // Rings have fill="none" and stroke with rgba, and strokeWidth 0.75 or 1.5
+        const style = c.getAttribute('style') || ''
+        // Rings have fill="none", a stroke via style, and strokeWidth 0.75 or 1.5
         // Exclude reference ring (strokeWidth 2.5)
-        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
+        return fill === 'none' && style.includes('stroke') && strokeWidth !== '2.5'
       })
 
       expect(ringCircles.length).toBe(7)
@@ -116,27 +116,27 @@ describe('PolarChart', () => {
       const circles = container.querySelectorAll('circle')
       const ringCircles = Array.from(circles).filter(c => {
         const fill = c.getAttribute('fill')
-        const stroke = c.getAttribute('stroke')
         const strokeWidth = c.getAttribute('stroke-width')
+        const style = c.getAttribute('style') || ''
         // Exclude reference ring (strokeWidth 2.5)
-        return fill === 'none' && stroke && stroke.includes('rgba') && strokeWidth !== '2.5'
+        return fill === 'none' && style.includes('stroke') && strokeWidth !== '2.5'
       })
 
       // 1h scale should have 5 rings: [0, 15, 30, 45, 60]
       expect(ringCircles.length).toBe(5)
     })
 
-    it('renders outer ring with stronger styling', () => {
+    it('renders outer ring with stronger styling matching wind color', () => {
       const { container } = render(
         <PolarChart data={mockData} timeWindowMinutes={30} />
       )
 
       const circles = container.querySelectorAll('circle[fill="none"]')
-      // Outer ring should have blue accent color and solid stroke
+      // Outer ring should have solid stroke (dasharray "0") and stronger strokeWidth
       const outerRing = Array.from(circles).find(c => {
-        const stroke = c.getAttribute('stroke')
         const dasharray = c.getAttribute('stroke-dasharray')
-        return stroke && stroke.includes('0,68,204') && dasharray === '0'
+        const strokeWidth = c.getAttribute('stroke-width')
+        return dasharray === '0' && strokeWidth === '1.5'
       })
 
       expect(outerRing).toBeTruthy()

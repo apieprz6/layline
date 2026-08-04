@@ -166,6 +166,13 @@ export default function PolarChart({
       .sort((a, b) => a.minsAgo - b.minsAgo); // Sort oldest to newest
   }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes]);
 
+  // Outer ring color matches the displayed reference point's wind strength
+  const outerRingColor = useMemo(() => {
+    if (displayPoint) return getWindColorHex(displayPoint.spd);
+    if (dataPoints.length === 0) return "var(--blue-500)";
+    return dataPoints[dataPoints.length - 1].color;
+  }, [displayPoint, dataPoints]);
+
   // Generate line segments, skipping gaps > 90°
   const lineSegments = useMemo(() => {
     const segments: Array<{
@@ -445,26 +452,24 @@ export default function PolarChart({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          {/* Background gradients */}
-          <defs>
-            <radialGradient id="bgWash" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#F0EDE6" stopOpacity="1" />
-              <stop offset="70%" stopColor="#EFEBE2" stopOpacity="1" />
-              <stop offset="100%" stopColor="#E8E2D2" stopOpacity="1" />
-            </radialGradient>
-            <radialGradient id="outerHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="92%" stopColor="rgba(0,68,204,0)" />
-              <stop offset="100%" stopColor="rgba(0,68,204,0.12)" />
-            </radialGradient>
-          </defs>
-
-          {/* Background circles */}
-          <circle cx={CENTER_X} cy={CENTER_Y} r={R + 6} fill="url(#bgWash)" />
+          {/* Background circles — subtle radial shading */}
           <circle
             cx={CENTER_X}
             cy={CENTER_Y}
             r={R + 6}
-            fill="url(#outerHalo)"
+            style={{ fill: "var(--chart-bg-edge)" }}
+          />
+          <circle
+            cx={CENTER_X}
+            cy={CENTER_Y}
+            r={R * 0.7 + 6}
+            style={{ fill: "var(--chart-bg-mid)" }}
+          />
+          <circle
+            cx={CENTER_X}
+            cy={CENTER_Y}
+            r={R * 0.35 + 6}
+            style={{ fill: "var(--chart-bg-center)" }}
           />
 
           {/* Angle tick lines (every 10°) */}
@@ -473,13 +478,13 @@ export default function PolarChart({
             const isIntercardinal = angle % 45 === 0;
             const isCoarse = angle % 30 === 0;
 
-            const stroke = isCardinal
-              ? "rgba(0,0,0,0.32)"
+            const strokeVar = isCardinal
+              ? "var(--chart-grid-cardinal)"
               : isIntercardinal
-                ? "rgba(0,0,0,0.18)"
+                ? "var(--chart-grid-inter)"
                 : isCoarse
-                  ? "rgba(0,0,0,0.10)"
-                  : "rgba(0,0,0,0.04)";
+                  ? "var(--chart-grid-coarse)"
+                  : "var(--chart-grid-fine)";
 
             const strokeWidth = isCardinal ? 1 : isCoarse ? 0.75 : 0.5;
 
@@ -494,7 +499,7 @@ export default function PolarChart({
                   y1={y1}
                   x2={x2}
                   y2={y2}
-                  stroke={stroke}
+                  style={{ stroke: strokeVar }}
                   strokeWidth={strokeWidth}
                 />
               );
@@ -508,7 +513,7 @@ export default function PolarChart({
                 y1={CENTER_Y}
                 x2={x2}
                 y2={y2}
-                stroke={stroke}
+                style={{ stroke: strokeVar }}
                 strokeWidth={strokeWidth}
               />
             );
@@ -522,9 +527,12 @@ export default function PolarChart({
               cy={CENTER_Y}
               r={Math.max(0, ring.r01 * R)}
               fill="none"
-              stroke={
-                ring.isOuterRing ? "rgba(0,68,204,0.55)" : "rgba(0,0,0,0.12)"
-              }
+              style={{
+                stroke: ring.isOuterRing
+                  ? outerRingColor
+                  : "var(--chart-grid-coarse)",
+              }}
+              strokeOpacity={ring.isOuterRing ? 0.7 : 1}
               strokeWidth={ring.isOuterRing ? 1.5 : 0.75}
               strokeDasharray={ring.isOuterRing ? "0" : "2 4"}
             />
@@ -553,9 +561,9 @@ export default function PolarChart({
                   width={labelWidth}
                   height={11}
                   rx={2}
-                  fill={
-                    accent ? "rgba(0,68,204,0.10)" : "rgba(240,237,230,0.95)"
-                  }
+                  style={{
+                    fill: "var(--chart-label-bg)",
+                  }}
                 />
                 {/* Label text */}
                 <text
@@ -564,7 +572,7 @@ export default function PolarChart({
                   fontFamily="var(--font-mono)"
                   fontSize={8.5}
                   fontWeight={accent ? 600 : 500}
-                  fill={accent ? "#0044CC" : "#666666"}
+                  style={{ fill: "var(--text-muted)" }}
                 >
                   {label}
                 </text>
@@ -580,7 +588,7 @@ export default function PolarChart({
               textAnchor="middle"
               fontFamily="var(--font-mono)"
               fontSize={8.5}
-              fill="rgba(0,0,0,0.4)"
+              style={{ fill: "var(--chart-center-text)" }}
             >
               {formatTimeOffset(nowOffsetMinutes + timeWindowMinutes)}
             </text>
@@ -681,7 +689,7 @@ export default function PolarChart({
                     cy={CENTER_Y}
                     r={Math.max(0, hoverRadius)}
                     fill="none"
-                    stroke="rgba(0,0,0,0.22)"
+                    style={{ stroke: "var(--chart-grid-inter)" }}
                     strokeWidth={1}
                     strokeDasharray="2 3"
                   />
@@ -727,7 +735,7 @@ export default function PolarChart({
             })()}
 
           {/* Center dot */}
-          <circle cx={CENTER_X} cy={CENTER_Y} r={2.5} fill="rgba(0,0,0,0.5)" />
+          <circle cx={CENTER_X} cy={CENTER_Y} r={2.5} style={{ fill: "var(--chart-center-dot)" }} />
         </svg>
       </div>
 

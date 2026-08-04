@@ -58,12 +58,19 @@ describe('HamburgerMenu', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1)
   })
 
-  it('renders Dashboard and Wind Data navigation links', () => {
+  it('renders Dashboard, Wind Data, and Settings navigation links', () => {
     render(<HamburgerMenu {...defaultProps} isOpen={true} />)
 
-    // Check both nav items exist
     expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /wind data/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument()
+  })
+
+  it('Settings link routes to /settings', () => {
+    render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+    const settingsLink = screen.getByRole('link', { name: /settings/i })
+    expect(settingsLink).toHaveAttribute('href', '/settings')
   })
 
   it('highlights active route', () => {

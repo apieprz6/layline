@@ -88,6 +88,18 @@
   /* Dock-specific surfaces (mobile bottom controls) */
   --surface-dock-bg:   rgba(240, 237, 230, 0.94);
   --surface-dock-blur: blur(14px) saturate(160%);
+
+  /* Polar chart tokens */
+  --chart-bg-center:     #F0EDE6;
+  --chart-bg-mid:        #EFEBE2;
+  --chart-bg-edge:       #E8E2D2;
+  --chart-grid-cardinal: rgba(0, 0, 0, 0.32);
+  --chart-grid-inter:    rgba(0, 0, 0, 0.18);
+  --chart-grid-coarse:   rgba(0, 0, 0, 0.10);
+  --chart-grid-fine:     rgba(0, 0, 0, 0.04);
+  --chart-label-bg:      rgba(240, 237, 230, 0.95);
+  --chart-center-dot:    rgba(0, 0, 0, 0.5);
+  --chart-center-text:   rgba(0, 0, 0, 0.4);
 }
 
 /* ============================================================
@@ -340,6 +352,18 @@
   --shadow-dock: 0 -4px 20px rgba(100, 0, 0, 0.06);
 
   --page-bg-2: #140000;
+
+  /* Polar chart tokens — night vision */
+  --chart-bg-center:     #120000;
+  --chart-bg-mid:        #100000;
+  --chart-bg-edge:       #0E0000;
+  --chart-grid-cardinal: rgba(180, 0, 0, 0.40);
+  --chart-grid-inter:    rgba(180, 0, 0, 0.25);
+  --chart-grid-coarse:   rgba(180, 0, 0, 0.15);
+  --chart-grid-fine:     rgba(180, 0, 0, 0.06);
+  --chart-label-bg:      rgba(18, 0, 0, 0.95);
+  --chart-center-dot:    rgba(180, 0, 0, 0.5);
+  --chart-center-text:   rgba(180, 0, 0, 0.4);
 }
 
 @layer components {
