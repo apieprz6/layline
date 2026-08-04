@@ -76,6 +76,7 @@ export default function RaceHeader({ currentWind, onOpenMenu }: RaceHeaderProps)
           >
             <svg width="16" height="16" viewBox="0 0 16 16">
               <g transform={`rotate(${currentWind.direction} 8 8)`}>
+                <rect x="7.25" y="9" width="1.5" height="5" rx="0.5" fill="var(--blue-500)" opacity="0.2" />
                 <polygon points="8,3 10,10 8,9 6,10" fill="var(--blue-500)" />
               </g>
             </svg>
