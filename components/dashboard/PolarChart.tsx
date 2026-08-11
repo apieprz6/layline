@@ -286,6 +286,8 @@ export default function PolarChart({
         borderRadius: "12px",
         padding: "10px",
         boxShadow: "var(--shadow-sm)",
+        WebkitUserSelect: "none",
+        userSelect: "none",
       }}
     >
       {/* Header row */}

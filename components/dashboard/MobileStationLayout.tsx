@@ -19,6 +19,8 @@ export default function MobileStationLayout({
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
       }}
     >
       {/* Sticky header area */}
