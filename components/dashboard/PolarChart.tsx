@@ -322,7 +322,7 @@ export default function PolarChart({
       </div>
 
       {/* Chart container with overlays */}
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative", aspectRatio: "1" }}>
         {/* Left overlay: Direction */}
         {displayPoint && svgDimensions.width > 0 && (
           <div
