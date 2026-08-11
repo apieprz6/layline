@@ -167,7 +167,7 @@ export default function SpeedLineChart({
     <svg
       ref={svgRef}
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      style={{ width: '100%', height: HEIGHT, display: 'block', touchAction: 'none', cursor: 'crosshair', userSelect: 'none' }}
+      style={{ width: '100%', flex: '1 1 0', minHeight: 0, display: 'block', touchAction: 'none', cursor: 'crosshair', userSelect: 'none' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
