@@ -31,22 +31,7 @@ export default function BottomControlsDock({
   onReturnToLive,
 }: BottomControlsDockProps) {
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        background: "var(--surface-dock-bg)",
-        backdropFilter: "var(--surface-dock-blur)",
-        WebkitBackdropFilter: "var(--surface-dock-blur)",
-        borderTop: "1px solid var(--surface-divider)",
-        padding: "12px 16px",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 34px) + 12px)",
-        boxShadow: "var(--shadow-dock)",
-      }}
-    >
+    <div className="bottom-dock">
       {/* Scale selector */}
       <div
         style={{

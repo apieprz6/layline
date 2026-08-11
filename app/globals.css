@@ -481,4 +481,35 @@
     border-top: 1px solid var(--surface-divider);
     margin: var(--space-4) 0;
   }
+
+  .bottom-dock {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: var(--surface-dock-bg);
+    backdrop-filter: var(--surface-dock-blur);
+    -webkit-backdrop-filter: var(--surface-dock-blur);
+    border-top: 1px solid var(--surface-divider);
+    padding: 12px 16px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 34px) + 12px);
+    box-shadow: var(--shadow-dock);
+  }
+
+  @media (min-width: 1024px) {
+    .bottom-dock {
+      max-width: 700px;
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      border-radius: 12px 12px 0 0;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .bottom-dock {
+      max-width: 800px;
+    }
+  }
 }
