@@ -58,7 +58,7 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
 
   return (
     <AppLayout>
-      <div className="p-4 space-y-4">
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
         {SHOW_CURRENT_WIND_CARD && (
           <WindCard
             current={{ speed: 12, direction: 245, gust: 15 }}
