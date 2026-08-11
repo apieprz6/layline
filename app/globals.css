@@ -499,18 +499,11 @@
 
   @media (min-width: 1024px) {
     .bottom-dock {
-      width: 100%;
-      max-width: 700px;
+      width: 80%;
       left: 50%;
       right: auto;
       transform: translateX(-50%);
       border-radius: 12px 12px 0 0;
-    }
-  }
-
-  @media (min-width: 1440px) {
-    .bottom-dock {
-      max-width: 800px;
     }
   }
 }
