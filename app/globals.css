@@ -506,4 +506,10 @@
       border-radius: 12px 12px 0 0;
     }
   }
+
+  @media (min-width: 1440px) {
+    .bottom-dock {
+      width: 60%;
+    }
+  }
 }
