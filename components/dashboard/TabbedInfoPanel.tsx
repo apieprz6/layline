@@ -66,7 +66,6 @@ export default function TabbedInfoPanel({
 
   return (
     <div
-      className="tabbed-info-card"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--border)',
