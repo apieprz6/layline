@@ -628,6 +628,7 @@ export default function PolarChart({
           {/* Line segments connecting data points */}
           {lineSegments.map((segment, i) => (
             <line
+              className="chart-data-stroke"
               key={`seg-${i}`}
               x1={segment.x1}
               y1={segment.y1}

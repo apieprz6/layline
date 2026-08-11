@@ -288,6 +288,7 @@ export default function SpeedLineChart({
 
         return (
           <line
+            className="chart-data-stroke"
             key={`seg${i}`}
             x1={x1}
             y1={y1}
