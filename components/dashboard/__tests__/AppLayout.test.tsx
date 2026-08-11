@@ -53,6 +53,14 @@ describe('AppLayout', () => {
     expect(screen.getByText('Page content')).toBeInTheDocument()
   })
 
+  it('applies left-aligned container classes at md breakpoint', () => {
+    render(<AppLayout {...defaultProps} />)
+
+    const content = screen.getByText('Page content')
+    const container = content.parentElement
+    expect(container).toHaveClass('max-w-md', 'mx-auto', 'md:mx-0', 'md:max-w-none')
+  })
+
   it('opens menu when hamburger button is clicked', async () => {
     const user = userEvent.setup({ delay: null })
     const { container } = render(<AppLayout {...defaultProps} />)

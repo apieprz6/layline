@@ -24,7 +24,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         onClose={() => setMenuOpen(false)}
       />
 
-      <div className="max-w-md mx-auto lg:max-w-7xl">
+      <div className="max-w-md mx-auto md:mx-0 md:max-w-none">
         {children}
       </div>
     </div>
