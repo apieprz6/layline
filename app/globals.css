@@ -421,9 +421,23 @@
 
     .station-layout__polar > * {
       height: 100%;
+    }
+
+    .polar-chart-card {
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       min-height: 0;
+    }
+
+    .polar-chart-card__chart {
+      flex: 1 1 0;
+      min-height: 0;
+    }
+
+    .polar-chart-card__chart svg {
+      height: 100%;
+      max-height: 100%;
     }
 
     .station-layout__speed {
