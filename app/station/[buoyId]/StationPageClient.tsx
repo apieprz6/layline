@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import type { WindDataPoint, WindDataPointWithOffset } from "@/types";
 import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
-import MobileStationLayout from "@/components/dashboard/MobileStationLayout";
+import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
 import PolarChart from "@/components/dashboard/PolarChart";
 import SpeedLineChart from "@/components/dashboard/SpeedLineChart";
@@ -111,8 +111,10 @@ export default function StationPageClient({
     [fetchedAt],
   );
 
+  const hasData = data && data.length > 0;
+
   return (
-    <MobileStationLayout
+    <StationLayout
       header={
         <StationHeader
           stationName={stationName}
@@ -122,6 +124,85 @@ export default function StationPageClient({
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
         />
+      }
+      polarChart={
+        hasData ? (
+          <PolarChart
+            data={data}
+            referenceTime={now}
+            timeWindowMinutes={timeWindowMinutes}
+            nowOffsetMinutes={nowOffset}
+            hoverPoint={hoverPoint}
+            onHoverChange={setHoverPoint}
+            displayPoint={displayPoint}
+            mode={mode}
+          />
+        ) : null
+      }
+      speedChart={
+        hasData ? (
+          <div
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--surface-border)",
+              borderRadius: "12px",
+              padding: "12px 10px 6px 10px",
+              boxShadow: "var(--shadow-sm)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "0 6px 4px 6px",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-body)",
+                  fontSize: "9.5px",
+                  fontWeight: "600",
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Wind speed
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {TIME_SCALES[scaleId].label}
+              </span>
+            </div>
+            <SpeedLineChart
+              data={data}
+              referenceTime={now}
+              timeWindowMinutes={timeWindowMinutes}
+              nowOffsetMinutes={nowOffset}
+              hoverPoint={hoverPoint}
+              onHoverChange={setHoverPoint}
+            />
+          </div>
+        ) : null
+      }
+      tabbedPanel={
+        hasData ? (
+          <TabbedInfoPanel
+            data={data}
+            referenceTime={now}
+            timeWindowMinutes={timeWindowMinutes}
+            nowOffsetMinutes={nowOffset}
+            onOffsetChange={setNowOffset}
+            buoyId={buoyId}
+            maxOffsetMinutes={maxOffset}
+          />
+        ) : null
       }
       dock={
         <BottomControlsDock
@@ -137,85 +218,6 @@ export default function StationPageClient({
           onReturnToLive={() => setNowOffset(0)}
         />
       }
-    >
-      {/* Polar chart card */}
-      {data && data.length > 0 && (
-        <PolarChart
-          data={data}
-          referenceTime={now}
-          timeWindowMinutes={timeWindowMinutes}
-          nowOffsetMinutes={nowOffset}
-          hoverPoint={hoverPoint}
-          onHoverChange={setHoverPoint}
-          displayPoint={displayPoint}
-          mode={mode}
-        />
-      )}
-
-      {/* Speed line chart card */}
-      {data && data.length > 0 && (
-        <div
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--surface-border)",
-            borderRadius: "12px",
-            padding: "12px 10px 6px 10px",
-            boxShadow: "var(--shadow-sm)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "0 6px 4px 6px",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "9.5px",
-                fontWeight: "600",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "var(--text-muted)",
-              }}
-            >
-              Wind speed
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "var(--text-muted)",
-              }}
-            >
-              {TIME_SCALES[scaleId].label}
-            </span>
-          </div>
-          <SpeedLineChart
-            data={data}
-            referenceTime={now}
-            timeWindowMinutes={timeWindowMinutes}
-            nowOffsetMinutes={nowOffset}
-            hoverPoint={hoverPoint}
-            onHoverChange={setHoverPoint}
-          />
-        </div>
-      )}
-
-      {/* Tabbed info panel */}
-      {data && data.length > 0 && (
-        <TabbedInfoPanel
-          data={data}
-          referenceTime={now}
-          timeWindowMinutes={timeWindowMinutes}
-          nowOffsetMinutes={nowOffset}
-          onOffsetChange={setNowOffset}
-          buoyId={buoyId}
-          maxOffsetMinutes={maxOffset}
-        />
-      )}
-    </MobileStationLayout>
+    />
   );
 }

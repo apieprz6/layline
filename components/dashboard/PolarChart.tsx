@@ -280,6 +280,7 @@ export default function PolarChart({
 
   return (
     <div
+      className="polar-chart-card"
       style={{
         background: "var(--surface-raised)",
         border: "1px solid var(--surface-border)",
@@ -322,7 +323,7 @@ export default function PolarChart({
       </div>
 
       {/* Chart container with overlays */}
-      <div style={{ position: "relative", aspectRatio: "1" }}>
+      <div className="polar-chart-card__chart" style={{ position: "relative", aspectRatio: "1" }}>
         {/* Left overlay: Direction */}
         {displayPoint && svgDimensions.width > 0 && (
           <div
@@ -627,6 +628,7 @@ export default function PolarChart({
           {/* Line segments connecting data points */}
           {lineSegments.map((segment, i) => (
             <line
+              className="chart-data-stroke"
               key={`seg-${i}`}
               x1={segment.x1}
               y1={segment.y1}

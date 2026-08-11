@@ -367,6 +367,142 @@
 }
 
 @layer components {
+  /* ============================================================
+     STATION LAYOUT — Responsive grid for station detail page
+     ============================================================ */
+  .station-layout {
+    min-height: 100vh;
+    background: var(--surface-base);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .station-layout__scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 16px 0 16px;
+    padding-bottom: calc(180px + 16px);
+  }
+
+  .station-layout__content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  @media (min-width: 768px) {
+    .station-layout__scroll {
+      display: flex;
+      justify-content: center;
+      padding: 16px 20px 0 20px;
+      padding-bottom: calc(180px + 20px);
+    }
+
+    .station-layout__content {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 16px;
+      align-items: stretch;
+      width: 100%;
+      max-width: 1200px;
+      height: calc(100vh - 100px - 180px);
+    }
+
+    .station-layout__polar {
+      grid-row: 1 / -1;
+      grid-column: 1;
+      min-height: 0;
+    }
+
+    .station-layout__polar > * {
+      height: 100%;
+    }
+
+    .polar-chart-card {
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .polar-chart-card__chart {
+      flex: 1 1 0;
+      min-height: 0;
+    }
+
+    .polar-chart-card__chart svg {
+      height: 100%;
+      max-height: 100%;
+    }
+
+    .station-layout__speed {
+      grid-row: 1;
+      grid-column: 2;
+      min-height: 0;
+      display: flex;
+    }
+
+    .station-layout__speed > * {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .station-layout__tabbed {
+      grid-row: 2;
+      grid-column: 2;
+      min-height: 0;
+      display: flex;
+    }
+
+    .station-layout__tabbed > * {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .station-layout__scroll {
+      padding: 20px 20px 0 20px;
+      padding-bottom: calc(180px + 20px);
+    }
+
+    .station-layout__content {
+      grid-template-columns: 3fr 2fr;
+      gap: 20px;
+      max-width: 1200px;
+    }
+
+    .chart-data-stroke {
+      stroke-width: 1.5;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .station-layout__scroll {
+      padding: 24px 24px 0 24px;
+      padding-bottom: calc(180px + 24px);
+    }
+
+    .station-layout__content {
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1400px;
+    }
+
+    .chart-data-stroke {
+      stroke-width: 1.25;
+    }
+  }
+
   /* Typography utility classes */
 .h1, h1 {
   font-family: var(--font-display);
