@@ -464,8 +464,19 @@
     .station-layout__tabbed > * {
       flex: 1;
       min-height: 0;
+    }
+
+    .tabbed-info-card {
       display: flex;
       flex-direction: column;
+      height: 100%;
+    }
+
+    .tabbed-info-card > :last-child {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
   }
 
