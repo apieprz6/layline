@@ -288,6 +288,10 @@ export default function PolarChart({
         boxShadow: "var(--shadow-sm)",
         WebkitUserSelect: "none",
         userSelect: "none",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
       }}
     >
       {/* Header row */}
@@ -322,7 +326,7 @@ export default function PolarChart({
       </div>
 
       {/* Chart container with overlays */}
-      <div style={{ position: "relative", aspectRatio: "1" }}>
+      <div style={{ position: "relative", aspectRatio: "1", flex: "1 1 0", minHeight: 0 }}>
         {/* Left overlay: Direction */}
         {displayPoint && svgDimensions.width > 0 && (
           <div
@@ -445,7 +449,8 @@ export default function PolarChart({
           viewBox="0 0 360 360"
           style={{
             width: "100%",
-            height: "auto",
+            height: "100%",
+            maxHeight: "100%",
             display: "block",
             touchAction: "none",
             userSelect: "none",
