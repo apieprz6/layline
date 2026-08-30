@@ -100,7 +100,7 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
         <div style={{ padding: '18px 16px 16px', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>layline</div>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Wed Night · Navy Pier</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Race Circle · Lake Michigan</div>
           </div>
           <button
             onClick={onClose}

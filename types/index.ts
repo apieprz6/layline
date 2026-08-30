@@ -107,7 +107,8 @@ export interface TacticalAdvice {
 
 export interface RaceBriefing {
   generatedAt: string
-  raceDate: string
+  /** The Target Time this briefing was anchored to (ISO 8601), or null for a current-conditions briefing */
+  targetTime: string | null
   courseRecommendations: CourseRecommendation[]
   rigSetup: RigSetup
   sailTrim: SailTrim

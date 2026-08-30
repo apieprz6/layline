@@ -8,20 +8,27 @@ const client = new Anthropic({
 interface RaceAnalysisInput {
   windForecasts: WindForecast[]
   buoyData: BuoyData[]
-  raceDate: string
-  raceTime: string
   location: string
+  /**
+   * Optional Target Time the sailor has anchored the forecast to (ISO 8601).
+   * Omit for a current-conditions briefing — Layline assumes no schedule.
+   */
+  targetTime?: string
 }
 
 export async function generateRaceBriefing(
   input: RaceAnalysisInput
 ): Promise<RaceBriefing> {
-  const prompt = `You are an expert sailing tactician analyzing weather data for a Wednesday night beer can regatta.
+  const occasion = input.targetTime
+    ? `The sailor has anchored this briefing to ${input.targetTime}. Reason about the conditions expected at that specific time — do not assume any particular day of the week or start time beyond what is given.`
+    : `No target time was given. Brief on current and near-term conditions, and state plainly how far ahead your advice holds.`
 
-Race Details:
-- Date: ${input.raceDate}
-- Time: ${input.raceTime}
-- Location: ${input.location}
+  const prompt = `You are an expert sailing tactician analyzing weather data for a recreational competitive PHRF fleet racing on Lake Michigan. The occasion could be a weeknight series race, a weekend regatta, or a distance race — reason from the conditions and the time being asked about, not from an assumed schedule.
+
+Venue: ${input.location}
+The COLYC Race Circle sits roughly 2.5nm offshore of Navy Pier in an urban lakefront setting. Shoreline thermals matter: on warm afternoons a lake breeze can fill from the E/NE and override a light gradient, and wind often goes lighter and shiftier toward sunset as thermal forcing collapses.
+
+${occasion}
 
 Wind Forecasts (from multiple sources):
 ${JSON.stringify(input.windForecasts, null, 2)}
@@ -78,7 +85,7 @@ Format your response as JSON matching this structure:
 
   return {
     generatedAt: new Date().toISOString(),
-    raceDate: input.raceDate,
+    targetTime: input.targetTime ?? null,
     ...analysis,
   }
 }

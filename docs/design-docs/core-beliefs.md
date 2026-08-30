@@ -119,22 +119,26 @@ interface BuoyReading {
 
 **Lake Michigan patterns, race committee tendencies, and shoreline effects are critical context.**
 
-**Why**: Generic sailing advice is useless. Navy Pier racing has unique characteristics that affect tactics, and encoding this local knowledge makes Layline valuable.
+**Why**: Generic sailing advice is useless. The Chicago lakefront has unique characteristics that affect tactics, and encoding this local knowledge makes Layline valuable.
 
 **How**:
 - Encode Lake Michigan patterns in LLM prompts
 - Reference race committee's typical course selections
-- Account for shoreline thermal effects
-- Consider evening wind patterns (Wednesday 7pm races)
+- Account for shoreline thermal effects and lake-breeze timing
+- Consider the time of day actually being asked about, rather than assuming one
 - Include historical patterns from past races
+
+**Local knowledge is about *place and physics*, not about a schedule.** Encode what the lake does at a given hour and season; do not encode "races start at 7:00 PM."
 
 **Example**:
 ```
 LLM Prompt context:
-"Navy Pier Wednesday night races typically start at 7:00 PM. As the sun sets, 
-wind often becomes lighter and more shifty due to thermal effects from the 
-shoreline. The race committee typically sets windward-leeward courses in medium 
-air and may shorten the course in light or heavy conditions."
+"The COLYC Race Circle sits ~2.5nm offshore of Navy Pier in an urban harbor 
+setting. On summer afternoons a lake breeze often fills from the E/NE and can 
+override a light gradient. Toward sunset, wind frequently goes lighter and 
+shiftier as thermal forcing collapses. The race committee typically sets 
+windward-leeward courses in medium air and may shorten in light or heavy 
+conditions."
 ```
 
 ---
@@ -221,11 +225,11 @@ export async function generateBriefing(input: any) {
 
 **Caching rules**:
 ```typescript
-// Weather data cache: 15 minutes during race window
-const RACE_WINDOW_CACHE = 15 * 60 * 1000 // 15 min
+// Weather data cache: 15 minutes when actively monitoring conditions
+const ACTIVE_CACHE = 15 * 60 * 1000 // 15 min
 
-// Weather data cache: 30 minutes during preparation
-const PREP_CACHE = 30 * 60 * 1000 // 30 min
+// Weather data cache: 30 minutes for general forecast browsing
+const BROWSE_CACHE = 30 * 60 * 1000 // 30 min
 
 // LLM briefing regeneration threshold
 const WIND_CHANGE_THRESHOLD = 3 // knots
@@ -374,13 +378,19 @@ High confidence."
 
 ### Race Format
 - **PHRF handicap racing** (not one-design)
-- **Wednesday nights**, ~7:00 PM start
-- **Beer can racing** (recreational competitive, not professional)
+- **Recreational competitive** (beer can series through weekend regattas, not professional)
+- **No assumed schedule.** Weeknight series, weekend regattas, and distance races are all in scope, as is simply watching conditions with no race at all
+
+### Occasion & Time
+- Layline opens on **Current Conditions**. A **Target Time** is optional and set by the sailor
+- Never hardcode a race day, a start time, or a "race window" — the app is used year-round and at all hours
+- Time-of-day reasoning is still valuable (lake breeze, sunset collapse), but it must key off the time actually being asked about
 
 ### Location
-- **Navy Pier Racing Circle**, Lake Michigan
-- **Coordinates**: ~41.89°N, 87.60°W
-- **Urban harbor setting** (wind influenced by buildings)
+- **COLYC Race Circle**, Lake Michigan
+- **Coordinates**: 41.8528333°N, 87.55683333°W (~2.5nm offshore of Navy Pier)
+- Single canonical Forecast Location — see `lib/config/locations.ts`
+- **Urban harbor setting** (wind influenced by buildings and shoreline thermals)
 
 ### Typical Conditions
 - **Wind**: 8-15 knots most common
@@ -399,9 +409,13 @@ High confidence."
 - **Boat types**: Variety of PHRF-rated boats (25-40 feet)
 
 ### Usage Pattern
-- **Tuesday evening**: Initial forecast check and race planning
-- **Wednesday afternoon**: Final forecast update
-- **Race day**: Quick reference and conditions check
+- **Days out**: Is this regatta going to be sailable? Long-range forecast check
+- **Morning of / day before**: Planning — what to bring, how to set up
+- **Hours before**: Final forecast update against a **Target Time**
+- **On the way / at the dock**: Quick conditions check
+- **No race at all**: Watching a front move through, or checking whether it's worth going out
+
+Usage is continuous and year-round, not clustered around one evening a week.
 
 ---
 
@@ -442,8 +456,13 @@ These patterns violate our core beliefs and should never be used:
 ### ❌ Generic Sailing Advice
 - Advice not specific to Lake Michigan
 - Ignoring local wind patterns
-- Generic tactics not tailored to Wednesday night format
-- Not accounting for PHRF handicap racing
+- Generic tactics not tailored to PHRF handicap racing on the Chicago lakefront
+
+### ❌ Assumed Schedule
+- Hardcoding a race day or start time (e.g. Wednesday, 19:00)
+- Treating a **Target Time** as always present
+- Copy that presumes the user is preparing for a race right now
+- "Race window" logic that only makes sense one evening a week
 
 ### ❌ Technical Jargon Overuse
 - Overly technical language in UI
@@ -535,8 +554,8 @@ Layline's core beliefs prioritize:
 1. **Trust through transparency** (raw data integrity, traceable sources)
 2. **Mobile-first accessibility** (390px design, high contrast)
 3. **Honest uncertainty** (confidence over precision, model disagreement)
-4. **Local expertise** (Lake Michigan patterns, race-specific advice)
+4. **Local expertise** (Lake Michigan patterns, place-specific advice)
 5. **Technical quality** (Server Components, type safety, cost control)
 6. **User-focused UX** (scannable, actionable, honest)
 
-When in doubt, refer back to these principles. They exist to make Layline a trusted, reliable, and valuable tool for Wednesday night racers on Lake Michigan.
+When in doubt, refer back to these principles. They exist to make Layline a trusted, reliable, and valuable tool for sailors racing on Lake Michigan — whatever is on the schedule, and whenever they look.

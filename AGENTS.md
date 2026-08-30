@@ -17,7 +17,7 @@ Welcome! This guide helps AI coding assistants work effectively in the Layline c
 
 ### Sailing Domain Knowledge Required
 
-Layline is a **sailing race preparation dashboard** for competitive Wednesday night regattas on Lake Michigan. You need to understand sailing terminology and tactics to work effectively.
+Layline is a **sailing weather dashboard** for competitive racing on Lake Michigan — weeknight series, weekend regattas, distance races, or simply observing conditions. You need to understand sailing terminology and tactics to work effectively.
 
 📖 **Read**: `docs/references/sailing-glossary-llms.txt` for complete terminology
 
@@ -45,7 +45,7 @@ The core value proposition is **LLM-generated race briefings** that analyze weat
 
 ### What is Layline?
 
-A Next.js dashboard that replaces checking 4 weather apps + 3 websites before Wednesday night races. Provides:
+A Next.js dashboard that replaces checking 4 weather apps + 3 websites before going sailing. Provides:
 - Real-time wind conditions from multiple sources
 - AI-generated tactical race briefings
 - Rig setup recommendations
@@ -53,12 +53,13 @@ A Next.js dashboard that replaces checking 4 weather apps + 3 websites before We
 
 ### Key Details
 
-- **Location**: Navy Pier Racing Circle, Lake Michigan (~41.89°N, -87.60°W)
-- **Schedule**: Wednesday nights, ~7:00 PM start
+- **Location**: COLYC Race Circle, Lake Michigan (41.8528333°N, -87.55683333°W) — ~2.5nm offshore from Navy Pier. Single canonical Forecast Location; see `lib/config/locations.ts`.
+- **Schedule**: None assumed. Layline shows current conditions by default; a **Target Time** is optional and set by the sailor. Do **not** hardcode a race day or start time.
+- **Occasions**: Weeknight series, weekend regattas, distance races, and plain conditions-watching. Wednesday-night racing is one use case, not the frame.
 - **Race Format**: PHRF handicap racing (mixed boat types)
 - **Users**: Recreational competitive sailors (not professionals)
 - **Budget**: $0-5/month (free tier services only)
-- **Primary Usage**: Mobile (390px viewport, checked on commute/dock)
+- **Primary Usage**: Mobile (390px viewport, checked on commute/dock), year-round and at all hours
 
 ### Weather Data Sources
 
@@ -448,6 +449,7 @@ Before submitting code, verify:
 - [ ] **Design tokens** - Use CSS variables from globals.css
 - [ ] **Sailing terminology** - Use proper terms from glossary
 - [ ] **Next.js 16 patterns** - No Pages Router code
+- [ ] **No assumed schedule** - No hardcoded race day or start time; Target Time is optional
 
 ---
 
@@ -552,6 +554,8 @@ if (!user) redirect('/auth/login')
 
 🚨 **Sailing domain** - Use proper terminology from glossary
 
+🚨 **No hardcoded schedule** - Target Time is optional and sailor-set. Never assume Wednesday, 7:00 PM, or any race day
+
 ---
 
 ## Success Criteria
@@ -576,7 +580,7 @@ Layline is a sailing race preparation dashboard with:
 - **Domain**: Sailing tactics and weather interpretation
 - **Tech**: Next.js 16, TypeScript, Supabase, Claude API
 - **Principles**: Raw data integrity, type safety, mobile-first
-- **Goal**: Make Wednesday night racing easier with AI-powered briefings
+- **Goal**: Make Lake Michigan racing easier with AI-powered briefings, whatever is on the schedule
 
 Read the references, follow the patterns, respect the principles, and you'll ship great code.
 
