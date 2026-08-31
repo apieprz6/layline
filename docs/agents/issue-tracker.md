@@ -10,7 +10,7 @@ Issues for this repo are tracked in **Linear**.
 
 ## How skills interact with Linear
 
-Skills like `to-issues`, `triage`, `to-prd`, and `qa` use the **Linear MCP** to create and manage issues.
+Skills like `to-tickets`, `triage`, `to-spec`, `wayfinder`, and `code-review` use the **Linear MCP** to create and manage issues.
 
 ### Creating issues
 
