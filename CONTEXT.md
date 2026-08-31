@@ -129,6 +129,86 @@ _Avoid_: Acceleration, wind change
 Standard deviation of wind speed over a time period. Measures consistency.
 _Avoid_: Stability, consistency
 
+### Boat Setup
+
+**Boat Setup**:
+The versioned record of how the boat is configured: its **Polar**, **Crossover Chart**, **Sail Definitions**, and **Rig Tune**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
+_Avoid_: Versioned artifact, config, boat config, settings (a Boat Setup artifact is a measured or measured-out record, not a preference)
+
+**Version**:
+An immutable snapshot of one **Boat Setup** artifact. A new Version is minted whenever the artifact changes — by upload (Polar, Crossover Chart, Sail Definitions) or by entry (Rig Tune). Earlier Versions are never overwritten, because Races already point at them.
+_Avoid_: Revision, edit, update
+
+**Polar**:
+The table of the boat's target boat speed by true wind angle and true wind speed. The boat's own performance reference, measured or certificate-derived — nothing to do with wind observations.
+_Avoid_: Polar chart (that's the **Wind Rose**), speed chart, VMG table (a Polar holds boat speed, not VMG)
+
+**Target Speed**:
+The boat speed the **Polar** says is achievable at a given true wind angle and true wind speed. Always computed by Layline from the stored **Polar**; never read from a **Recording**, even though recordings carry a target-speed column of their own.
+_Avoid_: Polar speed, POL (that's a column in a Recording, not this concept), hull speed, Target Time (an unrelated weather concept)
+
+**Polar Efficiency**:
+Actual boat speed as a fraction of **Target Speed** at the angle the boat is actually sailing. Answers "is the boat going as fast as it can at this angle" — and nothing else: a Polar Efficiency of 100% says nothing about whether the angle was the right one to steer. Distinct from **VMG Efficiency**, which judges the angle too.
+_Avoid_: Percent of polar, percent of target, polar percent, boat speed percentage
+
+**VMG (Velocity Made Good)**:
+The component of boat speed in the direction that matters — upwind, the speed made directly to windward: boat speed × cos(true wind angle). Always derived, never measured by an instrument.
+_Avoid_: Speed to mark, progress, effective speed
+
+**Target VMG**:
+The best **VMG** the **Polar** can produce at a given true wind speed, achieved at that Polar's optimal beating or running angle. A property of the Polar and the wind speed alone — it does not depend on the angle currently being sailed.
+_Avoid_: Target speed (that's boat speed at a specific angle — a different number), best VMG, optimum
+
+**VMG Efficiency**:
+Actual **VMG** as a fraction of **Target VMG**. Judges boat speed and steering angle together, so it is the harsher and more tactically honest number: sailing fast at a bad angle scores well on **Polar Efficiency** and badly here. Meaningful upwind and downwind only — on a reach, VMG is measured toward a mark, and Layline holds no course or mark data.
+_Avoid_: Polar efficiency (a different number), percent of target VMG, VMG percentage
+
+**Crossover Chart**:
+The grid of true wind angle against true wind speed naming which **Sail Configuration** to carry. A recommendation the boat may or may not have followed — comparing it against what was actually flown is the point of keeping it.
+_Avoid_: Sail selection chart, sail chart, matrix
+
+**Sail Definition**:
+One numbered entry in the sail list a **Crossover Chart** refers to. The number is the chart's own identifier, not Layline's idea of a sail. A Sail Definition may exist without the chart ever calling for it.
+_Avoid_: Sail number, sail id, sail type
+
+**Sail Configuration**:
+The sails set at a given moment, as the set of sails flown plus the **Reef State**. What the crew actually did, distinct from what the **Crossover Chart** suggested. The sails aboard Handsome Pete are `main`, `jib-1`, `jib-2`, `jib-3`, `A2`, `A3`. A Sail Configuration may be as small as the main alone.
+_Avoid_: Sail plan, sail combo, sail selection (that's the chart's recommendation, not what was flown), reaching spin (the sail is the `A3`)
+
+**Reef State**:
+How deeply the mainsail is reefed in a **Sail Configuration**. Handsome Pete's main has one reef point, so the values are `full` and `reef-1`. Named for the reef point rather than as a yes/no, so a future main with two reefs does not force the vocabulary to change.
+_Avoid_: Reefed (as a boolean), shortened, first reef
+
+**Rig Tune**:
+The versioned record of standing-rigging settings by wind band. Entered by hand from measurements on the dock, not uploaded from a file.
+_Avoid_: Rig setup, tuning guide (that's the external document the numbers come from), rig config
+
+**Calibration Event**:
+Something a person did to an instrument on a given date — an autocompensation, an offset dialled in, a sensor replaced. Records an action, never a stored value.
+_Avoid_: Calibration (bare — ambiguous between the action and the number)
+
+**Calibration Log**:
+The append-only sequence of **Calibration Events**. It has no "current" value: nothing reads it to find out what an instrument is set to.
+_Avoid_: Log (bare — overloaded between logbook, Calibration Log, and NMEA log)
+
+**Measured Offset**:
+An instrument error Layline derives from a **Race**'s own data — a compass deviation, a wind-angle offset. Independently measured, never written back into the **Calibration Log** and never held on the instrument.
+_Avoid_: Calibration, correction, error
+
+### Race Archive
+
+**Race**:
+One complete race sailed, as the sailor-supplied window of start and finish inside a **Recording**. The unit sailors talk about and the unit performance is reported for.
+_Avoid_: Regatta (that's a multi-race event, which Layline does not model), series, event, session
+
+**Recording**:
+One qtVlm VDR export, covering a single **Race** plus the transit before it and the motoring after. Longer than the Race it contains.
+_Avoid_: Log, track, GPX, file
+
+**Sea State**:
+The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind.
+_Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0-9 and is not what these bands are)
+
 ### Users & Authentication
 
 **Guest**:
@@ -142,7 +222,7 @@ A signed-in user's identity. Stored in the `profiles` table. Contains `display_n
 Human-readable name shown in the UI (e.g., avatar initials, greeting). Sourced from the sign-up form (email/password flow) or Google profile metadata (OAuth flow).
 
 **Role**:
-Flat permission level on a profile. Values: `admin` (can upload regattas, modify boat setup), `user` (can view boat performance data), or `null` (not yet assigned). Assigned after sign-up, not during.
+Flat permission level on a profile. Values: `admin` (can upload **Races**, modify **Boat Setup**), `user` (can view boat performance data), or `null` (not yet assigned). Assigned after sign-up, not during.
 _Avoid_: Captain, crew, tactician, trimmer (legacy terms from initial design)
 
 **Auth Sheet**:
@@ -159,6 +239,10 @@ UI component displaying buoy data. Has two states:
 - **Collapsed**: Shows current wind speed, direction, gust, status dot
 - **Expanded**: Adds history charts, trend badges, detailed statistics
 
+**Wind Rose**:
+Radial display of wind observations from one **Buoy**: angle is wind direction, distance from centre is how recently the observation was taken, colour is wind speed. A weather display — it has nothing to do with the boat's **Polar**.
+_Avoid_: Polar chart, polar (reserved for the boat's target-speed table)
+
 **Summary Bar**:
 Aggregated status display showing count of online stations, average wind across online sources, consensus direction, and last sync time.
 
@@ -172,6 +256,20 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 ## Relationships
 
+- A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, and a **Rig Tune**
+- Each **Boat Setup** artifact has many **Versions**; each **Race** points at the Versions current when it was sailed
+- A **Recording** contains exactly one **Race**; the Race is the sailor-supplied window inside it
+- A **Race** carries **Sail Configurations** and **Sea State** as human annotations, resolved onto the Recording by time
+- A **Crossover Chart** cell names a **Sail Definition**; every cell must resolve to one, but a Sail Definition need not appear in any cell
+- A **Sail Configuration** is what was flown; a **Crossover Chart** says what was suggested — the two are compared, never conflated
+- **Target Speed** is computed from the **Polar**, never read from a **Recording**
+- **Polar Efficiency** compares boat speed against **Target Speed** at the angle sailed; **VMG Efficiency** compares **VMG** against **Target VMG** and judges the angle itself
+- **Target Speed** depends on both true wind angle and true wind speed; **Target VMG** depends on wind speed alone
+- A **Sail Configuration** is a set of sails plus one **Reef State**
+- A **Calibration Event** records a human action; a **Measured Offset** is derived from a **Race** — neither produces the other
+- The **Calibration Log** has no current value, so nothing asks it what an instrument is set to
+- A **Wind Rose** displays **Buoy** observations; a **Polar** describes the boat — they share no data
+- A Guest sees no **Boat Setup** and no **Race**; a **Profile** with `role` `admin` may write them
 - A **Guest** can use all dashboard and weather features without a **Profile**
 - A **Profile** is created on sign-up (email/password or Google OAuth)
 - A **Profile** has one **Role** (`admin`, `user`, or `null`)
@@ -220,8 +318,32 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "What's a good **Gust Factor** threshold for showing a warning?"
 > **Domain expert:** "Above 30% is **puffy** — that's when sailors need to be ready for significant speed variations. Below 15% is **smooth**, easy to manage."
 
+> **Dev:** "The **Recording** already has a target speed column. Why compute **Target Speed** ourselves?"
+> **Domain expert:** "Because that column is qtVlm's number, not ours — it was computed inside that software against settings we can't see and can't recover. We recompute from the **Polar** so every race is measured the same way."
+
+> **Dev:** "The crew flew the main alone for two minutes. Which **Sail Definition** is that?"
+> **Domain expert:** "None — the numbered list has no entry for it. That's exactly why a **Sail Configuration** is a set of sails and not a number off the chart."
+
+> **Dev:** "We were at 101% **Polar Efficiency** upwind but only 88% **VMG Efficiency**. Is one of them wrong?"
+> **Domain expert:** "Both are right — that's the boat going beautifully in the wrong direction. Full speed for the angle you're steering, but you're steering too low to make good progress to windward. If they ever read the same, one of them is broken."
+
+> **Dev:** "We re-measured the **Polar** in July. Does the June race's percentage change?"
+> **Domain expert:** "No. That race points at the **Version** that was current in June, and it keeps pointing at it forever."
+
 ## Flagged ambiguities
 
 - "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
 - "offline" could mean "seasonal" (expected) or "error" (unexpected) — resolved: **Offline** is a neutral status, context determines if it's expected (Purdue in winter) or concerning (CHII2 in summer).
+- "polar" meant both the boat's target-speed table and the dashboard's radial wind display — resolved: **Polar** is the boat's table only; the wind display is the **Wind Rose**. The two share no data and no purpose.
+- "regatta" was used for what the data calls a race — resolved: **Race**, always. Layline models one race per **Recording** and no multi-race event, so "regatta" promises a fleet, a series, and results that do not exist here.
+- A **Recording**'s `POL` column looks like a target speed and is one — but it is qtVlm's own computation, made against coefficients held in that installation and recorded nowhere in the export. Resolved: Layline ignores it and computes **Target Speed** from the stored **Polar** instead. Do not read `POL` for anything.
+- `PRE` in a **Recording** reads like "performance" and is **atmospheric pressure** (and is empty in every row this boat has produced). The percent-of-polar channel qtVlm does have is `PPC`, which is absent from the export entirely. Code treating `PRE` as performance is silently wrong.
+- "calibration" meant both an action taken on an instrument and a number describing its error — resolved: a **Calibration Event** is the action, a **Measured Offset** is the derived number, and bare "calibration" is avoided.
+- Sail configurations were spelled three ways — `Main + Jib 1` in the design, `main+jib-1` in the analysis pipeline, `[main, jib-1]` in the annotations. Resolved: a **Sail Configuration** is the set of sails flown plus a reef state; the numbered form belongs to **Sail Definitions** and is the **Crossover Chart**'s identifier, not Layline's. The two schemes cannot express each other — the numbered list has no entry for mainsail alone (which was flown), and the set-based annotations have no reef token (though reefed entries cover a large share of the chart).
+- The sail previously annotated `reaching-spin` is the **`A3`**, and that is its name from now on. The old annotations and two **Sail Definition** labels ("Main + Reaching Spin", "Reef + Reaching Spin") use the old word. Since nothing outside Layline reads those files, the **Sail Definitions** are authored correctly at seed time as **v1** — Layline's version history starts with the right names rather than recording a correction to a name it never used.
+- **Polar Efficiency** and **VMG Efficiency** are different numbers and must never be shown as one. Polar Efficiency compares boat speed against the target *for the angle being sailed*, so it rewards a well-trimmed boat sailing the wrong course. VMG Efficiency compares progress against the best the boat could theoretically make, so it penalises the bad angle. A boat pinching or sailing too low can read high on the first and low on the second at the same instant — that gap is the useful signal, and collapsing the two into "percent of polar" destroys it.
+- **Polar Efficiency**'s numerator is not yet decided. Speed through the water is the dimensionally correct choice, because the **Polar** is a through-water target — but that is the uncalibrated paddlewheel, whose calibration is known to vary between sessions. Speed over ground is trustworthy but measures a different quantity against a through-water target, which is wrong in any current. A related trap: recordings with a blank through-water speed also have their *wind* columns computed from GPS, so those rows change meaning in two ways at once.
+- **Neither efficiency figure means anything below about 45° true wind angle.** The **Polar**'s 30° and 35° rows are manufactured filler rather than measurements — row 35 is exactly twice row 30 in every column — so a boat pinching at 28° computes to roughly 480% of target. Any display must suppress that range rather than render it.
+- **Sea State** is not the Douglas scale. NOAA marine forecasts carry formal numeric sea state; Layline's four named bands are what a sailor can honestly report from the rail. Never join the two as if they were the same vocabulary.
+- A **Polar**'s wind-speed axis is defined at 10 m above the water. **CHII2** measures at 85 ft (~26 m), where wind runs 20-30% stronger. Feeding a CHII2 reading into a Polar lookup overstates **Target Speed** by roughly that margin.
 - "race time" was used to mean both a fixed weekly moment (Wednesday 7:00 PM) and "whenever the user cares about" — resolved: **Target Time**, always optional and always sailor-set. Layline assumes no schedule and no fleet. Wednesday-night series racing is one occasion among many (weekend regattas, distance races, or simply watching the lake).
