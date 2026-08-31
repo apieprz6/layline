@@ -132,11 +132,11 @@ _Avoid_: Stability, consistency
 ### Boat Setup
 
 **Boat Setup**:
-The versioned record of how the boat is configured: its **Polar**, **Crossover Chart**, **Sail Definitions**, and **Rig Tune**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
+The versioned record of how the boat is configured: its **Polar**, **Crossover Chart**, **Sail Definitions**, **Rig Tune**, and **Instrument Calibration**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
 _Avoid_: Versioned artifact, config, boat config, settings (a Boat Setup artifact is a measured or measured-out record, not a preference)
 
 **Version**:
-An immutable snapshot of one **Boat Setup** artifact. A new Version is minted whenever the artifact changes — by upload (Polar, Crossover Chart, Sail Definitions) or by entry (Rig Tune). Earlier Versions are never overwritten, because Races already point at them.
+An immutable snapshot of one **Boat Setup** artifact. A new Version is minted whenever the artifact changes — by upload (Polar, Crossover Chart, Sail Definitions) or by entry (Rig Tune, Instrument Calibration). Earlier Versions are never overwritten, because Races already point at them. One exception: an **Instrument Calibration** Version's numbers may be corrected in place, because they are transcribed off a display and a mistyped figure would otherwise stand forever as what the boat ran.
 _Avoid_: Revision, edit, update
 
 **Polar**:
@@ -183,16 +183,28 @@ _Avoid_: Reefed (as a boolean), shortened, first reef
 The versioned record of standing-rigging settings by wind band. Entered by hand from measurements on the dock, not uploaded from a file.
 _Avoid_: Rig setup, tuning guide (that's the external document the numbers come from), rig config
 
+**Instrument Calibration**:
+The versioned record of the corrections programmed into the boat's instrument display: one multiplier and one **Programmed Offset** per **Calibration Channel**. Entered by hand off the display's own screens and kept in the display's own encoding — a multiplier reads `1.02`, never `+2%`. A Version snapshots all channels at once, and is dated from when the numbers went into the instrument, not when they were typed into Layline.
+_Avoid_: Calibration (bare), calibration file, calibration settings, instrument correction
+
+**Calibration Channel**:
+One measurement the instrument display corrects: `AWA`, `AWS`, `STW`, or `HDG`. The correction is `multiplier × reading + Programmed Offset`, and only `AWS` and `STW` have a multiplier — `AWA` and `HDG` carry an offset alone. The same four names identify what a **Calibration Event** was performed on.
+_Avoid_: Instrument (the display corrects channels, not devices — one masthead unit feeds both `AWA` and `AWS`), sensor, field
+
+**Programmed Offset**:
+The figure a person typed into the instrument display for one **Calibration Channel**, in that channel's own unit — degrees for `AWA` and `HDG`, knots for `AWS` and `STW`. What the boat was told. Distinct from the **Measured Offset**, which is what the data says is still wrong afterwards.
+_Avoid_: Offset (bare — ambiguous between this and a **Measured Offset**), calibration offset, correction
+
 **Calibration Event**:
-Something a person did to an instrument on a given date — an autocompensation, an offset dialled in, a sensor replaced. Records an action, never a stored value.
+Something a person did to the instruments on a given date, recorded as that date, the **Calibration Channels** it was performed on, and a note in plain words. Its type is either `autocompensation` — the compass rebuilding its own deviation table, which can only be performed on `HDG` — or `other`, covering everything else: a paddlewheel replaced or cleaned, a masthead unit swapped or re-aligned, a smoothing setting changed in the navigation software. Records an action, never a value; numbers live in **Instrument Calibration**.
 _Avoid_: Calibration (bare — ambiguous between the action and the number)
 
 **Calibration Log**:
-The append-only sequence of **Calibration Events**. It has no "current" value: nothing reads it to find out what an instrument is set to.
+The one timeline of everything done to the instruments, assembled when read from two sources: the **Calibration Events** somebody wrote down, and the **Instrument Calibration** Versions, each shown as what it changed. Nothing is stored in it twice, and it holds no value of its own — "what is the boat set to now" is answered by the current Instrument Calibration Version, never by reading back through the Log.
 _Avoid_: Log (bare — overloaded between logbook, Calibration Log, and NMEA log)
 
 **Measured Offset**:
-An instrument error Layline derives from a **Race**'s own data — a compass deviation, a wind-angle offset. Independently measured, never written back into the **Calibration Log** and never held on the instrument.
+The instrument error still present in a **Race**'s own data, derived by Layline — a compass deviation, a wind-angle offset. Because the display applies its correction before a **Recording** is written, this is what remains *after* the **Programmed Offset** rather than the whole error: a residual. Independently measured, never written back into the **Calibration Log** and never held on the instrument.
 _Avoid_: Calibration, correction, error
 
 ### Race Archive
@@ -256,7 +268,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 ## Relationships
 
-- A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, and a **Rig Tune**
+- A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, a **Rig Tune**, and an **Instrument Calibration**
 - Each **Boat Setup** artifact has many **Versions**; each **Race** points at the Versions current when it was sailed
 - A **Recording** contains exactly one **Race**; the Race is the sailor-supplied window inside it
 - A **Race** carries **Sail Configurations** and **Sea State** as human annotations, resolved onto the Recording by time
@@ -267,7 +279,10 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Target Speed** depends on both true wind angle and true wind speed; **Target VMG** depends on wind speed alone
 - A **Sail Configuration** is a set of sails plus one **Reef State**
 - A **Calibration Event** records a human action; a **Measured Offset** is derived from a **Race** — neither produces the other
-- The **Calibration Log** has no current value, so nothing asks it what an instrument is set to
+- An **Instrument Calibration** holds one multiplier and one **Programmed Offset** per **Calibration Channel**; a **Calibration Event** names the Channels it was performed on and holds no numbers at all
+- The **Calibration Log** is a view over **Calibration Events** and **Instrument Calibration** Versions; the current Version answers what the boat is set to, and the Log never does
+- A **Race** points at the **Instrument Calibration** Version in force when it was sailed, or at none — an unrecorded calibration is left empty rather than guessed
+- A **Programmed Offset** is what a person put into the instrument; a **Measured Offset** is what the data says is left over
 - A **Wind Rose** displays **Buoy** observations; a **Polar** describes the boat — they share no data
 - A Guest sees no **Boat Setup** and no **Race**; a **Profile** with `role` `admin` may write them
 - A **Guest** can use all dashboard and weather features without a **Profile**
@@ -330,6 +345,9 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "We re-measured the **Polar** in July. Does the June race's percentage change?"
 > **Domain expert:** "No. That race points at the **Version** that was current in June, and it keeps pointing at it forever."
 
+> **Dev:** "The display has a `+2°` wind angle offset programmed. So the **Measured Offset** for a race should come out near zero?"
+> **Domain expert:** "It should come out near zero if the `+2°` was right. The display corrects the reading before the recording is written, so what you measure afterwards is whatever is *still* wrong — the leftover. If it reads 3°, the boat needs 3° more, not 3° instead of the 2°."
+
 ## Flagged ambiguities
 
 - "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
@@ -338,7 +356,10 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - "regatta" was used for what the data calls a race — resolved: **Race**, always. Layline models one race per **Recording** and no multi-race event, so "regatta" promises a fleet, a series, and results that do not exist here.
 - A **Recording**'s `POL` column looks like a target speed and is one — but it is qtVlm's own computation, made against coefficients held in that installation and recorded nowhere in the export. Resolved: Layline ignores it and computes **Target Speed** from the stored **Polar** instead. Do not read `POL` for anything.
 - `PRE` in a **Recording** reads like "performance" and is **atmospheric pressure** (and is empty in every row this boat has produced). The percent-of-polar channel qtVlm does have is `PPC`, which is absent from the export entirely. Code treating `PRE` as performance is silently wrong.
-- "calibration" meant both an action taken on an instrument and a number describing its error — resolved: a **Calibration Event** is the action, a **Measured Offset** is the derived number, and bare "calibration" is avoided.
+- "calibration" meant an action, a number a person programs into the boat, and a number derived from data — resolved into three terms: a **Calibration Event** is the action, a **Programmed Offset** is what was typed into the instrument, and a **Measured Offset** is what the data says is still wrong. Bare "calibration" is avoided, and so is bare "offset".
+- A **Calibration Event** on `HDG` changes far more than heading. A **Recording**'s true wind direction is computed from the compass, so a heading error lands in the wind columns too — the archive's recordings from before July 2026 carry roughly 10-12° of it. That propagation is a fixed property of the recording format, documented once in `docs/research/qtvlm-csv-columns.md`, so an Event names only the **Calibration Channel** it was performed on and never lists the columns it goes on to contaminate.
+- The navigation software's polar penalties are deliberately **not** stored. They are a pessimistic planning hedge for long offshore races — a tired crew trims less actively — not a description of how the boat sails, so feeding them into **Target Speed** would flatter every result. Worse, tuning a penalty until races read 100% is circular: it calibrates the yardstick to the measurement and destroys the only number that was informative. The honest figure is **Polar Efficiency** against the unpenalised **Polar**, and the penalty is something that goes *out* to the navigation software, never something that comes back in.
+- A **Version** is immutable everywhere except an **Instrument Calibration** correction. Nothing else in a **Boat Setup** can be edited after minting — an upload can simply be re-uploaded, and a wrong **Rig Tune** is superseded by the right one. A calibration Version is different because it is a transcription off a display: left uncorrectable, a mistyped figure would stand permanently as what the boat ran, and every **Race** pointing at it would report against a number that never existed.
 - Sail configurations were spelled three ways — `Main + Jib 1` in the design, `main+jib-1` in the analysis pipeline, `[main, jib-1]` in the annotations. Resolved: a **Sail Configuration** is the set of sails flown plus a reef state; the numbered form belongs to **Sail Definitions** and is the **Crossover Chart**'s identifier, not Layline's. The two schemes cannot express each other — the numbered list has no entry for mainsail alone (which was flown), and the set-based annotations have no reef token (though reefed entries cover a large share of the chart).
 - The sail previously annotated `reaching-spin` is the **`A3`**, and that is its name from now on. The old annotations and two **Sail Definition** labels ("Main + Reaching Spin", "Reef + Reaching Spin") use the old word. Since nothing outside Layline reads those files, the **Sail Definitions** are authored correctly at seed time as **v1** — Layline's version history starts with the right names rather than recording a correction to a name it never used.
 - **Polar Efficiency** and **VMG Efficiency** are different numbers and must never be shown as one. Polar Efficiency compares boat speed against the target *for the angle being sailed*, so it rewards a well-trimmed boat sailing the wrong course. VMG Efficiency compares progress against the best the boat could theoretically make, so it penalises the bad angle. A boat pinching or sailing too low can read high on the first and low on the second at the same instant — that gap is the useful signal, and collapsing the two into "percent of polar" destroys it.
