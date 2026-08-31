@@ -1,9 +1,10 @@
-# RacePrep Development Plan
+# Layline Development Plan
 
 ## Project Context
 
-**Location**: Navy Pier Racing Circle, Lake Michigan (~41.89°N, -87.60°W)  
-**Race Schedule**: Wednesday nights, ~7:00 PM start  
+**Location**: COLYC Race Circle, Lake Michigan (41.8528333°N, -87.55683333°W) — ~2.5nm offshore of Navy Pier  
+**Occasions**: Any race, any day — weeknight series, weekend regattas, distance races — plus plain conditions-watching with no race at all  
+**Schedule**: None assumed. Current conditions by default; a **Target Time** is optional and sailor-set  
 **Budget**: Low ($0-5/month target)  
 **Goal**: Single dashboard replacing 4 weather apps + 3 websites
 
@@ -42,7 +43,7 @@ All data sources below are FREE with no API keys or costs:
 
 **API**: NOAA NWS Weather.gov API  
 **Endpoints**:
-- `/points/41.89,-87.60` - Point forecast for racing circle
+- `/points/41.8528,-87.5568` - Point forecast for the race circle
 - Marine zone forecasts for Lake Michigan
 - Hourly marine data
 
@@ -74,7 +75,7 @@ All data sources below are FREE with no API keys or costs:
 1. Create service: `services/buoys/ndbc.ts`
 2. Fetch latest observations (real-time .txt files)
 3. Parse space-separated value format
-4. Display with 15-minute refresh during race time
+4. Display with 15-minute refresh while the user is actively monitoring
 
 ### Priority 3: Open-Meteo Multi-Model Forecasts
 **Why third**: Free access to multiple forecast models for comparison
@@ -88,7 +89,7 @@ All data sources below are FREE with no API keys or costs:
 
 **Implementation**:
 1. Create service: `services/weather/open-meteo.ts`
-2. Fetch hourly forecast for race location
+2. Fetch hourly forecast for the Forecast Location
 3. Request multiple models in single API call
 4. Compare model agreement/disagreement
 5. Refresh every 6 hours
@@ -173,7 +174,7 @@ The LLM should analyze weather data and provide tactical guidance on:
 3. **Historical context**:
    - Store past race conditions in database
    - Feed historical accuracy into prompts
-   - "Last 3 Wednesdays, NOAA over-predicted by 3 knots..."
+   - "Over the last 3 southerly evenings, NOAA over-predicted by 3 knots..."
    - Track which sources are most accurate for this location
    - Learn race committee's course selection patterns
 
@@ -213,11 +214,9 @@ Since Vercel free tier only allows 1 cron job per day, use GitHub Actions to tri
 3. Create GitHub Actions workflow (see below)
 4. GitHub triggers your Vercel API on schedule
 
-**Schedule for Wednesday 7pm Races**:
-- **Tuesday 6:00 PM**: Initial forecast brief
-- **Wednesday 12:00 PM**: Mid-day update
-- **Wednesday 4:00 PM**: Final forecast brief
-- **Wednesday 6:00-8:00 PM**: Live conditions (15-min refresh during race)
+**Cadence**: Because Layline assumes no race schedule, background refresh follows **model run availability**, not a fleet calendar. Each model is worth re-fetching shortly after its run lands (HRRR hourly; GFS/ECMWF/ICON every 6h with availability delays of ~1.5–7h). See the forecast fetch-and-cache work for the authoritative cadence.
+
+A simple every-6-hours sweep is a reasonable starting point, with on-demand fetches covering everything else. If a **Target Time** is set, tighten the cadence as it approaches rather than keying off a fixed day.
 
 **GitHub Actions Workflow**:
 ```yaml
@@ -226,14 +225,8 @@ name: Scheduled Weather Updates
 
 on:
   schedule:
-    # Tuesday 6pm CT = 00:00 UTC Wednesday
-    - cron: '0 0 * * 3'
-    # Wednesday 12pm CT = 18:00 UTC Wednesday
-    - cron: '0 18 * * 3'
-    # Wednesday 4pm CT = 22:00 UTC Wednesday
-    - cron: '0 22 * * 3'
-    # Wednesday 6pm, 6:30pm, 7pm, 7:30pm, 8pm CT
-    - cron: '0,30 0,1,2 * * 4'
+    # Every 6 hours, shortly after the main synoptic runs land
+    - cron: '0 5,11,17,23 * * *'
   # Allow manual trigger for testing
   workflow_dispatch:
 
@@ -292,8 +285,9 @@ export async function POST(request: NextRequest) {
 - Shared checklist (did we rig for heavy air?)
 
 ### Race Day Mode
-- Countdown timer to start
-- Live conditions only (remove old forecasts)
+- Opt-in mode, activated by setting a **Target Time** — not by the calendar
+- Countdown to the Target Time
+- Live conditions foregrounded (de-emphasize long-range forecasts)
 - Quick reference cards (rig settings, sail trim)
 
 ## Technical Debt / Optimization
@@ -392,12 +386,14 @@ export async function POST(request: NextRequest) {
 
 ### Data Freshness Strategy
 
-**Race preparation (Tuesday-Wednesday afternoon)**:
+Freshness keys off **what the user is doing**, not what day it is.
+
+**Browsing / planning (no Target Time, or one that's days out)**:
 - Fetch forecasts every 6 hours
 - Cache for 6 hours to minimize API calls
 - Update LLM brief only when data changes
 
-**Race time window (Wednesday 6-8pm)**:
+**Actively monitoring (Target Time within a few hours, or on a live data page)**:
 - Fetch buoy data every 15 minutes
 - Forecast data every 30 minutes (not changing that fast)
 - Real-time display mode
@@ -406,6 +402,7 @@ export async function POST(request: NextRequest) {
 - Manual refresh only
 - No background jobs
 - Saves API costs
+- Note: "off-season" is about *lake* conditions (and Purdue Buoy being pulled), not about a race series ending. CHII2 runs year-round and the app stays useful
 
 ### Architecture Decisions
 
@@ -450,5 +447,5 @@ Remember:
 - Don't over-engineer before you know what's actually useful on the water
 - **NEVER modify raw data** - Harrison Dever context (85ft elevation) is for LLM analysis and UI hints only
 - Purdue buoy is seasonal (May-October) - handle gracefully when offline
-- Wednesday evening races mean dashboards primarily checked Tuesday evening through Wednesday
+- No assumed race schedule: the dashboard gets checked year-round, at all hours, with and without a race pending
 - Mobile-first: Most checking happens on phones during the commute/before leaving for marina

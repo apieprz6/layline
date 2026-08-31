@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Layline — Sailing Race Dashboard",
-  description: "Wednesday night race preparation dashboard for competitive sailors at Navy Pier, Lake Michigan",
+  title: "Layline — Lake Michigan Sailing Weather",
+  description: "Wind observation, multi-model forecasts, and tactical briefings for sailors racing on Lake Michigan",
 };
 
 const themeInitScript = `

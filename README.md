@@ -1,12 +1,16 @@
-# Layline — Sailing Race Dashboard
+# Layline — Lake Michigan Sailing Weather
 
-A sailing race preparation dashboard for competitive sailors targeting Wednesday night races at Navy Pier on Lake Michigan.
+A sailing weather dashboard for Lake Michigan racers — multi-source wind observation, multi-model forecasts, and AI tactical briefings for any race, any day.
 
 ## About
 
-Layline consolidates weather data from multiple sources and uses AI to generate tactical race briefings. The dashboard provides wind forecasts, model comparisons, rig setup recommendations, and strategic race guidance.
+Layline consolidates weather data from multiple sources and uses AI to generate tactical briefings. The dashboard provides live buoy observations, wind forecasts, model comparisons, rig setup recommendations, and strategic guidance.
 
-**Target users:** Competitive recreational sailors, race crew and skippers, Wednesday night fleet racers.
+Racing is the lens, not a schedule. Layline is built for whatever is actually on: a weeknight series, a weekend regatta, a distance race — or simply watching what the wind is doing on the lake. It opens on current conditions; a **Target Time** is optional, set by you when you have a start to prepare for.
+
+Forecasts are anchored to the COLYC Race Circle (41.8528°N, 87.5568°W), roughly 2.5 nautical miles offshore from Navy Pier.
+
+**Target users:** Competitive recreational sailors racing series, regattas, and distance events out of Chicago.
 
 ## Design System
 

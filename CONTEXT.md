@@ -1,6 +1,6 @@
 # Layline Weather Data Context
 
-Layline fetches real-time weather data from multiple sources to provide sailors with actionable race preparation information for Wednesday night races on Lake Michigan.
+Layline fetches real-time weather data from multiple sources to give sailors actionable wind information for racing on Lake Michigan — any race, any day. It presents current conditions by default; a **Target Time** is optional.
 
 ## Language
 
@@ -28,11 +28,11 @@ _Avoid_: Forecast model, prediction model (use Weather Model)
 
 **GFS (Global Forecast System)**:
 NOAA's global weather model with 384-hour (16-day) forecast horizon. Updates every 6 hours (00z, 06z, 12z, 18z UTC). Good for overall synoptic patterns and long-range planning.
-_Context_: "GFS shows light air building to 12 knots by Wednesday evening"
+_Context_: "GFS shows light air building to 12 knots by Saturday evening"
 
 **HRRR (High-Resolution Rapid Refresh)**:
 NOAA's regional model covering North America with 48-hour forecast horizon. Updates hourly. Best for short-term Lake Michigan forecasts due to high temporal and spatial resolution.
-_Context_: "HRRR predicts a shift from SW to W around 7:00 PM"
+_Context_: "HRRR predicts a shift from SW to W around sunset"
 
 **ECMWF (European Centre for Medium-Range Weather Forecasts)**:
 European global model with 240-hour (10-day) forecast horizon. Updates every 12 hours (00z, 12z UTC). Generally considered most accurate global model for medium-range forecasts.
@@ -56,6 +56,16 @@ The complete response from fetching a weather model forecast: model ID, location
 **Model Run Time**:
 The UTC time when a weather model execution began (e.g., "00z run" means model started at midnight UTC). Different models have different run schedules: HRRR runs hourly, GFS runs every 6 hours (00z/06z/12z/18z), ECMWF runs every 12 hours (00z/12z).
 _Avoid_: Generation time, model time
+
+### Time & Occasion
+
+**Target Time**:
+An optional future moment a sailor anchors the forecast to — a start time, a scheduled race, or any time of interest. When no Target Time is set, Layline presents current conditions. A Target Time is chosen by the sailor; Layline does not assume one.
+_Avoid_: Race time (implies a fixed recurring schedule), forecast time (that's any Forecast Point's timestamp), start time (too narrow — a Target Time need not be a race start)
+
+**Current Conditions**:
+The present state of the wind as reported by Buoys, with no Target Time applied. The default view. Distinct from a forecast, which is always a prediction for some other moment.
+_Avoid_: Live conditions (reserved for the Live Fetch concept), real-time
 
 ### Data Status
 
@@ -186,6 +196,9 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Weather Model Result** contains multiple **Forecast Points** (one per timestamp)
 - All **Weather Model Results** use the same **Forecast Location** (COLYC Race Circle)
 - **Forecast Points** with null wind speed or direction are filtered out (data quality enforcement)
+- A **Target Time** is optional and sailor-set; with none set, Layline shows **Current Conditions**
+- A **Target Time** selects one **Forecast Point** per **Weather Model** for emphasis; it never filters the others out
+- **Current Conditions** come from **Buoys**; a **Target Time** is served by **Weather Models**
 
 ## Example dialogue
 
@@ -211,3 +224,4 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 - "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
 - "offline" could mean "seasonal" (expected) or "error" (unexpected) — resolved: **Offline** is a neutral status, context determines if it's expected (Purdue in winter) or concerning (CHII2 in summer).
+- "race time" was used to mean both a fixed weekly moment (Wednesday 7:00 PM) and "whenever the user cares about" — resolved: **Target Time**, always optional and always sailor-set. Layline assumes no schedule and no fleet. Wednesday-night series racing is one occasion among many (weekend regattas, distance races, or simply watching the lake).
