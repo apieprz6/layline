@@ -180,8 +180,28 @@ How deeply the mainsail is reefed in a **Sail Configuration**. Handsome Pete's m
 _Avoid_: Reefed (as a boolean), shortened, first reef
 
 **Rig Tune**:
-The versioned record of standing-rigging settings by wind band. Entered by hand from measurements on the dock, not uploaded from a file.
-_Avoid_: Rig setup, tuning guide (that's the external document the numbers come from), rig config
+The versioned record of the boat's shroud settings, one row per **Wind Band**. Entered by hand from measurements on the dock, never uploaded from a file — no such file has ever existed for this boat. Holds only standing rigging the crew can actually adjust: the three **Shroud Positions**, port and starboard. Deliberately silent about the headstay, mast rake, pre-bend and mast butt position, none of which are adjustable in practice on Handsome Pete, and about backstay, cunningham and outhaul, which are trim rather than tune.
+_Avoid_: Rig setup, tuning guide (that's the external document the numbers come from), rig config, rig file
+
+**Shroud Position**:
+One of the three shroud pairs a **Rig Tune** records: `V1` (the cap shroud), `D1` (the lower) and `D2` (the intermediate). Named as the boat's tuning guide names them, so figures transcribe without a mapping step. Each Position is recorded for port and starboard separately, because each has its own turnbuckle and the two genuinely differ.
+_Avoid_: Upper / mid / lower (the mockup's names, and `Mid` is `D2` while `Lower` is `D1` — an easy transcription error), shroud, stay, cap
+
+**Turnbuckle Gap**:
+The measured distance between the threads inside one turnbuckle, in millimetres, for one **Shroud Position** on one side. Smaller gap means more tension. The figure a caliper produces and the one that restores a **Rig Tune** when something has moved.
+_Avoid_: Tension, shroud tension, Loos reading (a dimensionless gauge number, and its meaning depends on the gauge model), gap (bare)
+
+**Turns From Base**:
+How far one **Shroud Position** is wound off the **Base Tune**, as signed full turns at half-turn resolution. How the rig is actually re-geared at the dock, with no tools. Stored alongside the **Turnbuckle Gap** rather than derived from it: both are the specification, and no thread pitch is recorded that would let one produce the other.
+_Avoid_: Turns (bare), delta, adjustment, offset (that word belongs to **Instrument Calibration**)
+
+**Base Tune**:
+The one **Wind Band** in a **Rig Tune** whose **Turnbuckle Gaps** are absolute, and from which every other band's **Turns From Base** is counted. On Handsome Pete it is a heavier band — the tune set for the Race to Mackinac and then left in — so most of the table runs looser than base, and the largest deltas sit at the light end. Marked by an explicit flag, never by a band's position in the list or by its name.
+_Avoid_: Base (bare), base setting, default tune, standard tune
+
+**Wind Band**:
+One true-wind-speed range in a **Rig Tune**, holding the settings for those conditions. The bands belong to the Version, not to the application: they are entered by hand from whichever tuning guide the numbers came from, they must be contiguous, and the top band is open-ended. Distinct from the dashboard's Light / Medium / Heavy / Storm display classification, which describes conditions on screen and has no business indexing a tune.
+_Avoid_: Wind range, condition band, gear (as in "shifting gears" — that's the act, not the row)
 
 **Instrument Calibration**:
 The versioned record of the corrections programmed into the boat's instrument display: one multiplier and one **Programmed Offset** per **Calibration Channel**. Entered by hand off the display's own screens and kept in the display's own encoding — a multiplier reads `1.02`, never `+2%`. A Version snapshots all channels at once, and is dated from when the numbers went into the instrument, not when they were typed into Layline.
@@ -278,6 +298,12 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Polar Efficiency** compares boat speed against **Target Speed** at the angle sailed; **VMG Efficiency** compares **VMG** against **Target VMG** and judges the angle itself
 - **Target Speed** depends on both true wind angle and true wind speed; **Target VMG** depends on wind speed alone
 - A **Sail Configuration** is a set of sails plus one **Reef State**
+- A **Rig Tune** has one row per **Wind Band**; each row holds a **Turnbuckle Gap** and a **Turns From Base** for every **Shroud Position**, port and starboard
+- Exactly one **Wind Band** in a **Rig Tune** is the **Base Tune**; its **Turnbuckle Gaps** are absolute and every other band's **Turns From Base** counts from it
+- **Wind Bands** are contiguous and the top one is open-ended, so every wind speed falls in exactly one band
+- Changing the **Base Tune**'s **Turnbuckle Gaps** marks every other band's Gaps stale; their **Turns From Base** are unaffected
+- A **Race** points at the **Rig Tune** Version in force when it was sailed and records which **Wind Band** the boat was set to, or at neither — the archived races predate any Version
+- The **Wind Band** a **Race** was set to is what the crew chose, never derived from the **Recording**'s own wind; the gap between the two is a finding, not an ingest error
 - A **Calibration Event** records a human action; a **Measured Offset** is derived from a **Race** — neither produces the other
 - An **Instrument Calibration** holds one multiplier and one **Programmed Offset** per **Calibration Channel**; a **Calibration Event** names the Channels it was performed on and holds no numbers at all
 - The **Calibration Log** is a view over **Calibration Events** and **Instrument Calibration** Versions; the current Version answers what the boat is set to, and the Log never does
@@ -348,6 +374,15 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "The display has a `+2°` wind angle offset programmed. So the **Measured Offset** for a race should come out near zero?"
 > **Domain expert:** "It should come out near zero if the `+2°` was right. The display corrects the reading before the recording is written, so what you measure afterwards is whatever is *still* wrong — the leftover. If it reads 3°, the boat needs 3° more, not 3° instead of the 2°."
 
+> **Dev:** "The **Base Tune** is one of the heavy bands? I assumed base meant the middle of the range."
+> **Domain expert:** "It means the tune we actually set and leave in. We tune for the Mac — three days offshore, heavy-ish all round — and that's the rig for most of the season. Everything else is easing off it, so the light-air band is the furthest from base, not the closest."
+
+> **Dev:** "If we store **Turns From Base** and the **Turnbuckle Gap** for the same band, isn't one of them redundant?"
+> **Domain expert:** "No, they're for different moments. Turns are how I re-gear at the dock in five minutes with a spanner. The gap is how I put it back where it belongs when something's come loose and I don't trust anything — that's when the caliper comes out. Both are the spec. If they ever disagree, somebody miscounted, and I'd want to know."
+
+> **Dev:** "We re-measured the **Base Tune** in July. The other bands' gaps are still on file — are they still good?"
+> **Domain expert:** "No, and that's the trap. The turns are still right — light air is still a turn and a half looser than base, whatever base is. But every millimetre figure I wrote down for the other bands was measured against the old base, so they're all wrong until I go and measure them again."
+
 ## Flagged ambiguities
 
 - "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
@@ -360,6 +395,11 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Calibration Event** on `HDG` changes far more than heading. A **Recording**'s true wind direction is computed from the compass, so a heading error lands in the wind columns too — the archive's recordings from before July 2026 carry roughly 10-12° of it. That propagation is a fixed property of the recording format, documented once in `docs/research/qtvlm-csv-columns.md`, so an Event names only the **Calibration Channel** it was performed on and never lists the columns it goes on to contaminate.
 - The navigation software's polar penalties are deliberately **not** stored. They are a pessimistic planning hedge for long offshore races — a tired crew trims less actively — not a description of how the boat sails, so feeding them into **Target Speed** would flatter every result. Worse, tuning a penalty until races read 100% is circular: it calibrates the yardstick to the measurement and destroys the only number that was informative. The honest figure is **Polar Efficiency** against the unpenalised **Polar**, and the penalty is something that goes *out* to the navigation software, never something that comes back in.
 - A **Version** is immutable everywhere except an **Instrument Calibration** correction. Nothing else in a **Boat Setup** can be edited after minting — an upload can simply be re-uploaded, and a wrong **Rig Tune** is superseded by the right one. A calibration Version is different because it is a transcription off a display: left uncorrectable, a mistyped figure would stand permanently as what the boat ran, and every **Race** pointing at it would report against a number that never existed.
+- "wind band" meant three different sets of edges for one boat. The dashboard classifies conditions at 0-8 / 9-15 / 16-22 / 23+ knots (`lib/utils/wind.ts`, shipped and used by four components), the mockup's analysis screens classify at ≤9 / ≤14 / 15+ (`classifyBin`), and the rig tune mockup used 0-8 / 9-14 / 15-20 / 21+. Resolved by separating concerns rather than picking a winner: the dashboard classification owns *display*, and a **Wind Band** is data on a **Rig Tune** Version, entered from whichever tuning guide the numbers came from. What is forbidden is sharing the *words*: the mockup keyed its rig bands `light` / `base` / `medium` / `heavy`, three of which are also `classifyBin` return values with different ranges — rig `medium` is 15-20 kt, which `classifyBin` calls `heavy`, and 9-14 kt has no `classifyBin` key at all. Indexing a tune by a classification result compiles and returns the wrong rig.
+- "rig" meant both the boat's standing rigging and the trim advice on the dashboard. `RigRecommendation.tsx` renders a card headed "Rig setup" carrying backstay, cunningham and outhaul — which are running rigging, adjusted continuously while sailing, and generated per forecast. A **Rig Tune** is standing rigging, measured on the dock, and versioned. Resolved: "Rig Tune" is the artifact and "Rig setup" is not a phrase Layline uses; that card is trim and is renamed accordingly. It is currently hidden, so the rename is deferred rather than dropped.
+- The boat's own tuning guide makes the **headstay** its dominant per-band adjustment — North's card swings it -6 to +12 turns where `V1` moves -1 to +1 — and a **Rig Tune** does not record it at all. This is deliberate, not an oversight: the headstay turnbuckle is not easily reachable on Handsome Pete, so the crew shifts gears on the shrouds alone, which is itself published practice (Doyle's guide for the sister boat prints `N/A` in its head stay column for every band). The consequence to understand is that the remaining per-band spread is only about one to three turns, so a **Rig Tune**'s value rests as much on its notes and on the per-race band record as on the numbers.
+- Headstay *sag* has no target and no field, in any unit. No tuning guide in this family publishes one, and on a swept-spreader fractional rig it is governed dynamically by the backstay and statically by `D1` and `D2` stiffness — not, as is easy to assume, by cap shroud tension, whose published job is side bend. Nothing should be built expecting a sag or headstay-tension number to validate against.
+- A **Rig Tune** looked like a file and is not one. The mockup gave it a filename (`Wayward_Wind.rig`), a Download action and an Upload action, for an artifact that has never existed as a file for this boat and is typed in by hand. Resolved: no filename, no upload, no download. It keeps its row alongside the uploaded artifacts, showing only its Version and date.
 - Sail configurations were spelled three ways — `Main + Jib 1` in the design, `main+jib-1` in the analysis pipeline, `[main, jib-1]` in the annotations. Resolved: a **Sail Configuration** is the set of sails flown plus a reef state; the numbered form belongs to **Sail Definitions** and is the **Crossover Chart**'s identifier, not Layline's. The two schemes cannot express each other — the numbered list has no entry for mainsail alone (which was flown), and the set-based annotations have no reef token (though reefed entries cover a large share of the chart).
 - The sail previously annotated `reaching-spin` is the **`A3`**, and that is its name from now on. The old annotations and two **Sail Definition** labels ("Main + Reaching Spin", "Reef + Reaching Spin") use the old word. Since nothing outside Layline reads those files, the **Sail Definitions** are authored correctly at seed time as **v1** — Layline's version history starts with the right names rather than recording a correction to a name it never used.
 - **Polar Efficiency** and **VMG Efficiency** are different numbers and must never be shown as one. Polar Efficiency compares boat speed against the target *for the angle being sailed*, so it rewards a well-trimmed boat sailing the wrong course. VMG Efficiency compares progress against the best the boat could theoretically make, so it penalises the bad angle. A boat pinching or sailing too low can read high on the first and low on the second at the same instant — that gap is the useful signal, and collapsing the two into "percent of polar" destroys it.
