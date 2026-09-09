@@ -132,11 +132,11 @@ _Avoid_: Stability, consistency
 ### Boat Setup
 
 **Boat Setup**:
-The versioned record of how the boat is configured: its **Polar**, **Crossover Chart**, **Sail Definitions**, **Rig Tune**, and **Instrument Calibration**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
+The versioned record of how the boat is configured, in four artifacts: its **Polar**, **Crossover Chart**, **Rig Tune**, and **Instrument Calibration**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
 _Avoid_: Versioned artifact, config, boat config, settings (a Boat Setup artifact is a measured or measured-out record, not a preference)
 
 **Version**:
-An immutable snapshot of one **Boat Setup** artifact. A new Version is minted whenever the artifact changes — by upload (Polar, Crossover Chart, Sail Definitions) or by entry (Rig Tune, Instrument Calibration). Earlier Versions are never overwritten, because Races already point at them. One exception: an **Instrument Calibration** Version's numbers may be corrected in place, because they are transcribed off a display and a mistyped figure would otherwise stand forever as what the boat ran.
+An immutable snapshot of one **Boat Setup** artifact. A new Version is minted whenever the artifact changes — by upload (Polar, Crossover Chart) or by entry (Rig Tune, Instrument Calibration). Earlier Versions are never overwritten, because Races already point at them. One exception: an **Instrument Calibration** Version's numbers may be corrected in place, because they are transcribed off a display and a mistyped figure would otherwise stand forever as what the boat ran.
 _Avoid_: Revision, edit, update
 
 **Polar**:
@@ -168,11 +168,19 @@ The grid of true wind angle against true wind speed naming which **Sail Configur
 _Avoid_: Sail selection chart, sail chart, matrix
 
 **Sail Definition**:
-One numbered entry in the sail list a **Crossover Chart** refers to. The number is the chart's own identifier, not Layline's idea of a sail. A Sail Definition may exist without the chart ever calling for it.
-_Avoid_: Sail number, sail id, sail type
+One numbered entry in the sail list carried *inside* a **Crossover Chart**. The number is the chart's own identifier, not Layline's idea of a sail, and it means nothing outside the chart that refers to it — which is why the two are one artifact and are versioned together. A Sail Definition may exist without the chart ever calling for it.
+_Avoid_: Sail number, sail id, sail type, **Sail** (that is an entry in the boat's **Sail Inventory**, a different thing)
+
+**Sail Inventory**:
+The sails aboard the boat, each named once, so every **Sail Configuration** refers to the same sail by the same name. A property of the boat rather than a **Boat Setup** artifact, and not versioned — renaming a sail corrects every entry that names it, which is the point of having it.
+_Avoid_: Sail list (that is a **Crossover Chart**'s numbered **Sail Definitions**), sail locker, inventory (bare)
+
+**Sail**:
+One entry in the **Sail Inventory**: aboard Handsome Pete, `main`, `jib-1`, `jib-2`, `jib-3`, `A2`, `A3`. A Sail that has been flown is retired rather than deleted, because the record of what was flown has to keep resolving.
+_Avoid_: **Sail Definition** (that is a **Crossover Chart**'s numbered entry), headsail, kite (both too narrow)
 
 **Sail Configuration**:
-The sails set at a given moment, as the set of sails flown plus the **Reef State**. What the crew actually did, distinct from what the **Crossover Chart** suggested. The sails aboard Handsome Pete are `main`, `jib-1`, `jib-2`, `jib-3`, `A2`, `A3`. A Sail Configuration may be as small as the main alone.
+The sails set at a given moment, as the set of **Sails** flown plus the **Reef State**. What the crew actually did, distinct from what the **Crossover Chart** suggested. The sails come from the boat's **Sail Inventory**. A Sail Configuration may be as small as the main alone.
 _Avoid_: Sail plan, sail combo, sail selection (that's the chart's recommendation, not what was flown), reaching spin (the sail is the `A3`)
 
 **Reef State**:
@@ -334,14 +342,14 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 ## Relationships
 
-- A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, a **Rig Tune**, and an **Instrument Calibration**
-- Each **Boat Setup** artifact has many **Versions**; each **Race** points at the Versions current when it was sailed
+- A **Boat Setup** comprises four artifacts: a **Polar**, a **Crossover Chart**, a **Rig Tune**, and an **Instrument Calibration**
+- Each **Boat Setup** artifact has many **Versions**; each **Race** points at the four Versions current when it was sailed, or at none of them
 - A **Recording** contains exactly one **Race**; the Race is the sailor-supplied **Race Window** inside it
 - One export *file* may back several **Recordings** — a regatta day is uploaded once per **Race** and annotated differently each time
 - Everything on a **Race** except its **Transcription** is **Testimony**, and all of it is editable by **Amendment**; the Transcription never is
 - An **Amendment** carries no change reason and no history, unlike a **Boat Setup** **Version**, because nothing points at a **Race**
 - A **Race Window** may reach past the end of its **Recording** — that means the recording dropped out, and it is stated on the race page, never refused
-- Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it
+- Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it; a failed deletion leaves stored bytes behind rather than a **Race** whose bytes are gone
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
 - A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
 - A **Race** carries **Sail Configurations** and **Sea State** as **Annotations**, resolved onto **Recording Rows** by time on read
@@ -352,12 +360,13 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Row Quality** says how far a row can be trusted; what the boat was *doing* is a separate axis, and the two never share a field
 - **Gap Seconds** is measured between non-**Frozen** rows, so it is defined by **Row Quality** and must be recomputed with it
 - A **Measured Offset** is computed from a **Race** and displayed; it is never written into a **Transcription** or into an **Instrument Calibration**
-- A **Crossover Chart** cell names a **Sail Definition**; every cell must resolve to one, but a Sail Definition need not appear in any cell
+- A **Crossover Chart** carries its own **Sail Definitions**, in the same Version: a cell names one, every cell must resolve to one, and a Sail Definition need not appear in any cell — so no cell can resolve against a list it was not authored against
+- The **Sail Inventory** belongs to the boat and holds the **Sails** a **Sail Configuration** names; a **Sail Definition** is a **Crossover Chart**'s own numbering and the two never resolve into each other
 - A **Sail Configuration** is what was flown; a **Crossover Chart** says what was suggested — the two are compared, never conflated
 - **Target Speed** is computed from the **Polar**, never read from a **Recording**
 - **Polar Efficiency** compares boat speed against **Target Speed** at the angle sailed; **VMG Efficiency** compares **VMG** against **Target VMG** and judges the angle itself
 - **Target Speed** depends on both true wind angle and true wind speed; **Target VMG** depends on wind speed alone
-- A **Sail Configuration** is a set of sails plus one **Reef State**
+- A **Sail Configuration** is a set of **Sails** plus one **Reef State**, and names at least one Sail
 - A **Rig Tune** has one row per **Wind Band**; each row holds a **Turnbuckle Gap** and a **Turns From Base** for every **Shroud Position**, port and starboard
 - Exactly one **Wind Band** in a **Rig Tune** is the **Base Tune**; its **Turnbuckle Gaps** are absolute and every other band's **Turns From Base** counts from it
 - **Wind Bands** are contiguous and the top one is open-ended, so every wind speed falls in exactly one band
@@ -471,6 +480,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Rig Tune** looked like a file and is not one. The mockup gave it a filename (`Wayward_Wind.rig`), a Download action and an Upload action, for an artifact that has never existed as a file for this boat and is typed in by hand. Resolved: no filename, no upload, no download. It keeps its row alongside the uploaded artifacts, showing only its Version and date.
 - Sail configurations were spelled three ways — `Main + Jib 1` in the design, `main+jib-1` in the analysis pipeline, `[main, jib-1]` in the annotations. Resolved: a **Sail Configuration** is the set of sails flown plus a reef state; the numbered form belongs to **Sail Definitions** and is the **Crossover Chart**'s identifier, not Layline's. The two schemes cannot express each other — the numbered list has no entry for mainsail alone (which was flown), and the set-based annotations have no reef token (though reefed entries cover a large share of the chart).
 - The sail previously annotated `reaching-spin` is the **`A3`**, and that is its name from now on. The old annotations and two **Sail Definition** labels ("Main + Reaching Spin", "Reef + Reaching Spin") use the old word. Since nothing outside Layline reads those files, the **Sail Definitions** are authored correctly at seed time as **v1** — Layline's version history starts with the right names rather than recording a correction to a name it never used.
+- A **Crossover Chart** and its **Sail Definitions** were two artifacts, versioned independently, and that pairing was unsound. A **Race** froze a pointer to each, so it could point at chart v1 alongside definitions v2 — a combination that never existed on the boat, in which a cell resolves to a different sail than the one it was authored for, or to nothing. Resolved by collapsing them into one artifact rather than by adding a rule nobody could enforce: the numbered list is the chart's own identifier scheme and has no meaning apart from it. **Boat Setup** therefore has four artifacts and a **Race** freezes four pointers. See ADR 0012.
+- The sails aboard the boat had no name of their own and no home. `main` / `jib-1` / `A2` is neither a **Sail Definition** (which is a **Crossover Chart**'s numbering) nor a **Sail Configuration** (which is a set of them plus a reef state) — it is a third thing, and every list of it was previously written inline wherever it was needed. Resolved as the **Sail Inventory**, one named **Sail** per row on the boat, which is what makes the `reaching-spin` → `A3` rename a single correction instead of a text rewrite across every annotation that mentions it.
 - **Polar Efficiency** and **VMG Efficiency** are different numbers and must never be shown as one. Polar Efficiency compares boat speed against the target *for the angle being sailed*, so it rewards a well-trimmed boat sailing the wrong course. VMG Efficiency compares progress against the best the boat could theoretically make, so it penalises the bad angle. A boat pinching or sailing too low can read high on the first and low on the second at the same instant — that gap is the useful signal, and collapsing the two into "percent of polar" destroys it.
 - **Polar Efficiency**'s numerator is not yet decided. Speed through the water is the dimensionally correct choice, because the **Polar** is a through-water target — but that is the uncalibrated paddlewheel, whose calibration is known to vary between sessions. Speed over ground is trustworthy but measures a different quantity against a through-water target, which is wrong in any current. A related trap: recordings with a blank through-water speed also have their *wind* columns computed from GPS, so those rows change meaning in two ways at once.
 - **Neither efficiency figure means anything below about 45° true wind angle.** The **Polar**'s 30° and 35° rows are manufactured filler rather than measurements — row 35 is exactly twice row 30 in every column — so a boat pinching at 28° computes to roughly 480% of target. Any display must suppress that range rather than render it.

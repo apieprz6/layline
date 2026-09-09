@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted, amended in two places by the schema work — see ADR 0011 (`created_by` is now required
+on every kind) and ADR 0012 (Instrument Calibration is the *fourth* Boat Setup artifact, not the
+fifth). Both amendments are marked inline below.
 
 ## Context
 
@@ -35,7 +37,9 @@ Model calibration as **two shapes**, with the log presented as a view over both.
 
 ### Instrument Calibration — a versioned Boat Setup artifact
 
-The fifth member of Boat Setup, alongside the Polar, Crossover Chart, Sail Definitions and Rig Tune. Numbers typed into a form off the display's own screens, exactly as a Rig Tune is typed off the dock.
+A member of Boat Setup, alongside the Polar, Crossover Chart and Rig Tune. Numbers typed into a form off the display's own screens, exactly as a Rig Tune is typed off the dock.
+
+> **Amended by ADR 0012.** This said "the fifth member … alongside the Polar, Crossover Chart, Sail Definitions and Rig Tune". A Crossover Chart now carries its own Sail Definitions, so Boat Setup has **four** artifacts and Instrument Calibration is the fourth.
 
 | Calibration Channel | multiplier | Programmed Offset |
 | ------------------- | ---------- | ----------------- |
@@ -63,7 +67,9 @@ A **Calibration Event** is:
 - a non-empty set of Calibration Channels it was performed on;
 - a required free-text note.
 
-`autocompensation` is constrained to `{HDG}` — it is a compass operation by definition. Everything else is `other` plus the note: a paddlewheel replaced or cleaned, a masthead unit swapped or re-aligned, a smoothing setting changed in the navigation software. No value field, and no author field: one boat, one writer, and a note that can name a rigger in words if one ever does the work.
+`autocompensation` is constrained to `{HDG}` — it is a compass operation by definition. Everything else is `other` plus the note: a paddlewheel replaced or cleaned, a masthead unit swapped or re-aligned, a smoothing setting changed in the navigation software. No value field.
+
+> **Amended by ADR 0011.** This also said "and no author field: one boat, one writer, and a note that can name a rigger in words if one ever does the work". The schema makes `created_by` required and uniform across every Boat Setup kind and every Calibration Event. The one-writer argument is true today and would be a schema change the day a second admin exists; the note still names a rigger in words.
 
 ### Freezing, and the absent case
 
@@ -81,7 +87,7 @@ An event names only what was acted on. A heading event reaches the wind columns 
 
 ## Consequences
 
-- Boat Setup grows from four members to five. `CONTEXT.md` amended accordingly, along with the Calibration Log and Measured Offset definitions.
+- Boat Setup grows by one member. `CONTEXT.md` amended accordingly, along with the Calibration Log and Measured Offset definitions. (Written as "from four members to five"; ADR 0012 then merged Sail Definitions into the Crossover Chart, so the count is four.)
 - Three new terms: **Instrument Calibration**, **Calibration Channel**, **Programmed Offset**. The last exists to break a genuine collision — the figure a person programs and the figure the analysis derives are both "offsets" and are never the same number.
 - Because the display corrects a reading before it is recorded, a **Measured Offset** is a *residual* — what is left after the Programmed Offset, not the whole error. Any analysis that treats it as absolute is wrong, and the honesty annotation this implies feeds the raw-vs-derived question.
 - The mockup's `CAL_FIELDS` steppers survive as the edit form. Its "Push to instruments?" banner, its Download action, its version-history-with-uploader, and its fake filename do not. Its derived `CAL_CHECKS` and `CAL_TRENDS` are Measured Offsets and belong to the analysis effort.
