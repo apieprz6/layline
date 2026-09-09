@@ -16,6 +16,7 @@ import {
   SHROUD_LABEL,
   SHROUD_POSITIONS,
   clockOf,
+  spanLabel,
   type CalibrationPayload,
   type CrossoverPayload,
   type PolarPayload,
@@ -24,6 +25,7 @@ import {
   type SailDefinition,
 } from './fixture'
 import {
+  POLAR_FILLER_BELOW,
   QUALITY_COLOR,
   QUALITY_LABEL,
   worstLabel,
@@ -33,8 +35,13 @@ import {
   type Span,
 } from './derive'
 
-/** Angles below this are manufactured filler in the Polar; never rendered as data. */
-export const POLAR_SUPPRESS_BELOW = 45
+/**
+ * Angles below this are manufactured filler in the Polar; never rendered as
+ * data. Kept as an alias of the derivation's own threshold so a screen and a
+ * calculation can never disagree about which rows are real — 40° is a measured
+ * row and must not be struck through with the 30° and 35° filler.
+ */
+export const POLAR_SUPPRESS_BELOW = POLAR_FILLER_BELOW
 
 // ---------------------------------------------------------------------------
 // Small shared bits
@@ -857,12 +864,26 @@ export function TraceChart({
   unit,
   height = 90,
   color = 'var(--wind-medium)',
+  interactive = false,
+  highlight = null,
+  onHover,
+  quality,
 }: {
   series: SeriesPoint[]
   unit: string
   height?: number
   color?: string
+  /** Scrub with a finger or a mouse to read a sample. Off by default. */
+  interactive?: boolean
+  /** Externally driven cursor, so several charts and the track can share one. */
+  highlight?: number | null
+  onHover?: (index: number | null) => void
+  /** Optional, only to name why a sample is unreadable rather than low. */
+  quality?: Quality[]
 }): React.ReactElement {
+  const hatchId = `frozenHatch-${React.useId()}`
+  const [local, setLocal] = useState<number | null>(null)
+  const active = highlight ?? local
   const width = 340
   const values = series.filter((p) => p.value !== null && !p.frozen).map((p) => p.value as number)
   const min = values.length > 0 ? Math.min(...values) : 0
@@ -897,8 +918,56 @@ export function TraceChart({
   })
   if (start !== null) frozenBands.push({ from: start, to: series.length - 1 })
 
+  const set = (index: number | null): void => {
+    setLocal(index)
+    if (onHover) onHover(index)
+  }
+
+  const scrub = (clientX: number, element: Element): void => {
+    if (series.length === 0) return
+    const rect = element.getBoundingClientRect()
+    const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    set(Math.round(fraction * (series.length - 1)))
+  }
+
+  const point = active !== null && active < series.length ? series[active] : null
+  const readout = ((): string => {
+    if (point === null) return ''
+    if (point.frozen) return 'frozen — a repeated copy, not a reading'
+    if (point.value === null) {
+      const q = quality?.[active as number]
+      return q?.notWaterReferenced === true ? 'no paddlewheel — nothing recorded' : 'not recorded'
+    }
+    return `${point.value.toFixed(1)} ${unit}`
+  })()
+
   return (
     <div>
+      {interactive && (
+        <div
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            minHeight: '18px', marginBottom: '2px',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
+              color: point?.frozen === true ? 'var(--wind-storm)' : 'var(--text-primary)',
+            }}
+          >
+            {point === null ? '' : readout}
+          </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {point === null ? 'Drag across to read it' : clockOf(point.time)}
+          </span>
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
@@ -906,9 +975,19 @@ export function TraceChart({
         preserveAspectRatio="none"
         role="img"
         aria-label={`Trace in ${unit}`}
+        style={{ touchAction: interactive ? 'none' : undefined, cursor: interactive ? 'crosshair' : undefined }}
+        onPointerDown={interactive ? (e) => scrub(e.clientX, e.currentTarget) : undefined}
+        onPointerMove={
+          interactive
+            ? (e) => {
+                if (e.buttons > 0 || e.pointerType === 'mouse') scrub(e.clientX, e.currentTarget)
+              }
+            : undefined
+        }
+        onPointerLeave={interactive ? () => set(null) : undefined}
       >
         <defs>
-          <pattern id="frozenHatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <pattern id={hatchId} width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
             <rect width="6" height="6" fill="rgba(204,17,0,0.08)" />
             <line x1="0" y1="0" x2="0" y2="6" stroke="var(--wind-storm)" strokeWidth="1.4" opacity="0.5" />
           </pattern>
@@ -920,12 +999,28 @@ export function TraceChart({
             y={0}
             width={Math.max(2, x(band.to) - x(band.from))}
             height={height}
-            fill="url(#frozenHatch)"
+            fill={`url(#${hatchId})`}
           />
         ))}
         {segments.map((d, i) => (
           <path key={i} d={d} fill="none" stroke={color} strokeWidth="1.6" />
         ))}
+        {point !== null && (
+          <>
+            <line
+              x1={x(active as number)}
+              y1={0}
+              x2={x(active as number)}
+              y2={height}
+              stroke="var(--text-primary)"
+              strokeWidth="1"
+              opacity="0.35"
+            />
+            {point.value !== null && !point.frozen && (
+              <circle cx={x(active as number)} cy={y(point.value)} r={3.2} fill={color} />
+            )}
+          </>
+        )}
       </svg>
       <div
         style={{
@@ -947,13 +1042,19 @@ export function TrackMap({
   rows,
   quality,
   height = 200,
+  highlight = null,
+  cadenceSec,
 }: {
   rows: Row[]
   quality: Quality[]
   height?: number
+  /** Row index to mark, so a trace and the track can share one cursor. */
+  highlight?: number | null
+  /** When given, the latched stretch is spoken in time rather than in rows. */
+  cadenceSec?: number
 }): React.ReactElement {
   const points = rows
-    .map((r, i) => ({ r, q: quality[i] }))
+    .map((r, i) => ({ r, q: quality[i], index: i }))
     .filter((p) => p.r.lat !== null && p.r.lon !== null)
   if (points.length === 0) {
     return <Seam>No position in this window.</Seam>
@@ -990,6 +1091,12 @@ export function TrackMap({
   })
   if (current.length > 1) live.push(current.join(' '))
 
+  const marked = highlight === null ? undefined : points.find((p) => p.index === highlight)
+  const cursor =
+    marked === undefined
+      ? null
+      : { x: px(marked.r.lon as number), y: py(marked.r.lat as number) }
+
   return (
     <div>
       <svg
@@ -1017,6 +1124,20 @@ export function TrackMap({
             <circle cx={frozenMarks[0].x} cy={frozenMarks[0].y} r={2.5} fill="var(--wind-storm)" />
           </>
         )}
+        {cursor !== null && (
+          <>
+            <circle
+              cx={cursor.x}
+              cy={cursor.y}
+              r={7}
+              fill="none"
+              stroke="var(--text-primary)"
+              strokeWidth="1.4"
+              opacity="0.8"
+            />
+            <circle cx={cursor.x} cy={cursor.y} r={2.5} fill="var(--text-primary)" />
+          </>
+        )}
       </svg>
       {frozenMarks.length > 0 && (
         <p
@@ -1025,8 +1146,11 @@ export function TrackMap({
             color: 'var(--wind-storm)', lineHeight: 1.45,
           }}
         >
-          The circled fix is where the feed latched: {frozenMarks.length}{' '}
-          {frozenMarks.length === 1 ? 'row' : 'rows'} inside this window repeat it
+          The circled fix is where the feed latched:{' '}
+          {cadenceSec === undefined
+            ? `${frozenMarks.length} ${frozenMarks.length === 1 ? 'row' : 'rows'}`
+            : spanLabel(frozenMarks.length * cadenceSec)}{' '}
+          inside this window {frozenMarks.length === 1 ? 'repeats' : 'repeat'} it
           verbatim. The track does not continue — it stops.
         </p>
       )}

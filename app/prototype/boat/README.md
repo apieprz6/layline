@@ -8,10 +8,13 @@ Run it:
 ```bash
 npm run dev
 # http://localhost:4000/prototype/boat?variant=A&viewer=admin
+# ...&variant=B&tab=races&race=race-0812   (B only: open a section, or one race)
 ```
 
 Both knobs live in the URL, so any screen can be shared exactly as seen. `variant` is
-`A`, `B` or `C`; `viewer` is `guest`, `member` or `admin`. The floating bottom bar
+`A`, `B` or `C`; `viewer` is `guest`, `member` or `admin`. Variant B also reads `tab`
+(`setup`, `races`, `overall`) and `race`, so a specific race screen can be linked rather
+than described. The floating bottom bar
 switches variants (arrow buttons, or ← / →) and viewers, and hides itself in
 production builds.
 
@@ -53,9 +56,9 @@ where editing happens, what the Overall tab does, and what a guest is told.
 | | **A — Index** | **B — Evidence-first** | **C — Ledger** |
 |---|---|---|---|
 | Position | Until the engine exists the boat sections are an index; everything is a list and the seam stays visible | The archive already holds a track, a trace and an honest account of row quality, so show them | One boat, one chronological record; everything is an entry in it |
-| Race row | Plain text row | Sparkline + quality bar + coverage sentence | Timeline entry among Versions, Events and sail retirements |
-| Race detail | Minimal, with an explicit `Analysis` seam | Track map first, then SOG and TWS traces | Split: *what we say happened* above the line, *what the file says* below it |
-| Editing | A separate **Amend** screen | An **Amend** toggle that turns the Testimony fields into inputs in place | A pencil per field, inline, everywhere |
+| Race row | Plain text row | Three derived stats: speed against the polar, the wind it was sailed in, whether the Crossover Chart agrees | Timeline entry among Versions, Events and sail retirements |
+| Race detail | Minimal, with an explicit `Analysis` seam | Testimony as chips under the title; a scrubbable track and traces sharing one cursor; then the polar and crossover readings | Split: *what we say happened* above the line, *what the file says* below it |
+| Editing | A separate **Amend** screen | One pencil at the top right; the Testimony chips become inputs in place | A pencil per field, inline, everywhere |
 | Overall tab | No numbers at all — a seam reading **Not yet.** and four named future sections | Six honest figures from the archive, then a seam: **None of the above is performance.** | A greyed skeleton of the future cards with a **Waiting on:** line each |
 | Polar | `PolarTable` — the whole grid, sideways scroll | `PolarHeat` — tap a cell to read it | `PolarByWind` — pick a TWS, read horizontal bars |
 | Crossover | `CrossoverMatrix` — all 26 × 13 | `CrossoverMatrix` in a sheet | `CrossoverRuns` — runs collapsed to `45–65° → Main + Jib 1` |
@@ -88,6 +91,15 @@ Handing the same artifact three different renderings is itself the answer to que
 The production `HamburgerMenu` is untouched; each variant draws its own drawer preview,
 since the guest treatment of the drawer is one of the questions.
 
+Boat speed in the fixture is generated **from** the Polar and scaled by a per-recording
+"sailed at" factor, so the polar percentages land somewhere a sailor would not reject out
+of hand (87–106%) instead of the 140% that a wind-independent speed model produced in
+light air. That makes the percentage circular by construction: it is there to size the
+layout, and nothing about the number is evidence of anything. The upwind/downwind split
+is real arithmetic over the rows, and uses **speed through the water**, because a polar is
+water-referenced and scoring it against a figure that includes current would be a
+different claim wearing the same percent sign.
+
 Types are local to this folder on purpose — they belong to the throwaway, not to
 `types/index.ts`. There are no tests: the checks that ran against this were themselves
 throwaway.
@@ -96,14 +108,27 @@ throwaway.
 
 - A window that ends 20 seconds into a wind-instrument freeze: **1** frozen row inside
   the window, 147 across the file. The detail screen has to be honest about both.
-- A window that outruns its recording: *"340 rows inside the window; recording ended 19
-  min before the finish."*
+- A window that outruns its recording: *"recording ended 19 min before the finish."* Row
+  counts are never shown to the reader anywhere — how long the feed was dead is a fact
+  about the race, how many lines that took is a fact about the file.
 - A paddlewheel that stops, so speed through water is missing while everything else keeps
   coming.
 - Drifting on the line either side of the gun, where the wind maths is meaningless.
 - A Sail Definition (number 7, "Main + A3") that no cell in the crossover chart ever
   calls for.
-- Polar rows below ~45° that are filler, not measurements — row 35 is exactly twice row
-  30 — and must not be read as data.
+- Polar rows below 40° that are filler, not measurements — row 35 is exactly twice row 30
+  — and must not be read as data. 40° *is* a measured row, and since the fixture sails at
+  42° TWA, suppressing it would silently throw away every upwind figure on the screen. The
+  screen and the derivation share one threshold constant so they cannot disagree.
+- A Crossover Chart that calls for the **Jib 3** on a race in August, after that sail was
+  retired on 08-01. The chart outlived the inventory, which settles which side is wrong
+  without Layline having to guess (`race-0812`).
+- A three-hour regatta with two lines in the sail log, where the chart disagrees with most
+  of the race. The honest reading is *the sails on record do not track this race*, not two
+  hours under the wrong sail — so the screen says that once instead of listing fifteen
+  spans of one fact (`race-0822`).
+- A race whose every recorded sail change is what the chart called for, but where 19 min
+  could not be checked at all because the paddlewheel was out (`race-0715`). A chart is
+  read against true wind, and true wind was not a real figure there.
 - Two races on 6 June from a single uploaded file, which the race list has to look right
   with.

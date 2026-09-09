@@ -70,6 +70,16 @@ export function durationLabel(minutes: number): string {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m} min`
 }
 
+/**
+ * A stretch of a recording, spoken as a sailor would: seconds while it is still
+ * seconds. Used instead of row counts, which are an implementation detail of
+ * the file and mean nothing to the person reading.
+ */
+export function spanLabel(seconds: number): string {
+  if (seconds < 90) return `${Math.round(seconds)} s`
+  return durationLabel(seconds / 60)
+}
+
 // ---------------------------------------------------------------------------
 // Boat identity and Sail Inventory
 // ---------------------------------------------------------------------------
@@ -210,6 +220,27 @@ function buildPolar(scale: number): number[][] {
   grid[0] = grid[2].map((v) => Math.round(v * 0.45 * 10) / 10)
   grid[1] = grid[0].map((v) => Math.round(v * 2 * 10) / 10)
   return grid
+}
+
+/**
+ * The polar's own shape, read continuously rather than off the grid: the same
+ * formula `buildPolar` uses, with the angle efficiency interpolated between its
+ * two nearest real rows. Used only to generate plausible boat speed for the
+ * fixture rows. Angles below 40° fall back to the 40° row, since everything
+ * below it in the stored Polar is filler.
+ */
+function polarShapeSpeed(twaAbs: number, tws: number, scale: number): number {
+  const real = POLAR_TWA.filter((a) => a >= 40)
+  const clamped = Math.min(Math.max(twaAbs, real[0]), real[real.length - 1])
+  const upperIndex = real.findIndex((a) => a >= clamped)
+  const upper = real[upperIndex]
+  const lower = real[Math.max(0, upperIndex - 1)]
+  const span = upper - lower
+  const t = span === 0 ? 0 : (clamped - lower) / span
+  const efficiency =
+    (ANGLE_EFFICIENCY[lower] ?? 0.7) * (1 - t) + (ANGLE_EFFICIENCY[upper] ?? 0.7) * t
+  const lightPenalty = tws <= 6 && clamped >= 135 ? 0.88 : 1
+  return 2.42 * Math.sqrt(Math.max(tws, 0)) * scale * efficiency * lightPenalty
 }
 
 const POLAR_V1: PolarPayload = {
@@ -533,6 +564,15 @@ export interface Recording {
   twsBase: number
   twdBase: number
   legMinutes: number
+  /**
+   * How well the boat was sailed, as a fraction of its own polar. The rows are
+   * generated *from* the Polar and then scaled by this, which is why the polar
+   * percentages on screen land somewhere believable — 0.9 sails like a tired
+   * crew, 1.02 like a good night with some current help. Nothing about the
+   * resulting percentage is evidence of anything; it exists so the layout can
+   * be judged against numbers a sailor would not immediately reject.
+   */
+  sailedAt?: number
   /** The feed dies and the software keeps writing the last fix verbatim. */
   dropout?: { fromIndex: number; toIndex: number; channelsBlankFromIndex: number }
   /** Paddlewheel out: no STW, no CTW, so no honest true wind. */
@@ -549,76 +589,76 @@ export const RECORDINGS: Recording[] = [
   recording({
     id: 'rec-0603', filename: '06-03-26-beer-can.csv', contentSha256: '0f8a1d44',
     firstRowTime: '2026-06-03T18:31:00', rowCount: 205, cadenceSec: 30,
-    uploadedAt: '2026-06-04T07:12:00', seed: 603, twsBase: 11, twdBase: 190, legMinutes: 14,
+    uploadedAt: '2026-06-04T07:12:00', seed: 603, sailedAt: 0.94, twsBase: 11, twdBase: 190, legMinutes: 14,
   }),
   recording({
     id: 'rec-0606-a', filename: '06-06-26-nood.csv', contentSha256: 'c31be907',
     firstRowTime: '2026-06-06T10:40:00', rowCount: 620, cadenceSec: 30,
-    uploadedAt: '2026-06-08T20:02:00', seed: 606, twsBase: 13, twdBase: 60, legMinutes: 18,
+    uploadedAt: '2026-06-08T20:02:00', seed: 606, sailedAt: 0.99, twsBase: 13, twdBase: 60, legMinutes: 18,
   }),
   recording({
     // Same bytes, uploaded a second time for the second race of the day.
     id: 'rec-0606-b', filename: '06-06-26-nood.csv', contentSha256: 'c31be907',
     firstRowTime: '2026-06-06T10:40:00', rowCount: 620, cadenceSec: 30,
-    uploadedAt: '2026-06-08T20:19:00', seed: 606, twsBase: 13, twdBase: 60, legMinutes: 18,
+    uploadedAt: '2026-06-08T20:19:00', seed: 606, sailedAt: 0.99, twsBase: 13, twdBase: 60, legMinutes: 18,
   }),
   recording({
     id: 'rec-0607', filename: '06-07-26-nood.csv', contentSha256: '7a45f2e0',
     firstRowTime: '2026-06-07T10:52:00', rowCount: 460, cadenceSec: 30,
-    uploadedAt: '2026-06-08T20:31:00', seed: 607, twsBase: 16, twdBase: 45, legMinutes: 20,
+    uploadedAt: '2026-06-08T20:31:00', seed: 607, sailedAt: 1.01, twsBase: 16, twdBase: 45, legMinutes: 20,
   }),
   recording({
     id: 'rec-0617', filename: '06-17-26-beer-can.csv', contentSha256: '9cc07b13',
     firstRowTime: '2026-06-17T18:28:00', rowCount: 230, cadenceSec: 30,
-    uploadedAt: '2026-06-18T06:55:00', seed: 617, twsBase: 19, twdBase: 30, legMinutes: 12,
+    uploadedAt: '2026-06-18T06:55:00', seed: 617, sailedAt: 0.9, twsBase: 19, twdBase: 30, legMinutes: 12,
   }),
   recording({
     id: 'rec-0626', filename: '06-26-26-chi-mi-chi.csv', contentSha256: 'e2810cd5',
     firstRowTime: '2026-06-26T18:32:17', rowCount: 1420, cadenceSec: 30,
-    uploadedAt: '2026-06-28T15:44:00', seed: 626, twsBase: 9, twdBase: 210, legMinutes: 55,
+    uploadedAt: '2026-06-28T15:44:00', seed: 626, sailedAt: 0.96, twsBase: 9, twdBase: 210, legMinutes: 55,
   }),
   recording({
     id: 'rec-0701', filename: '07-01-26-beer-can.csv', contentSha256: '5b6d9a71',
     firstRowTime: '2026-07-01T18:34:00', rowCount: 195, cadenceSec: 30,
-    uploadedAt: '2026-07-02T07:03:00', seed: 701, twsBase: 7, twdBase: 155, legMinutes: 13,
+    uploadedAt: '2026-07-02T07:03:00', seed: 701, sailedAt: 0.86, twsBase: 7, twdBase: 155, legMinutes: 13,
   }),
   recording({
     id: 'rec-0708', filename: '07-08-26-beer-can.csv', contentSha256: '11f4c0ab',
     firstRowTime: '2026-07-08T18:30:00', rowCount: 210, cadenceSec: 30,
-    uploadedAt: '2026-07-09T06:40:00', seed: 708, twsBase: 12, twdBase: 175, legMinutes: 14,
+    uploadedAt: '2026-07-09T06:40:00', seed: 708, sailedAt: 0.97, twsBase: 12, twdBase: 175, legMinutes: 14,
     // Sitting on the line either side of the gun at 19:00.
     lowSpeed: { fromIndex: 56, toIndex: 62 },
   }),
   recording({
     id: 'rec-0715', filename: '07-15-26-beer-can.csv', contentSha256: '8dd2e5f6',
     firstRowTime: '2026-07-15T18:29:00', rowCount: 214, cadenceSec: 30,
-    uploadedAt: '2026-07-16T06:48:00', seed: 715, twsBase: 14, twdBase: 200, legMinutes: 14,
+    uploadedAt: '2026-07-16T06:48:00', seed: 715, sailedAt: 0.93, twsBase: 14, twdBase: 200, legMinutes: 14,
     noPaddlewheel: { fromIndex: 96, toIndex: 132 },
   }),
   recording({
     id: 'rec-0722', filename: '07-22-26-beer-can.csv', contentSha256: '3ae70b28',
     firstRowTime: '2026-07-22T18:33:00', rowCount: 198, cadenceSec: 30,
-    uploadedAt: '2026-07-23T07:20:00', seed: 722, twsBase: 8, twdBase: 130, legMinutes: 13,
+    uploadedAt: '2026-07-23T07:20:00', seed: 722, sailedAt: 0.88, twsBase: 8, twdBase: 130, legMinutes: 13,
   }),
   recording({
     id: 'rec-0804', filename: '08-04-26-100-beer-can.csv', contentSha256: 'd50ffa93',
     firstRowTime: '2026-08-04T18:22:00', rowCount: 240, cadenceSec: 30,
-    uploadedAt: '2026-08-05T06:31:00', seed: 804, twsBase: 10, twdBase: 95, legMinutes: 15,
+    uploadedAt: '2026-08-05T06:31:00', seed: 804, sailedAt: 1.03, twsBase: 10, twdBase: 95, legMinutes: 15,
   }),
   recording({
     id: 'rec-0812', filename: '08-12-26-beer-can.csv', contentSha256: '6c1a44b8',
     firstRowTime: '2026-08-12T18:31:00', rowCount: 206, cadenceSec: 30,
-    uploadedAt: '2026-08-13T06:52:00', seed: 812, twsBase: 17, twdBase: 220, legMinutes: 13,
+    uploadedAt: '2026-08-13T06:52:00', seed: 812, sailedAt: 0.95, twsBase: 17, twdBase: 220, legMinutes: 13,
   }),
   recording({
     id: 'rec-0822', filename: '08-22-26-glr.csv', contentSha256: 'fb0392da',
     firstRowTime: '2026-08-22T10:14:15', rowCount: 432, cadenceSec: 30,
-    uploadedAt: '2026-08-23T11:07:00', seed: 822, twsBase: 21, twdBase: 25, legMinutes: 24,
+    uploadedAt: '2026-08-23T11:07:00', seed: 822, sailedAt: 0.98, twsBase: 21, twdBase: 25, legMinutes: 24,
   }),
   recording({
     id: 'rec-0902', filename: '09-02-2026-beer-can.csv', contentSha256: '2f77bd01',
     firstRowTime: '2026-09-02T18:15:40', rowCount: 291, cadenceSec: 30,
-    uploadedAt: '2026-09-03T06:44:00', seed: 902, twsBase: 12, twdBase: 165, legMinutes: 13,
+    uploadedAt: '2026-09-03T06:44:00', seed: 902, sailedAt: 1.0, twsBase: 12, twdBase: 165, legMinutes: 13,
     // Parked in a hole two and a half minutes after the start.
     lowSpeed: { fromIndex: 92, toIndex: 96 },
     // Rows 129–275 repeat one fix for 73 minutes; from 131 the instrument
@@ -690,8 +730,19 @@ export function rowsFor(recordingId: string): Row[] {
     const twd = Math.round(rec.twdBase + Math.sin(i / 37) * 7 + (rand() - 0.5) * 4)
     const twa = upwind ? (starboard ? -42 : 42) : starboard ? -150 : 150
     const cog = ((twd - twa) % 360 + 360) % 360
-    const boatSpeed = upwind ? 5.4 + tws * 0.09 : 6.1 + tws * 0.12
-    const sog = Math.round((boatSpeed + (rand() - 0.5) * 0.5) * 10) / 10
+    // Boat speed comes off the Polar's own shape, scaled by how well the boat
+    // was sailed, so light air reads like light air. Generated against v1; a
+    // race frozen on v2 will therefore read a couple of percent off, which is
+    // exactly what a new certificate does to a season of results.
+    // Most crews are better at one end of the course than the other, so the
+    // upwind and downwind figures are worth reading separately. Derived from the
+    // seed rather than another field: ±5%, deterministic, and meaningless as
+    // evidence.
+    const legBias = upwind ? 1 : 1 + ((rec.seed % 7) - 3) * 0.017
+    const throughWater = polarShapeSpeed(Math.abs(twa), tws, 1) * (rec.sailedAt ?? 0.95) * legBias
+    const stwValue = Math.round(Math.max(0, throughWater + (rand() - 0.5) * 0.4) * 10) / 10
+    // A fair current: over the ground is a little more than through the water.
+    const sog = Math.round((stwValue + 0.15 + (rand() - 0.5) * 0.2) * 10) / 10
 
     // Drifting: a hole on the course, or the last minutes before the gun.
     const lowSpeed =
@@ -718,7 +769,7 @@ export function rowsFor(recordingId: string): Row[] {
       tws,
       twa: Math.round(twa),
       ctw: paddleOut ? null : cog,
-      stw: paddleOut ? null : Math.round((sogOut * 0.98) * 10) / 10,
+      stw: paddleOut ? null : lowSpeed ? Math.round(sogOut * 0.9 * 10) / 10 : stwValue,
     })
   }
 
@@ -837,10 +888,14 @@ export const RACES: Race[] = [
     windowStart: '2026-07-08T19:00:00', windowFinish: '2026-07-08T20:08:00',
     polarVersionId: 'ver-polar-1', crossoverVersionId: 'ver-crossover-1',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-2',
+    // A log kept leg by leg, with one late hoist: the kite went up six minutes
+    // after the weather mark, which is the only thing the chart can object to.
     sailEntries: [
-      sailEntry('se-0708-1', '2026-07-08T18:52:00', ['main', 'jib-1'], 'full'),
-      sailEntry('se-0708-2', '2026-07-08T19:34:00', ['main', 'A2'], 'full'),
-      sailEntry('se-0708-3', '2026-07-08T19:58:00', ['main', 'jib-1'], 'full'),
+      sailEntry('se-0708-1', '2026-07-08T18:52:00', ['main', 'jib-2'], 'full'),
+      sailEntry('se-0708-2', '2026-07-08T19:18:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0708-3', '2026-07-08T19:26:00', ['main', 'jib-2'], 'full'),
+      sailEntry('se-0708-4', '2026-07-08T19:40:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0708-5', '2026-07-08T19:54:00', ['main', 'jib-2'], 'full'),
     ],
     seaStateEntries: [{ id: 'ss-0708-1', at: '2026-07-08T19:00:00', seaState: 'slight' }],
     updatedAt: '2026-07-09T06:40:00',
@@ -850,9 +905,16 @@ export const RACES: Race[] = [
     windowStart: '2026-07-15T19:00:00', windowFinish: '2026-07-15T20:10:00',
     polarVersionId: 'ver-polar-1', crossoverVersionId: 'ver-crossover-1',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-2',
+    // Every change written down, and every one of them what the chart calls for:
+    // the race that should read as agreeing, with a stretch it cannot check
+    // because the paddlewheel was out.
     sailEntries: [
       sailEntry('se-0715-1', '2026-07-15T18:50:00', ['main', 'jib-2'], 'full'),
-      sailEntry('se-0715-2', '2026-07-15T19:41:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0715-2', '2026-07-15T19:11:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0715-3', '2026-07-15T19:25:00', ['main', 'jib-2'], 'full'),
+      sailEntry('se-0715-4', '2026-07-15T19:39:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0715-5', '2026-07-15T19:53:00', ['main', 'jib-2'], 'full'),
+      sailEntry('se-0715-6', '2026-07-15T20:07:00', ['main', 'A2'], 'full'),
     ],
     seaStateEntries: [{ id: 'ss-0715-1', at: '2026-07-15T19:00:00', seaState: 'moderate' }],
     updatedAt: '2026-07-16T06:48:00',
@@ -862,9 +924,15 @@ export const RACES: Race[] = [
     windowStart: '2026-07-22T19:00:00', windowFinish: '2026-07-22T20:02:00',
     polarVersionId: 'ver-polar-1', crossoverVersionId: 'ver-crossover-2',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-2',
+    // Both downwind legs sailed under the A3, which this boat's chart names as a
+    // Sail Definition but never actually calls for in any cell. The disagreement
+    // is real and the chart is the thing that is wrong.
     sailEntries: [
       sailEntry('se-0722-1', '2026-07-22T18:55:00', ['main', 'jib-1'], 'full'),
-      sailEntry('se-0722-2', '2026-07-22T19:29:00', ['main', 'A3'], 'full'),
+      sailEntry('se-0722-2', '2026-07-22T19:12:00', ['main', 'A3'], 'full'),
+      sailEntry('se-0722-3', '2026-07-22T19:25:00', ['main', 'jib-1'], 'full'),
+      sailEntry('se-0722-4', '2026-07-22T19:38:00', ['main', 'A3'], 'full'),
+      sailEntry('se-0722-5', '2026-07-22T19:51:00', ['main', 'jib-1'], 'full'),
     ],
     seaStateEntries: [{ id: 'ss-0722-1', at: '2026-07-22T19:00:00', seaState: 'calm' }],
     updatedAt: '2026-07-23T07:20:00',
@@ -874,9 +942,14 @@ export const RACES: Race[] = [
     windowStart: '2026-08-04T18:50:00', windowFinish: '2026-08-04T20:11:00',
     polarVersionId: 'ver-polar-1', crossoverVersionId: 'ver-crossover-2',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-2',
+    // Wind built through the evening: the last beat was sailed under the Jib 1
+    // while the chart had already crossed over to the Jib 2.
     sailEntries: [
       sailEntry('se-0804-1', '2026-08-04T18:44:00', ['main', 'jib-1'], 'full'),
-      sailEntry('se-0804-2', '2026-08-04T19:22:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0804-2', '2026-08-04T19:07:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0804-3', '2026-08-04T19:22:00', ['main', 'jib-1'], 'full'),
+      sailEntry('se-0804-4', '2026-08-04T19:37:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0804-5', '2026-08-04T19:52:00', ['main', 'jib-1'], 'full'),
     ],
     seaStateEntries: [{ id: 'ss-0804-1', at: '2026-08-04T18:50:00', seaState: 'slight' }],
     updatedAt: '2026-08-05T06:31:00',
@@ -886,9 +959,14 @@ export const RACES: Race[] = [
     windowStart: '2026-08-12T19:00:00', windowFinish: '2026-08-12T20:07:00',
     polarVersionId: 'ver-polar-1', crossoverVersionId: 'ver-crossover-2',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-2',
+    // 18 knots, and the chart calls for the Jib 3 on both beats — a sail this
+    // boat sold on 08-01. The log is right; the chart is stale.
     sailEntries: [
       sailEntry('se-0812-1', '2026-08-12T18:51:00', ['main', 'jib-2'], 'full'),
-      sailEntry('se-0812-2', '2026-08-12T19:36:00', ['main', 'jib-2'], 'reef-1'),
+      sailEntry('se-0812-2', '2026-08-12T19:10:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0812-3', '2026-08-12T19:23:00', ['main', 'jib-2'], 'full'),
+      sailEntry('se-0812-4', '2026-08-12T19:36:00', ['main', 'A2'], 'full'),
+      sailEntry('se-0812-5', '2026-08-12T19:49:00', ['main', 'jib-2'], 'reef-1'),
     ],
     seaStateEntries: [{ id: 'ss-0812-1', at: '2026-08-12T19:00:00', seaState: 'moderate' }],
     updatedAt: '2026-08-13T06:52:00',
@@ -898,6 +976,10 @@ export const RACES: Race[] = [
     windowStart: '2026-08-22T11:00:00', windowFinish: '2026-08-22T14:09:00',
     polarVersionId: 'ver-polar-2', crossoverVersionId: 'ver-crossover-2',
     rigTuneVersionId: null, rigTuneBandId: null, calibrationVersionId: 'ver-cal-3',
+    // Three hours of regatta and two lines in the log: nobody was writing sail
+    // changes down. The chart will disagree with almost the whole race, and the
+    // honest reading of that is "the log does not track this race", not "the
+    // boat was mis-rigged for two hours".
     sailEntries: [
       sailEntry('se-0822-1', '2026-08-22T10:45:00', ['main', 'jib-2'], 'full'),
       sailEntry('se-0822-2', '2026-08-22T12:30:00', ['main', 'jib-2'], 'reef-1'),

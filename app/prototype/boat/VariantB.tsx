@@ -10,19 +10,25 @@
  * rows are — so show it, and let the missing engine be the one thing that is
  * missing. Its answers:
  *
- *   Q1  A race row is emphatically worth tapping: the detail screen opens on
- *       the track, then the SOG and TWS traces, then the raw rows. Frozen spans
- *       are drawn as breaks, never as flat line.
+ *   Q1  A race row is emphatically worth tapping. The row identifies the race
+ *       by three derived figures — speed against the polar, the wind it was
+ *       sailed in, and whether the Crossover Chart agrees with the sails that
+ *       were up — and the detail screen opens on a scrubbable track and traces.
+ *       Frozen spans are drawn as breaks, never as flat line. Row counts appear
+ *       nowhere: how long the feed was dead is a fact about the race, how many
+ *       lines that took is a fact about the file.
  *   Q2  Overall carries real figures — but only counts and sums over Testimony
  *       and Row Quality, each labelled as not being a performance claim.
  *   Q3  Artifacts render as heat grids you tap to read, sized to the screen
  *       rather than scrolled.
  *   Q4  A Guest sees both entries, locked, with an explicit invitation.
- *   Q6  Admin writes are an "Amend" mode on the screen itself: fields become
- *       inputs in place, and the Transcription block stays visibly outside it.
+ *   Q6  Admin writes are an "Amend" mode on the screen itself, reached by one
+ *       pencil at the top right: the Testimony chips become inputs in place, and
+ *       the mode says out loud that the recording is not what is being edited.
  *   Q7  Boat identity is the header of Boat management.
  */
 
+import { useSearchParams } from 'next/navigation'
 import React, { useMemo, useState } from 'react'
 import {
   ARTIFACT_LABEL,
@@ -45,6 +51,7 @@ import {
   racesUsingSail,
   sailConfigLabel,
   shortDateOf,
+  spanLabel,
   versionById,
   versionsOf,
   type ArtifactKind,
@@ -52,14 +59,19 @@ import {
 } from './fixture'
 import {
   DETECTOR_VERSION,
+  POLAR_SKIP_LABEL,
+  WIND_BAND_COLOR,
+  WIND_BAND_LABEL,
   analyseRace,
   archiveSummary,
   calibrationLog,
   changeLabel,
   checkWindow,
   isAnnotated,
+  quickStats,
   resolveSeaStateAt,
   seriesOf,
+  type RaceQuickStats,
 } from './derive'
 import {
   CalibrationValues,
@@ -72,7 +84,6 @@ import {
   QualityBar,
   QualityKey,
   RigTuneBands,
-  RowTable,
   Seam,
   SpanList,
   TraceChart,
@@ -129,10 +140,13 @@ function Card({
 function Sheet({
   title,
   onClose,
+  action,
   children,
 }: {
   title: string
   onClose: () => void
+  /** Sits left of the close button: on a race, the one pencil. */
+  action?: React.ReactNode
   children: React.ReactNode
 }): React.ReactElement {
   return (
@@ -166,16 +180,19 @@ function Sheet({
           >
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: '2px 6px',
-            }}
-          >
-            ×
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: '0 0 auto' }}>
+            {action}
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: '2px 6px',
+              }}
+            >
+              ×
+            </button>
+          </div>
         </div>
         {children}
       </div>
@@ -589,6 +606,123 @@ function SetupTab({ viewer }: { viewer: Viewer }): React.ReactElement {
 // Races tab — dense rows, each carrying its own coverage
 // ---------------------------------------------------------------------------
 
+/**
+ * One derived figure, with the honest empty case built in. A stat that cannot
+ * be computed says so and says why; it never shows a plausible number.
+ */
+function Stat({
+  value,
+  unit,
+  label,
+  color,
+  muted,
+}: {
+  value: string
+  unit?: string
+  label: string
+  color?: string
+  muted?: boolean
+}): React.ReactElement {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 'var(--text-lg)', fontWeight: 700,
+          color: muted === true ? 'var(--text-muted)' : color ?? 'var(--text-primary)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          lineHeight: 1.2,
+        }}
+      >
+        {value}
+        {unit !== undefined && (
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}> {unit}</span>
+        )}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+          color: 'var(--text-muted)', lineHeight: 1.3,
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  )
+}
+
+/** How much of the window the polar comparison actually covers. */
+function polarCoverage(stats: RaceQuickStats, windowMinutes: number): number {
+  const total = windowMinutes * 60
+  return total <= 0 ? 0 : stats.polar.scoredSeconds / total
+}
+
+function PolarStat({
+  stats,
+  windowMinutes,
+}: {
+  stats: RaceQuickStats
+  windowMinutes: number
+}): React.ReactElement {
+  const percent = stats.polar.averagePercent
+  if (percent === null) {
+    return <Stat value="—" label="no polar figure" muted />
+  }
+  const coverage = polarCoverage(stats, windowMinutes)
+  return (
+    <Stat
+      value={`${percent.toFixed(0)}%`}
+      label={coverage < 0.6 ? `of polar · part of the race` : 'of polar target'}
+      color={percent >= 100 ? 'var(--wind-light)' : 'var(--text-primary)'}
+    />
+  )
+}
+
+function WindStat({ stats }: { stats: RaceQuickStats }): React.ReactElement {
+  const { averageTws, band } = stats.wind
+  if (averageTws === null || band === null) {
+    return <Stat value="—" label="no wind figure" muted />
+  }
+  return (
+    <Stat
+      value={averageTws.toFixed(1)}
+      unit="kt"
+      label={WIND_BAND_LABEL[band].toLowerCase()}
+      color={WIND_BAND_COLOR[band]}
+    />
+  )
+}
+
+function CrossoverStat({ stats }: { stats: RaceQuickStats }): React.ReactElement {
+  const check = stats.crossover
+  if (check.status === 'no-sail-recorded') {
+    return <Stat value="?" label="no sail recorded" muted />
+  }
+  if (check.status === 'no-chart') {
+    return <Stat value="—" label="no crossover chart" muted />
+  }
+  if (check.status === 'agrees') {
+    return (
+      <Stat
+        value="✓"
+        // Never "agrees" flat when part of the race could not be checked at all.
+        label={check.uncheckedSeconds > 0 ? 'chart agrees · part checked' : 'chart agrees'}
+        color="var(--wind-light)"
+      />
+    )
+  }
+  if (check.dominant) {
+    // Fifteen spans of the same fact is still one fact. Say the fact.
+    return <Stat value="✗" label="log doesn't track this race" color="var(--wind-heavy)" />
+  }
+  return (
+    <Stat
+      value={spanLabel(check.disagreementSeconds)}
+      label={check.spans.length === 1 ? 'off the chart' : `off the chart, ${check.spans.length} spans`}
+      color="var(--wind-heavy)"
+    />
+  )
+}
+
 function RaceRow({
   race,
   onOpen,
@@ -597,10 +731,7 @@ function RaceRow({
   onOpen: () => void
 }): React.ReactElement {
   const analysis = useMemo(() => analyseRace(race), [race])
-  const series = useMemo(
-    () => seriesOf(analysis.windowRows, analysis.windowQuality, 'sog'),
-    [analysis]
-  )
+  const stats = useMemo(() => quickStats(analysis), [analysis])
 
   return (
     <button
@@ -640,8 +771,15 @@ function RaceRow({
         </span>
       </div>
 
-      <div style={{ margin: '8px 0 6px' }}>
-        <TraceChart series={series} unit="kt" height={34} />
+      <div
+        style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px',
+          margin: '10px 0 8px',
+        }}
+      >
+        <PolarStat stats={stats} windowMinutes={analysis.windowMinutes} />
+        <WindStat stats={stats} />
+        <CrossoverStat stats={stats} />
       </div>
 
       <QualityBar counts={analysis.counts} />
@@ -669,7 +807,9 @@ function RaceRow({
 }
 
 function RacesTab({ viewer }: { viewer: Viewer }): React.ReactElement {
-  const [openId, setOpenId] = useState<string | null>(null)
+  // `?race=race-0812` opens a race directly, same reason as `?tab=`.
+  const searchParams = useSearchParams()
+  const [openId, setOpenId] = useState<string | null>(searchParams.get('race'))
   const races = useMemo(() => racesByDateDesc(RACES), [])
   const open = races.find((r) => r.id === openId)
 
@@ -692,8 +832,9 @@ function RacesTab({ viewer }: { viewer: Viewer }): React.ReactElement {
         >
           {RACES.length} races from {RECORDINGS.length} uploads of{' '}
           {new Set(RECORDINGS.map((r) => r.contentSha256)).size} distinct files — 6 June
-          was uploaded twice, once for each of its races. Every line below the
-          trace is derived when the row loads; none of it is stored.
+          was uploaded twice, once for each of its races. Speed against the
+          polar, the wind, and the Crossover Chart&rsquo;s opinion of the sails
+          are all worked out when the row loads; none of it is stored.
         </div>
       </div>
 
@@ -717,6 +858,114 @@ function RacesTab({ viewer }: { viewer: Viewer }): React.ReactElement {
 // Race detail — the track first, and an Amend mode over the Testimony
 // ---------------------------------------------------------------------------
 
+/** Testimony, worn as chips by the title. Missing is a chip too, and looks it. */
+function Chip({
+  children,
+  missing,
+}: {
+  children: React.ReactNode
+  missing?: boolean
+}): React.ReactElement {
+  return (
+    <span
+      style={{
+        padding: '3px 9px', borderRadius: '999px',
+        fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+        border: missing === true ? '1px dashed var(--surface-border)' : '1px solid var(--surface-border)',
+        background: missing === true
+          ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.04) 4px, rgba(0,0,0,0.04) 8px)'
+          : 'var(--surface-elevated)',
+        color: missing === true ? 'var(--text-muted)' : 'var(--text-primary)',
+        fontStyle: missing === true ? 'italic' : 'normal',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  mono = true,
+}: {
+  label: string
+  value: string
+  onChange: (next: string) => void
+  mono?: boolean
+}): React.ReactElement {
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <Label>{label}</Label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '9px 11px', borderRadius: 'var(--input-radius)',
+          border: '1px solid var(--input-border)', background: 'var(--input-bg)',
+          color: 'var(--input-fg)', fontSize: 'var(--text-sm)',
+          fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body)',
+        }}
+      />
+    </div>
+  )
+}
+
+function TextButton({
+  label,
+  onClick,
+  danger,
+}: {
+  label: string
+  onClick: () => void
+  danger?: boolean
+}): React.ReactElement {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+        fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', fontWeight: 600,
+        color: danger === true ? 'var(--state-danger)' : 'var(--text-accent)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+function PencilButton({
+  amending,
+  onClick,
+}: {
+  amending: boolean
+  onClick: () => void
+}): React.ReactElement {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={amending ? 'Stop amending' : 'Amend what we say happened'}
+      title={amending ? 'Done' : 'Amend what we say happened'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer',
+        borderRadius: '999px', padding: '5px 10px',
+        border: `1px solid ${amending ? 'var(--blue-500)' : 'var(--surface-border)'}`,
+        background: amending ? 'var(--blue-muted)' : 'transparent',
+        color: amending ? 'var(--text-accent)' : 'var(--text-secondary)',
+        fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', fontWeight: 600,
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+      {amending ? 'Done' : 'Amend'}
+    </button>
+  )
+}
+
 function RaceDetailSheet({
   race,
   viewer,
@@ -727,26 +976,192 @@ function RaceDetailSheet({
   onClose: () => void
 }): React.ReactElement {
   const analysis = useMemo(() => analyseRace(race), [race])
+  const stats = useMemo(() => quickStats(analysis), [analysis])
   const [amending, setAmending] = useState(false)
+  const [title, setTitle] = useState(race.title ?? '')
   const [start, setStart] = useState(race.windowStart)
   const [finish, setFinish] = useState(race.windowFinish)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  /** One cursor, shared by both traces and the track. */
+  const [cursor, setCursor] = useState<number | null>(null)
   const sog = useMemo(() => seriesOf(analysis.windowRows, analysis.windowQuality, 'sog'), [analysis])
   const tws = useMemo(() => seriesOf(analysis.windowRows, analysis.windowQuality, 'tws'), [analysis])
   const seaState = resolveSeaStateAt(race, race.windowStart)
   const refusal = checkWindow(race.recordingId, start, finish)
+  const polarVersion = versionById(race.polarVersionId)
+  const crossoverVersion = versionById(race.crossoverVersionId)
 
   return (
-    <Sheet title={race.title ?? longDateOf(race.windowStart)} onClose={onClose}>
+    <Sheet
+      title={race.title ?? longDateOf(race.windowStart)}
+      onClose={onClose}
+      action={
+        canWrite(viewer) ? (
+          <PencilButton amending={amending} onClick={() => setAmending(!amending)} />
+        ) : undefined
+      }
+    >
       <div
         style={{
           fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
-          color: 'var(--text-secondary)', marginBottom: '4px',
+          color: 'var(--text-secondary)', marginBottom: '8px',
         }}
       >
         {clockWithSecondsOf(race.windowStart)} → {clockWithSecondsOf(race.windowFinish)} ·{' '}
         {durationLabel(analysis.windowMinutes)}
       </div>
+
+      {amending ? (
+        <div
+          style={{
+            border: '1.5px solid var(--blue-500)', background: 'var(--blue-muted)',
+            borderRadius: '10px', padding: '13px', marginBottom: '14px',
+          }}
+        >
+          <p
+            style={{
+              margin: '0 0 12px', fontFamily: 'var(--font-body)',
+              fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.45,
+            }}
+          >
+            You are editing{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>what we say happened</strong>.
+            The recording itself is not reachable from here, or from anywhere.
+          </p>
+
+          <Field label="Title · optional, never generated" value={title} onChange={setTitle} mono={false} />
+          <Field label="Window start" value={start} onChange={setStart} />
+          <Field label="Window finish" value={finish} onChange={setFinish} />
+
+          {!refusal.ok && (
+            <div
+              style={{
+                padding: '10px 12px', borderRadius: '6px',
+                border: '1px solid var(--state-danger)',
+                fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                color: 'var(--state-danger)', lineHeight: 1.45, marginBottom: '12px',
+              }}
+            >
+              {refusal.reason}
+            </div>
+          )}
+
+          <div style={{ marginBottom: '12px' }}>
+            <Label>Sails</Label>
+            {race.sailEntries.length === 0 ? (
+              <NotRecorded label="No sail change written down" />
+            ) : (
+              race.sailEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: 'flex', alignItems: 'baseline', gap: '8px', padding: '4px 0',
+                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <Mono>{clockOf(entry.at)}</Mono>
+                  <span style={{ flex: 1 }}>{sailConfigLabel(entry)}</span>
+                  <TextButton label="Edit" onClick={() => undefined} />
+                  <TextButton label="Delete" onClick={() => undefined} danger />
+                </div>
+              ))
+            )}
+            <TextButton label="+ Add a sail change" onClick={() => undefined} />
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <Label>Sea State</Label>
+            <div
+              style={{
+                display: 'flex', alignItems: 'baseline', gap: '8px',
+                fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                {seaState === null ? <NotRecorded /> : SEA_STATE_LABEL[seaState.seaState]}
+              </span>
+              <TextButton label={seaState === null ? '+ Record it' : 'Edit'} onClick={() => undefined} />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '10px' }}>
+            <Label>Setup in force · frozen pointers, repointable</Label>
+            {(
+              [
+                ['Polar', race.polarVersionId],
+                ['Crossover', race.crossoverVersionId],
+                ['Rig Tune', race.rigTuneVersionId],
+                ['Calibration', race.calibrationVersionId],
+              ] as const
+            ).map(([label, id]) => (
+              <div
+                key={label}
+                style={{
+                  display: 'flex', alignItems: 'baseline', gap: '8px', padding: '4px 0',
+                  fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <span style={{ flex: 1 }}>{label}</span>
+                {versionById(id) ? (
+                  <Mono>v{versionById(id)?.versionNumber}</Mono>
+                ) : (
+                  <NotRecorded />
+                )}
+                <TextButton label="Change" onClick={() => undefined} />
+              </div>
+            ))}
+          </div>
+
+          <p
+            style={{
+              margin: 0, fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+              color: 'var(--text-muted)', lineHeight: 1.45,
+            }}
+          >
+            No change reason is asked for, no note is kept and there is no history
+            to read: this is a memory, and a corrected memory is simply better.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+          {race.sailEntries.length === 0 ? (
+            <Chip missing>No sails written down</Chip>
+          ) : (
+            race.sailEntries.map((entry) => (
+              <Chip key={entry.id}>
+                {clockOf(entry.at)} {sailConfigLabel(entry)}
+              </Chip>
+            ))
+          )}
+          {seaState === null ? (
+            <Chip missing>No sea state</Chip>
+          ) : (
+            <Chip>{SEA_STATE_LABEL[seaState.seaState]}</Chip>
+          )}
+          {(
+            [
+              ['Polar', race.polarVersionId],
+              ['Crossover', race.crossoverVersionId],
+              ['Rig Tune', race.rigTuneVersionId],
+              ['Cal', race.calibrationVersionId],
+            ] as const
+          ).map(([label, id]) =>
+            versionById(id) ? (
+              <Chip key={label}>
+                {label} v{versionById(id)?.versionNumber}
+              </Chip>
+            ) : (
+              <Chip key={label} missing>
+                No {label}
+              </Chip>
+            )
+          )}
+        </div>
+      )}
+
       <div
         style={{
           fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
@@ -760,16 +1175,63 @@ function RaceDetailSheet({
         {analysis.coverageSentence}
       </div>
 
-      <TrackMap rows={analysis.windowRows} quality={analysis.windowQuality} />
+      <TrackMap
+        rows={analysis.windowRows}
+        quality={analysis.windowQuality}
+        highlight={cursor}
+        cadenceSec={analysis.cadenceSec}
+      />
 
       <div style={{ marginTop: '16px' }}>
         <Label>Speed over the ground</Label>
-        <TraceChart series={sog} unit="kt" />
+        <TraceChart
+          series={sog}
+          unit="kt"
+          interactive
+          highlight={cursor}
+          onHover={setCursor}
+          quality={analysis.windowQuality}
+        />
       </div>
       <div style={{ marginTop: '14px' }}>
         <Label>True wind speed · computed upstream, not measured</Label>
-        <TraceChart series={tws} unit="kt" color="var(--wind-heavy)" />
+        <TraceChart
+          series={tws}
+          unit="kt"
+          color="var(--wind-heavy)"
+          interactive
+          highlight={cursor}
+          onHover={setCursor}
+          quality={analysis.windowQuality}
+        />
       </div>
+      {stats.wind.averageTws !== null && (
+        <div
+          style={{
+            marginTop: '8px', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {stats.wind.averageTws.toFixed(1)} kt average, {stats.wind.minTws?.toFixed(1)}–
+          {stats.wind.maxTws?.toFixed(1)} range
+          {stats.wind.averageTwd !== null && stats.wind.shiftDegrees !== null && (
+            <>
+              {' '}
+              · {Math.round(stats.wind.averageTwd)}° mean, {Math.round(stats.wind.shiftDegrees)}°
+              of shift
+            </>
+          )}
+        </div>
+      )}
+      <p
+        style={{
+          margin: '6px 0 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+          color: 'var(--text-muted)', lineHeight: 1.4,
+        }}
+      >
+        Drag either trace: both traces and the track move together, so a slow
+        patch can be found on the course rather than only on a clock.
+      </p>
 
       <div style={{ marginTop: '16px' }}>
         <QualityKey counts={analysis.counts} />
@@ -791,18 +1253,20 @@ function RaceDetailSheet({
         >
           {DETECTOR_VERSION} · nothing here is stored on a row
         </div>
+        <div style={{ marginTop: '10px' }}>
+          <ProvenanceSentence text={analysis.provenanceSentence} />
+        </div>
       </div>
 
       <div
         style={{
-          marginTop: '20px', border: amending ? '1.5px solid var(--blue-500)' : '1px solid var(--surface-border)',
-          borderRadius: '10px', padding: '14px',
-          background: amending ? 'var(--blue-muted)' : 'var(--surface-elevated)',
+          marginTop: '20px', border: '1px solid var(--surface-border)', borderRadius: '10px',
+          padding: '14px', background: 'var(--surface-elevated)',
         }}
       >
         <div
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
             marginBottom: '10px',
           }}
         >
@@ -812,169 +1276,183 @@ function RaceDetailSheet({
               color: 'var(--text-primary)',
             }}
           >
-            Testimony {amending && '· editing'}
+            Against the polar
           </span>
-          {canWrite(viewer) && (
-            <PrimaryButton
-              label={amending ? 'Done' : 'Amend'}
-              onClick={() => setAmending(!amending)}
-            />
-          )}
+          {polarVersion !== undefined && <Mono>v{polarVersion.versionNumber}</Mono>}
         </div>
 
-        {amending ? (
-          <>
-            {[
-              ['Window start', start, setStart] as const,
-              ['Window finish', finish, setFinish] as const,
-            ].map(([label, value, setter]) => (
-              <div key={label} style={{ marginBottom: '10px' }}>
-                <Label>{label}</Label>
-                <input
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  style={{
-                    width: '100%', padding: '9px 11px', borderRadius: 'var(--input-radius)',
-                    border: '1px solid var(--input-border)', background: 'var(--input-bg)',
-                    color: 'var(--input-fg)', fontFamily: 'var(--font-mono)',
-                    fontSize: 'var(--text-sm)',
-                  }}
-                />
-              </div>
-            ))}
-            {!refusal.ok && (
-              <div
-                style={{
-                  padding: '10px 12px', borderRadius: '6px',
-                  border: '1px solid var(--state-danger)',
-                  fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-                  color: 'var(--state-danger)', lineHeight: 1.45, marginBottom: '10px',
-                }}
-              >
-                {refusal.reason}
-              </div>
-            )}
-            <p
-              style={{
-                margin: '0 0 10px', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-                color: 'var(--text-secondary)', lineHeight: 1.45,
-              }}
-            >
-              Every annotation, every Version pointer and the title are editable
-              here too. No reason is asked for and no history is kept: this is a
-              memory, and a corrected memory is simply better.
-            </p>
-          </>
+        {stats.polar.averagePercent === null ? (
+          <NotRecorded label="Nothing here could be compared to a polar" />
         ) : (
-          <>
-            <div style={{ marginBottom: '10px' }}>
-              <Label>Sails</Label>
-              {race.sailEntries.length === 0 ? (
-                <NotRecorded />
-              ) : (
-                race.sailEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    style={{
-                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <Mono>{clockOf(entry.at)}</Mono> {sailConfigLabel(entry)}
-                  </div>
-                ))
-              )}
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <Label>Sea State</Label>
-              {seaState === null ? (
-                <NotRecorded />
-              ) : (
-                <span
-                  style={{
-                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  {SEA_STATE_LABEL[seaState.seaState]}
-                </span>
-              )}
-            </div>
-            <div>
-              <Label>Setup in force</Label>
-              {(
-                [
-                  ['Polar', race.polarVersionId],
-                  ['Crossover', race.crossoverVersionId],
-                  ['Rig Tune', race.rigTuneVersionId],
-                  ['Calibration', race.calibrationVersionId],
-                ] as const
-              ).map(([label, id]) => (
-                <div
-                  key={label}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', padding: '5px 0',
-                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <span>{label}</span>
-                  {versionById(id) ? (
-                    <Mono>v{versionById(id)?.versionNumber}</Mono>
-                  ) : (
-                    <NotRecorded />
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+            <Stat value={`${stats.polar.averagePercent.toFixed(0)}%`} label="overall" />
+            {stats.polar.upwindPercent === null ? (
+              <Stat value="—" label="upwind" muted />
+            ) : (
+              <Stat value={`${stats.polar.upwindPercent.toFixed(0)}%`} label="upwind" />
+            )}
+            {stats.polar.downwindPercent === null ? (
+              <Stat value="—" label="downwind" muted />
+            ) : (
+              <Stat value={`${stats.polar.downwindPercent.toFixed(0)}%`} label="downwind" />
+            )}
+          </div>
         )}
+
+        <p
+          style={{
+            margin: '10px 0 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+            color: 'var(--text-secondary)', lineHeight: 1.45,
+          }}
+        >
+          Scored over {spanLabel(stats.polar.scoredSeconds)} of{' '}
+          {durationLabel(analysis.windowMinutes)}.
+          {stats.polar.skipped.length > 0 && (
+            <>
+              {' '}
+              The rest went unscored:{' '}
+              {stats.polar.skipped
+                .map((s) => `${spanLabel(s.seconds)} ${POLAR_SKIP_LABEL[s.reason]}`)
+                .join('; ')}
+              .
+            </>
+          )}
+        </p>
+        <p
+          style={{
+            margin: '8px 0 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)',
+            color: 'var(--text-muted)', lineHeight: 1.45,
+          }}
+        >
+          Speed through the water, not over the ground, because a polar is
+          water-referenced. The polar itself came off a certificate and has never
+          been measured on this boat, so this is a comparison, not a grade.
+        </p>
       </div>
 
       <div
         style={{
-          marginTop: '16px', border: '1px solid var(--surface-border)', borderRadius: '10px',
-          padding: '14px', background: 'var(--surface-base)',
+          marginTop: '14px', border: '1px solid var(--surface-border)', borderRadius: '10px',
+          padding: '14px', background: 'var(--surface-elevated)',
         }}
       >
         <div
           style={{
-            display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+            marginBottom: '8px',
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2">
-            <rect x="4" y="11" width="16" height="10" rx="2" />
-            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-          </svg>
           <span
             style={{
               fontFamily: 'var(--font-display)', fontSize: 'var(--text-base)', fontWeight: 700,
               color: 'var(--text-primary)',
             }}
           >
-            Transcription · not editable by any path
+            Crossover Chart
           </span>
+          {crossoverVersion !== undefined && <Mono>v{crossoverVersion.versionNumber}</Mono>}
         </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
-            color: 'var(--text-secondary)', marginBottom: '10px',
-          }}
-        >
-          {analysis.allRows.length} rows · {analysis.windowRows.length} in this window
-        </div>
-        <RowTable rows={analysis.windowRows} quality={analysis.windowQuality} />
-        <div style={{ marginTop: '12px' }}>
-          <ProvenanceSentence text={analysis.provenanceSentence} />
-        </div>
+
+        {stats.crossover.status === 'no-sail-recorded' && (
+          <NotRecorded label="No sails written down, so there is nothing to compare" />
+        )}
+        {stats.crossover.status === 'no-chart' && (
+          <NotRecorded label="This race points at no Crossover Chart" />
+        )}
+        {stats.crossover.status === 'agrees' && (
+          <p
+            style={{
+              margin: 0, fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+              color: 'var(--text-secondary)', lineHeight: 1.45,
+            }}
+          >
+            The chart called for the sails that were up, across the{' '}
+            {spanLabel(stats.crossover.checkedSeconds)} it could be checked
+            {stats.crossover.uncheckedSeconds > 0 ? (
+              <>
+                {' '}
+                — {spanLabel(stats.crossover.uncheckedSeconds)} could not be checked,
+                because a chart is read against true wind and true wind was not a
+                real figure there
+              </>
+            ) : null}
+            .
+          </p>
+        )}
+        {stats.crossover.status === 'disagrees' && stats.crossover.dominant && (
+          <p
+            style={{
+              margin: 0, fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+              color: 'var(--text-secondary)', lineHeight: 1.45,
+            }}
+          >
+            The chart disagrees with{' '}
+            <span style={{ color: 'var(--wind-heavy)' }}>
+              {spanLabel(stats.crossover.disagreementSeconds)}
+            </span>{' '}
+            of the {spanLabel(stats.crossover.checkedSeconds)} it could check — most
+            of the race. Two lines in the log cannot describe{' '}
+            {spanLabel(analysis.windowMinutes * 60)} of racing, so read this as{' '}
+            <em>the sails on record do not track this race</em>, not as two hours
+            spent under the wrong sail. Listing every span would repeat one fact{' '}
+            {stats.crossover.spans.length} times.
+          </p>
+        )}
+        {stats.crossover.status === 'disagrees' && !stats.crossover.dominant && (
+          <>
+            {stats.crossover.spans.map((span) => (
+              <div
+                key={span.fromTime}
+                style={{
+                  padding: '7px 0', borderBottom: '1px solid var(--surface-divider)',
+                  fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                  color: 'var(--text-primary)', lineHeight: 1.45,
+                }}
+              >
+                <Mono>
+                  {clockOf(span.fromTime)}–{clockOf(span.toTime)}
+                </Mono>{' '}
+                <span style={{ color: 'var(--wind-heavy)' }}>{spanLabel(span.seconds)}</span> ·
+                carried {span.carried}, chart calls {span.called}
+                {span.calledRetired && (
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {' '}
+                    — a sail already off the boat by this race
+                  </span>
+                )}
+              </div>
+            ))}
+            <p
+              style={{
+                margin: '10px 0 0', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
+                color: 'var(--text-secondary)', lineHeight: 1.45,
+              }}
+            >
+              Either a sail change went unrecorded, or the chart is wrong for this
+              boat. Layline cannot tell which and does not guess — except where the
+              chart asks for a sail that had already left the inventory, which
+              settles it. Stretches under 90 s are left out, because a chart
+              boundary crossed twice is not a decision.
+              {stats.crossover.uncheckedSeconds > 0 && (
+                <>
+                  {' '}
+                  {spanLabel(stats.crossover.uncheckedSeconds)} of the window was not
+                  checked at all: a chart is read against true wind, and true wind
+                  was not a real figure there.
+                </>
+              )}
+            </p>
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: '18px' }}>
         <Seam>
-          <strong style={{ color: 'var(--text-primary)' }}>Still missing:</strong> the
-          polar comparison, the tack count, the wind shift picture. Everything
-          above this line is the file and your own memory of the day, drawn
-          straight.
+          <strong style={{ color: 'var(--text-primary)' }}>Still missing:</strong> every
+          tack and its cost, which side of the beat paid, VMG against the
+          heading, this race set beside the others. What is above the line is
+          arithmetic over one file and one memory — no model, no fleet, no
+          judgement about how the day was sailed.
         </Seam>
       </div>
 
@@ -1011,10 +1489,10 @@ function OverallTab(): React.ReactElement {
   const figures: { value: string; label: string }[] = [
     { value: String(summary.raceCount), label: 'races' },
     { value: durationLabel(summary.totalRacedMinutes), label: 'inside race windows' },
-    { value: summary.rowsInWindows.toLocaleString('en-US'), label: 'rows raced' },
     { value: String(summary.recordingCount), label: 'recordings' },
-    { value: String(summary.frozenRows), label: 'frozen rows' },
-    { value: String(summary.notWaterReferencedRows), label: 'rows with no paddlewheel' },
+    { value: String(summary.sailUsage.length), label: 'sail configurations used' },
+    { value: spanLabel(summary.frozenSeconds), label: 'of frozen feed' },
+    { value: spanLabel(summary.notWaterReferencedSeconds), label: 'with no paddlewheel' },
   ]
 
   return (
@@ -1211,8 +1689,16 @@ function LockedGuest(): React.ReactElement {
   )
 }
 
+const TABS: Tab[] = ['setup', 'races', 'overall']
+
 export default function VariantB({ viewer }: { viewer: Viewer }): React.ReactElement {
-  const [tab, setTab] = useState<Tab>('setup')
+  // `?tab=races` opens straight onto a section, so a screen can be linked to
+  // rather than described. Prototype convenience only.
+  const searchParams = useSearchParams()
+  const requested = searchParams.get('tab')
+  const [tab, setTab] = useState<Tab>(
+    requested !== null && (TABS as string[]).includes(requested) ? (requested as Tab) : 'setup'
+  )
 
   return (
     <div style={{ padding: '20px 16px 130px' }}>
