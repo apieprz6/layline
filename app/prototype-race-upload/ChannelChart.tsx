@@ -168,7 +168,9 @@ export default function ChannelChart({
       viewBox={`0 0 ${WIDTH} ${height}`}
       width="100%"
       height={height}
-      style={{ touchAction: 'none', display: 'block', cursor: onTapTime ? 'crosshair' : 'default' }}
+      // Fluid, like the map: the viewBox scales, so the pointer maths (which is
+      // already expressed as a fraction of the bounding rect) keeps working.
+      style={{ touchAction: 'none', display: 'block', width: '100%', height: 'auto', cursor: onTapTime ? 'crosshair' : 'default' }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}

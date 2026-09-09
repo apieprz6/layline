@@ -17,6 +17,11 @@
  *
  * The two scrubbers are the same state, so dragging either moves both. They are
  * not "linked"; there is only one window.
+ *
+ * Layout: stacked on a phone, side by side from 1024px up. This is the one place
+ * in the prototype that uses Tailwind classes rather than inline styles, because
+ * a media query cannot be expressed in a style object. Panes are capped so an
+ * ultrawide splits the space rather than growing two enormous squares.
  */
 
 import ChannelChart, { TraceLegend } from './ChannelChart'
@@ -101,63 +106,73 @@ export default function ChartStack({
         </span>
       </div>
 
-      <TrackMap
-        fixture={fixture}
-        windowStart={windowStart}
-        windowFinish={windowFinish}
-        height={compact ? 168 : 214}
-        onWindowChange={mode === 'window' ? onWindowChange : undefined}
-        markers={markers}
-        onTapTime={placing ? onTapTime : undefined}
-        onMarkerTap={editable ? onMarkerTap : undefined}
-        cursorAt={cursorAt}
-      />
+      <div className="flex flex-col lg:flex-row lg:justify-center lg:items-start">
+        {/* the track */}
+        <div className="lg:flex-1 lg:min-w-0 lg:max-w-[720px]">
+          <TrackMap
+            fixture={fixture}
+            windowStart={windowStart}
+            windowFinish={windowFinish}
+            height={compact ? 168 : 214}
+            onWindowChange={mode === 'window' ? onWindowChange : undefined}
+            markers={markers}
+            onTapTime={placing ? onTapTime : undefined}
+            onMarkerTap={editable ? onMarkerTap : undefined}
+            cursorAt={cursorAt}
+          />
+        </div>
 
-      {/* channel switch: one chart slot, four channels, so the second chart never
-          competes with the track for the screen */}
-      <div style={{ display: 'flex', gap: 4, padding: '6px 8px 2px' }}>
-        {CHANNEL_ORDER.map((k) => {
-          const on = k === channel
-          return (
-            <button
-              key={k}
-              onClick={() => {
-                costMeter.bump()
-                onChannelChange(k)
-              }}
-              style={{
-                flex: 1,
-                padding: '6px 2px',
-                borderRadius: 5,
-                fontSize: 10.5,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: on ? 700 : 500,
-                cursor: 'pointer',
-                border: `1px solid ${on ? 'var(--blue-500)' : 'var(--surface-border)'}`,
-                background: on ? 'var(--blue-500)' : 'var(--surface-raised)',
-                color: on ? '#fff' : 'var(--text-secondary)',
-              }}
-            >
-              {CHANNELS[k].label}
-            </button>
-          )
-        })}
-      </div>
+        {/* the channel, with its own switch: side by side there is no reason for
+            the pills to sit anywhere but above the chart they control */}
+        <div
+          className="lg:flex-1 lg:min-w-0 lg:max-w-[720px] border-t lg:border-t-0 lg:border-l"
+          style={{ borderColor: 'var(--surface-border)' }}
+        >
+          <div style={{ display: 'flex', gap: 4, padding: '6px 8px 2px' }}>
+            {CHANNEL_ORDER.map((k) => {
+              const on = k === channel
+              return (
+                <button
+                  key={k}
+                  onClick={() => {
+                    costMeter.bump()
+                    onChannelChange(k)
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 2px',
+                    borderRadius: 5,
+                    fontSize: 10.5,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: on ? 700 : 500,
+                    cursor: 'pointer',
+                    border: `1px solid ${on ? 'var(--blue-500)' : 'var(--surface-border)'}`,
+                    background: on ? 'var(--blue-500)' : 'var(--surface-raised)',
+                    color: on ? '#fff' : 'var(--text-secondary)',
+                  }}
+                >
+                  {CHANNELS[k].label}
+                </button>
+              )
+            })}
+          </div>
 
-      <div style={{ padding: '0 4px' }}>
-        <ChannelChart
-          fixture={fixture}
-          channel={channel}
-          windowStart={windowStart}
-          windowFinish={windowFinish}
-          height={(compact ? 104 : 124) + laneHeight}
-          onWindowChange={mode === 'window' ? onWindowChange : undefined}
-          markers={markers}
-          onTapTime={placing ? onTapTime : undefined}
-          onMarkerTap={editable ? onMarkerTap : undefined}
-          laneHeight={laneHeight}
-          cursorAt={cursorAt}
-        />
+          <div style={{ padding: '0 4px' }}>
+            <ChannelChart
+              fixture={fixture}
+              channel={channel}
+              windowStart={windowStart}
+              windowFinish={windowFinish}
+              height={(compact ? 104 : 124) + laneHeight}
+              onWindowChange={mode === 'window' ? onWindowChange : undefined}
+              markers={markers}
+              onTapTime={placing ? onTapTime : undefined}
+              onMarkerTap={editable ? onMarkerTap : undefined}
+              laneHeight={laneHeight}
+              cursorAt={cursorAt}
+            />
+          </div>
+        </div>
       </div>
 
       {/* ADR 0008 ruling 6: one generated sentence about where the number came

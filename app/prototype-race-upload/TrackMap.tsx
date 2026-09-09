@@ -230,7 +230,10 @@ export default function TrackMap({
       viewBox={`0 0 ${WIDTH} ${height}`}
       width="100%"
       height={height}
-      style={{ touchAction: 'none', display: 'block', cursor: onTapTime ? 'crosshair' : 'default' }}
+      // Fluid rather than pinned at 360px: the viewBox keeps the aspect ratio, so
+      // the projection stays geographically true while the track gets the room a
+      // desktop pane gives it. On a 390px phone this is a no-op.
+      style={{ touchAction: 'none', display: 'block', width: '100%', height: 'auto', cursor: onTapTime ? 'crosshair' : 'default' }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}

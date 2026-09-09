@@ -198,7 +198,12 @@ export default function VariantA() {
   const cursorAt = selSail?.at ?? selSea?.at ?? null
 
   return (
-    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 98 }}>
+    <div
+      // Capped so an ultrawide gives the charts room without stretching the form
+      // to the width of a desk.
+      className="lg:max-w-[1480px] lg:mx-auto"
+      style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 98 }}
+    >
       <Stepper step={step} />
 
       {/* One stack, every step from Window onward. Nothing is remounted, so the
