@@ -237,8 +237,34 @@ _Avoid_: Regatta (that's a multi-race event, which Layline does not model), seri
 One qtVlm VDR export, covering a single **Race** plus the transit before it and the motoring after. Longer than the Race it contains.
 _Avoid_: Log, track, GPX, file
 
+**Recording Row**:
+One timestamped line of a **Recording** — every channel the boat logged at that instant. The unit of the archive, and the smallest thing a **Provenance** applies to.
+_Avoid_: Sample, datapoint, reading (a reading is one channel, a row is all of them), observation
+
+**Transcription**:
+The complete, verbatim copy of a **Recording** in the database: every column, every row, nothing dropped, converted, rounded, or filled in. The test is a round trip — re-parsing the stored bytes reproduces the stored rows exactly. What a **Recording** *means* is computed from the Transcription; it is never written back into it.
+_Avoid_: Import, ingest, parse, clean (cleaning is a separate, later act that produces a view, not a Transcription)
+
+**Provenance**:
+Where a value came from, and therefore how much weight it carries. One of four classes:
+- **Measured** — a sensor reading. Only **STW** qualifies among the boat's live wind and speed channels.
+- **Computed** — calculated upstream by the navigation software from other channels, using settings the export does not record. Every true and ground wind value is this.
+- **Position-Derived** — from GPS: position, **COG**, **SOG**.
+- **Testimony** — a person typed it in from memory. Every **Annotation** is this.
+
+Provenance is a property of the *column in the format*, held once as reference data, not a field repeated on each value.
+_Avoid_: Source (that's a weather **Data Source**), origin, lineage, raw vs derived (a two-way split hides Testimony)
+
+**Water-Referenced**:
+Whether a **Recording Row** had a working paddlewheel when it was logged — `STW` and `CTW` both present. Rows that are not water-referenced have no honest true wind, because the navigation software had no through-water motion to subtract. The one thing Layline computes and stores on a row, because it is a pure function of that row's own values.
+_Avoid_: Valid, clean, good (those are judgements; this is a fact about which instruments were alive)
+
+**Annotation**:
+Something a sailor remembers and types in during upload, rather than something an instrument recorded — a **Sail Configuration** or a **Sea State**. **Testimony**, not measurement. Stored as one ordered list per kind on the **Race**, whose first entry sits at the race start, and resolved onto **Recording Rows** by time when read. Never copied onto rows.
+_Avoid_: Tag, note, event, manual data (all Annotations are manual — the word distinguishes nothing)
+
 **Sea State**:
-The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind.
+The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind. An **Annotation**.
 _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0-9 and is not what these bands are)
 
 ### Users & Authentication
@@ -291,7 +317,12 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, a **Rig Tune**, and an **Instrument Calibration**
 - Each **Boat Setup** artifact has many **Versions**; each **Race** points at the Versions current when it was sailed
 - A **Recording** contains exactly one **Race**; the Race is the sailor-supplied window inside it
-- A **Race** carries **Sail Configurations** and **Sea State** as human annotations, resolved onto the Recording by time
+- A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
+- A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
+- A **Race** carries **Sail Configurations** and **Sea State** as **Annotations**, resolved onto **Recording Rows** by time on read
+- An **Annotation** lives on the **Race**, never on a **Recording Row**; correcting one edits one entry, not hundreds of rows
+- A **Recording Row** that is not **Water-Referenced** has no honest true wind; it is shown as different, not as a caveat
+- A **Measured Offset** is computed from a **Race** and displayed; it is never written into a **Transcription** or into an **Instrument Calibration**
 - A **Crossover Chart** cell names a **Sail Definition**; every cell must resolve to one, but a Sail Definition need not appear in any cell
 - A **Sail Configuration** is what was flown; a **Crossover Chart** says what was suggested — the two are compared, never conflated
 - **Target Speed** is computed from the **Polar**, never read from a **Recording**
@@ -383,6 +414,15 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "We re-measured the **Base Tune** in July. The other bands' gaps are still on file — are they still good?"
 > **Domain expert:** "No, and that's the trap. The turns are still right — light air is still a turn and a half looser than base, whatever base is. But every millimetre figure I wrote down for the other bands was measured against the old base, so they're all wrong until I go and measure them again."
 
+> **Dev:** "The recording has an apparent wind angle column, so we can show what the masthead saw?"
+> **Domain expert:** "No — that column is qtVlm working backwards from true wind and boat speed. The masthead reading is the one thing you'd actually want and the export throws it away. Label it derived or somebody will trust it over the instrument."
+
+> **Dev:** "Three of the recording's columns are just arithmetic on columns we already store. Do we need to copy them?"
+> **Domain expert:** "Copy the whole file. The moment you start deciding which columns are redundant, somebody's going to meet one that's *nearly* redundant and guess. 'The file is in the database' is a thing you can test."
+
+> **Dev:** "The compass was reading 4° off for those June races. Should we store a corrected wind direction alongside the recorded one?"
+> **Domain expert:** "Store nothing corrected. That's the exact mistake qtVlm made — it couldn't tell compass error from current, so it called the difference current, and now there's a knot and a half of imaginary Lake Michigan flow baked into two columns nobody was looking at. Show me the 4° as a **Measured Offset** and leave the recording alone."
+
 ## Flagged ambiguities
 
 - "real-time" was used to mean both "no cache" and "frequently updated data" — resolved: use **Live Fetch** for uncached requests, describe update frequency separately (e.g., "CHII2 updates every 10 minutes").
@@ -408,3 +448,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Sea State** is not the Douglas scale. NOAA marine forecasts carry formal numeric sea state; Layline's four named bands are what a sailor can honestly report from the rail. Never join the two as if they were the same vocabulary.
 - A **Polar**'s wind-speed axis is defined at 10 m above the water. **CHII2** measures at 85 ft (~26 m), where wind runs 20-30% stronger. Feeding a CHII2 reading into a Polar lookup overstates **Target Speed** by roughly that margin.
 - "race time" was used to mean both a fixed weekly moment (Wednesday 7:00 PM) and "whenever the user cares about" — resolved: **Target Time**, always optional and always sailor-set. Layline assumes no schedule and no fleet. Wednesday-night series racing is one occasion among many (weekend regattas, distance races, or simply watching the lake).
+- "raw" cannot be said of instrument data at all. `STW` off the paddlewheel is the only **Measured** channel a **Recording** carries; every wind value is **Computed** by qtVlm using smoothing, a wind-instrument altitude and a solved current, none of which appear in the export, and all of it downstream of the display's own multiplier and **Programmed Offset**. Resolved: the standard is **as recorded, with known provenance** — see ADR 0008. Do not write "raw" of a recording, and do not read the founding principle's "store measurements exactly as received" as a claim that a raw wind measurement exists to store.
+- **Provenance** is not a two-way raw/derived split. A third class exists that is neither: an **Annotation** is **Testimony** — a sailor's memory, typed in at upload — and it is neither measured nor computed. Treating it as data of the same kind as `TWS` invites the two mistakes of writing it onto **Recording Rows** and of stamping it with a `source: auto | manual` field that distinguishes nothing.
+- `TWA` and `TWA (calc)` name the same quantity and disagree. `TWA` is what the instrument chain produced; `TWA (calc)` is `wrap(TWD − CTW)` and carries the fluxgate's deviation with it. They differ in *sign* on 12 of 4,193 rows, with outliers to 158°, and tack detection reads that sign. Resolved: plain `TWA` is authoritative, `TWA (calc)` is stored by the **Transcription** and read by nothing.
+- "clean" was used for two different acts. Copying the file into the database is a **Transcription** and is lossless by definition; marking rows low-speed or in-maneuver, choosing an `SOG_THRESHOLD`, suppressing angles below 45° — that is cleaning, it encodes judgement calls not yet settled, and it produces a computed view. Resolved: nothing cleaned is stored on a Transcription. The prior art's `cleaned-recordings/` conflated the two and lost data twice over — 1,898 rows deleted, and every `ALARM` value silently emptied by a pandas default nobody chose.
+- A missing wind direction is not north. `services/buoys/ndbc.ts:395` renders `wind_direction ?? 0` and plots the result as a real observation; the same file discards source units on conversion and rounds before caching, under fields commented `// knots (raw, unmodified)`. These are named as pre-existing debt in ADR 0008 and are not precedent for anything.

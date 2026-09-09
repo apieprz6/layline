@@ -21,11 +21,13 @@ Layline is a **sailing weather dashboard** for competitive racing on Lake Michig
 
 📖 **Read**: `docs/references/sailing-glossary-llms.txt` for complete terminology
 
-### Core Principle: Raw Data Integrity
+### Core Principle: Data Integrity
 
-**NEVER modify incoming weather data.** Store measurements exactly as received, add metadata for context, and interpret only in LLM prompts or UI annotations.
+**NEVER overwrite what a source gave you.** Store every value exactly as received — same units, same precision, same nulls — derive alongside it, and interpret only in LLM prompts or UI annotations. A missing value is stored as missing, never as a plausible number.
 
 Example: Harrison Dever (CHII2) reports 20 knots at 85ft elevation. Store 20, add metadata about elevation, and explain in UI that surface wind is typically 20-30% lower.
+
+The standard is **as recorded, with known provenance** — not "raw". Boat instrument data has no raw form to store: the masthead reading never reaches us, and every wind figure in a recording was computed upstream. Non-destruction is what always applies. See `docs/adr/0008-provenance-not-rawness-for-instrument-data.md`.
 
 📖 **Read**: `docs/design-docs/core-beliefs.md` for complete principles
 
@@ -200,7 +202,7 @@ import WindCard from '@/components/dashboard/WindCard'
 - Wind measured at **85 feet elevation**
 - Readings typically **20-30% higher than surface wind**
 - Excellent for **direction and trends**
-- **NEVER adjust the raw data** - store 85ft reading, explain in UI/LLM
+- **NEVER adjust the reading** - store the 85ft figure as reported, explain in UI/LLM
 
 **Purdue Buoy (45198)**:
 - **Seasonal**: May through October only
@@ -355,7 +357,7 @@ export default function ClientAuth() {
 
 1. Create service in `services/weather/` or `services/buoys/`
 2. Define TypeScript types in `types/index.ts`
-3. **Store raw data without modification** (add metadata for context)
+3. **Store values exactly as received** — same units, same precision, nulls as nulls (add metadata for context)
 4. Create API route in `app/api/weather/`
 5. Add caching (15-30 min)
 6. Update LLM prompt to include new source
@@ -441,7 +443,7 @@ Before submitting code, verify:
 
 - [ ] **TypeScript strict mode** - No `any` types, explicit return types
 - [ ] **Server Component by default** - Only use 'use client' when needed
-- [ ] **Raw data integrity** - Weather data stored unmodified
+- [ ] **Data integrity** - Nothing a source gave us is overwritten; no fabricated stand-ins for nulls; provenance stated
 - [ ] **Mobile-first design** - Works on 390px viewport
 - [ ] **Error handling** - Try/catch in API routes, graceful failures
 - [ ] **Auth patterns** - Correct server/client Supabase client
@@ -540,7 +542,7 @@ if (!user) redirect('/auth/login')
 
 ## Important Reminders
 
-🚨 **NEVER modify raw weather data** - Store as-is, interpret separately
+🚨 **NEVER overwrite what a source gave you** - Store as recorded, derive alongside, interpret separately
 
 🚨 **Next.js 16 ≠ your training data** - Read nextjs16-llms.txt first
 
@@ -563,7 +565,7 @@ if (!user) redirect('/auth/login')
 You're doing it right if:
 
 ✅ Code uses Next.js 16 App Router patterns (not Pages Router)
-✅ Weather data stored without modification
+✅ Weather and instrument data stored as recorded, with provenance
 ✅ TypeScript has no `any` types
 ✅ Components are Server Components unless they need interactivity
 ✅ Auth uses correct server/client Supabase patterns
@@ -579,7 +581,7 @@ You're doing it right if:
 Layline is a sailing race preparation dashboard with:
 - **Domain**: Sailing tactics and weather interpretation
 - **Tech**: Next.js 16, TypeScript, Supabase, Claude API
-- **Principles**: Raw data integrity, type safety, mobile-first
+- **Principles**: Data integrity and honest provenance, type safety, mobile-first
 - **Goal**: Make Lake Michigan racing easier with AI-powered briefings, whatever is on the schedule
 
 Read the references, follow the patterns, respect the principles, and you'll ship great code.

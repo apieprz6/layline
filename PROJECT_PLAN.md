@@ -406,10 +406,10 @@ Freshness keys off **what the user is doing**, not what day it is.
 
 ### Architecture Decisions
 
-**Core Principle: Raw Data Integrity**
-- NEVER modify incoming weather data
-- Store all measurements exactly as received from source
-- Include metadata (station elevation, measurement height, source)
+**Core Principle: Data Integrity** (see `docs/adr/0008-provenance-not-rawness-for-instrument-data.md`)
+- NEVER overwrite what a source gave you
+- Store all values exactly as received — same units, same precision, nulls as nulls
+- Include metadata (station elevation, measurement height, source, provenance)
 - Interpretation/adjustment happens only in:
   - LLM analysis layer
   - UI display hints/annotations
