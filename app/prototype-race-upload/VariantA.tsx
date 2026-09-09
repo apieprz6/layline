@@ -1,25 +1,37 @@
 'use client'
 
 /**
- * VARIANT A — the wizard, corrected.
+ * VARIANT A — the wizard, corrected, and now built around a persistent chart
+ * stack rather than a single speed trace.
  *
- * This is the Boat Management mockup's five-step flow with every defect LAY-94
- * found in it repaired: no Venue field, qtVlm CSV only in the copy, nothing
- * pre-selected in the sail and sea-state steps, four Version pickers rather than
- * five, the Wind Band present, and the duplicate-hash case a confirmation rather
- * than a refusal.
+ * Two changes from the first pass, both from review:
  *
- * The claim it makes: a race is a sequence of separate questions, so ask them one
- * at a time and never show the sailor a screen they cannot answer. The cost it
- * pays: seven sail changes means seven trips through the same sub-form, and the
- * window can only be judged against the trace on step 2.
+ * 1. The charts are a GPS track map plus one swappable channel (SOG / TWS / TWA
+ *    / AWA), cropped by a single shared window. Scrubbing the map's rail and
+ *    dragging the chart's handles are the same state, so they cannot disagree.
+ *    The map earns the top slot because a window is a *place* before it is a pair
+ *    of times: the moment the boat stops racing and motors home is obvious on a
+ *    track and nearly invisible on a speed line.
+ *
+ * 2. The stack stays mounted for the whole wizard, and the annotations placed on
+ *    earlier steps stay drawn on it. Only the permissions change per step — on
+ *    the sails step you place sail changes and the window is fixed; on the sea
+ *    step the sail markers go read-only. So the sailor answers each question
+ *    against the same picture, and can see what they have already said without
+ *    going back.
+ *
+ * Everything the mockup got wrong is still corrected: no Venue field, qtVlm CSV
+ * only in the copy, nothing pre-selected in the sail and sea-state steps, four
+ * Version pickers rather than five (ADR 0012), the Wind Band gated behind a Rig
+ * Tune choice (ADR 0007), and a duplicate content hash as a confirmation rather
+ * than a refusal (ADR 0009 + ADR 0010).
  */
 
 import { useState } from 'react'
-import SogTrace, { TraceLegend } from './SogTrace'
+import ChartStack, { type StackMode } from './ChartStack'
 import {
-  Button,
   BoatSetupPickers,
+  Button,
   Card,
   Label,
   Note,
@@ -41,13 +53,17 @@ import {
   fmtWindow,
   isSubmittable,
   mintId,
+  msToInput,
+  naiveMs,
+  nearestIndex,
+  rowMs,
   sailEntryRefusals,
   seaStateRefusals,
   windowRefusals,
+  type ChannelKey,
+  type ChartMarker,
   type Draft,
   type Fixture,
-  type SailEntry,
-  type SeaStateEntry,
 } from './shared'
 
 const STEPS = ['File', 'Window', 'Sails', 'Sea state', 'Review'] as const
@@ -55,6 +71,8 @@ const STEPS = ['File', 'Window', 'Sails', 'Sea state', 'Review'] as const
 export default function VariantA() {
   const [draft, setDraft] = useState<Draft>(emptyDraft())
   const [step, setStep] = useState(0)
+  const [channel, setChannel] = useState<ChannelKey>('sog')
+  const [selected, setSelected] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [confirmDuplicate, setConfirmDuplicate] = useState<Fixture | null>(null)
 
@@ -68,6 +86,7 @@ export default function VariantA() {
       setConfirmDuplicate(fixture)
       return
     }
+    costMeter.bump()
     setDraft(draftFromFixture(fixture))
     setStep(1)
   }
@@ -76,6 +95,7 @@ export default function VariantA() {
     costMeter.reset()
     setDraft(emptyDraft())
     setStep(0)
+    setSelected(null)
     setSubmitted(false)
   }
 
@@ -91,11 +111,120 @@ export default function VariantA() {
   const sailErrors = sailEntryRefusals(draft.sails)
   const seaErrors = seaStateRefusals(draft.seaState)
   const canAdvance =
-    step === 0 ? f !== null : step === 1 ? !windowBlocked : step === 2 ? Object.keys(sailErrors).length === 0 : step === 3 ? Object.keys(seaErrors).length === 0 : true
+    step === 0
+      ? f !== null
+      : step === 1
+        ? !windowBlocked
+        : step === 2
+          ? Object.keys(sailErrors).length === 0
+          : step === 3
+            ? Object.keys(seaErrors).length === 0
+            : true
+
+  const mode: StackMode = step === 1 ? 'window' : step === 2 ? 'sail' : step === 3 ? 'sea' : 'readonly'
+
+  /**
+   * Every annotation stays on the chart for the rest of the flow. `locked` is
+   * what the step decides, not visibility — you can always see what you said.
+   */
+  const markers: ChartMarker[] = f
+    ? [
+        ...draft.sails.map((e) => ({
+          id: e.id,
+          at: e.at,
+          lane: 'sail' as const,
+          label: e.sails.length > 0 ? e.sails.join('+') : '?',
+          selected: selected === e.id,
+          incomplete: e.sails.length === 0 || e.reef === null,
+          locked: mode !== 'sail',
+        })),
+        ...draft.seaState.map((e) => ({
+          id: e.id,
+          at: e.at,
+          lane: 'sea' as const,
+          label: e.state,
+          selected: selected === e.id,
+          locked: mode !== 'sea',
+        })),
+      ]
+    : []
+
+  /**
+   * Taps land on a row that actually exists rather than between two of them, and
+   * step off a time already taken so two entries never collide by accident.
+   */
+  const snap = (at: string, taken: string[]): string => {
+    if (!f) return at
+    let i = nearestIndex(f, naiveMs(at))
+    if (i < 0) return at
+    const last = f.series.sec.length - 1
+    while (i <= last && taken.includes(msToInput(rowMs(f, i)))) i += 1
+    return msToInput(rowMs(f, Math.min(i, last)))
+  }
+
+  const placeMarker = (at: string) => {
+    if (!f) return
+    costMeter.bump()
+    const lane = mode === 'sail' ? draft.sails : mode === 'sea' ? draft.seaState : []
+    const snapped = snap(at, lane.map((e) => e.at))
+    const id = mintId()
+    if (mode === 'sail') {
+      // Carry the previous plan forward: a change alters one sail, not all of
+      // them, so seven changes is not seven full sail plans.
+      const prev = [...draft.sails]
+        .sort((a, b) => naiveMs(a.at) - naiveMs(b.at))
+        .filter((e) => naiveMs(e.at) <= naiveMs(snapped))
+        .pop()
+      patch({ sails: [...draft.sails, { id, at: snapped, reef: prev?.reef ?? null, sails: prev ? [...prev.sails] : [] }] })
+    } else if (mode === 'sea') {
+      patch({ seaState: [...draft.seaState, { id, at: snapped, state: 'slight' }] })
+    } else {
+      return
+    }
+    setSelected(id)
+  }
+
+  const nudge = (minutes: number) => {
+    if (!selected) return
+    costMeter.bump()
+    patch({
+      sails: draft.sails.map((e) => (e.id === selected ? { ...e, at: msToInput(naiveMs(e.at) + minutes * 60_000) } : e)),
+      seaState: draft.seaState.map((e) => (e.id === selected ? { ...e, at: msToInput(naiveMs(e.at) + minutes * 60_000) } : e)),
+    })
+  }
+
+  const selSail = draft.sails.find((e) => e.id === selected) ?? null
+  const selSea = draft.seaState.find((e) => e.id === selected) ?? null
+  const cursorAt = selSail?.at ?? selSea?.at ?? null
 
   return (
-    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 88 }}>
+    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 98 }}>
       <Stepper step={step} />
+
+      {/* One stack, every step from Window onward. Nothing is remounted, so the
+          channel choice and the scroll position survive the step change. */}
+      {f && step >= 1 && (
+        <ChartStack
+          fixture={f}
+          channel={channel}
+          onChannelChange={setChannel}
+          windowStart={draft.windowStart}
+          windowFinish={draft.windowFinish}
+          onWindowChange={(s, fi) => {
+            costMeter.bump()
+            patch({ windowStart: s, windowFinish: fi })
+          }}
+          mode={mode}
+          markers={markers}
+          onTapTime={placeMarker}
+          onMarkerTap={(id) => {
+            costMeter.bump()
+            setSelected(id)
+          }}
+          cursorAt={cursorAt}
+          compact={step === 4}
+        />
+      )}
 
       {step === 0 && (
         <>
@@ -133,20 +262,8 @@ export default function VariantA() {
         <>
           <Header
             title="When did the race run?"
-            sub="Prefilled from the file's own extent. The race is almost never the whole recording."
+            sub="Drag either scrubber — they are the same window. Prefilled from the file's own extent; the race is almost never the whole recording."
           />
-          <Card>
-            <SogTrace
-              fixture={f}
-              windowStart={draft.windowStart}
-              windowFinish={draft.windowFinish}
-              onWindowChange={(s, fi) => {
-                costMeter.bump()
-                patch({ windowStart: s, windowFinish: fi })
-              }}
-            />
-            <TraceLegend />
-          </Card>
           <div style={{ display: 'flex', gap: 8 }}>
             <TimeInput label="Start" value={draft.windowStart} onChange={(v) => patch({ windowStart: v })} />
             <TimeInput label="Finish" value={draft.windowFinish} onChange={(v) => patch({ windowFinish: v })} />
@@ -159,42 +276,34 @@ export default function VariantA() {
         <>
           <Header
             title="What was up, and when?"
-            sub="One entry per change. Leave it empty if nobody wrote it down — an empty list is an honest answer."
+            sub="Tap the track where it happened — the time comes from the recording, not from a keypad. Leave it empty if nobody wrote it down."
           />
           {draft.sails.length === 0 && (
             <Note tone="quiet">
               No sail changes recorded. The race is still savable; its page will say the sail plan was not recorded.
             </Note>
           )}
-          {draft.sails.map((e, i) => (
-            <Card key={e.id}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                  Change {i + 1}
+          {/* The chart is the fast path, not the only one — a tap on a phone in a
+              car park is not always available. */}
+          <Button kind="quiet" onClick={() => placeMarker(draft.windowStart)}>
+            + Add one by time instead
+          </Button>
+
+          {selSail && (
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>
+                  {fmtClock(selSail.at)}
                 </span>
-                <Button
-                  kind="danger"
-                  onClick={() => {
-                    costMeter.bump()
-                    patch({ sails: draft.sails.filter((x) => x.id !== e.id) })
-                  }}
-                >
-                  Remove
-                </Button>
+                <Nudge onNudge={nudge} />
               </div>
-              <TimeInput
-                label="At"
-                value={e.at}
-                onChange={(v) => patch({ sails: draft.sails.map((x) => (x.id === e.id ? { ...x, at: v } : x)) })}
-              />
-              <div style={{ height: 9 }} />
               <Label>Sails up</Label>
               <SailPicker
-                selected={e.sails}
+                selected={selSail.sails}
                 onToggle={(k) =>
                   patch({
                     sails: draft.sails.map((x) =>
-                      x.id === e.id
+                      x.id === selSail.id
                         ? { ...x, sails: x.sails.includes(k) ? x.sails.filter((s) => s !== k) : [...x.sails, k] }
                         : x,
                     ),
@@ -202,86 +311,123 @@ export default function VariantA() {
                 }
               />
               <div style={{ height: 9 }} />
-              <Label>Main</Label>
+              <Label>Mainsail</Label>
               <ReefPicker
-                value={e.reef}
-                onChange={(v) => patch({ sails: draft.sails.map((x) => (x.id === e.id ? { ...x, reef: v } : x)) })}
+                value={selSail.reef}
+                onChange={(v) => patch({ sails: draft.sails.map((x) => (x.id === selSail.id ? { ...x, reef: v } : x)) })}
               />
-              {sailErrors[e.id] && (
+              <div style={{ height: 9 }} />
+              <TimeInput
+                label="Exact time, if you know it"
+                value={selSail.at}
+                onChange={(v) => patch({ sails: draft.sails.map((x) => (x.id === selSail.id ? { ...x, at: v } : x)) })}
+              />
+              {sailErrors[selSail.id] && (
                 <div style={{ marginTop: 8 }}>
-                  <Note tone="stop">{sailErrors[e.id]}</Note>
+                  <Note tone="stop">{sailErrors[selSail.id]}</Note>
                 </div>
               )}
+              <div style={{ marginTop: 9, display: 'flex', gap: 8 }}>
+                <Button
+                  kind="danger"
+                  onClick={() => {
+                    costMeter.bump()
+                    patch({ sails: draft.sails.filter((x) => x.id !== selSail.id) })
+                    setSelected(null)
+                  }}
+                >
+                  Remove
+                </Button>
+                <Button kind="ghost" onClick={() => setSelected(null)}>
+                  Done with this one
+                </Button>
+              </div>
             </Card>
-          ))}
-          <Button
-            kind="ghost"
-            full
-            onClick={() => {
+          )}
+
+          <EntryList
+            rows={[...draft.sails]
+              .sort((a, b) => naiveMs(a.at) - naiveMs(b.at))
+              .map((e) => ({
+                id: e.id,
+                at: e.at,
+                text:
+                  e.sails.length === 0
+                    ? 'no sails named'
+                    : e.sails.join(' + ') + (e.reef === 'reef-1' ? ' · reefed' : e.reef === null ? ' · main not stated' : ''),
+                bad: Boolean(sailErrors[e.id]),
+              }))}
+            selected={selected}
+            onSelect={(id) => {
               costMeter.bump()
-              const at =
-                draft.sails.length === 0
-                  ? draft.windowStart
-                  : draft.sails[draft.sails.length - 1].at
-              patch({ sails: [...draft.sails, { id: mintId(), at, reef: null, sails: [] } as SailEntry] })
+              setSelected(id)
             }}
-          >
-            + Add a sail change
-          </Button>
+          />
         </>
       )}
 
       {step === 3 && f && (
         <>
-          <Header title="What was the water doing?" sub="Same idea: one entry per change, and none is fine." />
-          {draft.seaState.map((e, i) => (
-            <Card key={e.id}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                  Entry {i + 1}
+          <Header
+            title="What was the water doing?"
+            sub="Same gesture. The sail changes stay on the chart so you can place sea state against them, but they are locked here."
+          />
+          <Button kind="quiet" onClick={() => placeMarker(draft.windowStart)}>
+            + Add one by time instead
+          </Button>
+          {selSea && (
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-primary)' }}>
+                  {fmtClock(selSea.at)}
                 </span>
+                <Nudge onNudge={nudge} />
+              </div>
+              <SeaStatePicker
+                value={selSea.state}
+                onChange={(v) =>
+                  patch({ seaState: draft.seaState.map((x) => (x.id === selSea.id ? { ...x, state: v } : x)) })
+                }
+              />
+              <div style={{ height: 9 }} />
+              <TimeInput
+                label="Exact time, if you know it"
+                value={selSea.at}
+                onChange={(v) => patch({ seaState: draft.seaState.map((x) => (x.id === selSea.id ? { ...x, at: v } : x)) })}
+              />
+              {seaErrors[selSea.id] && (
+                <div style={{ marginTop: 8 }}>
+                  <Note tone="stop">{seaErrors[selSea.id]}</Note>
+                </div>
+              )}
+              <div style={{ marginTop: 9, display: 'flex', gap: 8 }}>
                 <Button
                   kind="danger"
                   onClick={() => {
                     costMeter.bump()
-                    patch({ seaState: draft.seaState.filter((x) => x.id !== e.id) })
+                    patch({ seaState: draft.seaState.filter((x) => x.id !== selSea.id) })
+                    setSelected(null)
                   }}
                 >
                   Remove
                 </Button>
+                <Button kind="ghost" onClick={() => setSelected(null)}>
+                  Done with this one
+                </Button>
               </div>
-              <TimeInput
-                label="At"
-                value={e.at}
-                onChange={(v) => patch({ seaState: draft.seaState.map((x) => (x.id === e.id ? { ...x, at: v } : x)) })}
-              />
-              <div style={{ height: 9 }} />
-              <SeaStatePicker
-                value={e.state}
-                onChange={(v) => patch({ seaState: draft.seaState.map((x) => (x.id === e.id ? { ...x, state: v } : x)) })}
-              />
-              {seaErrors[e.id] && (
-                <div style={{ marginTop: 8 }}>
-                  <Note tone="stop">{seaErrors[e.id]}</Note>
-                </div>
-              )}
             </Card>
-          ))}
-          <Button
-            kind="ghost"
-            full
-            onClick={() => {
+          )}
+
+          <EntryList
+            rows={[...draft.seaState]
+              .sort((a, b) => naiveMs(a.at) - naiveMs(b.at))
+              .map((e) => ({ id: e.id, at: e.at, text: e.state, bad: Boolean(seaErrors[e.id]) }))}
+            selected={selected}
+            onSelect={(id) => {
               costMeter.bump()
-              patch({
-                seaState: [
-                  ...draft.seaState,
-                  { id: mintId(), at: draft.windowStart, state: 'slight' } as SeaStateEntry,
-                ],
-              })
+              setSelected(id)
             }}
-          >
-            + Add a sea state
-          </Button>
+          />
         </>
       )}
 
@@ -315,9 +461,13 @@ export default function VariantA() {
       <FooterNav
         step={step}
         canAdvance={canAdvance}
-        onBack={() => setStep((s) => Math.max(0, s - 1))}
+        onBack={() => {
+          setSelected(null)
+          setStep((s) => Math.max(0, s - 1))
+        }}
         onNext={() => {
           costMeter.bump()
+          setSelected(null)
           setStep((s) => Math.min(STEPS.length - 1, s + 1))
         }}
         onSubmit={() => {
@@ -339,18 +489,76 @@ function Header({ title, sub }: { title: string; sub: string }) {
   )
 }
 
+/** The entries as a list, so the chart is not the only way to reach one. */
+function EntryList({
+  rows,
+  selected,
+  onSelect,
+}: {
+  rows: { id: string; at: string; text: string; bad: boolean }[]
+  selected: string | null
+  onSelect: (id: string) => void
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {rows.map((r) => (
+        <button
+          key={r.id}
+          onClick={() => onSelect(r.id)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: '7px 10px',
+            borderRadius: 6,
+            border: `1px solid ${r.bad ? 'rgba(204,17,0,0.30)' : selected === r.id ? 'var(--blue-500)' : 'var(--surface-border)'}`,
+            background: selected === r.id ? 'var(--blue-muted)' : 'var(--surface-raised)',
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}>{fmtClock(r.at)}</span>
+          <span style={{ flex: 1, fontSize: 11.5, color: r.bad ? 'var(--state-danger)' : 'var(--text-secondary)' }}>{r.text}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Snapping lands on a real row; this is how you get between two of them. */
+function Nudge({ onNudge }: { onNudge: (m: number) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      {[-5, -1, 1, 5].map((m) => (
+        <button
+          key={m}
+          onClick={() => onNudge(m)}
+          style={{
+            padding: '4px 7px',
+            fontSize: 10,
+            fontFamily: 'var(--font-mono)',
+            borderRadius: 4,
+            border: '1px solid var(--surface-border)',
+            background: 'var(--surface-raised)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
+          {m > 0 ? `+${m}` : m}
+        </button>
+      ))}
+      <span style={{ fontSize: 8.5, color: 'var(--text-muted)' }}>min</span>
+    </div>
+  )
+}
+
 function Stepper({ step }: { step: number }) {
   return (
     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
       {STEPS.map((s, i) => (
         <div key={s} style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              height: 3,
-              borderRadius: 2,
-              background: i <= step ? 'var(--blue-500)' : 'var(--surface-border)',
-            }}
-          />
+          <div style={{ height: 3, borderRadius: 2, background: i <= step ? 'var(--blue-500)' : 'var(--surface-border)' }} />
           <div
             style={{
               fontSize: 8.5,

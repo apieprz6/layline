@@ -9,7 +9,7 @@ import VariantA from './VariantA'
 import VariantB from './VariantB'
 import VariantC from './VariantC'
 import VariantD from './VariantD'
-import { RECORDINGS, windowView, windowRefusals, fmtWindow } from './shared'
+import { RECORDINGS, costMeter, windowView, windowRefusals, fmtWindow } from './shared'
 
 describe('prototype variants render', () => {
   const cases: [string, () => React.ReactElement][] = [
@@ -36,6 +36,91 @@ describe('prototype variants render', () => {
       unmount()
     })
   }
+})
+
+describe('variant A carries the charts through the wizard', () => {
+  it('places a sail change from the chart, then locks it on the next step', () => {
+    const { container } = render(<VariantA />)
+    fireEvent.click(screen.getByText(/08-26-26-beer-can\.csv/).closest('button')!)
+
+    // The stack is two charts sharing one window: the track map, then the channel.
+    expect(container.querySelectorAll('svg').length).toBe(2)
+    // all four channels are reachable from the pill row
+    for (const label of ['SOG', 'TWS', 'TWA', 'AWA']) expect(screen.getByText(label)).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Next')) // → Sails
+    const chart = container.querySelectorAll('svg')[1]
+    fireEvent.pointerDown(chart, { clientX: 200, clientY: 60 })
+
+    // tapping the chart opens the entry, rather than making the sailor type a time
+    expect(screen.getByText('Sails up')).toBeTruthy()
+    fireEvent.click(screen.getByText('Main'))
+    fireEvent.click(screen.getByText('Full'))
+
+    const editable = [...container.querySelectorAll('g')].filter((g) => (g as SVGGElement).style.opacity === '1')
+    expect(editable.length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByText('Next')) // → Sea state
+    // the sail change is still drawn, and is now read-only
+    const locked = [...container.querySelectorAll('g')].filter((g) => {
+      const o = (g as SVGGElement).style.opacity
+      return o === '0.5' || o === '0.45'
+    })
+    expect(locked.length).toBeGreaterThan(0)
+    expect(screen.queryByText('Sails up')).toBeNull()
+  })
+})
+
+/**
+ * The argument LAY-94 exists to settle is how much typing a race costs, so this
+ * measures it rather than guessing: the seven real sail changes of
+ * 08-26-26-beer-can, entered through Variant A, counted by the shared cost meter.
+ */
+describe('what a busy race costs in Variant A', () => {
+  const LABELS: Record<string, string> = {
+    main: 'Main',
+    'jib-1': 'Jib 1',
+    'jib-2': 'Jib 2',
+    'jib-3': 'Jib 3',
+    A2: 'A2',
+    A3: 'A3',
+  }
+
+  it('enters seven sail changes and reports the action count', () => {
+    const f = RECORDINGS.find((r) => r.filename === '08-26-26-beer-can.csv')!
+    expect(f.truth.sails).toHaveLength(7)
+
+    costMeter.reset()
+    const { container } = render(<VariantA />)
+    fireEvent.click(screen.getByText(/08-26-26-beer-can\.csv/).closest('button')!)
+    fireEvent.click(screen.getByText('Next')) // → Sails
+
+    // Carry-forward means each change costs the difference from the last plan,
+    // not a fresh sail plan — which is the whole reason seven is affordable.
+    let carried: string[] = []
+    let reefSet = false
+    for (const entry of f.truth.sails) {
+      fireEvent.pointerDown(container.querySelectorAll('svg')[1], { clientX: 200, clientY: 60 })
+      const changed = [
+        ...entry.sails.filter((s) => !carried.includes(s)),
+        ...carried.filter((s) => !entry.sails.includes(s)),
+      ]
+      // the pickers count their own taps, so the test must not double-count
+      for (const s of changed) fireEvent.click(screen.getByText(LABELS[s]))
+      if (!reefSet) {
+        fireEvent.click(screen.getByText('Full'))
+        reefSet = true
+      }
+      carried = entry.sails
+    }
+
+    fireEvent.click(screen.getByText('Next')) // → Sea state
+    fireEvent.click(screen.getByText('Next')) // → Review
+
+    console.log(`Variant A · 08-26-26-beer-can · 7 sail changes = ${costMeter.actions} actions`)
+    expect(costMeter.actions).toBeLessThan(32)
+    expect(screen.getByText('Anything else you know?')).toBeTruthy()
+  })
 })
 
 describe('the maths the variants share', () => {

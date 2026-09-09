@@ -8,6 +8,7 @@
  *
  * Run:  npx jest -c app/prototype-race-upload/jest.proto.config.cjs
  */
+/* eslint-disable @typescript-eslint/no-require-imports -- a CommonJS jest config */
 const path = require('path')
 const root = path.resolve(__dirname, '../..')
 

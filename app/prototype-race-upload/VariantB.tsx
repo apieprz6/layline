@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react'
-import SogTrace, { TraceLegend } from './SogTrace'
+import ChannelChart, { TraceLegend } from './ChannelChart'
 import {
   BoatSetupPickers,
   Button,
@@ -125,7 +125,7 @@ export default function VariantB() {
           padding: '8px 10px 4px',
         }}
       >
-        <SogTrace
+        <ChannelChart
           fixture={f}
           windowStart={draft.windowStart}
           windowFinish={draft.windowFinish}

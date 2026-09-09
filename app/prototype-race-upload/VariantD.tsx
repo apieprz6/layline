@@ -21,7 +21,7 @@
  */
 
 import { useState } from 'react'
-import SogTrace, { TraceLegend } from './SogTrace'
+import ChannelChart, { TraceLegend } from './ChannelChart'
 import {
   BoatSetupPickers,
   Button,
@@ -107,7 +107,7 @@ export default function VariantD() {
         ) : (
           <>
             <Card pad={8}>
-              <SogTrace
+              <ChannelChart
                 fixture={f}
                 windowStart={draft.windowStart}
                 windowFinish={draft.windowFinish}
@@ -190,7 +190,7 @@ export default function VariantD() {
         </Note>
 
         <Card pad={8}>
-          <SogTrace
+          <ChannelChart
             fixture={f}
             windowStart={race.windowStart}
             windowFinish={race.windowFinish}

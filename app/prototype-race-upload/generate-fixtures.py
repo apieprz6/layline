@@ -95,9 +95,14 @@ def load(name):
             {
                 "i": i,
                 "t": t,
+                "lat": to_float(r.get("Latitude")),
+                "lon": to_float(r.get("Longitude")),
                 "sog": to_float(r.get("SOG")),
                 "tws": to_float(r.get("TWS")),
                 "twa": to_float(r.get("TWA")),
+                # qtVlm's own calculation, and the source column says so in its
+                # name. Stored as given; the UI states where it came from.
+                "awa": to_float(r.get("AWA (calc)")),
                 "stw": to_float(r.get("STW")),
                 "ctw": to_float(r.get("CTW")),
                 "key": tuple((r.get(f) or "").strip() for f in DROPOUT_FIELDS),
@@ -176,18 +181,32 @@ def main():
         rows = f["rows"]
         st = stats(rows, start, finish)
 
-        # Compact plot series: seconds from first row, SOG, TWS, and a flag
-        # bitmask (1 frozen, 2 not-water-referenced, 4 low-speed).
+        # Column-major plot series, so a chart can pick one channel without
+        # walking a tuple. A missing value stays null: it is never backfilled
+        # with a plausible number.
         t0 = rows[0]["t"]
-        series = [
-            [
-                int((r["t"] - t0).total_seconds()),
-                r["sog"] if r["sog"] is not None else -1,
-                r["tws"] if r["tws"] is not None else -1,
-                (1 if r["frozen"] else 0) | (0 if r["water"] else 2) | (4 if r["low"] else 0),
-            ]
-            for r in rows
-        ]
+
+        def col(field, places=None):
+            out = []
+            for r in rows:
+                v = r[field]
+                out.append(v if v is None or places is None else round(v, places))
+            return out
+
+        series = {
+            "sec": [int((r["t"] - t0).total_seconds()) for r in rows],
+            "lat": col("lat", 6),
+            "lon": col("lon", 6),
+            "sog": col("sog", 2),
+            "tws": col("tws", 2),
+            "twa": col("twa", 1),
+            "awa": col("awa", 1),
+            # 1 frozen, 2 not-water-referenced, 4 low-speed
+            "flags": [
+                (1 if r["frozen"] else 0) | (0 if r["water"] else 2) | (4 if r["low"] else 0)
+                for r in rows
+            ],
+        }
 
         out.append(
             {

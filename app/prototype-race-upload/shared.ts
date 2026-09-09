@@ -13,8 +13,73 @@ import fixtures from './fixtures.json'
 
 // ---------------------------------------------------------------- fixtures
 
-/** [secondsFromFirstRow, SOG, TWS, flags] — flags: 1 Frozen, 2 not water-referenced, 4 Low-Speed. */
-export type SeriesPoint = [number, number, number, number]
+/**
+ * Column-major so a chart can take one channel without walking a tuple.
+ * A missing value is `null` and stays `null` — never a plausible stand-in.
+ * flags: 1 Frozen, 2 not water-referenced, 4 Low-Speed.
+ */
+export interface Series {
+  sec: number[]
+  lat: (number | null)[]
+  lon: (number | null)[]
+  sog: (number | null)[]
+  tws: (number | null)[]
+  twa: (number | null)[]
+  awa: (number | null)[]
+  flags: number[]
+}
+
+/** The channels the secondary chart can show. */
+export type ChannelKey = 'sog' | 'tws' | 'twa' | 'awa'
+
+export interface Channel {
+  key: ChannelKey
+  label: string
+  unit: string
+  /** The qtVlm column this came from, verbatim. */
+  sourceColumn: string
+  /** What the number actually is, for the one provenance line under the chart. */
+  provenance: string
+  /** Angles wrap; speeds do not. Decides the y-scale and whether 0 is meaningful. */
+  kind: 'speed' | 'angle'
+}
+
+export const CHANNELS: Record<ChannelKey, Channel> = {
+  sog: {
+    key: 'sog',
+    label: 'SOG',
+    unit: 'kt',
+    sourceColumn: 'SOG',
+    provenance: 'Speed over ground, from GPS. Unaffected by current — this is progress across the seabed, not through the water.',
+    kind: 'speed',
+  },
+  tws: {
+    key: 'tws',
+    label: 'TWS',
+    unit: 'kt',
+    sourceColumn: 'TWS',
+    provenance: 'True wind speed as the instruments reported it at the masthead. Where STW and CTW are blank the figure was computed from GPS instead — those stretches are washed blue.',
+    kind: 'speed',
+  },
+  twa: {
+    key: 'twa',
+    label: 'TWA',
+    unit: '°',
+    sourceColumn: 'TWA',
+    provenance: 'True wind angle as reported. The file also carries a TWA (calc) column, which Layline does not read here.',
+    kind: 'angle',
+  },
+  awa: {
+    key: 'awa',
+    label: 'AWA',
+    unit: '°',
+    sourceColumn: 'AWA (calc)',
+    provenance: 'Apparent wind angle. The boat never measured it — qtVlm calculated it, and the column name says so. Stored exactly as the file gives it, and labelled as a calculation wherever it is shown.',
+    kind: 'angle',
+  },
+}
+
+export const CHANNEL_ORDER: ChannelKey[] = ['sog', 'tws', 'twa', 'awa']
 
 export interface FixtureStats {
   inWindowRows: number
@@ -38,7 +103,7 @@ export interface Fixture {
   firstRowTime: string
   lastRowTime: string
   t0: string
-  series: SeriesPoint[]
+  series: Series
   stats: FixtureStats
   truth: {
     windowStart: string
@@ -255,6 +320,7 @@ export function windowView(f: Fixture, startInput: string, finishInput: string):
   const t0 = naiveMs(f.t0)
   const start = naiveMs(startInput)
   const finish = naiveMs(finishInput)
+  const { sec, flags } = f.series
   let rows = 0
   let frozen = 0
   let notWater = 0
@@ -263,10 +329,11 @@ export function windowView(f: Fixture, startInput: string, finishInput: string):
   let longestDropout = 0
   let runStart: number | null = null
 
-  for (const [sec, , , flags] of f.series) {
-    const ms = t0 + sec * 1000
+  for (let i = 0; i < sec.length; i += 1) {
+    const ms = t0 + sec[i] * 1000
+    const fl = flags[i]
     // Dropout runs are measured over the whole file, window or not.
-    if (flags & FLAG_FROZEN) {
+    if (fl & FLAG_FROZEN) {
       if (runStart === null) runStart = ms
       longestDropout = Math.max(longestDropout, ms - runStart)
     } else {
@@ -275,9 +342,9 @@ export function windowView(f: Fixture, startInput: string, finishInput: string):
     if (ms < start || ms > finish) continue
     rows += 1
     lastRowMs = ms
-    if (flags & FLAG_FROZEN) frozen += 1
-    if (flags & FLAG_NOT_WATER) notWater += 1
-    if (flags & FLAG_LOW_SPEED) lowSpeed += 1
+    if (fl & FLAG_FROZEN) frozen += 1
+    if (fl & FLAG_NOT_WATER) notWater += 1
+    if (fl & FLAG_LOW_SPEED) lowSpeed += 1
   }
 
   return {
@@ -289,6 +356,95 @@ export function windowView(f: Fixture, startInput: string, finishInput: string):
     spanSeconds: (finish - start) / 1000,
     longestDropoutSeconds: longestDropout / 1000,
   }
+}
+
+// ------------------------------------------------------------- chart markers
+
+/**
+ * One annotation, as every chart draws it. `locked` is the whole point of the
+ * revised wizard: a marker placed on an earlier step stays on the chart for the
+ * rest of the flow so you can see what you already said, but cannot be moved
+ * from a step that isn't about it.
+ */
+export interface ChartMarker {
+  id: string
+  at: string
+  lane: 'sail' | 'sea'
+  label: string
+  selected?: boolean
+  incomplete?: boolean
+  locked?: boolean
+}
+
+// ------------------------------------------------------- shared chart geometry
+//
+// Both charts and the map read the same time axis and the same flag spans, which
+// is what makes their scrubbers agree rather than merely look alike.
+
+export interface TimeAxis {
+  t0: number
+  tEnd: number
+  /** Padded bounds. The axis is NOT clamped to the file: a race can finish after the log dies. */
+  min: number
+  max: number
+}
+
+export function timeAxis(f: Fixture): TimeAxis {
+  const t0 = naiveMs(f.t0)
+  const tEnd = naiveMs(f.lastRowTime)
+  const slack = Math.max((tEnd - t0) * 0.1, 10 * 60 * 1000)
+  return { t0, tEnd, min: t0 - slack, max: tEnd + slack }
+}
+
+export interface Span {
+  from: number
+  to: number
+  fromIndex: number
+  toIndex: number
+}
+
+/** Contiguous runs of rows carrying a flag, in wall-clock ms. */
+export function flagSpans(f: Fixture, flag: number): Span[] {
+  const { sec, flags } = f.series
+  const t0 = naiveMs(f.t0)
+  const out: Span[] = []
+  let from: number | null = null
+  let fromIndex = 0
+  for (let i = 0; i < sec.length; i += 1) {
+    const on = (flags[i] & flag) !== 0
+    if (on && from === null) {
+      from = t0 + sec[i] * 1000
+      fromIndex = i
+    } else if (!on && from !== null) {
+      out.push({ from, to: t0 + sec[i] * 1000, fromIndex, toIndex: i })
+      from = null
+    }
+  }
+  if (from !== null) {
+    out.push({ from, to: t0 + sec[sec.length - 1] * 1000, fromIndex, toIndex: sec.length - 1 })
+  }
+  return out
+}
+
+/** Row index nearest a wall-clock time, or -1 when the series is empty. */
+export function nearestIndex(f: Fixture, ms: number): number {
+  const { sec } = f.series
+  if (sec.length === 0) return -1
+  const t0 = naiveMs(f.t0)
+  const target = (ms - t0) / 1000
+  let lo = 0
+  let hi = sec.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (sec[mid] < target) lo = mid + 1
+    else hi = mid
+  }
+  if (lo > 0 && Math.abs(sec[lo - 1] - target) <= Math.abs(sec[lo] - target)) return lo - 1
+  return lo
+}
+
+export function rowMs(f: Fixture, i: number): number {
+  return naiveMs(f.t0) + f.series.sec[i] * 1000
 }
 
 // ------------------------------------------------------------- the refusals
