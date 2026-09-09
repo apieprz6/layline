@@ -117,9 +117,23 @@ describe('what a busy race costs in Variant A', () => {
     fireEvent.click(screen.getByText('Next')) // → Sea state
     fireEvent.click(screen.getByText('Next')) // → Review
 
-    console.log(`Variant A · 08-26-26-beer-can · 7 sail changes = ${costMeter.actions} actions`)
-    expect(costMeter.actions).toBeLessThan(32)
+    // Pinned rather than bounded: this figure is the answer LAY-94 reports, so a
+    // change to the flow that costs the sailor more taps should fail here.
+    expect(costMeter.actions).toBe(24)
     expect(screen.getByText('Anything else you know?')).toBeTruthy()
+  })
+
+  it('costs five actions when there is nothing to annotate', () => {
+    costMeter.reset()
+    render(<VariantA />)
+    fireEvent.click(screen.getByText(/06-03-26-beer-can\.csv/).closest('button')!)
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByText('Next'))
+    fireEvent.click(screen.getByText('Save race'))
+
+    // The floor of the flow: pick the file, walk through, submit. Everything
+    // above five is something the sailor chose to say about the race.
+    expect(costMeter.actions).toBe(5)
+    expect(screen.getByText(/everything that would be written/)).toBeTruthy()
   })
 })
 

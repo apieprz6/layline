@@ -86,7 +86,8 @@ export default function VariantA() {
       setConfirmDuplicate(fixture)
       return
     }
-    costMeter.bump()
+    // RecordingPicker already counts the tap; counting it here too inflated the
+    // measurement by one.
     setDraft(draftFromFixture(fixture))
     setStep(1)
   }
