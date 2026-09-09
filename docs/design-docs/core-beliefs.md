@@ -4,15 +4,19 @@ This document establishes the foundational principles that guide all technical a
 
 ## Domain Principles
 
-### 1. Raw Data Integrity (CRITICAL)
+### 1. Data Integrity (CRITICAL)
 
-**Never modify incoming weather measurements.**
+**Never overwrite what a source gave you. Derive alongside it, and carry the provenance of both.**
 
-**Why**: Sailors trust original source data. Making adjustments hides the interpretation layer and breaks trust. When a sailor sees "20 knots at CHII2," they need to know that's what the station actually reported, not what we think it "should" be at surface level.
+**Why**: Sailors trust original source data. Making adjustments hides the interpretation layer and breaks trust. When a sailor sees "20 knots at CHII2," they need to know that's what the station actually reported, not what we think it "should" be at surface level. And once a correction is folded into a stored value, the error stops being distinguishable from signal — it propagates into everything computed downstream, wearing the name of a real quantity.
+
+**"Raw" is not the standard — "as recorded, with known provenance" is.** This distinction is not pedantry. For the boat's own instrument data there is no raw measurement to store: the masthead's actual reading never reaches us, and every wind figure in a recording was computed by the navigation software from settings that aren't in the file. Demanding rawness there describes a world that doesn't exist, and a rule that can't be honoured gets quietly ignored. Non-destruction can always be honoured. See ADR 0008.
 
 **How**:
-- Store all measurements exactly as received from the source
-- Add metadata fields to provide context (station elevation, measurement height, source)
+- Store every value exactly as the source gave it — same units, same precision, same nulls
+- A missing value is stored as missing, never as a plausible number
+- Derived values live beside the recorded ones; they never replace them
+- Every value carries its provenance: **Measured** (a sensor reading), **Computed** (calculated upstream from other channels), **Position-Derived** (from GPS), or **Testimony** (a human typed it in from memory)
 - Interpretation happens ONLY in:
   - LLM analysis layer (context provided in prompts)
   - UI display hints and annotations
@@ -23,7 +27,7 @@ This document establishes the foundational principles that guide all technical a
 ✅ **CORRECT**:
 ```typescript
 interface BuoyReading {
-  windSpeed: 20,  // Store exact raw value
+  windSpeed: 20,  // Store exactly what the station reported
   windDirection: 225,
   metadata: {
     station: 'CHII2',
@@ -53,7 +57,14 @@ interface BuoyReading {
 // This destroys trust and hides the interpretation
 ```
 
-**Applies to**: All weather data (wind speed, direction, pressure, temperature, wave height)
+❌ **Also wrong — a fabricated value is worse than a missing one**:
+```typescript
+{ dir: row.wind_direction ?? 0 }  // ← plots a missing direction as due north
+```
+
+**Applies to**: All weather data (wind speed, direction, pressure, temperature, wave height) and all instrument data recorded aboard the boat. A Recording is transcribed into the database completely and verbatim, and the round trip is tested.
+
+**Not currently honoured everywhere.** The weather ingest predates this wording and violates it in four known places, listed with file:line pointers in ADR 0008. Treat that list as debt, not precedent.
 
 ---
 
@@ -424,9 +435,12 @@ Usage is continuous and year-round, not clustered around one evening a week.
 These patterns violate our core beliefs and should never be used:
 
 ### ❌ Data Manipulation
-- Modifying raw weather data
-- "Correcting" measurements based on assumptions
-- Hiding data source details
+- Overwriting a value the source gave us
+- "Correcting" measurements based on assumptions, or storing a corrected value at all
+- Substituting a plausible number for a missing one (`?? 0`)
+- Converting units in place and discarding the source value
+- Rounding before storing or caching
+- Hiding data source details, or presenting a computed value as a measured one
 - Applying blanket adjustments
 
 ### ❌ Type Unsafety
@@ -482,7 +496,7 @@ These patterns violate our core beliefs and should never be used:
 
 When making technical or design decisions, ask:
 
-1. **Does this respect raw data integrity?** If modifying source data, stop.
+1. **Does this respect data integrity?** If it overwrites what a source gave us, or stores a corrected value, stop.
 
 2. **Does this work on mobile?** If not optimized for 390px screen, rework.
 
@@ -511,8 +525,8 @@ When beliefs conflict:
 **Safety > Everything else**
 If there's any question about safety (storm conditions, equipment failure, crew safety), err on the side of caution. Recommend not racing if conditions are dangerous.
 
-**Raw data integrity > User experience**
-Never compromise data integrity for convenience. If showing raw data is ugly, improve the presentation without modifying the data.
+**Data integrity > User experience**
+Never compromise data integrity for convenience. If showing a value as recorded is ugly, improve the presentation without modifying what's stored.
 
 **Type safety > Development speed**
 Take the time to define proper types. The upfront cost pays off in reliability.
@@ -540,7 +554,7 @@ This document should evolve as we learn:
 - Usage patterns reveal flaws in assumptions
 
 **Never compromise on**:
-- Raw data integrity
+- Data integrity (non-destruction and honest provenance)
 - Type safety
 - Mobile-first approach
 - Safety-first recommendations
@@ -551,7 +565,7 @@ This document should evolve as we learn:
 
 Layline's core beliefs prioritize:
 
-1. **Trust through transparency** (raw data integrity, traceable sources)
+1. **Trust through transparency** (data integrity, honest provenance, traceable sources)
 2. **Mobile-first accessibility** (390px design, high contrast)
 3. **Honest uncertainty** (confidence over precision, model disagreement)
 4. **Local expertise** (Lake Michigan patterns, place-specific advice)
