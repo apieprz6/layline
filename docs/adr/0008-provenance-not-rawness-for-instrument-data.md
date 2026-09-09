@@ -4,6 +4,8 @@
 
 Accepted. Amends the Raw Data Integrity principle in `docs/design-docs/core-beliefs.md`, together with its seven restatements in `AGENTS.md` and its statement in `PROJECT_PLAN.md`.
 
+Ruling 2 is upheld and **refined by ADR 0009**, which settles *when* the cleaned view is computed rather than whether it is stored. The consequence below reading "`STATUS` does not exist in effort 1" was right about the column and wrong about the timing: the quality half of it is computed at read from the first release.
+
 ## Context
 
 Layline's founding principle says: **never modify incoming weather measurements**, store them exactly as received, and interpret only in prompts and UI. It was written about buoys, and the worked example is Harrison Dever — the station reports 20 knots at 85 feet, so store 20 and explain, never scale to surface.
@@ -30,7 +32,7 @@ One further piece of context, recorded because it changes what this ADR is for. 
 
 Six specific rulings follow.
 
-**1. A Recording is transcribed into the database completely and verbatim.** Every column, every row, including the three `(calc)` columns that carry no independent information. The commitment is a test, not a comment: re-parsing the stored bytes reproduces the stored rows exactly, and that round-trip is checked against all eleven real recordings.
+**1. A Recording is transcribed into the database completely and verbatim.** Every column, every row, including the three `(calc)` columns that carry no independent information. The commitment is a test, not a comment: re-parsing the stored bytes reproduces the stored rows exactly, and that round-trip is checked against all thirteen real recordings.
 
 **2. Only a column that is a pure function of its own row may be added to the transcription.** `water_referenced` (`STW IS NOT NULL AND CTW IS NOT NULL`) qualifies: it makes no new truth claim and cannot drift. `STATUS` does not, because it depends on `SOG_THRESHOLD` and a maneuver-window span that live outside the row and are not yet settled. This is the line, and it is sharper than "derived versus not".
 
@@ -38,7 +40,7 @@ Six specific rulings follow.
 
 **4. Nothing corrected is ever stored.** No corrected column, and no correction factor applied on read. A **Measured Offset** is computed when someone looks at a Race, displayed as what it is — the residual still present after the display's **Programmed Offset** — and never written back into any stored value.
 
-**5. Where two columns describe the same quantity, the spec names one authoritative and the other is stored but never read.** For true wind angle that is plain `TWA`: it is what the instrument chain produced and what the software itself trusted when synthesising apparent wind, whereas `TWA (calc)` is `wrap(TWD − CTW)` and inherits the fluxgate's deviation. They disagree in sign on 12 of 4,193 rows with outliers to 158°, and tack detection keys on that sign. Apparent wind has no authoritative alternative — `(calc)` is all that exists — so any display of it must be labelled derived, or a sailor will read it as what the masthead said.
+**5. Where two columns describe the same quantity, the spec names one authoritative and the other is stored but never read.** For true wind angle that is plain `TWA`: it is what the instrument chain produced and what the software itself trusted when synthesising apparent wind, whereas `TWA (calc)` is `wrap(TWD − CTW)` and inherits the fluxgate's deviation. They disagree in sign on 19 of 5,344 rows with outliers to 158°, and tack detection keys on that sign. Apparent wind has no authoritative alternative — `(calc)` is all that exists — so any display of it must be labelled derived, or a sailor will read it as what the masthead said.
 
 **6. Provenance is data, not copy.** Each column of the Recording format carries one provenance — Measured, Computed, or Position-Derived — held once as reference data about the format. A Race renders a single generated provenance line rather than a badge per number, and rows that are not water-referenced are visually distinct wherever wind is plotted, because those are not a caveat on a measurement but a different measurement.
 
@@ -46,16 +48,16 @@ Six specific rulings follow.
 
 - **Apply the rule verbatim.** Not merely awkward — incoherent. It requires storing a raw wind measurement that the export format destroyed before we ever saw the file.
 - **Narrow the rule to weather data, and govern instruments separately.** Keeps the wording true at the cost of the reasoning. The stated *why* — that sailors trust original source data and hiding the interpretation layer breaks that trust — transfers to instrument data completely. Two rules would also drift, and the honesty convention would be maintained in two places by whoever touched one last.
-- **Drop the redundant `(calc)` columns on transcription**, as the format research recommended, since they are algebraically derivable from columns we already store. Rejected because "copy the file completely" is mechanically testable and "drop what is redundant" is a judgement that decays: the next person meets a column that is *nearly* redundant. A pipeline in the prior art already proves the point — `clean_recordings.py` reads the CSV without `keep_default_na=False`, so pandas silently converted the literal string `"None"` in `ALARM` to empty in every one of 4,319 rows. Nobody decided that; a default did, and only a round-trip check catches it.
+- **Drop the redundant `(calc)` columns on transcription**, as the format research recommended, since they are algebraically derivable from columns we already store. Rejected because "copy the file completely" is mechanically testable and "drop what is redundant" is a judgement that decays: the next person meets a column that is *nearly* redundant. A pipeline in the prior art already proves the point — `clean_recordings.py` reads the CSV without `keep_default_na=False`, so pandas silently converted the literal string `"None"` in `ALARM` to empty in every one of 6,337 rows. Nobody decided that; a default did, and only a round-trip check catches it.
 - **Store a correction factor and apply it on read.** Cheaper than a corrected column and wrong in the same way: the number a sailor sees is not the number the boat recorded, and the difference is invisible at the point of use.
 
 ## Consequences
 
-- Any cleaned or corrected view of a Recording costs a computation or a join. At 2,421 cleaned rows for the entire archive this is free, and if cross-race queries later need speed that is a materialised view over the truth, not a change to it.
+- Any cleaned or corrected view of a Recording costs a computation or a join. At 4,088 in-window rows for the entire archive this is free, and if cross-race queries later need speed that is a materialised view over the truth, not a change to it.
 - Effort 2 may revise `SOG_THRESHOLD`, the maneuver window span, the 45° suppression floor, and the Polar Efficiency numerator without rewriting a single stored row. This is the main practical payoff.
 - Correcting a mistyped sail-change time edits one annotation entry rather than re-deriving several hundred rows. The open question of how an admin amends an annotation after upload gets materially easier.
 - The parsed rows are not a superset of the raw file in any useful sense — they are the file. The prior art's `cleaned-recordings/` was lossy in two directions at once (rows deleted, `ALARM` emptied); Layline's transcription is lossy in neither.
-- `STATUS` does not exist in effort 1. Marking rows `low-speed` or `maneuver` is cleaning, and cleaning belongs to the analysis effort; when it arrives it may not sit on the transcription.
+- `STATUS` does not exist in effort 1. Marking rows `low-speed` or `maneuver` is cleaning, and cleaning belongs to the analysis effort; when it arrives it may not sit on the transcription. **Refined by ADR 0009**: the column never exists, but the *quality* half of the cleaning is computed at read in effort 1, because a dropout makes a recording misleading rather than merely unrefined. Maneuver marking does wait for the analysis effort.
 - No provenance field is needed on an annotation. Every annotation is hand-entered, so a `source: 'auto' | 'manual'` distinction has nothing to distinguish, and the mockup's "Auto-matched to wind readings — nothing to fill in" is removed rather than implemented.
 - `twa`/`tws` are not stored on a sail-change entry, though the mockup puts them there. They are already in the recording at that timestamp; the Crossover Chart comparison reads them from the row.
 
