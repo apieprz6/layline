@@ -230,11 +230,15 @@ _Avoid_: Calibration, correction, error
 ### Race Archive
 
 **Race**:
-One complete race sailed, as the sailor-supplied window of start and finish inside a **Recording**. The unit sailors talk about and the unit performance is reported for.
+One complete race sailed, as the sailor-supplied **Race Window** inside a **Recording**. The unit sailors talk about and the unit performance is reported for. Everything a Race holds is **Testimony** except its **Transcription**.
 _Avoid_: Regatta (that's a multi-race event, which Layline does not model), series, event, session
 
+**Race Window**:
+The start and finish a sailor gives for a **Race**, as wall-clock times in the **Recording**'s own frame. A claim about which **Recording Rows** are the race, not a measurement — it is typed from memory, it is routinely round-numbered, and it need not sit inside the recording's own span. A window reaching past the last row means the recording dropped out before the race finished.
+_Avoid_: Race time (that's the weather side's **Target Time**), race duration, clip, window (bare — ambiguous with a maneuver window)
+
 **Recording**:
-One qtVlm VDR export, covering a single **Race** plus the transit before it and the motoring after. Longer than the Race it contains.
+One qtVlm VDR export, covering a single **Race** plus the transit before it and the motoring after. Longer than the Race it contains. One export *file* may be uploaded more than once — a regatta day holds several races — and each upload is its own Recording with its own **Transcription**.
 _Avoid_: Log, track, GPX, file
 
 **Recording Row**:
@@ -250,7 +254,7 @@ Where a value came from, and therefore how much weight it carries. One of four c
 - **Measured** — a sensor reading. Only **STW** qualifies among the boat's live wind and speed channels.
 - **Computed** — calculated upstream by the navigation software from other channels, using settings the export does not record. Every true and ground wind value is this.
 - **Position-Derived** — from GPS: position, **COG**, **SOG**.
-- **Testimony** — a person typed it in from memory. Every **Annotation** is this.
+- **Testimony** — a person typed it in from memory. Every **Annotation** is this, and so is everything else a **Race** holds that is not its **Transcription**: the **Race Window**, the recorded **Wind Band**, the frozen **Version** pointers, the title.
 
 Provenance is a property of the *column in the format*, held once as reference data, not a field repeated on each value.
 _Avoid_: Source (that's a weather **Data Source**), origin, lineage, raw vs derived (a two-way split hides Testimony)
@@ -272,8 +276,12 @@ Elapsed time since the previous non-**Frozen** **Recording Row**. Reads the samp
 _Avoid_: Interval, delta, sample rate (all of which imply the regular value this exists to contradict)
 
 **Annotation**:
-Something a sailor remembers and types in during upload, rather than something an instrument recorded — a **Sail Configuration** or a **Sea State**. **Testimony**, not measurement. Stored as one ordered list per kind on the **Race**, whose first entry sits at the race start, and resolved onto **Recording Rows** by time when read. Never copied onto rows.
+Something a sailor remembers and types in, rather than something an instrument recorded — a **Sail Configuration** or a **Sea State**. **Testimony**, not measurement. Stored as one ordered list per kind on the **Race**, every entry timestamped, and resolved onto **Recording Rows** when read: the entry in force is the latest at or before the row's time, falling back to the earliest. Never copied onto rows. An empty list is normal and means the race is not remembered — never that some default applied.
 _Avoid_: Tag, note, event, manual data (all Annotations are manual — the word distinguishes nothing)
+
+**Amendment**:
+An **admin** changing a **Race**'s **Testimony** after upload — its **Race Window**, its **Annotations**, its **Wind Band**, its **Version** pointers, its title. Edited in place, with no change reason and no history: nothing points at a Race, so an Amendment changes only its own reading, and that reading is recomputed on every view. Distinct from a new **Version**, which is how a **Boat Setup** artifact changes, and from a re-upload, which makes a second Race.
+_Avoid_: Edit, revision, correction (that word belongs to an **Instrument Calibration** Version), update
 
 **Sea State**:
 The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind. An **Annotation**.
@@ -328,7 +336,12 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 - A **Boat Setup** comprises a **Polar**, a **Crossover Chart**, **Sail Definitions**, a **Rig Tune**, and an **Instrument Calibration**
 - Each **Boat Setup** artifact has many **Versions**; each **Race** points at the Versions current when it was sailed
-- A **Recording** contains exactly one **Race**; the Race is the sailor-supplied window inside it
+- A **Recording** contains exactly one **Race**; the Race is the sailor-supplied **Race Window** inside it
+- One export *file* may back several **Recordings** — a regatta day is uploaded once per **Race** and annotated differently each time
+- Everything on a **Race** except its **Transcription** is **Testimony**, and all of it is editable by **Amendment**; the Transcription never is
+- An **Amendment** carries no change reason and no history, unlike a **Boat Setup** **Version**, because nothing points at a **Race**
+- A **Race Window** may reach past the end of its **Recording** — that means the recording dropped out, and it is stated on the race page, never refused
+- Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
 - A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
 - A **Race** carries **Sail Configurations** and **Sea State** as **Annotations**, resolved onto **Recording Rows** by time on read
@@ -471,4 +484,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - "stale" means two unrelated things, and only one of them is Layline's. Cached weather 30-120 minutes old is **Stale** (a **Data Source Status**, on screen today). A **Recording Row** whose feed had died is **Frozen**, inside a **Dropout**. The prior art marks the latter `stale` in its `STATUS` column, and that word must not be carried across: both conditions can be rendered in the same session, and one is about how old a fetch is while the other is about whether a number was ever measured.
 - One column cannot hold both how much a row is worth and what the boat was doing. The prior art's `STATUS` carries `valid` / `stale` / `low-speed` / `tack` / `gybe` in a single field, so a row that is both slow and mid-tack keeps only whichever marker was assigned last — measured at 34 rows across 5 recordings, and they are exactly the rows a tack-cost comparison wants. Resolved: **Row Quality** is one axis and the maneuver a row sits in is another, computed independently. The prior art is not wrong to collapse them, it is writing a CSV; Layline is not, and should not inherit the constraint.
 - A **Dropout** is not caught by a speed gate, and a speed gate is not caught by a **Dropout** check. 855 of the archive's 869 frozen rows sit at `SOG` of 2 knots or more — the feed latched at a sailing speed — so **Low-Speed** flags almost none of them. Nor can the pure-function **Water-Referenced** column stand in: it agrees on most frozen rows only by accident, misses the frozen-but-live ones entirely, and undercounts the start of every dropout block by one row. The three states are genuinely three tests.
+- "Frozen" was read two ways about a **Race**'s **Version** pointers. It means the pointer does not follow the current **Version** — a June race never silently starts reporting against July's polar — and not that a person cannot change it. The pointers are nullable so seeding does not backdate a guess, which means somebody fills one in later when they remember; that is an **Amendment**, and it is the one most likely to happen while seeding the archive. See ADR 0010.
+- An empty **Annotation** list is not a gap to fill. Six of the archive's thirteen recordings have no sail or sea-state record at all — the same six on both kinds, so annotation is all-or-nothing per race — and that means the sailor does not remember the race. So no default is offered and no chip is pre-selected — the mockup pre-selects by index, which would record for those six races that the boat started on main and jib-1 in slight chop, which nobody said. Same failure as `wind_direction ?? 0`.
+- A **Recording**'s timestamps carry no timezone. The `Date` column has no offset and nothing in the export or the qtVlm documentation settles it; weeknight start times imply local. A **Race Window** is therefore stored and compared in the recording's own naive wall-clock frame with no conversion, and rendering it as Chicago local is a display decision. Any conversion at storage time could silently move a boundary.
 - A missing wind direction is not north. `services/buoys/ndbc.ts:395` renders `wind_direction ?? 0` and plots the result as a real observation; the same file discards source units on conversion and rounds before caching, under fields commented `// knots (raw, unmodified)`. These are named as pre-existing debt in ADR 0008 and are not precedent for anything.

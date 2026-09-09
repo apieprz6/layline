@@ -6,6 +6,8 @@ Accepted. Amends the Raw Data Integrity principle in `docs/design-docs/core-beli
 
 Ruling 2 is upheld and **refined by ADR 0009**, which settles *when* the cleaned view is computed rather than whether it is stored. The consequence below reading "`STATUS` does not exist in effort 1" was right about the column and wrong about the timing: the quality half of it is computed at read from the first release.
 
+Ruling 3 is upheld in substance and **amended by ADR 0010** in one clause: "whose first entry sits at the race start" is a **convention at entry time, not an invariant**, and no code may enforce it. Because the race window is editable, the entry that resolves onto the earliest row is whichever is earliest, with resolution falling back to it. ADR 0010 also settles the question this ADR left open below — how an admin amends a Race after upload — and extends **Testimony** to cover everything a Race holds that is not its Transcription.
+
 ## Context
 
 Layline's founding principle says: **never modify incoming weather measurements**, store them exactly as received, and interpret only in prompts and UI. It was written about buoys, and the worked example is Harrison Dever — the station reports 20 knots at 85 feet, so store 20 and explain, never scale to surface.
@@ -36,7 +38,7 @@ Six specific rulings follow.
 
 **2. Only a column that is a pure function of its own row may be added to the transcription.** `water_referenced` (`STW IS NOT NULL AND CTW IS NOT NULL`) qualifies: it makes no new truth claim and cannot drift. `STATUS` does not, because it depends on `SOG_THRESHOLD` and a maneuver-window span that live outside the row and are not yet settled. This is the line, and it is sharper than "derived versus not".
 
-**3. Annotations are stored as dated entries on the Race, never copied onto rows.** Sail Configuration and Sea State are neither measurements nor derivations — a person remembered them and typed them in. They are held once, as one ordered list per kind whose first entry sits at the race start, and resolved onto rows by time when read.
+**3. Annotations are stored as dated entries on the Race, never copied onto rows.** Sail Configuration and Sea State are neither measurements nor derivations — a person remembered them and typed them in. They are held once, as one ordered list per kind whose first entry sits at the race start, and resolved onto rows by time when read. (Per ADR 0010, that first clause is a data-entry convention, not a rule to enforce; resolution is the latest entry at or before the row's time, falling back to the earliest.)
 
 **4. Nothing corrected is ever stored.** No corrected column, and no correction factor applied on read. A **Measured Offset** is computed when someone looks at a Race, displayed as what it is — the residual still present after the display's **Programmed Offset** — and never written back into any stored value.
 
@@ -55,7 +57,7 @@ Six specific rulings follow.
 
 - Any cleaned or corrected view of a Recording costs a computation or a join. At 4,088 in-window rows for the entire archive this is free, and if cross-race queries later need speed that is a materialised view over the truth, not a change to it.
 - Effort 2 may revise `SOG_THRESHOLD`, the maneuver window span, the 45° suppression floor, and the Polar Efficiency numerator without rewriting a single stored row. This is the main practical payoff.
-- Correcting a mistyped sail-change time edits one annotation entry rather than re-deriving several hundred rows. The open question of how an admin amends an annotation after upload gets materially easier.
+- Correcting a mistyped sail-change time edits one annotation entry rather than re-deriving several hundred rows. The open question of how an admin amends an annotation after upload gets materially easier — **now settled by ADR 0010**, which generalises it: everything on a Race except the Transcription is Testimony, and all of it is editable in place.
 - The parsed rows are not a superset of the raw file in any useful sense — they are the file. The prior art's `cleaned-recordings/` was lossy in two directions at once (rows deleted, `ALARM` emptied); Layline's transcription is lossy in neither.
 - `STATUS` does not exist in effort 1. Marking rows `low-speed` or `maneuver` is cleaning, and cleaning belongs to the analysis effort; when it arrives it may not sit on the transcription. **Refined by ADR 0009**: the column never exists, but the *quality* half of the cleaning is computed at read in effort 1, because a dropout makes a recording misleading rather than merely unrefined. Maneuver marking does wait for the analysis effort.
 - No provenance field is needed on an annotation. Every annotation is hand-entered, so a `source: 'auto' | 'manual'` distinction has nothing to distinguish, and the mockup's "Auto-matched to wind readings — nothing to fill in" is removed rather than implemented.
