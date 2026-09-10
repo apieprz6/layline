@@ -302,14 +302,14 @@ An unauthenticated visitor. Guests have full access to the dashboard, weather da
 _Avoid_: Anonymous user, visitor
 
 **Account**:
-What a sailor is given by the owner: an email address and exactly one **Profile**. Resolved on the server and passed down as a prop; when there is none, the visitor is a **Guest**. The email lives on `auth.users` and everything else on `profiles`, so an Account keeps the two as distinct parts rather than blending them. Client code subscribes to auth changes only to learn *when* to ask the server again, never to learn *who* is signed in. See ADR 0018.
+What a sailor is given by the owner: an email address — their Google one, since that is what signs in — and exactly one **Profile**. Resolved on the server and passed down as a prop; when there is none, the visitor is a **Guest**. The email lives on `auth.users` and everything else on `profiles`, so an Account keeps the two as distinct parts rather than blending them. Client code subscribes to auth changes only to learn *when* to ask the server again, never to learn *who* is signed in. See ADR 0018.
 _Avoid_: Session (that is Supabase's tokens and cookies, not who is signed in), Viewer (that is the `admin`/`viewer` **Role**), current user
 
 **Profile**:
 A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created by a database trigger the moment the account is created, in the same transaction — so a Profile exists for every account, including one made by hand in Supabase. See ADR 0017.
 
 **Display Name**:
-Human-readable name shown in the UI (e.g., avatar initials, greeting). Read from `raw_user_meta_data` by the trigger that creates the **Profile** — so it comes from whatever made the account: the owner in Supabase, or Google profile metadata on a first OAuth sign-in.
+Human-readable name shown in the UI (e.g., avatar initials, greeting). Read from `raw_user_meta_data` by the trigger that creates the **Profile**, which since ADR 0020 leaves Google profile metadata as its only source. A Google account that granted no `profile` scope supplies none, and then there is none: a Display Name is never synthesised from an email address.
 
 **Role**:
 Flat permission level on a profile, governing **writes only**. Values: `admin` (can upload **Races** and write **Boat Setup**) or `viewer` (can read both **Boat management** and **Boat performance**, and write neither). Every signed-in account reads the same data, whatever its Role. Never null: every account starts as a `viewer`, and `admin` is granted by hand through Supabase, there being no role-assignment UI — a Role cannot be written by the account that holds it. See ADR 0017 and ADR 0019.
@@ -320,11 +320,12 @@ A drawer entry, or the screen behind it, that a **Guest** can see but not read: 
 _Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
-Bottom sheet overlay (82% viewport height) that opens over whatever screen the sailor is on. Two modes: Sign in (email + password) and Forgot password (email only). Includes Google OAuth, as sign-in only. There is no Sign up mode: sign-up is closed and the owner creates accounts by hand in Supabase (ADR 0019). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout.
-_Avoid_: Login page, auth page (it's a sheet, not a page)
+Bottom sheet overlay that opens over whatever screen the sailor is on. **One mode: Continue with Google.** There is no password field, no Forgot password and no email field — Google is the only way in, and an account must already exist for it to sign in to (ADR 0020). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout, and ADR 0020, which left it holding a single button.
+_Avoid_: Login page, auth page (it's a sheet, not a page), Sign in mode / Forgot password mode (there are no modes left to name)
 
-**Account Merging**:
-When a user signs up with email/password and later authenticates via Google OAuth with the same email address, both identities resolve to the same **Account**. Unconditional on hosted Supabase: there is no setting that enables or disables it, and `enable_manual_linking` is not it — that only gates the manual `linkIdentity()` routes. ADR 0004's "with account merging enabled" describes a switch that does not exist. See LAY-115.
+**Identity Linking**:
+How a hand-created **Account** gets its first session: the owner creates a row against the crew member's Google address, and the Google identity attaches to that row on first sign-in because the addresses match. Unconditional on hosted Supabase — there is no setting that enables or disables it, and `enable_manual_linking` is not it, that only gates the manual `linkIdentity()` routes. A closed front door does not block it: a matching row makes this a link rather than a signup, which is the only reason ADR 0019 and ADR 0020 can coexist. See LAY-115 and ADR 0020.
+_Avoid_: Account Merging (ADR 0004's term, and now a misnomer — nothing merges, because the row the owner creates has no credential of its own to merge with)
 
 ### UI Components
 
@@ -392,9 +393,10 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Guest** can use all dashboard and weather features without a **Profile**
 - A **Profile** is created by a trigger whenever an account is, whatever made the account
 - A **Profile** has exactly one **Role**, `admin` or `viewer`, and never null
-- **Account Merging** links email/password and Google OAuth identities sharing the same email
+- **Identity Linking** attaches a Google identity to the row the owner created, matching on email address
 - The **Auth Sheet** opens over any screen, including a **Locked Entry**; it does not navigate to a separate route
-- The `/auth/reset-password` page is the only dedicated auth route (deep-linked from email)
+- `/auth/callback` is the only dedicated auth route; there is no recovery route, because there is no credential to recover
+- An **Account** exists only if the owner made one, and enters only through Google — losing the Google account loses the **Profile** with it
 - A **Buoy** is a type of **Data Source**
 - A **Weather Model** is a type of **Data Source**
 - Each **Buoy** has one **Data Source Status** at any given time
