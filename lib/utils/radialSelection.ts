@@ -1,16 +1,16 @@
 /**
- * Radial selection utilities for polar charts
+ * Radial selection utilities for the Wind Rose
  * Converts user touch/click coordinates to time-based data point selection
  */
 
 import type { WindDataPointWithOffset } from '@/types'
 
 /**
- * Find the data point closest to a given radius (time offset) on the polar chart
+ * Find the data point closest to a given radius (time offset) on the Wind Rose
  *
  * Algorithm:
  * 1. Convert client coordinates to SVG coordinates (accounting for element bounds and viewBox)
- * 2. Calculate polar coordinates (radius and angle) from center of chart
+ * 2. Calculate radial coordinates (radius and angle) from center of chart
  * 3. Convert radius (0-1 normalized) to time offset in minutes
  * 4. Find the data point with the closest `minsAgo` value to the calculated time offset
  *
@@ -33,7 +33,7 @@ export function findPointByRadius(
   if (dataPoints.length === 0) return null
   if (timeWindowMinutes === 0) return null
 
-  // Chart constants (must match PolarChart component)
+  // Chart constants (must match WindRose component)
   const SIZE = 360
   const PAD = 42
   const CENTER_X = SIZE / 2

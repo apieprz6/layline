@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 interface StationLayoutProps {
   header: ReactNode
-  polarChart: ReactNode
+  windRose: ReactNode
   speedChart: ReactNode
   tabbedPanel: ReactNode
   dock: ReactNode
@@ -10,7 +10,7 @@ interface StationLayoutProps {
 
 export default function StationLayout({
   header,
-  polarChart,
+  windRose,
   speedChart,
   tabbedPanel,
   dock,
@@ -21,8 +21,8 @@ export default function StationLayout({
 
       <div className="station-layout__scroll">
         <div className="station-layout__content">
-          <div className="station-layout__polar">
-            {polarChart}
+          <div className="station-layout__wind-rose">
+            {windRose}
           </div>
           <div className="station-layout__speed">
             {speedChart}

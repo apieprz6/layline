@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import { render, screen, waitFor } from '@testing-library/react'
-import PolarChart from '../PolarChart'
+import WindRose from '../WindRose'
 import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
 
 // Mock SVG getBoundingClientRect for overlay positioning
@@ -21,7 +21,7 @@ beforeAll(() => {
   })
 })
 
-describe('PolarChart - Card Refactor (LAY-34)', () => {
+describe('WindRose - Card Refactor (LAY-34)', () => {
   const mockData: WindDataPoint[] = [
     { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
     { timestamp: '2026-05-19T17:50:00.000Z', spd: 14, dir: 185 },
@@ -33,7 +33,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
   describe('Card structure', () => {
     it('renders complete card structure with header, SVG, and footer', () => {
       const { container } = render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -65,7 +65,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
   describe('Header', () => {
     it('shows "At reference" in gray when mode is reference', () => {
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -81,7 +81,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
 
     it('shows "● At touch" in accent color when mode is touch', () => {
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -104,7 +104,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       }
 
       const { container } = render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -135,7 +135,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       }
 
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -168,7 +168,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       }
 
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -197,7 +197,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       }
 
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -223,7 +223,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
       }
 
       const { container } = render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -244,7 +244,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
   describe('CHII2 elevation note removal', () => {
     it('does NOT render CHII2 elevation note for CHII2 buoy (moved to Legend tab)', () => {
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}
@@ -260,7 +260,7 @@ describe('PolarChart - Card Refactor (LAY-34)', () => {
 
     it('does not render elevation note for other buoys', () => {
       render(
-        <PolarChart
+        <WindRose
           data={mockData}
           
           timeWindowMinutes={60}

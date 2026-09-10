@@ -4,7 +4,7 @@ import StationLayout from '../StationLayout'
 describe('StationLayout', () => {
   const defaultProps = {
     header: <div data-testid="header">Header</div>,
-    polarChart: <div data-testid="polar-chart">Polar Chart</div>,
+    windRose: <div data-testid="wind-rose">Wind Rose</div>,
     speedChart: <div data-testid="speed-chart">Speed Chart</div>,
     tabbedPanel: <div data-testid="tabbed-panel">Tabbed Panel</div>,
     dock: <div data-testid="dock">Dock</div>,
@@ -14,7 +14,7 @@ describe('StationLayout', () => {
     render(<StationLayout {...defaultProps} />)
 
     expect(screen.getByTestId('header')).toBeInTheDocument()
-    expect(screen.getByTestId('polar-chart')).toBeInTheDocument()
+    expect(screen.getByTestId('wind-rose')).toBeInTheDocument()
     expect(screen.getByTestId('speed-chart')).toBeInTheDocument()
     expect(screen.getByTestId('tabbed-panel')).toBeInTheDocument()
     expect(screen.getByTestId('dock')).toBeInTheDocument()
@@ -26,11 +26,11 @@ describe('StationLayout', () => {
     expect(container.firstChild).toHaveClass('station-layout')
   })
 
-  it('places polar chart in the correct grid area', () => {
+  it('places wind rose in the correct grid area', () => {
     render(<StationLayout {...defaultProps} />)
 
-    const polarChart = screen.getByTestId('polar-chart')
-    expect(polarChart.parentElement).toHaveClass('station-layout__polar')
+    const windRose = screen.getByTestId('wind-rose')
+    expect(windRose.parentElement).toHaveClass('station-layout__wind-rose')
   })
 
   it('places speed chart in the correct grid area', () => {
@@ -51,7 +51,7 @@ describe('StationLayout', () => {
     render(
       <StationLayout
         header={<div data-testid="header">Header</div>}
-        polarChart={null}
+        windRose={null}
         speedChart={null}
         tabbedPanel={null}
         dock={<div data-testid="dock">Dock</div>}
