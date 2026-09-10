@@ -57,15 +57,20 @@ function validatePreferences(data: unknown): data is UserPreferences {
  * @throws 500 on database errors
  */
 export async function GET() {
+  // Authenticating can refresh the session, which writes auth cookies onto this
+  // response. When it does, Supabase fills these with no-store headers so no CDN
+  // caches the response and serves one sailor's token to another (LAY-121).
+  const authHeaders = new Headers()
+
   try {
     // Authenticate user
-    const supabase = await createClient()
+    const supabase = await createClient(authHeaders)
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: authHeaders }
       )
     }
 
@@ -78,7 +83,7 @@ export async function GET() {
 
     // If no profile exists, return defaults
     if (dbError?.code === 'PGRST116' || !profile) {
-      return NextResponse.json(DEFAULT_PREFERENCES)
+      return NextResponse.json(DEFAULT_PREFERENCES, { headers: authHeaders })
     }
 
     // Handle other database errors
@@ -86,20 +91,21 @@ export async function GET() {
       console.error('Database error fetching preferences:', dbError)
       return NextResponse.json(
         { error: 'Failed to fetch preferences' },
-        { status: 500 }
+        { status: 500, headers: authHeaders }
       )
     }
 
     // Return stored preferences or defaults if empty
     const preferences = profile.preferences as UserPreferences
     return NextResponse.json(
-      Object.keys(preferences).length > 0 ? preferences : DEFAULT_PREFERENCES
+      Object.keys(preferences).length > 0 ? preferences : DEFAULT_PREFERENCES,
+      { headers: authHeaders }
     )
   } catch (error) {
     console.error('Preferences GET error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: 500, headers: authHeaders }
     )
   }
 }
@@ -117,15 +123,19 @@ export async function GET() {
  * @throws 500 on database errors
  */
 export async function PUT(request: NextRequest) {
+  // See GET: a session refresh writes auth cookies onto this response, and
+  // Supabase fills these so nothing caches it (LAY-121).
+  const authHeaders = new Headers()
+
   try {
     // Authenticate user
-    const supabase = await createClient()
+    const supabase = await createClient(authHeaders)
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: authHeaders }
       )
     }
 
@@ -136,14 +146,14 @@ export async function PUT(request: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: 'Invalid JSON payload' },
-        { status: 400 }
+        { status: 400, headers: authHeaders }
       )
     }
 
     if (!validatePreferences(preferences)) {
       return NextResponse.json(
         { error: 'Invalid preferences structure' },
-        { status: 400 }
+        { status: 400, headers: authHeaders }
       )
     }
 
@@ -167,16 +177,18 @@ export async function PUT(request: NextRequest) {
       console.error('Database error updating preferences:', dbError)
       return NextResponse.json(
         { error: 'Failed to update preferences' },
-        { status: 500 }
+        { status: 500, headers: authHeaders }
       )
     }
 
-    return NextResponse.json(profile.preferences as UserPreferences)
+    return NextResponse.json(profile.preferences as UserPreferences, {
+      headers: authHeaders,
+    })
   } catch (error) {
     console.error('Preferences PUT error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: 500, headers: authHeaders }
     )
   }
 }
