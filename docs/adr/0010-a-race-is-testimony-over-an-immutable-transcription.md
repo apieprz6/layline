@@ -6,6 +6,8 @@ Accepted. Builds on ADR 0008, whose read-time resolution ruling is this decision
 
 Decided concurrently with **ADR 0009**, which owns what happens to a recording *at* upload while this one owns what happens to a Race *after* it. They overlap on two rulings — which windows are refused, and what a duplicate content hash does — and reached the same answer independently. Where they touch, ADR 0009 is the authority on the ingest gate and this ADR states only what the amendment path needs from it.
 
+**Amended 2026-09-10** by *Amendment 1* at the foot of this document, which moves the amend surface onto ADR 0014's window-and-annotation flow, entered without its file step. The amendment changes only **where** amending happens. Nothing about **what** may be amended, or with what audit, changes; every other ruling here stands as written.
+
 ## Context
 
 The upload wizard finishes and the sailor notices the finish time is wrong. What can be changed, and what happens to everything hanging off it?
@@ -109,6 +111,10 @@ Stated as a commitment the analysis effort inherits rather than as an observatio
 
 ### Two flows, not one
 
+> **Superseded in part by Amendment 1 (2026-09-10).** *In-place field editing on the Race detail page*
+> no longer holds. The clause about the upload step is exactly what the amendment keeps, and the
+> ruling on a second race from one recording is untouched.
+
 **Amendment is in-place field editing on the Race detail page, with no upload step anywhere in it.** Re-running a five-step wizard to fix a finish time would drag a file upload into an operation that must never touch the Transcription.
 
 **Logging a second race from one recording is a fresh wizard run** with the same file dropped again. Under the simplicity ruling above there is no shared recording to offer and nothing to reuse, which is why the duplicate warning is worded as information: on this path it fires every time, correctly.
@@ -125,7 +131,7 @@ Stated as a commitment the analysis effort inherits rather than as an observatio
 ## Consequences
 
 - Two new terms in `CONTEXT.md` — **Race Window** and **Amendment** — with **Recording**, **Annotation** and **Provenance**'s Testimony class amended, since Testimony now covers everything on a Race that is not the Transcription.
-- A Race detail page with editable fields is new work with no counterpart in the design, which offers only a back chevron on the analysis screen. Amendment is not a variant of the wizard and shares no UI with it.
+- A Race detail page with editable fields is new work with no counterpart in the design, which offers only a back chevron on the analysis screen. Amendment is not a variant of the wizard and shares no UI with it. *(Amendment 1 reverses the second sentence — amendment is now the same UI as the flow, minus its file step — and reduces the first: the Race detail page needs an entry point, not a form.)*
 - Four wizard defects follow from this decision and ADR 0007, all in the same two steps: the pre-selected sail and sea-state chips must go, both steps must be skippable, a **Wind Band** field must be added (the wizard collects none, though ADR 0007 requires a Race to record one), and the `Venue` field must go. Separately, the wizard's Boat Setup summary is a hardcoded string with no control that omits Rig Tune entirely, so version pointer selection is new work too.
 - "Wave state" is the mockup's word at those steps; it is **Sea State** throughout, per the charting map.
 - Delete is genuinely destructive and has no undo. The Transcription and the Storage object go with the Race, and re-creating it means re-uploading the file and re-typing every annotation. The confirmation is the only guard, which is proportionate for a single-admin tool but should not be omitted.
@@ -133,3 +139,42 @@ Stated as a commitment the analysis effort inherits rather than as an observatio
 - **An amendment changes which rows a Race counts, and one recording shows how sharp that edge is.** `09-02-2026-beer-can.csv` ends in a **Dropout**: data rows 129 to 275 repeat one position, `COG` and `SOG` for 73 minutes on an unbroken 30-second cadence, and from row 131 onward all eleven wind and derived columns are empty while the stale fix keeps repeating — a latched GPS, not a boat sitting still. The annotated finish of `19:20:00` falls **20 seconds into that freeze**, so exactly one **Frozen** row is inside the window and the other 146 sit past the finish. The window is therefore honest today by 20 seconds. Push the finish 73 minutes later — an ordinary amendment, and a plausible one for a sailor who remembers finishing late — and 147 fabricated rows enter the window with nothing in the timestamps to betray them. This is precisely why the Race page states coverage as **Row Quality** rather than a row count, and why ADR 0009's decision to compute quality over the whole Transcription and *then* filter to the window is what makes an editable window safe. Nothing here needs the analysis effort.
 - The charting map's earlier count of eleven recordings is superseded twice over; there are **thirteen**, each with a window in `metadata.yaml`, and the seed and its acceptance test are at least thirteen Races — more if any recording turns out to hold a second race.
 - The archive never exercises the second hard refusal. Every one of the thirteen windows contains data, the leanest being `09-02-2026-beer-can` at 42 in-window rows, so *zero rows inside the window* is a guard against a future mistake rather than a rule with a precedent behind it. Worth knowing before someone deletes it as dead code.
+
+## Amendment 1 (2026-09-10): The amend surface is the annotation flow with its file step removed
+
+**An Amendment is made in ADR 0014's window-and-annotation flow, over the Race's existing Transcription, entered without its File step.** There is no second annotation UI on the Race detail page; the detail page holds the entry point and nothing more.
+
+Requested by the owner: one annotation experience, used both when a race is logged and when it is corrected.
+
+### Why the original ruling moves
+
+**It was made before there was a surface to point at.** ADR 0010 predates ADR 0014. When it said *in-place field editing*, the alternative on the table was the mockup's hardcoded `New regatta` wizard — a five-step march that begins with a file drop. ADR 0014 then built and measured something different: a GPS track and one swappable channel, mounted once, cropped by a single window, with annotations placed by tapping a real recorded row. That is the surface an amendment wants.
+
+**The objection survives; its scope was too wide.** *"Re-running a five-step wizard to fix a finish time would drag a file upload into an operation that must never touch the Transcription"* is an objection to the **file step**, and it is upheld below without qualification. What it does not justify is a second way to say the same four things about a race. Two annotation surfaces for one set of objects is a cost paid twice in code and once, worse, by the person amending — who now has to remember which screen edits sails by dragging and which by typing.
+
+**The chart is not a nicety here; it is the safety.** This ADR's own last consequence is the argument. On `09-02-2026-beer-can` the annotated finish of `19:20:00` falls **20 seconds** into a 73-minute freeze, and pushing that finish later — an ordinary amendment — pulls **147 fabricated rows** into the window with nothing in the timestamps to betray them. A datetime field cannot show that; it shows a number that looks fine either way. ADR 0014 obliges any map to ring frozen points and break the track through them, and hatches the same run on the channel chart, so the most dangerous amendment in this archive becomes the one hardest to make by accident. Consistency was never the reason to reuse the flow; this is.
+
+### What the amend path is
+
+- **No File step, and no file input anywhere on it.** The chart stack reads the Race's stored Transcription. Nothing is re-parsed, no bytes are read, hashed, written or moved, no Storage prefix is involved, and the duplicate-content warning cannot arise on this path. The Transcription is read-only input here exactly as it is on every other screen.
+- **The steps stop being a sequence.** Five ordered steps are a first pass through four questions; an amendment is usually one answer. Window, Sails, Sea state and the Wind Band and Version pointers are each reachable directly, in any order, and a visit may touch one of them and end. There is no march through `Next` and no Review gate. Entering from a particular chip or field lands on the section it belongs to. This is the same objection the rejected *freeze the window* alternative names — ceremony on the most likely correction — and it applies to a five-step re-run as squarely as it did to delete-and-re-upload.
+- **One save, and nothing is written before it.** ADR 0013's stance minus the temporary prefix, since no bytes move: leaving without saving changes nothing, and a save writes whatever the visit actually changed.
+- **Delete is not on this path.** It stays on the Race detail page behind its confirmation, because it destroys a Transcription and this flow may not.
+- **Logging a second race from one recording is unchanged** — a fresh run *with* its file step, the same file dropped again, the duplicate warning firing correctly every time. The two flows in *Two flows, not one* are still two; the line between them is now the file step rather than the whole UI.
+
+### What does not change
+
+- **The Transcription and the stored bytes are not editable, ever, by anyone, through any path** — now including this one, which is the ruling that mattered.
+- **No audit trail.** Nothing beyond `updated_at`: no change reason, no note, no per-field history. Reusing a wizard is not a reason to acquire a wizard's ceremony.
+- **The two hard refusals still bind an amendment exactly as they bind an upload**, and now do so by construction rather than by discipline. The window is edited by the same component running the same validation, which answers this ADR's own worry that *a validation rule that exists only in the wizard is a rule the amendment path can walk around* — there is one path.
+- **Moving the window never rewrites an annotation timestamp**, and resolution still falls back to the earliest entry.
+- **Nothing is pre-selected, both annotation kinds stay skippable, and an empty list still means the race is not remembered.** Opening the Sails section during an amendment must not be able to turn an unremembered race into a remembered one.
+- **Every derived figure is still computed from current Testimony at read time**, so an amendment is immediately observable by everything.
+
+### Consequences of this amendment
+
+- **The flow's rows come from a Transcription, not from a parse.** ADR 0014's flow must be constructible over an existing Race, with its initial state read from stored Testimony rather than empty. That puts the parse boundary *outside* the flow — worth knowing before the upload path is built with the parser inside it, because retrofitting that seam later is the expensive version of this decision.
+- **The flow has two modes and must say which one it is in.** One writes a new Race; the other edits a race whose numbers somebody has already read. The screen may not be ambiguous about that, and the mode is not just a hidden step-1 skip.
+- **The Race detail page's editable-fields design is dropped.** What replaces it — a single edit affordance, or per-section entry from the chips — is not settled here. The LAY-95 prototype (`prototype/lay-95-boat-sections`) put the Testimony chips behind one pencil by the race title, and those chips are a plausible place for per-section entry into the right flow section.
+- **`CONTEXT.md`'s Amendment entry loses "edited in place"** and gains the flow, and the relationships list says where an Amendment happens.
+- **The two prototypes now overlap on purpose.** LAY-94's flow and LAY-95's race archive were built on separate throwaway branches and have never been run against each other. Whoever implements this reconciles them; the ADRs, not the prototypes, are the record.
