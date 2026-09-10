@@ -57,5 +57,7 @@ Three constraints come with it, and none of them is optional:
   layout, and a locked boat screen is outside it. Either the sheet becomes reachable from more than
   the dashboard, or the invitation routes to the dashboard with the sheet open. Both are defensible,
   the difference is visible to the user, and it belongs to whoever implements this.
+  **Settled by ADR 0016**: the sheet moves up into the app layout and opens in place, because routing
+  to the dashboard would land a deep-linking guest somewhere other than the screen they asked for.
 - `CONTEXT.md`'s **Guest** entry no longer claims that everything a guest cannot use is invisible to
   them, and the locked treatment now has a name to be referred to by.
