@@ -298,7 +298,7 @@ _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0
 ### Users & Authentication
 
 **Guest**:
-An unauthenticated visitor. Guests have full access to the dashboard, weather data, and all read-only features. No account required.
+An unauthenticated visitor. Guests have full access to the dashboard, weather data, and all read-only features. No account required. **Boat management** and **Boat performance** are the exception: a Guest sees both, as **Locked Entries**, and reads neither.
 _Avoid_: Anonymous user, visitor
 
 **Profile**:
@@ -310,6 +310,10 @@ Human-readable name shown in the UI (e.g., avatar initials, greeting). Sourced f
 **Role**:
 Flat permission level on a profile. Values: `admin` (can upload **Races**, modify **Boat Setup**), `user` (can view boat performance data), or `null` (not yet assigned). Assigned after sign-up, not during.
 _Avoid_: Captain, crew, tactician, trimmer (legacy terms from initial design)
+
+**Locked Entry**:
+A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. Used only for **Boat management** and **Boat performance**. See ADR 0015.
+_Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
 Bottom sheet overlay (82% viewport height) on the dashboard. Three modes: Sign in (email + password), Sign up (name + email + password), Forgot password (email only). Includes Google OAuth in sign-in and sign-up modes. Not a dedicated route — lives inside the dashboard layout.
