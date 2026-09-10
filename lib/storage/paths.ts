@@ -31,13 +31,18 @@ export const BOAT_BUCKET = 'boat'
  */
 const STORAGE_KEY_SAFE = /[^\w!\-.*'() &$@=;:+,?]/g
 
-/** Reject an id that would put a hole or an extra segment in the path. */
+/** Reject an id that would put a hole, an extra segment, or a climb out in the path. */
 function assertPathSegment(value: string, what: string): void {
-  if (value === '' || value.trim() === '') {
+  if (value.trim() === '') {
     throw new TypeError(`${what} is required to derive a Storage path`)
   }
   if (value.includes('/') || value.includes('\\')) {
     throw new TypeError(`${what} may not contain a path separator: ${JSON.stringify(value)}`)
+  }
+  // `..` carries no separator of its own but still climbs a prefix once joined, which would
+  // put an object outside the tree the storage policies are written against.
+  if (value === '.' || value === '..') {
+    throw new TypeError(`${what} may not be a relative path segment: ${JSON.stringify(value)}`)
   }
 }
 

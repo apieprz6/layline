@@ -566,6 +566,16 @@ export interface Race {
   instrument_calibration_version_id: string | null
   /** The Wind Band the boat was set to. Must belong to `rig_tune_version_id`. */
   rig_tune_band_id: string | null
+  /**
+   * The constant tags that make each pointer's kind a database constraint rather than a
+   * convention (ADR 0011). Every one is `NOT NULL DEFAULT` its own literal, so a write omits
+   * them and a read returns them — which is why they are here: a row read from PostgREST has
+   * them, and a type that pretended otherwise would be a mapping layer.
+   */
+  polar_kind: 'polar'
+  crossover_kind: 'crossover_chart'
+  rig_tune_kind: 'rig_tune'
+  calibration_kind: 'instrument_calibration'
   created_by: string
   created_at: string
   /** The entire provenance of an Amendment, touched by the annotation tables too. */

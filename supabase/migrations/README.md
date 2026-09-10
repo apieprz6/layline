@@ -73,7 +73,13 @@ See `/docs/adr/0001-jsonb-user-preferences.md` for design rationale.
 **Purpose**: the hosted schema for the race archive and Boat Setup. Nothing user-facing —
 this migration and its two check suites are the deliverable.
 
-**What it creates**: twelve tables, six enums, five constraint triggers, RLS on every table.
+**What it creates**: twelve tables, six enums, four invariant triggers — three of them
+`CONSTRAINT TRIGGER`s, deferred so a multi-statement write can finish before being judged, and
+one plain `BEFORE UPDATE` for Version immutability — four `updated_at` triggers, three
+annotation triggers that reach back to the Race, and RLS on every table.
+(LAY-101's description says "five constraint triggers"; the authoritative design doc has four
+invariant triggers and wins. Band contiguity is deliberately application-level —
+`docs/design-docs/race-archive-schema.md:362`.)
 `boats`, `sails`, `boat_setup_artifacts`, `boat_setup_versions`, `rig_tune_bands`,
 `calibration_events`, `recordings`, `recording_rows`, `races`, `race_sail_entries`,
 `race_sail_entry_sails`, `race_sea_state_entries`.

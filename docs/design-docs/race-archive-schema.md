@@ -944,3 +944,17 @@ of both remain the owner's, as they were for LAY-92.
 One correction to this document came out of it, marked at the two sites: a bare
 `ARRAY_LENGTH(x, 1) >= 1` is NULL for `'{}'`, and a CHECK that evaluates to NULL is satisfied, so
 both "non-empty array" constraints admitted the empty array they exist to refuse.
+
+Three things in the migration are not in the SQL above, and are disclosed rather than folded in:
+
+- **Idempotency.** `IF NOT EXISTS` on every table and index, a `DO … EXCEPTION WHEN
+  duplicate_object` guard per enum, `ON CONFLICT DO NOTHING` on the seeds, and a
+  `DROP POLICY IF EXISTS` before each `CREATE POLICY`, so `supabase db reset` and a re-run of a
+  partly-applied push both work. A re-run therefore replaces all 25 policies, which is the
+  intent: the migration is the definition.
+- **`boat_setup_versions_artifact_idx`**, an index on the FK column that the sketch above does
+  not list. The Version list is read by artifact on every Boat Setup page.
+- **Filename sanitising.** `lib/storage/paths.ts` replaces anything outside storage-api's own
+  key charset, so `régate.csv` is stored under the key `r_gate.csv` while `recordings.filename`
+  keeps the original. Nothing parses a key to recover a name, so the two may differ; a rejected
+  upload would be a refusal Layline has no reason to make.
