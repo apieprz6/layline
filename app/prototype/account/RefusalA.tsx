@@ -277,8 +277,12 @@ export function RefusalToast({ onDismiss }: { onDismiss: () => void }): React.Re
 
 /**
  * Harness only — NOT part of any drawing. It shows what the URL carried and what
- * the sailor is shown instead, side by side, because the whole point of keying on
- * `error_code` is invisible in a screenshot.
+ * the sailor is shown instead, because the whole point of keying on `error_code`
+ * is invisible in a screenshot.
+ *
+ * It lives *inside* the switcher panel rather than fixed to the screen, so it
+ * moves out of the way with everything else and never covers what is being
+ * judged.
  */
 export function RefusalHarnessStrip({ refusal }: { refusal: RefusalKey }): React.ReactElement | null {
   if (refusal === 'none') return null
@@ -286,12 +290,7 @@ export function RefusalHarnessStrip({ refusal }: { refusal: RefusalKey }): React
   return (
     <div
       style={{
-        position: 'fixed',
-        top: '8px',
-        left: '8px',
-        right: '8px',
-        zIndex: 300,
-        padding: '8px 10px',
+        padding: '6px 8px',
         borderRadius: 'var(--radius-sm)',
         border: '1px dashed var(--surface-border-hover)',
         background: 'var(--surface-elevated)',
@@ -299,11 +298,10 @@ export function RefusalHarnessStrip({ refusal }: { refusal: RefusalKey }): React
         fontSize: '9px',
         lineHeight: 1.6,
         color: 'var(--text-muted)',
-        pointerEvents: 'none',
       }}
     >
       <div style={{ textTransform: 'uppercase', letterSpacing: 'var(--tracking-wider)' }}>
-        harness · not part of the drawing
+        what the url carried · never shown to the sailor
       </div>
       <div style={{ wordBreak: 'break-all', color: 'var(--text-secondary)' }}>
         /auth/callback?

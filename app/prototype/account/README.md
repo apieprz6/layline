@@ -47,9 +47,12 @@ All four knobs live in the URL, so any screen can be shared exactly as seen. `va
 `A`, `B` or `C`; `account` is `guest`, `owner` (admin, short name), `crew` (a deliberately
 long name and long address) or `nameless` (`display_name` is null); `sheet=1` opens the Auth
 Sheet, so a sheet can be linked rather than described; `refused` is `callback`, `sheet`,
-`toast` or `cancel` (A only). The floating bottom bar switches variants (arrow buttons, or
-← / →), switches account state, switches refusal landing, and hides the drawer so the page
-behind can be seen. It disappears in production builds.
+`toast` or `cancel` (A only). The floating bar switches variants (arrow buttons, or ← / →),
+switches account state, switches refusal landing, and hides the drawer so the page behind can
+be seen. It starts bottom-centre — which is where a bottom sheet, a toast and the dock all
+live — so **drag it by its handle** to get it off whatever it is covering, `▼` to collapse it
+to a pill, double-click the handle to re-centre. The position is in memory only; a reload
+re-centres it. The whole bar disappears in production builds.
 
 The drawer opens on load, because the drawer is the artifact. The real `RaceHeader` and the
 real `LiveWindCard` are behind it on purpose — a drawer judged against a blank page always
@@ -163,9 +166,10 @@ did was wrong and nothing is broken.
 `?refused=cancel` is the second non-success path: Google returns the same `error=access_denied`
 when someone taps Cancel on the consent screen. **It draws nothing**, on purpose, and that is
 what to look at — a sailor who merely changed their mind must not be told they have no account.
-The dashed strip at the top of the screen is **harness, not UI**: it shows what the URL carried
-next to what the sailor is shown, because keying on `error_code` rather than `error` is
-invisible in a screenshot. Supabase's own string appears nowhere in the drawings.
+The dashed strip **inside the harness bar** shows what the URL carried next to what the sailor
+is shown, because keying on `error_code` rather than `error` is invisible in a screenshot. It
+sits in the bar rather than on the screen so it is never mistaken for UI and never covers the
+drawing. Supabase's own string appears nowhere in the drawings.
 
 ## Layout of the folder
 

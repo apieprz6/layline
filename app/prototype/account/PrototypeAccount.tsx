@@ -116,8 +116,6 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
         </>
       )}
 
-      {onA && <RefusalHarnessStrip refusal={refusal} />}
-
       <PrototypeSwitcher
         variants={VARIANTS.map(({ key, name }) => ({ key, name }))}
         current={variant.key}
@@ -163,6 +161,7 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
               {drawerOpen ? 'hide' : 'drawer'}
             </button>
           </div>
+          {onA && <RefusalHarnessStrip refusal={refusal} />}
           {onA && (
             <div style={{ display: 'flex', gap: '4px' }}>
               {REFUSAL_STATES.map((state) => {
