@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...opting in: the example holds no secrets, only the variable names, and LAY-120 needs those to
+# have a committed home. It had never been committable until now.
+!.env.local.example
 
 # vercel
 .vercel

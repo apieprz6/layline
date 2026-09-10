@@ -151,11 +151,11 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+site_url = "http://127.0.0.1:4000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["http://127.0.0.1:4000/auth/callback", "http://localhost:4000/auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -168,7 +168,11 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+# ADR 0019: sign-up is closed. The owner creates crew accounts by hand; with reads flat, the front
+# door is the only access boundary. This also refuses a stranger's Google sign-in (422
+# `signup_disabled`), which is intended — OAuth is sign-*in* only. A hand-created row is a
+# LinkAccount, not a CreateAccount, so it reaches no gate.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -213,6 +217,19 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
+# This is the *email provider* switch, NOT ADR 0019's sign-up gate at line 171 — the two keys are
+# spelled identically and only the section differs ([auth.sms] carries a third copy at line ~254).
+# Check which section you are in before editing either one.
+#
+# ADR 0020 turns this OFF on the hosted project, because Studio's "Create new user" modal forces a
+# dormant password onto every hand-made row and a hosted project's anon key ships to the browser:
+# `signInWithPassword` could be called against the REST API without ever touching the Auth Sheet.
+#
+# It is deliberately left ON here, and local therefore diverges from hosted on purpose. That threat
+# is a browser-shipped anon key, which loopback is not, and ADR 0020 names a programmatically
+# created session on local Supabase as its entire mitigation for having no browser — which needs
+# `signInWithPassword` to work. Turning this off locally would remove the only way to test the
+# Account resolution and the Profile trigger.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
@@ -327,6 +344,20 @@ url = ""
 # If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
+email_optional = false
+
+# ADR 0020: Google is the only door. The one provider Layline uses.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Overrides the default auth callback URL derived from auth.external_url.
+redirect_uri = ""
+url = ""
+# Required for local sign in with Google auth, per the comment on [auth.external.apple] above.
+skip_nonce_check = true
+# Google always returns an email address, and ADR 0020 needs one: the hand-created row is matched on it.
 email_optional = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
