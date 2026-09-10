@@ -302,17 +302,17 @@ An unauthenticated visitor. Guests have full access to the dashboard, weather da
 _Avoid_: Anonymous user, visitor
 
 **Account**:
-What a sailor gets by signing up: an email address and exactly one **Profile**. Resolved on the server and passed down as a prop; when there is none, the visitor is a **Guest**. The email lives on `auth.users` and everything else on `profiles`, so an Account keeps the two as distinct parts rather than blending them. Client code subscribes to auth changes only to learn *when* to ask the server again, never to learn *who* is signed in. See ADR 0018.
+What a sailor is given by the owner: an email address and exactly one **Profile**. Resolved on the server and passed down as a prop; when there is none, the visitor is a **Guest**. The email lives on `auth.users` and everything else on `profiles`, so an Account keeps the two as distinct parts rather than blending them. Client code subscribes to auth changes only to learn *when* to ask the server again, never to learn *who* is signed in. See ADR 0018.
 _Avoid_: Session (that is Supabase's tokens and cookies, not who is signed in), Viewer (that is the `admin`/`viewer` **Role**), current user
 
 **Profile**:
 A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created by a database trigger the moment the account is created, in the same transaction — so a Profile exists for every account, including one made by hand in Supabase. See ADR 0017.
 
 **Display Name**:
-Human-readable name shown in the UI (e.g., avatar initials, greeting). Sourced from the sign-up form (email/password flow) or Google profile metadata (OAuth flow).
+Human-readable name shown in the UI (e.g., avatar initials, greeting). Read from `raw_user_meta_data` by the trigger that creates the **Profile** — so it comes from whatever made the account: the owner in Supabase, or Google profile metadata on a first OAuth sign-in.
 
 **Role**:
-Flat permission level on a profile. Values: `admin` (can upload **Races**, modify **Boat Setup**) or `viewer` (can view boat performance data). Never null: every account starts as a `viewer`, and `admin` is granted by hand through Supabase, there being no role-assignment UI. See ADR 0017.
+Flat permission level on a profile, governing **writes only**. Values: `admin` (can upload **Races** and write **Boat Setup**) or `viewer` (can read both **Boat management** and **Boat performance**, and write neither). Every signed-in account reads the same data, whatever its Role. Never null: every account starts as a `viewer`, and `admin` is granted by hand through Supabase, there being no role-assignment UI — a Role cannot be written by the account that holds it. See ADR 0017 and ADR 0019.
 _Avoid_: `user` (every account is a user; the word distinguishes nothing — superseded ADR 0004 term), captain, crew, tactician, trimmer (legacy terms from initial design)
 
 **Locked Entry**:
@@ -320,7 +320,7 @@ A drawer entry, or the screen behind it, that a **Guest** can see but not read: 
 _Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
-Bottom sheet overlay (82% viewport height) that opens over whatever screen the sailor is on. Three modes: Sign in (email + password), Sign up (name + email + password), Forgot password (email only). Includes Google OAuth in sign-in and sign-up modes. Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout.
+Bottom sheet overlay (82% viewport height) that opens over whatever screen the sailor is on. Two modes: Sign in (email + password) and Forgot password (email only). Includes Google OAuth, as sign-in only. There is no Sign up mode: sign-up is closed and the owner creates accounts by hand in Supabase (ADR 0019). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout.
 _Avoid_: Login page, auth page (it's a sheet, not a page)
 
 **Account Merging**:
