@@ -162,7 +162,7 @@ function AccountBlock({
         >
           {/* No name means the email has already taken the line above it, so the
               second line says where the account came from rather than repeating. */}
-          {name ?? 'Google account'}
+          {name ? account.email : 'Google account'}
         </div>
       </div>
       <button onClick={onSignOut} style={textLink('var(--text-muted)')}>

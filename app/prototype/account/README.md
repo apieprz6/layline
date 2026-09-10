@@ -4,6 +4,27 @@
 anything: "Continue with Google" closes the sheet. Delete the folder once the questions
 below are answered; the branch keeps it.
 
+## Verdict — Variant A won, on both surfaces (2026-09-10)
+
+The owner picked **A** whole: the account block at the top of the bordered footer with
+`v1.0 · May 2026` demoted to a hairline beneath it, and **A's sheet** — edge-anchored,
+sized to its contents, ~250px rather than ADR 0004's 82%.
+
+Two decisions ride along with that choice, both taken deliberately:
+
+- **The double sign-in affordance stays.** A draws the block's "Sign in" *and* ADR 0016's
+  inline link on each locked row, and that is endorsed rather than tolerated. ADR 0016 needs
+  no amendment.
+- **ADR 0004's 82% height no longer describes what will be built.** Nothing was amended here;
+  the debt is recorded on LAY-119 and LAY-53 for whoever writes the build ticket.
+
+B and C stay in this folder as the primary source: they are the record of what A was chosen
+*against*, and the losing sheet treatments in particular are the argument for A's height.
+
+Nothing was folded into `main`, because there is no account UI in `main` to fold into — no
+`AuthSheet`, no Account resolution, no `/auth/callback`. The spec is the deliverable; the
+build comes out of LAY-53 via `/to-tickets`.
+
 Run it:
 
 ```bash
