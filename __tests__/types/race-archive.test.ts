@@ -189,12 +189,19 @@ describe('the twelve row types', () => {
       rig_tune_version_id: null,
       instrument_calibration_version_id: null,
       rig_tune_band_id: null,
+      polar_kind: 'polar',
+      crossover_kind: 'crossover_chart',
+      rig_tune_kind: 'rig_tune',
+      calibration_kind: 'instrument_calibration',
       created_by: 'u',
       created_at: '2026-09-10T00:00:00Z',
       updated_at: '2026-09-10T00:00:00Z',
     }
 
     expect(race.rig_tune_version_id).toBeNull()
+    // The four constant tag columns are on the row too, each pinned to its one literal, so
+    // the composite FKs cannot be satisfied by a pointer of the wrong kind.
+    expect(race.rig_tune_kind).toBe('rig_tune')
   })
 
   it('types the annotations, including the join table that carries the set', () => {

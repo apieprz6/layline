@@ -80,7 +80,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 COMMENT ON TYPE boat_setup_kind IS
-    'The four Boat Setup artifacts. The label is used verbatim in the Storage path boat-setup/{kind}/{version_id}/{filename}, so there is no mapping to get wrong.';
+    'The four Boat Setup artifacts. Two of them are file-backed, and for those the label is used verbatim in the Storage path boat-setup/{kind}/{version_id}/{filename}, so there is no mapping to get wrong. A Rig Tune and an Instrument Calibration are entered by hand and reach Storage never.';
 COMMENT ON TYPE calibration_channel IS
     'The four calibrated instrument channels. The same enum names the keys inside an Instrument Calibration payload, so the two representations cannot drift.';
 COMMENT ON TYPE recording_date_order IS

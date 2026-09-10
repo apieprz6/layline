@@ -40,6 +40,13 @@ describe('recordingObjectPath', () => {
   it('refuses an id carrying a path separator', () => {
     expect(() => recordingObjectPath('../..', 'x.csv')).toThrow(/recording id/i)
   })
+
+  it('refuses a bare .. , which carries no separator and still climbs the prefix', () => {
+    // `recordings/../x.csv` would land an object outside the prefix the storage policies are
+    // written against, and no separator check catches it.
+    expect(() => recordingObjectPath('..', 'x.csv')).toThrow(/relative path segment/i)
+    expect(() => recordingObjectPath('.', 'x.csv')).toThrow(/relative path segment/i)
+  })
 })
 
 describe('boatSetupObjectPath', () => {
