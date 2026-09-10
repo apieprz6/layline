@@ -53,6 +53,14 @@ contains the string at all. On the OAuth path the check sits *inside* `case mode
 link a Google identity while sign-up is closed**, and a stranger with no row gets 422
 `signup_disabled`.
 
+**Both halves observed against the hosted project, 2026-09-10 (LAY-120)**, which is what this whole
+decision rests on and had until then been read out of GoTrue's source alone. With sign-up off, a
+Google account matching an existing row linked onto it (`app_metadata.providers` came back
+`["email", "google"]`), and an unknown Google account was refused. The refusal arrives as a redirect
+carrying `error=access_denied`, `error_code=signup_disabled`,
+`error_description=Signups not allowed for this instance` — **in the query string and the fragment
+both**, so `/auth/callback` can read it server-side.
+
 ### The population
 
 The owner and a handful of crew, over the life of one boat, all known personally, all of whom have a
@@ -76,6 +84,17 @@ sets `email_confirmed_at` via `user.Confirm` (`internal/api/admin.go:566`). The 
 Continue with Google and is in. No password is handed over, chosen, or recovered, and the owner never
 holds a credential belonging to someone else.
 
+**Amended by observation, 2026-09-10 (LAY-120): auto-confirm is not load-bearing, and unchecked is
+marginally cleaner.** Leaving it checked was written here as a precaution against
+`RemoveUnconfirmedIdentities`. Both paths were then run against the live project. An **unconfirmed**
+row still **links** on first Google sign-in — it is not treated as a new signup and so is not caught
+by the closed front door, which was the failure this precaution risked causing — and the scrub leaves
+the row at `providers: ["google"]`. A **confirmed** row links too and stays at
+`providers: ["email", "google"]`, keeping a dormant email identity that is inert only for as long as
+the email provider stays off. So the scrub is a feature under this ADR rather than a hazard: unchecked
+rows converge on a Google-only identity by themselves. Either is safe; checked remains the default and
+the instruction, because it is what the Studio modal does if nobody touches it.
+
 ### The email provider is turned off, because omitting a field removes nothing
 
 Studio's "Create new user" modal requires a password, so every hand-made row carries a **dormant
@@ -95,10 +114,13 @@ sign-up, and `enable_signup` at line 216 under `[auth.email]` governs whether th
 exists at all. Same name, different section, opposite consequences if confused, and `[auth.sms]`
 carries a third copy at line 254. Anyone editing this file must check which section they are in.
 
-One thing here is **not verified and may not be asserted**: that `admin.createUser` still works with
-the email provider disabled. Admin creation does not consult the provider gate in the paths read, but
-no live project was available to confirm it. LAY-120 confirms it, with a fallback of leaving the
+One thing here was **not verified and could not be asserted**: that `admin.createUser` still works
+with the email provider disabled. Admin creation does not consult the provider gate in the paths read,
+but no live project was available to confirm it. The fallback, had it been blocked, was leaving the
 provider enabled and creating every account through the admin API with a long random password.
+
+**Verified 2026-09-10 (LAY-120): it works.** Studio's "Create new user" modal creates a row with the
+email provider disabled on the hosted project. The fallback is not needed and the provider stays off.
 
 ### Nothing recovers a lost Google account
 
@@ -144,7 +166,14 @@ holds preferences, that is an acceptable loss; it is written down so it is not d
   is that there is one mode; what that looks like goes to LAY-119, alongside the drawer's account
   block, since both are the same conversation about what signing in looks like.
 - **The copy for a refused stranger is now the primary error state**, not an edge case: it is the only
-  way the sheet can fail. Nobody has seen the error yet, so LAY-120 still has to record it.
+  way the sheet can fail. **The error was recorded 2026-09-10 (LAY-120)** — see the Context section —
+  so the copy is no longer blocked and goes to LAY-119 with the rest of the sheet. Two constraints
+  fell out of the observation. Key off **`error_code`**, never `error`: `access_denied` is the generic
+  OAuth 2.0 code and is also what Google returns when a sailor cancels at the consent screen, so
+  keying on it would tell someone who merely changed their mind that they have no account. And do not
+  surface `error_description` verbatim — "Signups not allowed for this instance" is developer language
+  about a Supabase instance, addressed to a sailor who was invited by name. Record it as received,
+  write the sailor's sentence separately.
 - **`CONTEXT.md` changes**: **Auth Sheet** drops to one mode; **Account Merging** is rewritten, since
   with no password path there is no second identity to merge and the same-email machinery now serves
   provisioning rather than merging; the stale relationship line naming `/auth/reset-password` as the
