@@ -301,6 +301,10 @@ _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0
 An unauthenticated visitor. Guests have full access to the dashboard, weather data, and all read-only features. No account required. **Boat management** and **Boat performance** are the exception: a Guest sees both, as **Locked Entries**, and reads neither.
 _Avoid_: Anonymous user, visitor
 
+**Account**:
+What a sailor gets by signing up: an email address and exactly one **Profile**. Resolved on the server and passed down as a prop; when there is none, the visitor is a **Guest**. The email lives on `auth.users` and everything else on `profiles`, so an Account keeps the two as distinct parts rather than blending them. Client code subscribes to auth changes only to learn *when* to ask the server again, never to learn *who* is signed in. See ADR 0018.
+_Avoid_: Session (that is Supabase's tokens and cookies, not who is signed in), Viewer (that is the `admin`/`viewer` **Role**), current user
+
 **Profile**:
 A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created by a database trigger the moment the account is created, in the same transaction — so a Profile exists for every account, including one made by hand in Supabase. See ADR 0017.
 
@@ -320,7 +324,7 @@ Bottom sheet overlay (82% viewport height) that opens over whatever screen the s
 _Avoid_: Login page, auth page (it's a sheet, not a page)
 
 **Account Merging**:
-When a user signs up with email/password and later authenticates via Google OAuth with the same email address, both identities resolve to the same account. Configured in Supabase auth settings.
+When a user signs up with email/password and later authenticates via Google OAuth with the same email address, both identities resolve to the same **Account**. Unconditional on hosted Supabase: there is no setting that enables or disables it, and `enable_manual_linking` is not it — that only gates the manual `linkIdentity()` routes. ADR 0004's "with account merging enabled" describes a switch that does not exist. See LAY-115.
 
 ### UI Components
 
