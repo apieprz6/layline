@@ -89,7 +89,7 @@
   --surface-dock-bg:   rgba(240, 237, 230, 0.94);
   --surface-dock-blur: blur(14px) saturate(160%);
 
-  /* Polar chart tokens */
+  /* Wind Rose tokens */
   --chart-bg-center:     #F0EDE6;
   --chart-bg-mid:        #EFEBE2;
   --chart-bg-edge:       #E8E2D2;
@@ -353,7 +353,7 @@
 
   --page-bg-2: #140000;
 
-  /* Polar chart tokens — night vision */
+  /* Wind Rose tokens — night vision */
   --chart-bg-center:     #120000;
   --chart-bg-mid:        #100000;
   --chart-bg-edge:       #0E0000;
@@ -413,29 +413,29 @@
       height: calc(100vh - 100px - 180px);
     }
 
-    .station-layout__polar {
+    .station-layout__wind-rose {
       grid-row: 1 / -1;
       grid-column: 1;
       min-height: 0;
     }
 
-    .station-layout__polar > * {
+    .station-layout__wind-rose > * {
       height: 100%;
     }
 
-    .polar-chart-card {
+    .wind-rose-card {
       overflow: hidden;
       display: flex;
       flex-direction: column;
       min-height: 0;
     }
 
-    .polar-chart-card__chart {
+    .wind-rose-card__chart {
       flex: 1 1 0;
       min-height: 0;
     }
 
-    .polar-chart-card__chart svg {
+    .wind-rose-card__chart svg {
       height: 100%;
       max-height: 100%;
     }

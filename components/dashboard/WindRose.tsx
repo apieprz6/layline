@@ -11,7 +11,7 @@ import { TIME_SCALES } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 
-interface PolarChartProps {
+interface WindRoseProps {
   data: WindDataPoint[];
   timeWindowMinutes: number;
   nowOffsetMinutes?: number; // Minutes ago from current time (0 = live, 60 = 1h ago)
@@ -41,7 +41,7 @@ const COMPASS_LABELS = [
   { label: "NW", angle: 315 },
 ];
 
-function polarToXY(
+function radialToXY(
   angleDeg: number,
   r0to1: number,
   cx: number,
@@ -57,7 +57,7 @@ function polarToXY(
 // Note: Replaced by findPointByRadius from radialSelection module
 // Old cartesian-distance based selection removed in favor of time-prioritized radial selection
 
-export default function PolarChart({
+export default function WindRose({
   data,
   timeWindowMinutes,
   nowOffsetMinutes = 0,
@@ -66,7 +66,7 @@ export default function PolarChart({
   onHoverChange,
   displayPoint,
   mode = "reference",
-}: PolarChartProps) {
+}: WindRoseProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
 
@@ -137,7 +137,7 @@ export default function PolarChart({
     });
   }, [radialRings]);
 
-  // Filter and map data points to polar coordinates relative to time window
+  // Filter and map data points to radial coordinates relative to time window
   const dataPoints = useMemo(() => {
     if (timeWindowMinutes === 0) return [];
 
@@ -156,7 +156,7 @@ export default function PolarChart({
         // Relative position within the current window
         const relativeAge = point.minsAgo - windowStart;
         const r01 = 1 - relativeAge / timeWindowMinutes;
-        const [x, y] = polarToXY(point.dir, r01, CENTER_X, CENTER_Y, R);
+        const [x, y] = radialToXY(point.dir, r01, CENTER_X, CENTER_Y, R);
         const color = getWindColorHex(point.spd);
         const opacity =
           Math.round((0.15 + 0.85 * Math.pow(r01, 1.2)) * 1e6) / 1e6;
@@ -280,7 +280,7 @@ export default function PolarChart({
 
   return (
     <div
-      className="polar-chart-card"
+      className="wind-rose-card"
       style={{
         background: "var(--surface-raised)",
         border: "1px solid var(--surface-border)",
@@ -323,7 +323,7 @@ export default function PolarChart({
       </div>
 
       {/* Chart container with overlays */}
-      <div className="polar-chart-card__chart" style={{ position: "relative", aspectRatio: "1" }}>
+      <div className="wind-rose-card__chart" style={{ position: "relative", aspectRatio: "1" }}>
         {/* Left overlay: Direction */}
         {displayPoint && svgDimensions.width > 0 && (
           <div
@@ -493,8 +493,8 @@ export default function PolarChart({
 
             // Full radial lines for coarse ticks, short ticks for fine ones
             if (!isCoarse) {
-              const [x1, y1] = polarToXY(angle, 0.965, CENTER_X, CENTER_Y, R);
-              const [x2, y2] = polarToXY(angle, 1, CENTER_X, CENTER_Y, R);
+              const [x1, y1] = radialToXY(angle, 0.965, CENTER_X, CENTER_Y, R);
+              const [x2, y2] = radialToXY(angle, 1, CENTER_X, CENTER_Y, R);
               return (
                 <line
                   key={`tick-${angle}`}
@@ -508,7 +508,7 @@ export default function PolarChart({
               );
             }
 
-            const [x2, y2] = polarToXY(angle, 1, CENTER_X, CENTER_Y, R);
+            const [x2, y2] = radialToXY(angle, 1, CENTER_X, CENTER_Y, R);
             return (
               <line
                 key={`tick-${angle}`}
@@ -547,7 +547,7 @@ export default function PolarChart({
             const isLiveNow = ring.absMinutes <= 0;
             const isOuterRef = ring.minutes === 0;
             const accent = isLiveNow || isOuterRef;
-            const [lx, ly] = polarToXY(0, ring.r01, CENTER_X, CENTER_Y, R);
+            const [lx, ly] = radialToXY(0, ring.r01, CENTER_X, CENTER_Y, R);
 
             // Calculate label width for background box
             const labelWidth = Math.max(24, label.length * 6.2);
@@ -599,7 +599,7 @@ export default function PolarChart({
 
           {/* Compass labels */}
           {COMPASS_LABELS.map(({ label, angle }) => {
-            const [x, y] = polarToXY(
+            const [x, y] = radialToXY(
               angle,
               LABEL_RADIUS / R,
               CENTER_X,
@@ -666,7 +666,7 @@ export default function PolarChart({
               // Calculate position of hover point relative to window
               const relativeAge = hoverPoint.minsAgo - nowOffsetMinutes;
               const r01 = 1 - relativeAge / timeWindowMinutes;
-              const [hx, hy] = polarToXY(
+              const [hx, hy] = radialToXY(
                 hoverPoint.dir,
                 r01,
                 CENTER_X,
@@ -713,7 +713,7 @@ export default function PolarChart({
 
               const relativeAge = referencePoint.minsAgo - nowOffsetMinutes;
               const r01 = 1 - relativeAge / timeWindowMinutes;
-              const [rx, ry] = polarToXY(
+              const [rx, ry] = radialToXY(
                 referencePoint.dir,
                 r01,
                 CENTER_X,

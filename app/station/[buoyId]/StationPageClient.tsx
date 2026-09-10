@@ -6,7 +6,7 @@ import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
 import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
-import PolarChart from "@/components/dashboard/PolarChart";
+import WindRose from "@/components/dashboard/WindRose";
 import SpeedLineChart from "@/components/dashboard/SpeedLineChart";
 import BottomControlsDock from "@/components/dashboard/BottomControlsDock";
 import TabbedInfoPanel from "@/components/dashboard/TabbedInfoPanel";
@@ -125,9 +125,9 @@ export default function StationPageClient({
           onReturnToLive={() => setNowOffset(0)}
         />
       }
-      polarChart={
+      windRose={
         hasData ? (
-          <PolarChart
+          <WindRose
             data={data}
             referenceTime={now}
             timeWindowMinutes={timeWindowMinutes}
