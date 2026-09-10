@@ -7,6 +7,10 @@ alternatives and confirmed by the owner. Applies ADR 0008 (provenance), ADR 0009
 gates), ADR 0010 (Testimony over an immutable Transcription), ADR 0012 (four Boat Setup artifacts)
 and ADR 0013 (orphaned bytes over orphaned rows) rather than revising any of them.
 
+**ADR 0010 was subsequently amended to reuse this flow** as the amend surface for an existing Race,
+entered without the File step (ADR 0010, Amendment 1, 2026-09-10). This decision stands as written;
+what changes is that the flow has a second caller, and the consequences of that are recorded there.
+
 ## Context
 
 Getting a race into Layline means answering four questions about a qtVlm CSV: which stretch of it is

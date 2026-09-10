@@ -288,7 +288,7 @@ Something a sailor remembers and types in, rather than something an instrument r
 _Avoid_: Tag, note, event, manual data (all Annotations are manual — the word distinguishes nothing)
 
 **Amendment**:
-An **admin** changing a **Race**'s **Testimony** after upload — its **Race Window**, its **Annotations**, its **Wind Band**, its **Version** pointers, its title. Edited in place, with no change reason and no history: nothing points at a Race, so an Amendment changes only its own reading, and that reading is recomputed on every view. Distinct from a new **Version**, which is how a **Boat Setup** artifact changes, and from a re-upload, which makes a second Race.
+An **admin** changing a **Race**'s **Testimony** after upload — its **Race Window**, its **Annotations**, its **Wind Band**, its **Version** pointers, its title. Made in the same window-and-annotation flow that logs a race, entered from the race without its file step: the same charts, the same tap-to-place times, no file read and no new **Transcription**. Carries no change reason and no history: nothing points at a Race, so an Amendment changes only its own reading, and that reading is recomputed on every view. Distinct from a new **Version**, which is how a **Boat Setup** artifact changes, and from a re-upload, which makes a second Race.
 _Avoid_: Edit, revision, correction (that word belongs to an **Instrument Calibration** Version), update
 
 **Sea State**:
@@ -348,6 +348,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - One export *file* may back several **Recordings** — a regatta day is uploaded once per **Race** and annotated differently each time
 - Everything on a **Race** except its **Transcription** is **Testimony**, and all of it is editable by **Amendment**; the Transcription never is
 - An **Amendment** carries no change reason and no history, unlike a **Boat Setup** **Version**, because nothing points at a **Race**
+- An **Amendment** is made in the flow that logs a race, minus its file step; logging a second race from one export is the same flow *with* it
 - A **Race Window** may reach past the end of its **Recording** — that means the recording dropped out, and it is stated on the race page, never refused
 - Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it; a failed deletion leaves stored bytes behind rather than a **Race** whose bytes are gone
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
