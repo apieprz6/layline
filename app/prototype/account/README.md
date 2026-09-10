@@ -25,7 +25,22 @@ Nothing was folded into `main`, because there is no account UI in `main` to fold
 `AuthSheet`, no Account resolution, no `/auth/callback`. The spec is the deliverable; the
 build comes out of LAY-53 via `/to-tickets`.
 
-### Second pass — the refused stranger (2026-09-10, after the verdict)
+### Second verdict — the refusal lands on `/auth/callback`, full screen (2026-09-10)
+
+`?refused=callback` won. The refusal is shown where it already arrives: the callback route
+renders it whole — `layline`, the copy centred, a filled "Back to the weather" — with no
+drawer and no dashboard behind it. The sheet is *not* reopened and there is no toast, so
+nothing carries a reason back through state.
+
+Two consequences the build inherits:
+
+- **`/auth/callback` stops being a pure redirect handler and becomes a route that renders.**
+  It has to branch on `error_code` before it can redirect: `signup_disabled` → this screen,
+  `access_denied` with no `error_code` → silent, straight back, no message.
+- **The Auth Sheet has no error state at all.** Its one failure mode is shown somewhere else,
+  so the sheet needs no error region and no error prop.
+
+### The pass itself — the refused stranger (2026-09-10, after the first verdict)
 
 LAY-119 was widened again once LAY-120 saw Supabase's actual error, so the refusal
 graduated from "what this prototype cannot show" into this folder. It is drawn on **A only**,
@@ -148,7 +163,7 @@ Three landings, one shared copy block (`RefusalCopy`), so the landing is the onl
 
 | `?refused=` | Where it lands | Costs | Argument against |
 |---|---|---|---|
-| `callback` | The callback route renders it, full screen, no drawer and no dashboard | Nothing — it is where the error already is | The sailor is on a bare route, away from the screen they started on, and needs an explicit way back ("Back to the weather") |
+| **`callback` — chosen** | The callback route renders it, full screen, no drawer and no dashboard | Nothing — it is where the error already is | The sailor is on a bare route, away from the screen they started on, and needs an explicit way back ("Back to the weather") |
 | `sheet` | Back on the screen they left, sheet reopened, the copy replacing its body, Google button demoted to a retry | A round trip: the callback must redirect *and* carry the reason through state | Most machinery of the three, for a state most sailors see once |
 | `toast` | Back on the screen they left, sheet closed, a dismissible banner low on the screen | A round trip, same as above | Missable, and dismissible before it is read — for the sheet's *only* failure mode, that is the whole objection |
 
@@ -190,8 +205,11 @@ folded into `main`.
 
 ## What this prototype cannot show
 
-- **Which landing is right.** The refusal is drawn three ways and that choice is the owner's;
-  nothing here settles it.
+- **The `82%` figure is not in ADR 0004.** Everything above and on LAY-119 called the sheet's
+  height "ADR 0004's". ADR 0004's text specifies no height at all — `height:82%` is in
+  `mockups/Login-mockup.html`, inherited into ADR 0004 by reference through LAY-53's Notes. So
+  what the pending amendment supersedes is the *mockup*; ADR 0004 needs amending for its modes,
+  fields, routes and role model, which is a longer list than one number.
 - **Anything about the OAuth round-trip.** The button closes the sheet. There is no browser in
   the agent environment, so **no screen here has been looked at by anyone** — all three
   variants and all three sheets were confirmed only by fetching the route and reading the
