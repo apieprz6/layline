@@ -302,14 +302,14 @@ An unauthenticated visitor. Guests have full access to the dashboard, weather da
 _Avoid_: Anonymous user, visitor
 
 **Profile**:
-A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created on first sign-up (email/password or Google OAuth).
+A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created by a database trigger the moment the account is created, in the same transaction — so a Profile exists for every account, including one made by hand in Supabase. See ADR 0017.
 
 **Display Name**:
 Human-readable name shown in the UI (e.g., avatar initials, greeting). Sourced from the sign-up form (email/password flow) or Google profile metadata (OAuth flow).
 
 **Role**:
-Flat permission level on a profile. Values: `admin` (can upload **Races**, modify **Boat Setup**), `user` (can view boat performance data), or `null` (not yet assigned). Assigned after sign-up, not during.
-_Avoid_: Captain, crew, tactician, trimmer (legacy terms from initial design)
+Flat permission level on a profile. Values: `admin` (can upload **Races**, modify **Boat Setup**) or `viewer` (can view boat performance data). Never null: every account starts as a `viewer`, and `admin` is granted by hand through Supabase, there being no role-assignment UI. See ADR 0017.
+_Avoid_: `user` (every account is a user; the word distinguishes nothing — superseded ADR 0004 term), captain, crew, tactician, trimmer (legacy terms from initial design)
 
 **Locked Entry**:
 A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. In the drawer the invitation sits on the row itself — a padlock and a "Sign in" link — rather than in a block of its own. Used only for **Boat management** and **Boat performance**. See ADR 0015 and ADR 0016.
@@ -386,8 +386,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Wind Rose** displays **Buoy** observations; a **Polar** describes the boat — they share no data
 - A Guest sees no **Boat Setup** and no **Race**; a **Profile** with `role` `admin` may write them
 - A **Guest** can use all dashboard and weather features without a **Profile**
-- A **Profile** is created on sign-up (email/password or Google OAuth)
-- A **Profile** has one **Role** (`admin`, `user`, or `null`)
+- A **Profile** is created by a trigger whenever an account is, whatever made the account
+- A **Profile** has exactly one **Role**, `admin` or `viewer`, and never null
 - **Account Merging** links email/password and Google OAuth identities sharing the same email
 - The **Auth Sheet** opens over any screen, including a **Locked Entry**; it does not navigate to a separate route
 - The `/auth/reset-password` page is the only dedicated auth route (deep-linked from email)
