@@ -36,7 +36,7 @@ Only `/auth/reset-password` exists as a standalone page (deep-linked from passwo
 
 ## Consequences
 
-- Dashboard layout must support the sheet overlay (Client Component for open/close state)
+- Dashboard layout must support the sheet overlay (Client Component for open/close state) — **amended by ADR 0016**: the sheet mounts in the *app* layout instead, so it can open over a locked boat screen too. Its modes, contents and OAuth flow are unchanged.
 - No middleware redirects for unauthenticated users on dashboard routes
 - Google OAuth requires Google Cloud Console credentials + Supabase provider config
 - `profiles` table needs a `display_name` column

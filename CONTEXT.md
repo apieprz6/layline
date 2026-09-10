@@ -312,11 +312,11 @@ Flat permission level on a profile. Values: `admin` (can upload **Races**, modif
 _Avoid_: Captain, crew, tactician, trimmer (legacy terms from initial design)
 
 **Locked Entry**:
-A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. Used only for **Boat management** and **Boat performance**. See ADR 0015.
+A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. In the drawer the invitation sits on the row itself — a padlock and a "Sign in" link — rather than in a block of its own. Used only for **Boat management** and **Boat performance**. See ADR 0015 and ADR 0016.
 _Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
-Bottom sheet overlay (82% viewport height) on the dashboard. Three modes: Sign in (email + password), Sign up (name + email + password), Forgot password (email only). Includes Google OAuth in sign-in and sign-up modes. Not a dedicated route — lives inside the dashboard layout.
+Bottom sheet overlay (82% viewport height) that opens over whatever screen the sailor is on. Three modes: Sign in (email + password), Sign up (name + email + password), Forgot password (email only). Includes Google OAuth in sign-in and sign-up modes. Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout.
 _Avoid_: Login page, auth page (it's a sheet, not a page)
 
 **Account Merging**:
@@ -389,7 +389,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Profile** is created on sign-up (email/password or Google OAuth)
 - A **Profile** has one **Role** (`admin`, `user`, or `null`)
 - **Account Merging** links email/password and Google OAuth identities sharing the same email
-- The **Auth Sheet** opens from the dashboard; it does not navigate to a separate route
+- The **Auth Sheet** opens over any screen, including a **Locked Entry**; it does not navigate to a separate route
 - The `/auth/reset-password` page is the only dedicated auth route (deep-linked from email)
 - A **Buoy** is a type of **Data Source**
 - A **Weather Model** is a type of **Data Source**
@@ -504,3 +504,4 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - An empty **Annotation** list is not a gap to fill. Six of the archive's thirteen recordings have no sail or sea-state record at all — the same six on both kinds, so annotation is all-or-nothing per race — and that means the sailor does not remember the race. So no default is offered and no chip is pre-selected — the mockup pre-selects by index, which would record for those six races that the boat started on main and jib-1 in slight chop, which nobody said. Same failure as `wind_direction ?? 0`.
 - A **Recording**'s timestamps carry no timezone. The `Date` column has no offset and nothing in the export or the qtVlm documentation settles it; weeknight start times imply local. A **Race Window** is therefore stored and compared in the recording's own naive wall-clock frame with no conversion, and rendering it as Chicago local is a display decision. Any conversion at storage time could silently move a boundary.
 - A missing wind direction is not north. `services/buoys/ndbc.ts:395` renders `wind_direction ?? 0` and plots the result as a real observation; the same file discards source units on conversion and rounds before caching, under fields commented `// knots (raw, unmodified)`. These are named as pre-existing debt in ADR 0008 and are not precedent for anything.
+- "**Seed**" is retired, and there is no seeding step. The word crept in for the act of getting the existing archive into Layline, and it carries two implications the boat owner has repeatedly had to deny: that a program does it, and that it is part of building. Neither is true — the owner enters every configuration and every race **by hand through the finished UI, after it is built, as ordinary use.** So there is no migration script, no importer, no backfill, and **no race count in any specification**; the thirteen recordings are *evidence* that the upload gates and the schema hold, never a checklist or an acceptance test. What survives untouched is every decision reasoned from *a person typing the archive in from memory* — nullable **Version** pointers so nothing backdates a guess, no pre-selected **Annotation** chip, upload gates tolerant of real hand-written windows — because that person is precisely who does this. Read "at seed time" in ADR 0005, 0007, 0009, 0010, 0012 and `docs/design-docs/race-archive-schema.md` as "when the owner first enters the archive by hand"; their reasoning is unaffected and they are dated records, so they are not rewritten. The one legitimate survivor of the word is a **database** seed: `boats`, `sails` and the four `boat_setup_artifacts` rows are reference data inserted by migration, which is a different act entirely.
