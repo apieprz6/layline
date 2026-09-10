@@ -26,6 +26,7 @@ import {
   VersionLine,
 } from './shared'
 import { initialsOf, type PrototypeAccount } from './fixture'
+import { RefusalSheetBody, type RefusalKey } from './RefusalA'
 
 export const VARIANT_A_NAME = 'Footer, second line'
 
@@ -37,6 +38,8 @@ export interface VariantProps {
   onOpenSheet: () => void
   onCloseSheet: () => void
   onSignOut: () => void
+  /** The refused-stranger pass. Drawn on A only; B and C ignore it. */
+  refusal?: RefusalKey
 }
 
 function Avatar({ account }: { account: PrototypeAccount }): React.ReactElement {
@@ -228,7 +231,9 @@ export default function VariantA({
   onOpenSheet,
   onCloseSheet,
   onSignOut,
+  refusal = 'none',
 }: VariantProps): React.ReactElement {
+  const refusedInSheet = refusal === 'sheet'
   return (
     <>
       <div
@@ -361,29 +366,38 @@ export default function VariantA({
                 margin: '0 auto 18px',
               }}
             />
-            <div
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 700,
-                fontSize: 'var(--text-xl)',
-                color: 'var(--text-primary)',
-                letterSpacing: 'var(--tracking-tight)',
-              }}
-            >
-              Sign in
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-muted)',
-                margin: '6px 0 18px',
-                lineHeight: 1.5,
-              }}
-            >
-              Layline accounts are made by the boat&apos;s owner.
-            </div>
-            <GoogleButton onClick={onCloseSheet} />
+            {refusedInSheet ? (
+              /* The sheet reopened carrying the reason — the copy replaces the
+                 body, and the sheet grows to ~330px. Still sized to its
+                 contents, which is the whole argument for A's sheet. */
+              <RefusalSheetBody onRetry={onCloseSheet} />
+            ) : (
+              <>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 700,
+                    fontSize: 'var(--text-xl)',
+                    color: 'var(--text-primary)',
+                    letterSpacing: 'var(--tracking-tight)',
+                  }}
+                >
+                  Sign in
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-muted)',
+                    margin: '6px 0 18px',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Layline accounts are made by the boat&apos;s owner.
+                </div>
+                <GoogleButton onClick={onCloseSheet} />
+              </>
+            )}
           </div>
         </>
       )}

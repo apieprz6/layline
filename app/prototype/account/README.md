@@ -25,6 +25,14 @@ Nothing was folded into `main`, because there is no account UI in `main` to fold
 `AuthSheet`, no Account resolution, no `/auth/callback`. The spec is the deliverable; the
 build comes out of LAY-53 via `/to-tickets`.
 
+### Second pass — the refused stranger (2026-09-10, after the verdict)
+
+LAY-119 was widened again once LAY-120 saw Supabase's actual error, so the refusal
+graduated from "what this prototype cannot show" into this folder. It is drawn on **A only**,
+because A had already won: `RefusalA.tsx`, switched with `?refused=`. Three landings and the
+cancel path, all sharing one copy block so the *landing* is the only variable. See
+"Where the refusal lands", below. Nothing about the winning block or sheet changed.
+
 Run it:
 
 ```bash
@@ -32,14 +40,16 @@ npm run dev
 # http://localhost:4000/prototype/account?variant=A&account=guest
 # ...&variant=B&account=nameless    (the null Display Name case)
 # ...&variant=C&account=owner&sheet=1   (the Auth Sheet, open)
+# ...&variant=A&refused=callback    (the refused stranger; also sheet, toast, cancel)
 ```
 
-All three knobs live in the URL, so any screen can be shared exactly as seen. `variant` is
+All four knobs live in the URL, so any screen can be shared exactly as seen. `variant` is
 `A`, `B` or `C`; `account` is `guest`, `owner` (admin, short name), `crew` (a deliberately
 long name and long address) or `nameless` (`display_name` is null); `sheet=1` opens the Auth
-Sheet, so a sheet can be linked rather than described. The floating bottom bar
-switches variants (arrow buttons, or ← / →), switches account state, and hides the drawer
-so the page behind can be seen. It disappears in production builds.
+Sheet, so a sheet can be linked rather than described; `refused` is `callback`, `sheet`,
+`toast` or `cancel` (A only). The floating bottom bar switches variants (arrow buttons, or
+← / →), switches account state, switches refusal landing, and hides the drawer so the page
+behind can be seen. It disappears in production builds.
 
 The drawer opens on load, because the drawer is the artifact. The real `RaceHeader` and the
 real `LiveWindCard` are behind it on purpose — a drawer judged against a blank page always
@@ -121,6 +131,42 @@ drawer near overflow in any variant. **Width, not height, is the constraint**: a
 padding, a 32px avatar and a 10px gap, the name line has ~194px, which is why the `crew`
 state carries a 26-character name and a 40-character address. Check that state in all three.
 
+## Where the refusal lands
+
+The observed error, refusing an unknown Google account with sign-up off, in both the query
+string and the fragment:
+
+```
+?error=access_denied&error_code=signup_disabled&error_description=Signups+not+allowed+for+this+instance
+```
+
+It arrives at **`/auth/callback`**, not in the sheet, so *where it is shown* is a choice.
+Three landings, one shared copy block (`RefusalCopy`), so the landing is the only variable:
+
+| `?refused=` | Where it lands | Costs | Argument against |
+|---|---|---|---|
+| `callback` | The callback route renders it, full screen, no drawer and no dashboard | Nothing — it is where the error already is | The sailor is on a bare route, away from the screen they started on, and needs an explicit way back ("Back to the weather") |
+| `sheet` | Back on the screen they left, sheet reopened, the copy replacing its body, Google button demoted to a retry | A round trip: the callback must redirect *and* carry the reason through state | Most machinery of the three, for a state most sailors see once |
+| `toast` | Back on the screen they left, sheet closed, a dismissible banner low on the screen | A round trip, same as above | Missable, and dismissible before it is read — for the sheet's *only* failure mode, that is the whole objection |
+
+The copy is the same in all three, and it is the sailor's, not Supabase's:
+
+> **You are not on the crew list yet**
+> Layline accounts are made by the boat's owner. Ask them to add the Google address you just
+> used, then sign in again.
+
+Two deliberate choices in it. It **does not name the address**, because the error carries no
+email and claiming to know which account was refused would be inventing it. And it is drawn
+**calm, not alarmed** — one `--state-warning` mark, no red card — because nothing the sailor
+did was wrong and nothing is broken.
+
+`?refused=cancel` is the second non-success path: Google returns the same `error=access_denied`
+when someone taps Cancel on the consent screen. **It draws nothing**, on purpose, and that is
+what to look at — a sailor who merely changed their mind must not be told they have no account.
+The dashed strip at the top of the screen is **harness, not UI**: it shows what the URL carried
+next to what the sailor is shown, because keying on `error_code` rather than `error` is
+invisible in a screenshot. Supabase's own string appears nowhere in the drawings.
+
 ## Layout of the folder
 
 - `fixture.ts` — the four account states, and `initialsOf()`, the one bit worth lifting: it
@@ -131,6 +177,8 @@ state carries a 26-character name and a 40-character address. Check that state i
   they are the thing being judged.
 - `VariantA.tsx`, `VariantB.tsx`, `VariantC.tsx` — the three positions. Each draws its own
   drawer and its own sheet.
+- `RefusalA.tsx` — the refused stranger, on the winning variant only: one copy block, three
+  landings, the cancel path that draws nothing, and the harness strip.
 - `PrototypeAccount.tsx`, `page.tsx` — URL wiring inside the real chrome.
 
 The production `HamburgerMenu` is untouched, and so is every ADR: nothing here has been
@@ -138,9 +186,8 @@ folded into `main`.
 
 ## What this prototype cannot show
 
-- **The sheet's failure state.** ADR 0020 left "a stranger is refused" as the sheet's only
-  way to fail, and nobody has seen Supabase's error yet (expected 422 `signup_disabled`), so
-  no variant writes that copy. LAY-120 records it first, and it lands on whichever sheet wins.
+- **Which landing is right.** The refusal is drawn three ways and that choice is the owner's;
+  nothing here settles it.
 - **Anything about the OAuth round-trip.** The button closes the sheet. There is no browser in
   the agent environment, so **no screen here has been looked at by anyone** — all three
   variants and all three sheets were confirmed only by fetching the route and reading the

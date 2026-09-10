@@ -18,6 +18,13 @@ import VariantA, { VARIANT_A_NAME } from './VariantA'
 import VariantB, { VARIANT_B_NAME } from './VariantB'
 import VariantC, { VARIANT_C_NAME } from './VariantC'
 import { ACCOUNT_STATES, accountFor, type AccountStateKey } from './fixture'
+import {
+  REFUSAL_STATES,
+  RefusalCallbackScreen,
+  RefusalHarnessStrip,
+  RefusalToast,
+  type RefusalKey,
+} from './RefusalA'
 
 const VARIANTS = [
   { key: 'A', name: VARIANT_A_NAME, Component: VariantA },
@@ -36,8 +43,11 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
   const account = accountFor(accountKey)
 
   const [drawerOpen, setDrawerOpen] = useState(true)
+  // The refused-stranger pass (LAY-120 has now seen the error). Drawn on A only.
+  const refusal = (searchParams.get('refused') ?? 'none') as RefusalKey
   // The sheet lives in the URL so a sheet can be linked rather than described.
-  const sheetOpen = searchParams.get('sheet') === '1'
+  // The in-sheet landing implies an open sheet, so it does not need `sheet=1` too.
+  const sheetOpen = searchParams.get('sheet') === '1' || refusal === 'sheet'
 
   const setParam = useCallback(
     (key: string, value: string | null) => {
@@ -57,6 +67,10 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
     (open: boolean) => setParam('sheet', open ? '1' : null),
     [setParam]
   )
+  const setRefusal = useCallback(
+    (key: RefusalKey) => setParam('refused', key === 'none' ? null : key),
+    [setParam]
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -70,29 +84,45 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
   }, [sheetOpen, setSheetOpen])
 
   const Variant = variant.Component
+  const onA = variant.key === 'A'
+  // Landing 1 is a route of its own, so it replaces the app rather than sitting
+  // over it — which is the point being drawn.
+  const takesTheScreen = onA && refusal === 'callback'
 
   return (
     <div className="min-h-screen">
-      <RaceHeader onOpenMenu={() => setDrawerOpen(true)} />
+      {takesTheScreen ? (
+        <RefusalCallbackScreen onBack={() => setRefusal('none')} />
+      ) : (
+        <>
+          <RaceHeader onOpenMenu={() => setDrawerOpen(true)} />
 
-      <div className="max-w-md mx-auto md:mx-0 md:max-w-none">{children}</div>
+          <div className="max-w-md mx-auto md:mx-0 md:max-w-none">{children}</div>
 
-      <Variant
-        account={account}
-        drawerOpen={drawerOpen}
-        onCloseDrawer={() => setDrawerOpen(false)}
-        sheetOpen={sheetOpen}
-        onOpenSheet={() => setSheetOpen(true)}
-        onCloseSheet={() => setSheetOpen(false)}
-        // Sign-out is a stub: nothing is signed in, so it just puts the harness
-        // back to Guest.
-        onSignOut={() => setAccount('guest')}
-      />
+          <Variant
+            account={account}
+            drawerOpen={drawerOpen}
+            onCloseDrawer={() => setDrawerOpen(false)}
+            sheetOpen={sheetOpen}
+            onOpenSheet={() => setSheetOpen(true)}
+            onCloseSheet={() => setSheetOpen(false)}
+            // Sign-out is a stub: nothing is signed in, so it just puts the harness
+            // back to Guest.
+            onSignOut={() => setAccount('guest')}
+            refusal={onA ? refusal : 'none'}
+          />
+
+          {onA && refusal === 'toast' && <RefusalToast onDismiss={() => setRefusal('none')} />}
+        </>
+      )}
+
+      {onA && <RefusalHarnessStrip refusal={refusal} />}
 
       <PrototypeSwitcher
         variants={VARIANTS.map(({ key, name }) => ({ key, name }))}
         current={variant.key}
         extra={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', gap: '4px' }}>
             {ACCOUNT_STATES.map((state) => {
               const isCurrent = state.key === accountKey
@@ -132,6 +162,34 @@ export default function PrototypeAccount({ children }: { children: React.ReactNo
             >
               {drawerOpen ? 'hide' : 'drawer'}
             </button>
+          </div>
+          {onA && (
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {REFUSAL_STATES.map((state) => {
+                const isCurrent = state.key === refusal
+                return (
+                  <button
+                    key={state.key}
+                    onClick={() => setRefusal(state.key)}
+                    style={{
+                      flex: 1,
+                      padding: '6px 4px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: '10px',
+                      fontWeight: isCurrent ? 700 : 500,
+                      border: `1px solid ${isCurrent ? 'var(--state-warning)' : 'var(--surface-border)'}`,
+                      background: 'var(--surface-raised)',
+                      color: isCurrent ? 'var(--state-warning)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {state.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           </div>
         }
       />
