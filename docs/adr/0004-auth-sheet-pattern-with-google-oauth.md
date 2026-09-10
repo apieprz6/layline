@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Accepted, **amended four times** — ADR 0016 (mount point), ADR 0019 (Sign up mode cut, viewer grant
+widened), ADR 0020 (Google is the only method) and ADR 0021 (the sheet's size, and where a refusal
+lands). Most of the Decision below no longer describes what will be built: the modes, both auth methods,
+the `display_name` source, the role model and `/auth/reset-password` are all superseded. **ADR 0021's
+Consequences list them clause by clause.** What survives is the sheet *pattern* and that auth is additive
+rather than gate-keeping.
 
 ## Context
 

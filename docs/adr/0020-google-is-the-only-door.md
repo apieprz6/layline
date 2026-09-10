@@ -164,7 +164,10 @@ holds preferences, that is an acceptable loss; it is written down so it is not d
 - **The sheet's visual design is now a real question and is not answered here.** An 82%-viewport
   bottom sheet holding one button is not a thing anyone would draw on purpose. What this ADR settles
   is that there is one mode; what that looks like goes to LAY-119, alongside the drawer's account
-  block, since both are the same conversation about what signing in looks like.
+  block, since both are the same conversation about what signing in looks like. — **Answered by ADR
+  0021**: the sheet is sized to its contents, ~250px on a 390×844 screen. One correction to this bullet
+  while it is being annotated: the 82% is `mockups/Login-mockup.html`'s, not ADR 0004's, which specifies
+  no height at all.
 - **The copy for a refused stranger is now the primary error state**, not an edge case: it is the only
   way the sheet can fail. **The error was recorded 2026-09-10 (LAY-120)** — see the Context section —
   so the copy is no longer blocked and goes to LAY-119 with the rest of the sheet. Two constraints
@@ -173,7 +176,10 @@ holds preferences, that is an acceptable loss; it is written down so it is not d
   keying on it would tell someone who merely changed their mind that they have no account. And do not
   surface `error_description` verbatim — "Signups not allowed for this instance" is developer language
   about a Supabase instance, addressed to a sailor who was invited by name. Record it as received,
-  write the sailor's sentence separately.
+  write the sailor's sentence separately. **Answered by ADR 0021**, which keeps both constraints and
+  moves the state off the sheet entirely: the refusal is rendered full screen on `/auth/callback`, where
+  it already arrives, so the sheet has no error region at all. The **Refused Stranger** is a screen, not
+  a sheet mode.
 - **`CONTEXT.md` changes**: **Auth Sheet** drops to one mode; **Account Merging** is rewritten, since
   with no password path there is no second identity to merge and the same-email machinery now serves
   provisioning rather than merging; the stale relationship line naming `/auth/reset-password` as the

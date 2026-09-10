@@ -309,19 +309,23 @@ _Avoid_: Session (that is Supabase's tokens and cookies, not who is signed in), 
 A signed-in user's identity. Stored in the `profiles` table. Contains `display_name`, `role`, and `preferences`. Created by a database trigger the moment the account is created, in the same transaction — so a Profile exists for every account, including one made by hand in Supabase. See ADR 0017.
 
 **Display Name**:
-Human-readable name shown in the UI (e.g., avatar initials, greeting). Read from `raw_user_meta_data` by the trigger that creates the **Profile**, which since ADR 0020 leaves Google profile metadata as its only source. A Google account that granted no `profile` scope supplies none, and then there is none: a Display Name is never synthesised from an email address.
+Human-readable name shown in the UI (e.g., avatar initials, greeting). Read from `raw_user_meta_data` by the trigger that creates the **Profile**, which since ADR 0020 leaves Google profile metadata as its only source. A Google account that granted no `profile` scope supplies none, and then there is none: a Display Name is never synthesised from an email address. Where the UI would show initials, that case shows the address on the name line with "Google account" beneath it and a silhouette in place of the initials — not a first letter taken from the address (ADR 0021).
 
 **Role**:
 Flat permission level on a profile, governing **writes only**. Values: `admin` (can upload **Races** and write **Boat Setup**) or `viewer` (can read both **Boat management** and **Boat performance**, and write neither). Every signed-in account reads the same data, whatever its Role. Never null: every account starts as a `viewer`, and `admin` is granted by hand through Supabase, there being no role-assignment UI — a Role cannot be written by the account that holds it. See ADR 0017 and ADR 0019.
 _Avoid_: `user` (every account is a user; the word distinguishes nothing — superseded ADR 0004 term), captain, crew, tactician, trimmer (legacy terms from initial design)
 
 **Locked Entry**:
-A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. In the drawer the invitation sits on the row itself — a padlock and a "Sign in" link — rather than in a block of its own. Used only for **Boat management** and **Boat performance**. See ADR 0015 and ADR 0016.
+A drawer entry, or the screen behind it, that a **Guest** can see but not read: padlocked, carrying an invitation to sign in, and drawn as placeholder shapes rather than blurred or partial data. In the drawer the invitation sits on the row itself — a padlock and a "Sign in" link — rather than in a block of its own. The drawer's account block then offers "Sign in" a **second** time, deliberately: the two answer different questions, and a sailor who never taps a boat row would otherwise find no door (ADR 0021). Used only for **Boat management** and **Boat performance**. See ADR 0015 and ADR 0016.
 _Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
-Bottom sheet overlay that opens over whatever screen the sailor is on. **One mode: Continue with Google.** There is no password field, no Forgot password and no email field — Google is the only way in, and an account must already exist for it to sign in to (ADR 0020). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. See ADR 0016, which moved it up out of the dashboard layout, and ADR 0020, which left it holding a single button.
-_Avoid_: Login page, auth page (it's a sheet, not a page), Sign in mode / Forgot password mode (there are no modes left to name)
+Bottom sheet overlay that opens over whatever screen the sailor is on. **One mode: Continue with Google.** There is no password field, no Forgot password and no email field — Google is the only way in, and an account must already exist for it to sign in to (ADR 0020). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. **Sized to its contents** — a grab handle, a heading, one line of copy and the button, about 250px on a 390px screen — and it holds **no state at all**: no modes, no fields, no validation and no error region, because its one failure mode is the **Refused Stranger**, which is shown on another route entirely. See ADR 0016, which moved it up out of the dashboard layout, ADR 0020, which left it holding a single button, and ADR 0021, which sized it.
+_Avoid_: Login page, auth page (it's a sheet, not a page), Sign in mode / Forgot password mode (there are no modes left to name), 82% sheet (that height was `mockups/Login-mockup.html`'s, never ADR 0004's, and it was drawn for four fields that no longer exist)
+
+**Refused Stranger**:
+Someone who tapped Continue with Google without an **Account** waiting for them. Supabase refuses it — `error_code=signup_disabled` — and because the refusal arrives at `/auth/callback` rather than in the **Auth Sheet**, that route renders it as a full screen: the owner makes accounts, ask them to add the Google address you just used. Supabase's own wording is logged and never shown, and no address is named, because the error carries none. Distinct from tapping **Cancel** on Google's consent screen, which returns the same `error=access_denied` with no `error_code` and is shown **nothing at all**. See ADR 0021.
+_Avoid_: Error page, auth error, access denied (the generic OAuth code, which cannot tell a refusal from a change of mind), Sign-up failure (nobody was signing up)
 
 **Identity Linking**:
 How a hand-created **Account** gets its first session: the owner creates a row against the crew member's Google address, and the Google identity attaches to that row on first sign-in because the addresses match. Unconditional on hosted Supabase — there is no setting that enables or disables it, and `enable_manual_linking` is not it, that only gates the manual `linkIdentity()` routes. A closed front door does not block it: a matching row makes this a link rather than a signup, which is the only reason ADR 0019 and ADR 0020 can coexist. See LAY-115 and ADR 0020.
@@ -396,6 +400,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - **Identity Linking** attaches a Google identity to the row the owner created, matching on email address
 - The **Auth Sheet** opens over any screen, including a **Locked Entry**; it does not navigate to a separate route
 - `/auth/callback` is the only dedicated auth route; there is no recovery route, because there is no credential to recover
+- `/auth/callback` **renders as well as redirects**: it shows the **Refused Stranger** screen rather than sending a reason back to the **Auth Sheet** (ADR 0021)
 - An **Account** exists only if the owner made one, and enters only through Google — losing the Google account loses the **Profile** with it
 - A **Buoy** is a type of **Data Source**
 - A **Weather Model** is a type of **Data Source**
