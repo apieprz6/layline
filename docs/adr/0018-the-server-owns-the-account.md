@@ -139,6 +139,11 @@ discard the screen the sailor had chosen. Only the two boat routes are affected.
   token rotates; not taken, and `is_admin()` reads the table anyway.
 - **`types/index.ts:121` still reads `'admin' | 'user'`** and `Profile.role` is still nullable, both
   contrary to ADR 0017. The build applies that rename and the `NOT NULL` alongside this.
+- **Amended by the build, 2026-09-11 (LAY-125): `app/api/preferences/route.ts` no longer exists.** The
+  Context above counts its two `supabase.auth` calls; that count is now historical. Its `PUT` was a
+  second profile-creation path, which ADR 0017's trigger supersedes, and nothing called it. So the only
+  `supabase.auth` call left in the repo is the cookie-rotating `getUser()` in the middleware, and this
+  ADR's own `getClaims()` resolve is the first read of the **Account** anywhere.
 - **The middleware matcher already covers the future `/auth/*` routes** — it excludes only
   `_next/static`, `_next/image`, `favicon.ico` and image extensions. The `middleware.ts` → `proxy.ts`
   rename that Next 16 wants is a separate chore and deliberately not bundled here.
