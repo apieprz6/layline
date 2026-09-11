@@ -1,4 +1,3 @@
-import AppLayout from '@/components/dashboard/AppLayout'
 import WindDataContent from '@/components/dashboard/WindDataContent'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
@@ -12,9 +11,5 @@ export default async function WindDataPage() {
 
   const buoyData = [chii2Result, purdueResult]
 
-  return (
-    <AppLayout>
-      <WindDataContent buoys={buoyData} />
-    </AppLayout>
-  )
+  return <WindDataContent buoys={buoyData} />
 }
