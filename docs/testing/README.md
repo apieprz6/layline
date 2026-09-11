@@ -132,6 +132,9 @@ of file in this folder, and the only honest way to report a trigger as working:
 
 - [`profile-trigger-and-role-lock.md`](./profile-trigger-and-role-lock.md) — the
   Profile trigger, the `viewer` default, and the two locks on a **Role**
+- [`account-resolution.md`](./account-resolution.md) — the three shapes
+  `getClaims()` really returns, and the `profiles` read behind the drawer's
+  footer
 
 A record like that carries the re-run recipe and the observed output, so the next
 reader can repeat it rather than trust it.

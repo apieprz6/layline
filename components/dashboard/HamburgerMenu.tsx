@@ -3,10 +3,16 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import AccountBlock from './AccountBlock'
+import type { Account } from '@/types'
 
 interface HamburgerMenuProps {
   isOpen: boolean
   onClose: () => void
+  /** The signed-in sailor, resolved on the server; `null` is a **Guest**. */
+  account: Account | null
+  onSignIn: () => void
+  onSignOut: () => void
 }
 
 const navItems = [
@@ -43,7 +49,13 @@ const navItems = [
   },
 ]
 
-export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
+export default function HamburgerMenu({
+  isOpen,
+  onClose,
+  account,
+  onSignIn,
+  onSignOut,
+}: HamburgerMenuProps) {
   const pathname = usePathname()
 
   // Handle ESC key
@@ -152,9 +164,11 @@ export default function HamburgerMenu({ isOpen, onClose }: HamburgerMenuProps) {
           })}
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--surface-border)' }}>
-          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>v1.0 · May 2026</div>
+        {/* Footer — the account block is what this region is for, with the
+            version demoted to a hairline beneath it (ADR 0021, prototype A) */}
+        <div style={{ padding: '12px 16px 14px', borderTop: '1px solid var(--surface-border)' }}>
+          <AccountBlock account={account} onSignIn={onSignIn} onSignOut={onSignOut} />
+          <div style={{ marginTop: '10px', fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>v1.0 · May 2026</div>
         </div>
       </nav>
     </>

@@ -137,6 +137,36 @@ is one character of one.
   `?code=` but cannot render a screen, and this route now has to do both. Server-side is enough: LAY-120
   saw the error parameters in the query string as well as the fragment, so **no client-side fragment
   reader is needed** — do not build one.
+- **Amended by the build, 2026-09-11 (LAY-126): the sheet measures 180px, not ~250px.** The markup that
+  shipped is the prototype's, unchanged, so this is the estimate's error rather than a build deviation —
+  "roughly 250px" was arithmetic done without a browser, and this repo now has one
+  (`e2e/auth-sheet.spec.ts` measures it at 390×844). The decision it supports is untouched: 180px against
+  the mockup's 692px is the same argument, more so. **Nothing was padded to reach 250** — that is what this
+  ADR rejected variant B for. Whether 180px reads as spare rather than deliberate is the owner's call, and
+  the honest version of the question the Consequence below already asks.
+- **Amended by the build, 2026-09-11 (LAY-126): the route renders, and the *exchange* runs in the
+  browser.** The `page.tsx` above is right, and the sentence "a Route Handler can exchange `?code=`" hides
+  the corollary that a page **cannot**. Next 16 permits a cookie write only in phase `'action'`
+  (`areCookiesMutableInCurrentPhase` in `next/dist/server/web/spec-extension/adapters/request-cookies.js`),
+  and `lib/supabase/server.ts` swallows the `ReadonlyRequestCookiesError` so a Server Component can still
+  *read* a session — so a server-side `exchangeCodeForSession()` here would spend the single-use code,
+  drop the tokens, and report success. So the route branches on the error parameters on the server and
+  hands a `?code=` to a Client Component, which is also what ADR 0018 wanted for the cross-tab broadcast:
+  the preference turns out to be forced. Two smaller findings from doing it: `createBrowserClient` leaves
+  `detectSessionInUrl` on, so *constructing* the client on this URL is the exchange, and an explicit
+  `exchangeCodeForSession()` queues behind that automatic one and then fails with a missing PKCE verifier
+  — a successful sign-in reported as an error. And the query-string-only reading stands: nothing built
+  here reads the fragment.
+- **Amended by the build, 2026-09-11 (LAY-126): the SDK reports the outcome of that exchange to nobody,
+  and the callback says so rather than assuming.** Because the exchange happens inside `initialize()`,
+  the only thing left to ask afterwards is `getSession()` — which answers about the **cookie**, not about
+  the round trip, so a browser that already held a session would report success for an exchange that
+  failed. `_getSessionFromURL` does leave one mark: on success it deletes `code` from the address bar.
+  So a session plus a `code` still on the URL means the two are unrelated — a reload of the callback
+  after a sign-in that already worked, or a code this browser had no PKCE verifier for. The sailor holds
+  a session either way and is sent onward rather than into a dead end; the ambiguity goes to the log. It
+  cannot be resolved from the browser, and the state it would matter in — switching from one Google
+  account straight to another — is the owner's to try.
 - **Whoever builds the Auth Sheet must not give it an error prop.** Its only failure mode is shown on
   another route, and an unused error region is how a 250px sheet grows back to 692.
 - **ADR 0015 and ADR 0016 stand unamended.** The inline invitation, the five-entry order, the padlocks

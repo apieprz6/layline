@@ -161,6 +161,24 @@ export interface Profile {
   updated_at: string
 }
 
+/**
+ * The signed-in sailor: an email address — their Google one, since that is what
+ * signs in — and the parts of their one **Profile** the app reads. `null` in
+ * place of an Account means a **Guest**.
+ *
+ * Resolved on the server and passed down as a prop; client code never assembles
+ * one (ADR 0018). The email comes from the verified JWT and everything else from
+ * `profiles`, so the two stay distinct rather than blended. `displayName` is
+ * null whenever Google gave no name, and is never filled in from the address.
+ */
+export interface Account {
+  userId: string
+  email: string
+  displayName: string | null
+  /** Governs writes only, and is shown nowhere in the drawer (ADR 0019, ADR 0021). */
+  role: UserRole
+}
+
 // Buoy history types
 
 // Canonical wind data point with absolute timestamp
