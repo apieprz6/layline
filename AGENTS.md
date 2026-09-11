@@ -410,6 +410,22 @@ export default function ClientAuth() {
 
 See: `app/dashboard/page.tsx` for reference implementation
 
+### Writing a Test
+
+Two runners. **Jest** (`npm test`) owns `__tests__/` and answers most questions in
+jsdom — reach for it by default. **Playwright** (`npm run test:e2e`) owns `e2e/`
+and is only for what needs a real browser: an element's *position* rather than
+its presence, a click that must fire a real handler, viewport-dependent layout at
+390px, focus and keyboard behaviour.
+
+🚨 **Browser tests run against `next build && next start`, never `next dev`.** In
+this environment `next dev` never hydrates, and a Playwright click on an
+un-hydrated node *succeeds* — so the failure masquerades as a bad selector.
+Always navigate with `gotoHydrated()` from `e2e/hydrated.ts`, never a bare
+`page.goto()`.
+
+📖 **Read**: `docs/testing/README.md` before writing a browser test
+
 ---
 
 ## References & Documentation
@@ -424,9 +440,10 @@ See: `app/dashboard/page.tsx` for reference implementation
 
 4. **`docs/references/wind-conditions-llms.txt`** - Wind classification system
 5. **`docs/references/supabase-ssr-llms.txt`** - Auth patterns
-6. **`PROJECT_PLAN.md`** - Technical roadmap and weather API details
-7. **`README.md`** - Design system overview
-8. **`SETUP_GUIDE.md`** - Development environment setup
+6. **`docs/testing/README.md`** - Jest vs Playwright, and the hydration trap
+7. **`PROJECT_PLAN.md`** - Technical roadmap and weather API details
+8. **`README.md`** - Design system overview
+9. **`SETUP_GUIDE.md`** - Development environment setup
 
 ### For Deep Dives
 
@@ -452,6 +469,7 @@ Before submitting code, verify:
 - [ ] **Sailing terminology** - Use proper terms from glossary
 - [ ] **Next.js 16 patterns** - No Pages Router code
 - [ ] **No assumed schedule** - No hardcoded race day or start time; Target Time is optional
+- [ ] **Tests pass** - `npm test`; plus `npm run test:e2e` if the change touches interactive UI
 
 ---
 
@@ -495,7 +513,6 @@ See `PROJECT_PLAN.md` for complete roadmap.
 ### Known Limitations
 
 - Mock weather data currently (Phase 2 will add real APIs)
-- No tests yet (Phase 6)
 - No PWA/offline support (Future)
 - Single user (crew collaboration in Phase 6)
 

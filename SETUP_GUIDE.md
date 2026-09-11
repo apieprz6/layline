@@ -8,6 +8,16 @@ This guide will get you from zero to a working dashboard in ~30 minutes.
 npm install
 ```
 
+Optional, and only if you'll be running the browser tests (`npm run test:e2e`) —
+Chromium is a separate download that `npm install` does not fetch:
+
+```bash
+npx playwright install chromium
+DEBIAN_FRONTEND=noninteractive npx playwright install-deps chromium   # Linux only
+```
+
+See `docs/testing/README.md` for how the two test suites divide up.
+
 ## Step 2: Supabase Setup (10 min)
 
 ### Create Project
