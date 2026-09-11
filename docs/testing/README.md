@@ -29,6 +29,22 @@ browser:
 
 If a Jest test can answer the question, write the Jest test.
 
+### `toBeVisible()` does not mean on-screen
+
+Worth stating flatly, because the first version of this suite got it wrong:
+**Playwright's `toBeVisible()` cannot tell an open drawer from a closed one.** It
+checks for a non-empty bounding box and `visibility` not being `hidden` — and a
+node translated off-canvas keeps its bounding box. Measured on the closed drawer,
+the version hairline reports `isVisible: true` at `x: -252`, entirely off-screen.
+
+So a test that opens the drawer and then asserts `toBeVisible()` on something
+inside it passes whether or not the click did anything — which makes it worse
+than no test, since it looks like coverage. Use `toBeInViewport()` for anything
+whose position is the point.
+
+The same reasoning cuts the other way: if you're only asking whether an element
+*exists* or *renders*, that's not a position question and it belongs in Jest.
+
 ## Running the browser tests
 
 ```bash

@@ -120,4 +120,13 @@ describe('HamburgerMenu', () => {
 
     expect(screen.getByText(/v1\.0/i)).toBeInTheDocument()
   })
+
+  it('has no account block in the footer yet', () => {
+    render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+    // Guard rail for the account block, which lands in this footer. Today the
+    // region carries nothing but the version hairline. When the block ships,
+    // update this expectation rather than deleting it.
+    expect(screen.queryByText('Browsing as guest')).not.toBeInTheDocument()
+  })
 })

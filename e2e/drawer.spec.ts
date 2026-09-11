@@ -31,14 +31,22 @@ test.describe('hamburger drawer', () => {
     await expect(panel).not.toBeInViewport()
   })
 
-  test('the footer region holds only the version, for now', async ({ page }) => {
+  test('the footer stays above the fold when the drawer opens', async ({ page }) => {
     await gotoHydrated(page)
+
+    // `toBeVisible()` would be worthless here, and the trap is worth naming: the
+    // footer is inside the always-mounted panel, so a translated-off-canvas node
+    // keeps its bounding box and reads as "visible" with the drawer shut. Only
+    // its position distinguishes the two states.
+    const version = page.getByText(/v1\.0/i)
+    await expect(version).not.toBeInViewport()
+
     await page.getByRole('button', { name: 'Menu', exact: true }).click()
 
-    // Guard rail for the account block: today this region carries nothing but
-    // the version hairline. When the block lands, "Browsing as guest" joins it
-    // and this assertion is the one to update rather than delete.
-    await expect(page.getByText(/v1\.0/i)).toBeVisible()
-    await expect(page.getByText('Browsing as guest')).toHaveCount(0)
+    // The footer is pinned to the bottom of a full-height panel, so on a short
+    // viewport it is the first thing to fall off the screen. That it clears the
+    // fold at 390x844 is the browser-only question here; whether it *renders*
+    // is already covered in HamburgerMenu.test.tsx.
+    await expect(version).toBeInViewport()
   })
 })
