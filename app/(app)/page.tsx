@@ -1,4 +1,3 @@
-import AppLayout from '@/components/dashboard/AppLayout'
 import WindCard from '@/components/dashboard/WindCard'
 import ForecastChart from '@/components/dashboard/ForecastChart'
 import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
@@ -57,40 +56,38 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
   ]
 
   return (
-    <AppLayout>
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-        {SHOW_CURRENT_WIND_CARD && (
-          <WindCard
-            current={{ speed: 12, direction: 245, gust: 15 }}
-            forecast={{ speed: 14, direction: 248 }}
-          />
-        )}
+    <div className="p-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+      {SHOW_CURRENT_WIND_CARD && (
+        <WindCard
+          current={{ speed: 12, direction: 245, gust: 15 }}
+          forecast={{ speed: 14, direction: 248 }}
+        />
+      )}
 
-        <LiveWindCard buoys={buoyData} />
+      <LiveWindCard buoys={buoyData} />
 
-        {SHOW_RACE_BRIEFING && (
-          <TacticalBriefing
-            briefing={briefing}
-            generatedAt={new Date()}
-          />
-        )}
+      {SHOW_RACE_BRIEFING && (
+        <TacticalBriefing
+          briefing={briefing}
+          generatedAt={new Date()}
+        />
+      )}
 
-        {SHOW_WIND_FORECAST && (
-          <ForecastChart data={forecastData} />
-        )}
+      {SHOW_WIND_FORECAST && (
+        <ForecastChart data={forecastData} />
+      )}
 
-        {SHOW_MODEL_COMPARISON && (
-          <ModelComparison models={models} />
-        )}
+      {SHOW_MODEL_COMPARISON && (
+        <ModelComparison models={models} />
+      )}
 
-        {SHOW_RIG_SETUP && (
-          <RigRecommendation
-            condition="medium"
-            windSpeed={14}
-            recommendations={rigRecommendations}
-          />
-        )}
-      </div>
-    </AppLayout>
+      {SHOW_RIG_SETUP && (
+        <RigRecommendation
+          condition="medium"
+          windSpeed={14}
+          recommendations={rigRecommendations}
+        />
+      )}
+    </div>
   )
 }
