@@ -123,3 +123,15 @@ and that is not a gap to be closed by cleverness — don't burn a session trying
 Anything downstream of an *established* session can still be tested by seeding
 Supabase auth cookies or storage state; it's only the provider handshake that is
 off limits.
+
+**Database behaviour, for a different reason.** Triggers, RLS policies, `CHECK`
+constraints and column privileges are SQL: neither runner can see them, because
+both mock Supabase rather than reaching a database. They are verified by running
+them against the local stack and writing down what was observed — the second kind
+of file in this folder, and the only honest way to report a trigger as working:
+
+- [`profile-trigger-and-role-lock.md`](./profile-trigger-and-role-lock.md) — the
+  Profile trigger, the `viewer` default, and the two locks on a **Role**
+
+A record like that carries the re-run recipe and the observed output, so the next
+reader can repeat it rather than trust it.
