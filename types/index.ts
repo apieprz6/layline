@@ -118,12 +118,15 @@ export interface RaceBriefing {
 }
 
 // Database types
-export type UserRole = 'admin' | 'user'
+
+// A Role governs writes only, and is never null: every account starts as a viewer and
+// admin is granted by hand through Supabase. See docs/adr/0017 and docs/adr/0019.
+export type UserRole = 'admin' | 'viewer'
 
 export interface User {
   id: string
   email: string
-  role: UserRole | null
+  role: UserRole
   createdAt: string
 }
 
@@ -152,7 +155,7 @@ export interface Profile {
   id: string
   user_id: string
   display_name: string | null
-  role: UserRole | null
+  role: UserRole
   preferences: UserPreferences
   created_at: string
   updated_at: string
