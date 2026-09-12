@@ -391,7 +391,10 @@ CREATE TABLE IF NOT EXISTS calibration_events (
         REFERENCES boat_setup_artifacts (id, kind) ON DELETE CASCADE,
     CONSTRAINT calibration_events_kind_fixed CHECK (kind = 'instrument_calibration'),
 
-    CONSTRAINT channels_non_empty CHECK (ARRAY_LENGTH(channels, 1) >= 1),
+    -- COALESCE, not a bare ARRAY_LENGTH: array_length('{}', 1) is NULL, and a CHECK that
+    -- evaluates to NULL is satisfied, so `>= 1` alone admits the empty array it exists to
+    -- refuse. Corrected in LAY-101, where the check suite caught it.
+    CONSTRAINT channels_non_empty CHECK (COALESCE(ARRAY_LENGTH(channels, 1), 0) >= 1),
     CONSTRAINT note_non_empty CHECK (BTRIM(note) <> ''),
     -- an autocompensation is a compass operation by definition
     CONSTRAINT autocompensation_is_hdg_only CHECK (
@@ -432,7 +435,8 @@ CREATE TABLE IF NOT EXISTS recordings (
 
     CONSTRAINT row_count_positive CHECK (row_count > 0),
     CONSTRAINT row_times_ordered CHECK (last_row_time >= first_row_time),
-    CONSTRAINT source_columns_non_empty CHECK (ARRAY_LENGTH(source_columns, 1) >= 1)
+    -- COALESCE for the same reason as calibration_events.channels_non_empty.
+    CONSTRAINT source_columns_non_empty CHECK (COALESCE(ARRAY_LENGTH(source_columns, 1), 0) >= 1)
 );
 
 -- Plain, NOT unique. A duplicate hash is a legitimate second Race from one file, so ADR 0009
@@ -922,3 +926,35 @@ two implementations of a derivation is the thing "derive, don't store" was avoid
    vocabulary are typed by hand at seed time.
 4. The 17-check verification suite from LAY-92 has still only been run against a local stack; the
    hosted re-run is outstanding and this migration should be verified the same way.
+
+### Built (LAY-101)
+
+`supabase/migrations/20260910183000_create_race_archive_and_boat_setup.sql` is a lift of this
+document. Two check suites came with it, both committed and both re-runnable against a hosted
+project:
+
+- `scripts/verify-race-archive-schema.sh` — 93 checks. Attacks every invariant claimed above and
+  passes only when Postgres refuses. One transaction, ending in `ROLLBACK`.
+- `scripts/verify-boat-storage.sh` — LAY-92's 17 checks, written down at last, using
+  `lib/storage/paths.ts` so the paths under test are the ones the app derives.
+
+Both were run against a local stack: 93/93 and 17/17. The hosted `db push` and the hosted re-run
+of both remain the owner's, as they were for LAY-92.
+
+One correction to this document came out of it, marked at the two sites: a bare
+`ARRAY_LENGTH(x, 1) >= 1` is NULL for `'{}'`, and a CHECK that evaluates to NULL is satisfied, so
+both "non-empty array" constraints admitted the empty array they exist to refuse.
+
+Three things in the migration are not in the SQL above, and are disclosed rather than folded in:
+
+- **Idempotency.** `IF NOT EXISTS` on every table and index, a `DO … EXCEPTION WHEN
+  duplicate_object` guard per enum, `ON CONFLICT DO NOTHING` on the seeds, and a
+  `DROP POLICY IF EXISTS` before each `CREATE POLICY`, so `supabase db reset` and a re-run of a
+  partly-applied push both work. A re-run therefore replaces all 25 policies, which is the
+  intent: the migration is the definition.
+- **`boat_setup_versions_artifact_idx`**, an index on the FK column that the sketch above does
+  not list. The Version list is read by artifact on every Boat Setup page.
+- **Filename sanitising.** `lib/storage/paths.ts` replaces anything outside storage-api's own
+  key charset, so `régate.csv` is stored under the key `r_gate.csv` while `recordings.filename`
+  keeps the original. Nothing parses a key to recover a name, so the two may differ; a rejected
+  upload would be a refusal Layline has no reason to make.
