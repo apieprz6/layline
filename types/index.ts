@@ -441,6 +441,30 @@ export type BoatSetupVersion =
   | RigTuneVersion
   | InstrumentCalibrationVersion
 
+/**
+ * As much of the Version in force as a list row states: which number it is, and when
+ * it took effect. `Pick`ed from the Version itself so the two spellings of a column
+ * name can never drift apart.
+ */
+export type CurrentBoatSetupVersion = Pick<BoatSetupVersion, 'version_number' | 'effective_from'>
+
+/** One artifact as the Boat management list needs it. `null` means *not recorded*. */
+export interface BoatSetupRow {
+  kind: BoatSetupKind
+  current: CurrentBoatSetupVersion | null
+}
+
+/**
+ * The boat and its four artifacts, read together — the whole of Boat management's
+ * data. All-or-nothing on purpose: the screen's header *is* the boat's identity, so
+ * there is no half of this worth rendering.
+ */
+export interface BoatSetup {
+  boat: Boat
+  /** Always four, in `BOAT_SETUP_ORDER`. */
+  artifacts: BoatSetupRow[]
+}
+
 export type ShroudPosition = 'V1' | 'D1' | 'D2'
 
 /**
