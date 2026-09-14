@@ -4,6 +4,11 @@ import type { ReactElement } from 'react'
 import { signInWithGoogle } from '@/lib/account/browserAuth'
 import CallbackScreen, { BackToTheWeather, filledActionStyle } from './CallbackScreen'
 
+interface SignInDidNotFinishProps {
+  /** A path on this origin, already guarded by the route: where the retry aims. */
+  next: string
+}
+
 function AlertMark(): ReactElement {
   return (
     <svg
@@ -39,7 +44,7 @@ function AlertMark(): ReactElement {
  * sheet gains no error region — its one failure mode is still shown here, on its
  * own route.
  */
-export default function SignInDidNotFinish({ next }: { next: string }): ReactElement {
+export default function SignInDidNotFinish({ next }: SignInDidNotFinishProps): ReactElement {
   return (
     <CallbackScreen
       heading="Sign-in didn't finish"

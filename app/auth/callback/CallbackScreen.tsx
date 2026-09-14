@@ -50,7 +50,7 @@ export default function CallbackScreen({
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: '16px',
+            fontSize: 'var(--text-md)',
             letterSpacing: 'var(--tracking-tight)',
             color: 'var(--text-primary)',
             marginBottom: '28px',
@@ -137,37 +137,31 @@ export const filledActionStyle: CSSProperties = {
   cursor: 'pointer',
 }
 
+const quietActionStyle: CSSProperties = {
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  textDecoration: 'none',
+}
+
+interface BackToTheWeatherProps {
+  /**
+   * `quiet` is for the arm that has something better to offer first, so the
+   * screen never carries two filled buttons competing for the same thumb.
+   */
+  prominence?: 'filled' | 'quiet'
+}
+
 /**
  * The only exit this route has — every arm that renders is a place with no
  * navigation around it.
- *
- * `quiet` is for the arm that has something better to offer first, so that the
- * screen never carries two filled buttons competing for the same thumb.
  */
 export function BackToTheWeather({
   prominence = 'filled',
-}: {
-  prominence?: 'filled' | 'quiet'
-}): ReactElement {
-  if (prominence === 'quiet') {
-    return (
-      <Link
-        href="/"
-        style={{
-          fontFamily: 'var(--font-body)',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          textDecoration: 'none',
-        }}
-      >
-        Back to the weather
-      </Link>
-    )
-  }
-
+}: BackToTheWeatherProps): ReactElement {
   return (
-    <Link href="/" style={filledActionStyle}>
+    <Link href="/" style={prominence === 'quiet' ? quietActionStyle : filledActionStyle}>
       Back to the weather
     </Link>
   )

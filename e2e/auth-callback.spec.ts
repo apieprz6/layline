@@ -68,14 +68,9 @@ test.describe('the Refused Stranger, on a 390px screen', () => {
     expect(await mark.evaluate((el) => getComputedStyle(el).color)).toBe(expected)
   })
 
-  test('names no address, and repeats nothing Supabase wrote', async ({ page }) => {
-    await gotoHydrated(page, REFUSED)
-
-    const onScreen = await page.locator('body').innerText()
-    expect(onScreen).not.toContain('@')
-    expect(onScreen).not.toContain('Signups not allowed')
-    expect(onScreen).not.toContain('signup_disabled')
-  })
+  // That it names no address and repeats nothing Supabase wrote is a question
+  // about what text renders, so it is Jest's — see page.test.tsx, "logs
+  // Supabase's own words verbatim and shows none of them".
 
   test('its one action really goes back to the weather', async ({ page }) => {
     await gotoHydrated(page, REFUSED)
@@ -88,12 +83,18 @@ test.describe('the Refused Stranger, on a 390px screen', () => {
 })
 
 test.describe('the other arms, in a browser', () => {
-  test('Cancel on the consent screen puts the sailor back with nothing said', async ({ page }) => {
-    // Google's Cancel: the same `access_denied`, no `error_code`. The server
-    // redirects, so the sailor never sees a callback screen at all.
+  test('Cancel on the consent screen really lands the sailor back where they were', async ({
+    page,
+  }) => {
+    // Google's Cancel: the same `access_denied`, no `error_code`. Jest asserts
+    // that `redirect()` was *called* with the path — against a mock, because
+    // jsdom cannot navigate. This asserts the sailor arrives, which is the claim
+    // the sheet's silent failure mode actually rests on, and it is the only arm
+    // no other browser test renders.
     await gotoHydrated(page, '/auth/callback?error=access_denied&next=%2Fwind-data')
 
     expect(new URL(page.url()).pathname).toBe('/wind-data')
+    await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible()
     const onScreen = await page.locator('body').innerText()
     expect(onScreen).not.toMatch(/crew list|didn't finish/i)
   })

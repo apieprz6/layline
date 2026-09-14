@@ -171,8 +171,10 @@ is one character of one.
   narrower than "on `error_code`" suggested.** The screen that shipped is the prototype's
   `?refused=callback` — wordmark, key mark in `--state-warning`, copy centred in a 330px column, filled
   **Back to the weather** — and it was measured *and read* in Chromium at 390×844
-  (`e2e/auth-callback.spec.ts`), which is a first for this ADR: the heading sets on one line, the copy on
-  three, nothing overflows sideways, and the action sits above the fold. Two build findings. The branch
+  (`e2e/auth-callback.spec.ts`), which is a first for this ADR: nothing overflows sideways and the action
+  sits above the fold, both asserted there. The heading setting on one line and the copy on three is a
+  *reading* of a 390×844 screenshot, not an assertion — no test pins a line count, and none should, so
+  that observation is only as good as the fonts and copy it was taken with. Two build findings. The branch
   keys on `error_code` **alone**, not on `error` first: a URL carrying `error_code=signup_disabled` with no
   `error` is still the refusal, where the earlier code gated every arm behind `if (error)` and would have
   redirected that one silently. And the generic arm's "retry" is a filled **Try signing in again** that
