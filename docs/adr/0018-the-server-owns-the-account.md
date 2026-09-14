@@ -144,6 +144,29 @@ discard the screen the sailor had chosen. Only the two boat routes are affected.
   second profile-creation path, which ADR 0017's trigger supersedes, and nothing called it. So the only
   `supabase.auth` call left in the repo is the cookie-rotating `getUser()` in the middleware, and this
   ADR's own `getClaims()` resolve is the first read of the **Account** anywhere.
+- **Amended by observation, 2026-09-11 (LAY-126): "verifies the JWT locally against a cached JWKS" holds
+  only for an asymmetric signing key.** `auth-js` verifies in-process only when the token's `alg` is
+  asymmetric and carries a `kid`; for `HS256` it sets `signingKey = null` and falls back to
+  `getUser(token)` over the network (`GoTrueClient.getClaims`). The local stack signs with the legacy
+  shared HS256 secret, so `getClaims()` was measured making a round trip to `/auth/v1/user` — see
+  `docs/testing/account-resolution.md`. The choice is unaffected, because `getClaims()` is never *worse*
+  than `getUser()`, but the saved round trip is a hosted-project setting rather than something this repo
+  decides. The three arms are real, and the third — `{ data: null, error: null }` for nobody signed in —
+  was observed rather than inferred.
+- **Amended by the build, 2026-09-11 (LAY-126): naming the two events to ignore was not enough — the
+  trigger is the *user id*, not the event.** `auth-js` emits a fresh **`SIGNED_IN` on every hidden →
+  visible transition of the tab**, carrying the session it already had
+  (`_onVisibilityChanged` → `_recoverAndRefresh`, which notifies `SIGNED_IN` for a session recovered from
+  storage). A handler that ignored only `INITIAL_SESSION` and same-user `TOKEN_REFRESHED` would therefore
+  `router.refresh()` every time a sailor switched back to the browser — on `/`, a `force-dynamic` weather
+  refetch, which is the exact cost this section exists to avoid. `useRefreshOnIdentityChange` now compares
+  the user id on every event and refreshes only when the answer changed. The consequence to know: a change
+  *within* one identity — a new `display_name` — is not a trigger, and nothing in the app can make one yet.
+- **Amended by the build, 2026-09-11 (LAY-126): "auth operations run in the browser" is not a preference,
+  it is the only option.** The cross-tab argument above is sound and it is no longer the load-bearing one.
+  Next 16 allows a cookie write only in phase `'action'`, so nothing rendering a page — including
+  `/auth/callback` — can write a session cookie at all; `lib/supabase/server.ts` swallows the throw, which
+  is what makes a server-side sign-in fail *silently*. See the LAY-126 amendment on ADR 0021.
 - **The middleware matcher already covers the future `/auth/*` routes** — it excludes only
   `_next/static`, `_next/image`, `favicon.ico` and image extensions. The `middleware.ts` → `proxy.ts`
   rename that Next 16 wants is a separate chore and deliberately not bundled here.

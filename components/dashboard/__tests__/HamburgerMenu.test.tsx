@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import HamburgerMenu from '../HamburgerMenu'
+import type { Account } from '@/types'
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -10,10 +11,22 @@ jest.mock('next/navigation', () => ({
   })),
 }))
 
+const CREW: Account = {
+  userId: '11111111-1111-1111-1111-111111111111',
+  email: 'crew@example.com',
+  displayName: 'Jamie Torres',
+  role: 'viewer',
+}
+
 describe('HamburgerMenu', () => {
+  // The Account arrives as a prop, so the drawer needs no Supabase mock — which
+  // is part of why ADR 0018 made it one.
   const defaultProps = {
     isOpen: false,
     onClose: jest.fn(),
+    account: null,
+    onSignIn: jest.fn(),
+    onSignOut: jest.fn(),
   }
 
   it('renders closed by default', () => {
@@ -121,12 +134,89 @@ describe('HamburgerMenu', () => {
     expect(screen.getByText(/v1\.0/i)).toBeInTheDocument()
   })
 
-  it('has no account block in the footer yet', () => {
-    render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+  describe('the account block in the bordered footer', () => {
+    it('offers a Guest a way in, above the version hairline', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} />)
 
-    // Guard rail for the account block, which lands in this footer. Today the
-    // region carries nothing but the version hairline. When the block ships,
-    // update this expectation rather than deleting it.
-    expect(screen.queryByText('Browsing as guest')).not.toBeInTheDocument()
+      const guestLine = screen.getByText('Browsing as guest')
+      expect(guestLine).toBeInTheDocument()
+      expect(screen.getByText('Weather is open to everyone')).toBeInTheDocument()
+
+      // The block takes the top of the footer and demotes the version to a
+      // hairline beneath it, so they share one bordered region in that order.
+      const footer = guestLine.closest('div[style*="border-top"]')
+      expect(footer).not.toBeNull()
+      expect(footer?.textContent).toMatch(/Browsing as guest.*v1\.0 · May 2026/)
+    })
+
+    it('names the signed-in sailor instead, with a way out', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} account={CREW} />)
+
+      expect(screen.getByText('Jamie Torres')).toBeInTheDocument()
+      expect(screen.getByText('crew@example.com')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+      expect(screen.queryByText('Browsing as guest')).not.toBeInTheDocument()
+    })
+
+    it('renders a sailor Google never named without inventing one', () => {
+      render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={{ ...CREW, displayName: null }} />
+      )
+
+      expect(screen.getByText('crew@example.com')).toBeInTheDocument()
+      expect(screen.getByText('Google account')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    })
+
+    it('shows the same footer to a viewer and an admin — the Role is not in the drawer', () => {
+      const { container: asViewer } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={{ ...CREW, role: 'viewer' }} />
+      )
+      const viewerText = asViewer.textContent
+
+      const { container: asAdmin } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={{ ...CREW, role: 'admin' }} />
+      )
+
+      expect(asAdmin.textContent).toBe(viewerText)
+      expect(viewerText).not.toMatch(/admin|viewer/i)
+    })
+
+    it('hands the two taps to the layout that owns the sheet and the session', async () => {
+      const user = userEvent.setup()
+      const onSignIn = jest.fn()
+      const onSignOut = jest.fn()
+
+      const { unmount } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} onSignIn={onSignIn} />
+      )
+      await user.click(screen.getByRole('button', { name: 'Sign in' }))
+      expect(onSignIn).toHaveBeenCalledTimes(1)
+      unmount()
+
+      render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={CREW} onSignOut={onSignOut} />
+      )
+      await user.click(screen.getByRole('button', { name: 'Sign out' }))
+      expect(onSignOut).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the nav identical either way (ADR 0016)', () => {
+      const { container: asGuest, unmount } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} />
+      )
+      const guestNav = Array.from(asGuest.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+      unmount()
+
+      const { container: signedIn } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={CREW} />
+      )
+      const signedInNav = Array.from(signedIn.querySelectorAll('a')).map((a) =>
+        a.getAttribute('href')
+      )
+
+      expect(signedInNav).toEqual(guestNav)
+      expect(guestNav).toEqual(['/', '/wind-data', '/settings'])
+    })
   })
 })

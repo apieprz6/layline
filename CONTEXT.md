@@ -320,7 +320,7 @@ A drawer entry, or the screen behind it, that a **Guest** can see but not read: 
 _Avoid_: Teaser, preview, blurred state (nothing real is shown at reduced fidelity)
 
 **Auth Sheet**:
-Bottom sheet overlay that opens over whatever screen the sailor is on. **One mode: Continue with Google.** There is no password field, no Forgot password and no email field — Google is the only way in, and an account must already exist for it to sign in to (ADR 0020). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. **Sized to its contents** — a grab handle, a heading, one line of copy and the button, about 250px on a 390px screen — and it holds **no state at all**: no modes, no fields, no validation and no error region, because its one failure mode is the **Refused Stranger**, which is shown on another route entirely. See ADR 0016, which moved it up out of the dashboard layout, ADR 0020, which left it holding a single button, and ADR 0021, which sized it.
+Bottom sheet overlay that opens over whatever screen the sailor is on. **One mode: Continue with Google.** There is no password field, no Forgot password and no email field — Google is the only way in, and an account must already exist for it to sign in to (ADR 0020). Not a dedicated route — it mounts in the app layout, so a **Locked Entry** anywhere can open it without navigating first. **Sized to its contents** — a grab handle, a heading, one line of copy and the button, measured at 180px on a 390px screen (ADR 0021 estimated ~250px before anything had been built) — and it holds **no state at all**: no modes, no fields, no validation and no error region, because its one failure mode is the **Refused Stranger**, which is shown on another route entirely. See ADR 0016, which moved it up out of the dashboard layout, ADR 0020, which left it holding a single button, and ADR 0021, which sized it.
 _Avoid_: Login page, auth page (it's a sheet, not a page), Sign in mode / Forgot password mode (there are no modes left to name), 82% sheet (that height was `mockups/Login-mockup.html`'s, never ADR 0004's, and it was drawn for four fields that no longer exist)
 
 **Refused Stranger**:
@@ -401,6 +401,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - The **Auth Sheet** opens over any screen, including a **Locked Entry**; it does not navigate to a separate route
 - `/auth/callback` is the only dedicated auth route; there is no recovery route, because there is no credential to recover
 - `/auth/callback` **renders as well as redirects**: it shows the **Refused Stranger** screen rather than sending a reason back to the **Auth Sheet** (ADR 0021)
+- `/auth/callback` reads the refusal on the server and completes a `?code=` in the **browser** — a page render cannot write a session cookie (ADR 0021, amended by LAY-126)
 - An **Account** exists only if the owner made one, and enters only through Google — losing the Google account loses the **Profile** with it
 - A **Buoy** is a type of **Data Source**
 - A **Weather Model** is a type of **Data Source**
