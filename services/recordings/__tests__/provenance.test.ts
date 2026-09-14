@@ -106,6 +106,32 @@ describe('how often a recording sampled', () => {
     expect(provenance.median_cadence_seconds).toBe(60)
   })
 
+  it('counts a clock that went backwards instead of reporting a negative cadence', () => {
+    // The hour a naive wall clock repeats. A recording is stored in the sailor's own clock and
+    // never converted, so an autumn distance race really does step backwards an hour — and a
+    // difference of -3,600 seconds is not an interval, it is the clock saying so.
+    const provenance = describeRecording(
+      transcribed(file(['01:59:30', '02:00:00', '01:00:00', '01:00:30']))
+    )
+
+    expect(provenance.backwards_steps).toBe(1)
+    expect(provenance.median_cadence_seconds).toBe(30)
+    expect(provenance.largest_gap_seconds).toBe(30)
+  })
+
+  it('has no backwards step to report from a clock that only went forwards', () => {
+    expect(describeRecording(UNEVEN).backwards_steps).toBe(0)
+  })
+
+  it('spans the earliest row to the latest, which need not be the first and the last', () => {
+    const provenance = describeRecording(
+      transcribed(file(['01:59:30', '02:00:00', '01:00:00', '01:00:30']))
+    )
+
+    // 01:00:00 to 02:00:00, not the -3,570 seconds the first and last rows would give.
+    expect(provenance.span_seconds).toBe(3600)
+  })
+
   it('is measured over the rows it is given, so a Race Window has its own cadence', () => {
     // The same recording, read inside a window that stops before the hole. Cadence is a
     // property of the rows in hand, which is why nothing here is stored.

@@ -20,12 +20,19 @@ import { dirname, join } from 'node:path'
 
 import { describeRecording } from '@/services/recordings/provenance'
 import { parseQtvlmRecording, reassembleTranscription } from '@/services/recordings/qtvlm'
-import type { Transcription, TranscriptionChannels } from '@/types'
+import type { RecordingProvenance, Transcription } from '@/types'
 
 /** Where the recordings are, or null. */
 function findArchive(): string | null {
   const named = process.env.LAYLINE_ARCHIVE_DIR
-  if (named) return existsSync(named) ? named : null
+  if (named) {
+    // Someone who set this asked for the round trip to run. Skipping a typo'd path would report
+    // all green for the one claim they were trying to check.
+    if (!existsSync(named)) {
+      throw new Error(`LAYLINE_ARCHIVE_DIR is set to ${named}, which does not exist`)
+    }
+    return named
+  }
 
   // Up from the checkout — which may be a worktree several levels down — until the sibling
   // repository turns up or the root does.
@@ -54,88 +61,51 @@ if (filenames.length === 0) {
   )
 }
 
-/**
- * The text form Postgres `numeric` gives back. A value outside it would be re-rendered on the
- * way out of the database, and the round trip's bytes would go with it.
- */
-const CANONICAL_NUMERIC = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/
-const NEGATIVE_ZERO = /^-0(\.0*)?$/
-
-/** The channels stored as `numeric`, which is every one that is not a word. */
-const NUMERIC_CHANNELS: (keyof TranscriptionChannels)[] = [
-  'longitude',
-  'latitude',
-  'cog',
-  'sog',
-  'twd',
-  'tws',
-  'twa',
-  'gwd',
-  'gws',
-  'ctw',
-  'stw',
-  'pol',
-  'pre',
-  'xte',
-  'rpm',
-  'twa_calc',
-  'awa_calc',
-  'aws_calc',
-]
-
 function bytesOf(filename: string): Buffer {
   return readFileSync(join(archive as string, filename))
 }
 
-function transcribe(filename: string): { text: string; transcription: Transcription } {
-  const text = bytesOf(filename).toString('utf8')
-  const outcome = parseQtvlmRecording(text)
+/**
+ * The bytes, not a string: this is the path an upload takes, so the hash is over what Storage
+ * holds. A refusal throws, which is the assertion that every one of these files is storable —
+ * including that no value in them is a form Postgres `numeric` would give back changed.
+ */
+function transcribe(filename: string): { bytes: Buffer; transcription: Transcription } {
+  const bytes = bytesOf(filename)
+  const outcome = parseQtvlmRecording(bytes)
   if (!outcome.ok) {
     throw new Error(`${filename} was refused as ${outcome.reason}: ${outcome.message}`)
   }
-  return { text, transcription: outcome.transcription }
+  return { bytes, transcription: outcome.transcription }
 }
 
 const describeArchive = filenames.length > 0 ? describe : describe.skip
 
 describeArchive('every recording in the archive', () => {
   it.each(filenames)('%s is reproduced byte for byte from its Transcription', (filename) => {
-    const bytes = bytesOf(filename)
-    const { text, transcription } = transcribe(filename)
+    const { bytes, transcription } = transcribe(filename)
 
     // Semicolons, LF, `date_verbatim` first, empty for a null — the same recipe the schema
     // migration writes in SQL, arrived at independently.
-    const reassembled = Buffer.from(
-      reassembleTranscription(transcription, {
-        delimiter: transcription.delimiter,
-        decimalSeparator: transcription.decimal_separator,
-      }),
-      'utf8'
-    )
+    const reassembled = Buffer.from(reassembleTranscription(transcription), 'utf8')
 
     expect(reassembled.equals(bytes)).toBe(true)
     expect(createHash('sha256').update(reassembled).digest('hex')).toBe(
       transcription.content_sha256
     )
     expect(transcription.content_sha256).toBe(createHash('sha256').update(bytes).digest('hex'))
-    expect(text.endsWith('\n')).toBe(transcription.trailing_newline)
+    expect(transcription.trailing_newline).toBe(true)
   })
 
-  it.each(filenames)('%s holds only values Postgres numeric gives back unchanged', (filename) => {
-    // The hash is over the *stored* transcription, so a value the database would re-render is
-    // the one way a passing round trip here could still be a false promise.
-    const { transcription } = transcribe(filename)
+  it.each(filenames)('%s is transcribed to its last row', (filename) => {
+    const { bytes, transcription } = transcribe(filename)
 
-    for (const row of transcription.rows) {
-      for (const channel of NUMERIC_CHANNELS) {
-        const value = row[channel]
-        if (value === null) continue
-
-        expect(value).toMatch(CANONICAL_NUMERIC)
-        // `-0.0` is a real reading in a file and `0.0` on the way back out.
-        expect(value).not.toMatch(NEGATIVE_ZERO)
-      }
-    }
+    // One row per line after the header, so nothing was skipped on the way in.
+    const lines = bytes.toString('utf8').split('\n')
+    expect(transcription.row_count).toBe(lines.length - 2)
+    expect(transcription.rows[transcription.rows.length - 1].row_index).toBe(
+      transcription.row_count
+    )
   })
 
   it.each(filenames)('%s is read month-first, as its own filename says', (filename) => {
@@ -147,30 +117,39 @@ describeArchive('every recording in the archive', () => {
 })
 
 describeArchive('how often the archive sampled', () => {
+  const provenances: RecordingProvenance[] = filenames.map((filename) =>
+    describeRecording(transcribe(filename).transcription)
+  )
+
   it('is a different figure per recording, which is why no column holds it', () => {
-    const medians = new Set(
-      filenames.map(
-        (filename) => describeRecording(transcribe(filename).transcription).median_cadence_seconds
-      )
-    )
+    const medians = new Set(provenances.map((p) => p.median_cadence_seconds))
 
     // One stored cadence would be wrong about at least one of these recordings.
     expect(medians.size).toBeGreaterThan(1)
     expect(medians).toContain(30)
   })
 
-  it('includes a recording that sampled at 74 seconds with a 3,352-second hole in it', () => {
-    // 06-20-26-chi-wauk: a long race logged on event triggers rather than a timer, and the
-    // reason 30 seconds is never assumed. Its median inside a Race Window is 75.
-    const chiWauk = filenames.find((name) => name.includes('chi-wauk'))
-    if (!chiWauk) {
-      console.warn('No chi-wauk recording in this archive; skipping its cadence check.')
-      return
-    }
+  it('includes a recording that sampled well slower than 30 seconds', () => {
+    // 06-20-26-chi-wauk is the one: 258 rows at a median of 74 seconds, logged on event
+    // triggers rather than a timer. Asserted as a shape rather than a filename so the claim
+    // still means something when the archive grows another season.
+    const slowest = Math.max(...provenances.map((p) => p.median_cadence_seconds ?? 0))
 
-    const provenance = describeRecording(transcribe(chiWauk).transcription)
+    expect(slowest).toBeGreaterThan(60)
+  })
 
-    expect(provenance.median_cadence_seconds).toBe(74)
-    expect(provenance.largest_gap_seconds).toBe(3352)
+  it('includes a recording with an hour-long hole in it', () => {
+    // The same file: a 3,352-second gap where nothing was logged. A cadence taken as a mean
+    // rather than a median would swallow this, and a race page would state a sampling rate
+    // the boat never sampled at.
+    const largest = Math.max(...provenances.map((p) => p.largest_gap_seconds ?? 0))
+
+    expect(largest).toBeGreaterThan(3000)
+  })
+
+  it('never has a clock that went backwards, so none of these figures were salvaged', () => {
+    // Thirteen seasons of Lake Michigan racing and no autumn fall-back mid-recording. Worth
+    // stating: it means every median above came from intervals, not from a filtered subset.
+    expect(provenances.map((p) => p.backwards_steps)).toEqual(filenames.map(() => 0))
   })
 })

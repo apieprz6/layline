@@ -18,6 +18,12 @@ const HEADER =
   'Date;Longitude;Latitude;COG;SOG;TWD;TWS;TWA;GWD;GWS;CTW;STW;POL;PRE;XTE;' +
   'TWA (calc);AWA (calc);AWS (calc);ALARM;OBSERVATIONS'
 
+/** A third-party qtVlm export, vendored: semicolons, comma decimals, French alarm words. */
+const frenchExport = readFileSync(
+  join(process.cwd(), 'docs/research/fixtures/qtvlm-vdr-french-locale.csv'),
+  'utf8'
+)
+
 const ROW =
   '06/03/2026 18:07:34;-87.6123783333;41.8845983333;226.9;1.0;67.0;1.6;-6.0;49.4;2.6;73.0;;' +
   '0.1;;;-6.0;356.3;2.6;None;'
@@ -30,8 +36,8 @@ function transcribed(text: string, options?: Parameters<typeof parseQtvlmRecordi
   return outcome.transcription
 }
 
-function refused(text: string) {
-  const outcome = parseQtvlmRecording(text)
+function refused(source: string | Uint8Array) {
+  const outcome = parseQtvlmRecording(source)
   if (outcome.ok) {
     throw new Error('expected a refusal, got a Transcription')
   }
@@ -144,15 +150,27 @@ describe('the header', () => {
 
     expect(rows[0].extras).toBeNull()
   })
+
+  it('treats a column named after a property of every object as the extra it is', () => {
+    // `constructor` is a truthy lookup on any plain object, so a naive column map would slot
+    // this value into a field named after a function and lose it on the way to the database.
+    const { extras } = transcribed(`${HEADER};constructor;__proto__\n${ROW};-4.2;7\n`).rows[0]
+
+    // Written out key by key: `{ __proto__: '7' }` as a literal sets a prototype instead of
+    // holding a value, which is the same trap the parser has to avoid.
+    expect(Object.keys(extras ?? {})).toEqual(['constructor', '__proto__'])
+    expect(extras?.['constructor']).toBe('-4.2')
+    expect(extras?.['__proto__']).toBe('7')
+  })
+
+  it('reproduces a file whose columns are named after those properties', () => {
+    const text = `${HEADER};constructor;__proto__\n${ROW};-4.2;7\n`
+
+    expect(reassembleTranscription(transcribed(text))).toBe(text)
+  })
 })
 
 describe('the delimiter and the decimal separator', () => {
-  const FIXTURE = join(
-    process.cwd(),
-    'docs/research/fixtures/qtvlm-vdr-french-locale.csv'
-  )
-  const frenchExport = readFileSync(FIXTURE, 'utf8')
-
   it('are sniffed independently, because a real export pairs semicolons with commas', () => {
     const { delimiter, decimal_separator } = transcribed(frenchExport)
 
@@ -169,19 +187,107 @@ describe('the delimiter and the decimal separator', () => {
     expect(rows[0].latitude).toBe('46.4886666667')
   })
 
-  it('reproduces a comma-decimal file byte for byte, given its own separator back', () => {
+  it('reproduces a comma-decimal file byte for byte, without being told how again', () => {
+    // A Transcription carries what was sniffed, so reassembly reads it from there rather than
+    // falling back to a default that would put points in a comma-decimal file and report
+    // success.
     const transcription = transcribed(frenchExport)
-
-    const reassembled = reassembleTranscription(transcription, {
-      delimiter: transcription.delimiter,
-      decimalSeparator: transcription.decimal_separator,
-    })
+    const reassembled = reassembleTranscription(transcription)
 
     expect(sha256(reassembled)).toBe(transcription.content_sha256)
     expect(sha256(reassembled)).toBe(sha256(frenchExport))
   })
 
-  it('transcribes a vendor export in full, dropping no row and no localised word', () => {
+  it('is not decided by columns Layline has no name for', () => {
+    // Four comma-written values in unrecognised columns against three point-written readings.
+    // An extra is stored and reproduced verbatim, so it has no separator to be re-pointed with
+    // and no business voting on one — and this file reassembles exactly as it arrived.
+    const text =
+      'Date;Longitude;Latitude;SOG;HEEL;RUDDER;TRIM;LEEWAY\n' +
+      '06/03/2026 18:07:34;-87.6;41.8;1.0;-4,2;3,1;0,5;1,2\n'
+    const transcription = transcribed(text)
+
+    expect(transcription.decimal_separator).toBe('.')
+    expect(reassembleTranscription(transcription)).toBe(text)
+  })
+})
+
+describe('a value Postgres numeric would not give back unchanged', () => {
+  // The hash is over the *stored* transcription, so a value the database would re-render or
+  // refuse is the one way a byte round trip in memory could still be a false promise. Catching
+  // it here is a clear refusal; leaving it produces a raw type error at upload time.
+
+  it('is refused when a numeric column holds something that is not a number', () => {
+    const outcome = refused(`${HEADER}\n${ROW.replace(';67.0;', ';N/A;')}\n`)
+
+    expect(outcome.reason).toBe('not-transcribable')
+    expect(outcome.message).toMatch(/TWD/)
+    expect(outcome.message).toMatch(/N\/A/)
+  })
+
+  it('is refused for a negative zero, which comes back as a positive one', () => {
+    const outcome = refused(`${HEADER}\n${ROW.replace(';67.0;', ';-0.0;')}\n`)
+
+    expect(outcome.reason).toBe('not-transcribable')
+    expect(outcome.message).toMatch(/TWD/)
+  })
+
+  it('is refused for a sign or a leading zero the database would drop', () => {
+    expect(refused(`${HEADER}\n${ROW.replace(';67.0;', ';+67.0;')}\n`).reason).toBe(
+      'not-transcribable'
+    )
+    expect(refused(`${HEADER}\n${ROW.replace(';67.0;', ';067.0;')}\n`).reason).toBe(
+      'not-transcribable'
+    )
+  })
+
+  it('is not held to that standard in a column Layline has no name for', () => {
+    // An extra lands in JSONB as text, so `Aucune` or `1,2` or a word is stored as written.
+    const { rows } = transcribed(`${HEADER};NOTE\n${ROW};not a number\n`)
+
+    expect(rows[0].extras).toEqual({ NOTE: 'not a number' })
+  })
+})
+
+describe('the file as bytes', () => {
+  it('is hashed as the bytes it arrived as, not as a re-encoding of them', () => {
+    const bytes = Buffer.from(`${HEADER}\n${ROW}\n`, 'utf8')
+    const outcome = parseQtvlmRecording(bytes)
+
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.transcription.content_sha256).toBe(
+      createHash('sha256').update(bytes).digest('hex')
+    )
+  })
+
+  it('is refused when it is not UTF-8, rather than being read with replacement characters', () => {
+    // A Windows-1252 export: `obsé` as a single 0xE9 byte. Decoding it leniently would put
+    // U+FFFD in the row and hash bytes that are not the file's.
+    const outcome = refused(
+      Buffer.concat([
+        Buffer.from(`${HEADER}\n${ROW}`, 'utf8'),
+        Buffer.from([0x6f, 0x62, 0x73, 0xe9]),
+        Buffer.from('\n', 'utf8'),
+      ])
+    )
+
+    expect(outcome.reason).toBe('not-transcribable')
+    expect(outcome.message).toMatch(/UTF-8/)
+  })
+
+  it('is refused for a byte-order mark, which no stored column could reproduce', () => {
+    const outcome = refused(
+      Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`${HEADER}\n${ROW}\n`, 'utf8')])
+    )
+
+    expect(outcome.reason).toBe('not-transcribable')
+    expect(outcome.message).toMatch(/byte-order mark/)
+  })
+})
+
+describe('a whole vendor export', () => {
+  it('is transcribed in full, dropping no row and no localised word', () => {
     const { row_count, rows, first_row_time, last_row_time } = transcribed(frenchExport)
 
     expect(row_count).toBe(192)
@@ -248,6 +354,15 @@ describe('a file Layline will not record', () => {
     expect(refused('').reason).toBe('no-rows')
   })
 
+  it('is told that its first line is blank, rather than that it is empty', () => {
+    // A file with a header and rows is not empty, whatever its first line is. Telling the
+    // sailor otherwise sends them looking for a problem that is not there.
+    const outcome = refused(`\n${HEADER}\n${ROW}\n`)
+
+    expect(outcome.message).toMatch(/blank/)
+    expect(outcome.message).not.toMatch(/empty/)
+  })
+
   it('is refused for having no Date column', () => {
     const header = HEADER.replace('Date;', 'Time;')
     const outcome = refused(`${header}\n${ROW}\n`)
@@ -272,9 +387,14 @@ describe('a file Layline will not record', () => {
     expect(outcome.reason).toBe('date-unreadable')
   })
 
-  it('is refused for a date that no ordering makes real', () => {
+  it('is refused for a date that no ordering makes real, and told which row', () => {
     const row = ROW.replace('06/03/2026', '31/31/2026')
-    expect(refused(`${HEADER}\n${row}\n`).reason).toBe('date-unreadable')
+    const outcome = refused(`${HEADER}\n${row}\n`)
+
+    expect(outcome.reason).toBe('date-unreadable')
+    expect(outcome.message).toMatch(/row 1/)
+    // One row cannot disagree with itself, so this is not the file-level contradiction below.
+    expect(outcome.message).not.toMatch(/some rows/)
   })
 
   it('is refused when its rows disagree about which ordering they use', () => {

@@ -13,10 +13,10 @@
  *      number and none of them renders back as what the file said, so a number here would
  *      quietly cost the round trip its bytes. Postgres `numeric` keeps the scale it is given
  *      (see `docs/design-docs/race-archive-schema.md`), so text in and text out is the one
- *      representation that survives both hops. That leans on the value already being in the
- *      text form `numeric` gives back — no `+5.0`, no `007` — which is a property of the files
- *      rather than a rule enforced here, and is asserted over all thirteen of them in
- *      `__tests__/archive-round-trip.test.ts` rather than assumed.
+ *      representation that survives both hops — provided the text is already the form `numeric`
+ *      gives back, so `+5.0` and `007` and `-0.0` are refused rather than stored as values whose
+ *      bytes would change on the way out. Every one of the archive's thirteen recordings passes
+ *      that unaltered.
  *
  *   2. Nothing is interpreted. An empty field is null, never zero and never a sentinel: `-1`
  *      is a real wind angle and `0` a real direction, so a stand-in would be indistinguishable
@@ -28,6 +28,10 @@
  * before returning, so a Transcription that cannot reproduce the file is never handed back.
  * The round trip is therefore a property of the value, not a claim about it (ADR 0008); the
  * test over the archive's own recordings is in `__tests__/archive-round-trip.test.ts`.
+ *
+ * What that check cannot see is the storage hop, so the two things that would survive it and
+ * still come back different — a value `numeric` re-renders, and a column name that is a
+ * property of every JavaScript object — are refused and worked around here respectively.
  */
 
 import { createHash } from 'node:crypto'
@@ -54,8 +58,12 @@ const LATITUDE_COLUMN = 'Latitude'
  *
  * `TWA` and `TWA (calc)` are different columns and are kept apart deliberately: true wind
  * angle is read from `TWA`, and `TWA (calc)` is transcribed and read by nothing (ADR 0008).
+ *
+ * A Map rather than the object it is written as, because a plain object answers to `constructor`
+ * and `toString` as well, and a column so named would be slotted into a field that is a
+ * function instead of landing in `extras`.
  */
-const CHANNEL_BY_COLUMN: Readonly<Record<string, keyof TranscriptionChannels>> = {
+const CHANNEL_COLUMNS: Readonly<Record<string, keyof TranscriptionChannels>> = {
   Longitude: 'longitude',
   Latitude: 'latitude',
   COG: 'cog',
@@ -77,6 +85,10 @@ const CHANNEL_BY_COLUMN: Readonly<Record<string, keyof TranscriptionChannels>> =
   ALARM: 'alarm',
   OBSERVATIONS: 'observations',
 }
+
+const CHANNEL_BY_COLUMN: ReadonlyMap<string, keyof TranscriptionChannels> = new Map(
+  Object.entries(CHANNEL_COLUMNS)
+)
 
 /**
  * The two channels that are words rather than measurements. They are never normalised and
@@ -124,6 +136,20 @@ const SLASH_TIMESTAMP = /^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2}):(\d
 const COMMA_DECIMAL = /^[+-]?\d+,\d+$/
 const POINT_DECIMAL = /^[+-]?\d+\.\d+$/
 
+/**
+ * The text form Postgres `numeric` gives back: an optional sign, no leading zeros, an optional
+ * fraction of any length. A value outside it is re-rendered or refused by the database, either
+ * of which would cost the stored round trip its bytes — so it is refused here instead, where
+ * the reason can name the column.
+ */
+const CANONICAL_NUMERIC = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/
+
+/** `numeric` has one zero and it is positive, so `-0.0` comes back as `0.0`. */
+const NEGATIVE_ZERO = /^-0(\.0*)?$/
+
+/** A UTF-8 byte-order mark, which belongs to no column and so cannot be reproduced. */
+const BYTE_ORDER_MARK = '\uFEFF'
+
 /** What a header position holds, decided once so parse and reassemble cannot disagree. */
 type Slot =
   | { kind: 'date' }
@@ -149,19 +175,21 @@ export interface ParseQtvlmOptions {
   dateOrder?: RecordingDateOrder
 }
 
+/**
+ * Both default to the Transcription's own sniffed values, so the ordinary call takes no options
+ * and cannot quietly produce the wrong bytes. They are overridable only because a caller may be
+ * reproducing the recipe in
+ * `supabase/migrations/20260910183000_create_race_archive_and_boat_setup.sql`, which hardcodes
+ * `;` and a point.
+ *
+ * Neither has a column in `recordings`. Every file in the archive uses both defaults, so the
+ * SQL recipe is right as written; a comma-decimal upload would need the separator stored before
+ * its bytes could be reproduced from the database rather than from the file. Because the fields
+ * are required on `Transcription`, whoever assembles one from database rows has to answer that
+ * question rather than inherit a wrong default.
+ */
 export interface ReassembleOptions {
-  /**
-   * Defaults to `;`, matching the round-trip recipe in
-   * `supabase/migrations/20260909180000_create_race_archive_schema.sql`. Pass the sniffed
-   * `transcription.delimiter` to reproduce a file that used something else.
-   */
   delimiter?: string
-  /**
-   * Defaults to `.`, the form every numeric value is transcribed into. A comma-decimal upload
-   * needs `transcription.decimal_separator` passed back to reproduce its bytes — and that
-   * separator has no column of its own, so a caller reproducing bytes from the database must
-   * re-sniff them. Worth a column the day a comma-decimal recording is actually stored.
-   */
   decimalSeparator?: '.' | ','
 }
 
@@ -202,17 +230,20 @@ function sniffDelimiter(header: string): string {
 }
 
 /**
- * The decimal separator, sniffed from the cells that are neither the date nor text.
+ * The decimal separator, sniffed from the recognised measurements alone.
+ *
+ * An unrecognised column is deliberately not consulted. Its value is stored verbatim in
+ * `extras` and rendered verbatim on the way back, so the separator does nothing to it — which
+ * means a boat logging four instrument channels Layline has no name for could otherwise
+ * outvote the readings it does, and get a perfectly reproducible file refused.
  *
  * A file that mixes both forms is not refused here; it simply fails to reassemble, and the
  * self-check turns that into a refusal with the bytes to prove it.
  */
 function sniffDecimalSeparator(slots: Slot[], rows: string[][]): '.' | ',' {
-  // An unrecognised column is sniffed along with the rest: a column Layline has no name for
-  // is still a number, and it still has to reassemble.
   const numericSlots = slots
     .map((slot, index) => ({ slot, index }))
-    .filter(({ slot }) => slot.kind === 'extra' || (slot.kind === 'channel' && slot.numeric))
+    .filter(({ slot }) => slot.kind === 'channel' && slot.numeric)
 
   let commas = 0
   let points = 0
@@ -289,6 +320,7 @@ function decideDateOrder(
         'the Date column reads day-first in some rows and month-first in others, so no single ordering fits the file',
     }
   }
+
   if (dayFirst) return { order: 'DMY', proven: true }
   if (monthFirst) return { order: 'MDY', proven: true }
   return { order: 'MDY', proven: false }
@@ -297,13 +329,36 @@ function decideDateOrder(
 /**
  * Transcribe a qtVlm VDR export.
  *
- * `text` is the file decoded as UTF-8. `content_sha256` is taken over those bytes re-encoded,
- * which is the uploaded file's own hash for any UTF-8 file without a byte-order mark.
+ * Give it the uploaded bytes where they are to hand: `content_sha256` is then taken over those
+ * exact bytes, and a file that is not UTF-8 is refused rather than read with replacement
+ * characters and hashed as something the file never was. A string is accepted for convenience
+ * and re-encoded as UTF-8, which is the same hash for any file that really was UTF-8.
  */
 export function parseQtvlmRecording(
-  text: string,
+  source: string | Uint8Array,
   options: ParseQtvlmOptions = {}
 ): TranscriptionOutcome {
+  const bytes = typeof source === 'string' ? Buffer.from(source, 'utf8') : Buffer.from(source)
+
+  const text = bytes.toString('utf8')
+
+  // Decoding has to be lossless, and re-encoding is the whole test: a Windows-1252 export
+  // decodes to U+FFFD where its accented byte was, which encodes back to something else. Left
+  // alone it would put a replacement character in a row and hash bytes nobody can reproduce.
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    return refuse(
+      'not-transcribable',
+      'the file is not valid UTF-8, so its bytes cannot be read as a recording'
+    )
+  }
+
+  if (text.startsWith(BYTE_ORDER_MARK)) {
+    return refuse(
+      'not-transcribable',
+      'the file begins with a byte-order mark, which belongs to no column and so could not be reproduced'
+    )
+  }
+
   // A CR would survive into no stored column, so it could never be reproduced. Refusing is
   // honest where stripping it would leave `content_sha256` describing bytes we discarded.
   if (text.includes('\r')) {
@@ -317,8 +372,16 @@ export function parseQtvlmRecording(
   const lines = text.split('\n')
   if (trailing_newline) lines.pop()
 
-  if (lines.length === 0 || lines[0] === '') {
+  if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) {
     return refuse('no-rows', 'the file is empty')
+  }
+  if (lines[0] === '') {
+    // Not "empty": a file with a header and rows under a blank first line is a real recording,
+    // and telling the sailor it is empty sends them looking for the wrong problem.
+    return refuse(
+      'no-date-column',
+      `the first line is blank, so the file has no header and no ${DATE_COLUMN} column`
+    )
   }
 
   const delimiter = sniffDelimiter(lines[0])
@@ -366,7 +429,7 @@ export function parseQtvlmRecording(
       slots.push({ kind: 'date' })
       continue
     }
-    const channel = CHANNEL_BY_COLUMN[column]
+    const channel = CHANNEL_BY_COLUMN.get(column)
     if (channel) {
       slots.push({ kind: 'channel', channel, numeric: !TEXT_CHANNELS.has(channel) })
     } else {
@@ -402,6 +465,14 @@ export function parseQtvlmRecording(
         `row ${offset + 1} has a ${DATE_COLUMN} of ${JSON.stringify(cells[0])}, which is not a timestamp qtVlm writes`
       )
     }
+    // Settled per row, before the file-level ordering: one row cannot disagree with itself, so
+    // `31/31` is this row being unreadable and not the file's rows contradicting each other.
+    if (parts.first > 12 && parts.second > 12) {
+      return refuse(
+        'date-unreadable',
+        `row ${offset + 1} has a ${DATE_COLUMN} of ${JSON.stringify(cells[0])}, which is not a real date read either way round`
+      )
+    }
     partsByRow.push(parts)
   }
 
@@ -431,27 +502,47 @@ export function parseQtvlmRecording(
 
     const channels: TranscriptionChannels = { ...NO_CHANNELS }
     let extras: RecordingRowExtras | null = null
+    let unstorable: string | null = null
 
     slots.forEach((slot, index) => {
       const cell = cells[index]
       switch (slot.kind) {
         case 'date':
           return
-        case 'channel':
+        case 'channel': {
           // Empty means the instrument said nothing. Text is taken as written, spaces and
           // localised words included; a number is only re-pointed, never reformatted.
           if (cell === '') return
-          channels[slot.channel] = slot.numeric ? cell.replace(decimal_separator, '.') : cell
+          if (!slot.numeric) {
+            channels[slot.channel] = cell
+            return
+          }
+          const value = cell.replace(decimal_separator, '.')
+          if (!CANONICAL_NUMERIC.test(value) || NEGATIVE_ZERO.test(value)) {
+            unstorable ??=
+              `row ${offset + 1} has ${source_columns[index]} of ${JSON.stringify(cell)}, ` +
+              'which is not a value Postgres numeric gives back unchanged'
+            return
+          }
+          channels[slot.channel] = value
           return
+        }
         case 'extra':
           // An absent key and an empty field are the same missing value, so an empty extra is
-          // left out rather than stored as `''`.
+          // left out rather than stored as `''`. No numeric standard applies: an extra is text
+          // in JSONB, so a word or a comma decimal is stored exactly as the file wrote it.
           if (cell === '') return
-          extras ??= {}
+          // Null-prototype, because `extras['__proto__'] = value` on a plain object sets the
+          // prototype instead of holding the value, and the column would be silently lost.
+          extras ??= Object.create(null) as RecordingRowExtras
           extras[slot.column] = cell
           return
       }
     })
+
+    if (unstorable) {
+      return refuse('not-transcribable', unstorable)
+    }
 
     rows.push({
       row_index: offset + 1,
@@ -467,7 +558,8 @@ export function parseQtvlmRecording(
     source_columns,
     date_order,
     trailing_newline,
-    content_sha256: createHash('sha256').update(text, 'utf8').digest('hex'),
+    // Over the bytes themselves, so this is the hash of the object in Storage.
+    content_sha256: createHash('sha256').update(bytes).digest('hex'),
     row_count: rows.length,
     // Lexicographic on a fixed-width stamp is chronological, and stays in the wall clock.
     first_row_time: times.reduce((a, b) => (b < a ? b : a)),
@@ -481,8 +573,7 @@ export function parseQtvlmRecording(
   // The promise, checked rather than asserted. Anything the transcription cannot reproduce —
   // a quoted field, a mixed decimal separator, a numeric form no rule here anticipated —
   // fails here rather than being stored as a faithful copy that is not one.
-  const reassembled = reassembleTranscription(transcription, { delimiter, decimalSeparator: decimal_separator })
-  if (reassembled !== text) {
+  if (reassembleTranscription(transcription) !== text) {
     return refuse(
       'not-transcribable',
       'the transcription does not reproduce the file byte for byte, so storing it would store a claim rather than a copy'
@@ -501,24 +592,32 @@ export function parseQtvlmRecording(
 export function recordedValue(row: TranscriptionRow, column: string): string | null {
   if (column === DATE_COLUMN) return row.date_verbatim
 
-  const channel = CHANNEL_BY_COLUMN[column]
+  const channel = CHANNEL_BY_COLUMN.get(column)
   if (channel) return row[channel]
 
-  return row.extras?.[column] ?? null
+  // `Object.hasOwn` rather than a lookup, so a column named `toString` reads the value the file
+  // gave — or nothing — instead of a method inherited from a prototype the row never asked for.
+  if (row.extras && Object.hasOwn(row.extras, column)) return row.extras[column]
+
+  return null
 }
 
 /**
  * Render a Transcription back to the file it came from.
  *
- * This is the JavaScript half of the round trip; the SQL half is the recipe in the schema
- * migration, and the two agree by producing the same bytes rather than by sharing code.
+ * This is the JavaScript half of the round trip; the SQL half is the recipe in
+ * `supabase/migrations/20260910183000_create_race_archive_and_boat_setup.sql`, and the two agree
+ * by producing the same bytes rather than by sharing code.
  */
 export function reassembleTranscription(
   transcription: Transcription,
   options: ReassembleOptions = {}
 ): string {
-  const delimiter = options.delimiter ?? ';'
-  const decimalSeparator = options.decimalSeparator ?? '.'
+  // The Transcription's own sniffed values, not `;` and `.`: a default here would render a
+  // comma-decimal file with points and report success, and the caller would have a plausible
+  // file whose hash does not match the one stored beside it.
+  const delimiter = options.delimiter ?? transcription.delimiter
+  const decimalSeparator = options.decimalSeparator ?? transcription.decimal_separator
 
   const render = (row: TranscriptionRow, column: string): string => {
     const value = recordedValue(row, column)
@@ -526,7 +625,7 @@ export function reassembleTranscription(
 
     // Only a recognised measurement was re-pointed on the way in, so only one goes back. An
     // extra keeps whatever the file wrote, comma and all, because that is what was stored.
-    const channel = CHANNEL_BY_COLUMN[column]
+    const channel = CHANNEL_BY_COLUMN.get(column)
     const repoint = channel !== undefined && !TEXT_CHANNELS.has(channel)
     return repoint ? value.replace('.', decimalSeparator) : value
   }

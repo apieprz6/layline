@@ -56,7 +56,14 @@ export function describeRecording(recording: DescribableRecording): RecordingPro
 
   const seconds = rows.map((row) => wallClockSeconds(row.row_time))
   // Between consecutive rows as recorded, so the file's own order is what is measured.
-  const intervals = seconds.slice(1).map((at, index) => at - seconds[index])
+  const steps = seconds.slice(1).map((at, index) => at - seconds[index])
+
+  // A naive clock can go backwards: the hour a fall-back repeats is recorded twice, and the
+  // recording is never converted out of the sailor's clock to hide it. A difference of -3,600
+  // seconds is not a sampling interval, so it is counted rather than averaged into one — a
+  // negative cadence would be arithmetic nonsense presented as a figure about the boat.
+  const intervals = steps.filter((step) => step >= 0)
+  const backwards_steps = steps.length - intervals.length
 
   const dead_channels: string[] = []
   const constant_channels: { column: string; value: string }[] = []
@@ -92,7 +99,9 @@ export function describeRecording(recording: DescribableRecording): RecordingPro
     row_count: rows.length,
     median_cadence_seconds: median(intervals),
     largest_gap_seconds: intervals.length === 0 ? null : Math.max(...intervals),
+    // Earliest to latest, which is the first to the last row only while the clock went forwards.
     span_seconds: seconds.length === 0 ? null : Math.max(...seconds) - Math.min(...seconds),
+    backwards_steps,
     dead_channels,
     constant_channels,
   }

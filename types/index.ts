@@ -729,7 +729,13 @@ export type TranscriptionRefusal =
   | 'no-position-column'
   /** A `Date` column whose values cannot be read as timestamps, which is no `Date` in effect. */
   | 'date-unreadable'
-  /** The transcription does not reproduce the bytes, so storing it would store a claim. */
+  /**
+   * The bytes could not be reproduced, so storing the transcription would store a claim. This
+   * covers everything the file has that no column could hold and nothing about its quality: a
+   * CRLF or a byte-order mark, an encoding that is not UTF-8, a `Date` anywhere but first, a
+   * duplicated column name, a row whose field count is not the header's, a value Postgres
+   * `numeric` would not give back unchanged, and the self-check itself failing.
+   */
   | 'not-transcribable'
 
 export type TranscriptionOutcome =
@@ -749,8 +755,13 @@ export interface RecordingProvenance {
   median_cadence_seconds: number | null
   /** The largest interval between consecutive rows. Null below two rows. */
   largest_gap_seconds: number | null
-  /** First to last row time. */
+  /** Earliest row to latest row, which is first to last only while the clock went forwards. */
   span_seconds: number | null
+  /**
+   * How many times the naive wall clock stepped backwards — the hour a fall-back repeats. Those
+   * steps are not intervals, so they are counted here instead of being averaged into a cadence.
+   */
+  backwards_steps: number
   /** Verbatim header names with no value in any row: the channels this boat never fed. */
   dead_channels: string[]
   /** Verbatim header names carrying one value throughout, which is nearly as little. */
