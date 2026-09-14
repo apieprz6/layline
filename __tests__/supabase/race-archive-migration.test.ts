@@ -2,7 +2,7 @@
  * Static assertions over the race archive migration.
  *
  * The invariants themselves are proved against a live database by
- * scripts/verify-race-archive-schema.sql (93 checks). That suite needs Postgres, so it cannot
+ * scripts/verify-race-archive-schema.sql (94 checks). That suite needs Postgres, so it cannot
  * run here. What jest can do is guard the handful of properties that are properties of the
  * *text* of the migration — the ones where the failure mode is a plausible edit that no
  * running database would object to, or that only a hosted project would reject.

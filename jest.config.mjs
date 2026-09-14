@@ -23,7 +23,13 @@ const config = {
     '<rootDir>/e2e/',
     // Throwaway agent worktrees hold full copies of the repo, so leaving them
     // in makes `npm test` run every suite once per worktree.
-    '/\\.claude/',
+    //
+    // Anchored to <rootDir> on purpose. A bare '/\.claude/' is matched against
+    // each file's absolute path, and a worktree *lives* at
+    // .claude/worktrees/<name>/ — so running jest from inside one ignored every
+    // test it had and reported "No tests found". Anchoring excludes the
+    // worktrees when run from the main checkout and nothing when run from one.
+    '<rootDir>/.claude/',
   ],
   collectCoverageFrom: [
     'app/**/*.{js,jsx,ts,tsx}',

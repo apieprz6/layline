@@ -162,19 +162,43 @@ $$;
 -- Fixed UUIDs so a failure message points at something nameable.
 --
 --   admin  aaaaaaa1  an admin profile
---   crew   cccccccc  a signed-in user whose profile.role is NULL -- the tier LAY-95 settled
+--   crew   cccccccc  a viewer -- every signed-in account reads everything (ADR 0019)
 --   P1/P2  polar Versions 1 and 2
 --   R1/R2  rig_tune Versions 1 and 2, with bands
 --   C1     instrument_calibration Version 1
 --   REC1   a Recording with three rows; REC2 a second Recording with one
 
+-- 20260911213000_profile_trigger_and_role_lock.sql puts an AFTER INSERT trigger on auth.users
+-- that creates the Profile in this same transaction, with role defaulting to 'viewer'. So the
+-- two inserts below are all it takes to get both tiers, and a hand-written INSERT INTO profiles
+-- would now collide on the primary key.
 INSERT INTO auth.users (id, email) VALUES
     ('aaaaaaa1-0000-4000-8000-000000000001', 'admin@layline.test'),
     ('cccccccc-0000-4000-8000-000000000002', 'crew@layline.test');
 
-INSERT INTO profiles (id, user_id, role) VALUES
-    ('aaaaaaa1-0000-4000-8000-000000000001', 'aaaaaaa1-0000-4000-8000-000000000001', 'admin'),
-    ('cccccccc-0000-4000-8000-000000000002', 'cccccccc-0000-4000-8000-000000000002', NULL);
+-- Promoting one of them is a role write, which the same migration refuses for any caller whose
+-- JWT role is `authenticated`. This runs as the session user with no JWT, which is the SQL
+-- console path ADR 0017 designated, so it is allowed — and asserted below rather than assumed.
+UPDATE profiles SET role = 'admin'
+ WHERE id = 'aaaaaaa1-0000-4000-8000-000000000001';
+
+DO $$
+DECLARE
+    v_admin TEXT;
+    v_crew  TEXT;
+BEGIN
+    SELECT role INTO v_admin FROM profiles
+     WHERE id = 'aaaaaaa1-0000-4000-8000-000000000001';
+    SELECT role INTO v_crew FROM profiles
+     WHERE id = 'cccccccc-0000-4000-8000-000000000002';
+
+    PERFORM pg_temp.chk(
+        'the Profile trigger gave both fixtures a Profile, one admin and one viewer',
+        v_admin = 'admin' AND v_crew = 'viewer',
+        format('admin=%s crew=%s', COALESCE(v_admin, 'no profile'), COALESCE(v_crew, 'no profile'))
+    );
+END;
+$$;
 
 -- ===========================================================================
 -- Shape: what the migration is, before anything is written to it
@@ -1166,7 +1190,7 @@ BEGIN
     END LOOP;
 
     PERFORM pg_temp.chk(
-        'a signed-in user whose profile.role is NULL reads every table in full (LAY-95 q5)',
+        'a viewer reads every table in full: Role governs writes only (ADR 0019, LAY-95 q5)',
         v_hidden IS NULL,
         COALESCE(v_hidden::TEXT, '-')
     );

@@ -11,6 +11,10 @@
 #
 # Unlike the SQL suite this one really writes to Storage: it uploads, moves and deletes, and
 # creates two throwaway users. It cleans up after itself, but there is no ROLLBACK for bytes.
+#
+# Note that a hosted run cannot sign either user in as things stand: ADR 0020 turns the email
+# provider off there, and both tiers are reached with signInWithPassword. See the header of
+# verify-boat-storage.mjs.
 
 set -euo pipefail
 

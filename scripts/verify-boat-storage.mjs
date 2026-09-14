@@ -17,6 +17,14 @@
  * throwaway users. It is safe against a project holding real objects, but note that unlike
  * the SQL suite it genuinely writes: there is no ROLLBACK for object storage.
  *
+ * LOCAL ONLY, as of ADR 0020. Both tiers are reached with `signInWithPassword`, which needs
+ * the email provider — deliberately left on locally for exactly this reason
+ * (`supabase/config.toml`, the note above `[auth.email].enable_signup`) and deliberately
+ * turned OFF on the hosted project, because a hosted anon key ships to the browser. So a
+ * hosted run of the two signed-in tiers needs a session obtained some other way: a token
+ * minted from the project's JWT secret, or the email provider re-enabled for the length of
+ * the run. The four bucket checks and the service-role cleanup work hosted as they are.
+ *
  * The paths come from lib/storage/paths.ts, deliberately. That module is the single
  * implementation of the convention, and a verification script that hardcoded the same
  * strings would prove the strings agreed with themselves.
@@ -70,7 +78,18 @@ const service = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-/** A throwaway user, with the profile row that decides its tier. */
+/**
+ * A throwaway user at a given tier.
+ *
+ * The Profile is not created here: 20260911213000_profile_trigger_and_role_lock.sql puts an
+ * AFTER INSERT trigger on auth.users that makes it in the same transaction, defaulting to
+ * `viewer`. An insert from here would collide on the primary key, so a viewer needs nothing
+ * and an admin needs a promotion.
+ *
+ * The promotion goes through the service role deliberately. The same migration refuses a role
+ * write from any caller whose JWT role is `authenticated`, and the service role is the path
+ * ADR 0017 designated — so this doubles as a check that the lock is aimed where it claims.
+ */
 async function makeUser(label, role) {
   const email = `layline-storage-check-${label}-${RUN.slice(0, 8)}@example.com`
   const { data, error } = await service.auth.admin.createUser({
@@ -80,11 +99,25 @@ async function makeUser(label, role) {
   })
   if (error) throw new Error(`could not create the ${label} user: ${error.message}`)
 
-  const { error: profileError } = await service
+  const { data: profile, error: profileError } = await service
     .from('profiles')
-    .insert({ id: data.user.id, user_id: data.user.id, role })
+    .select('role')
+    .eq('id', data.user.id)
+    .single()
   if (profileError) {
-    throw new Error(`could not give the ${label} user a profile: ${profileError.message}`)
+    throw new Error(
+      `the Profile trigger did not give the ${label} user a Profile: ${profileError.message}`
+    )
+  }
+
+  if (profile.role !== role) {
+    const { error: promoteError } = await service
+      .from('profiles')
+      .update({ role })
+      .eq('id', data.user.id)
+    if (promoteError) {
+      throw new Error(`could not make the ${label} user a ${role}: ${promoteError.message}`)
+    }
   }
 
   const client = createClient(SUPABASE_URL, ANON_KEY, {
@@ -109,7 +142,7 @@ try {
   const sha256 = createHash('sha256').update(bytes).digest('hex')
 
   admin = await makeUser('admin', 'admin')
-  crew = await makeUser('crew', null)
+  crew = await makeUser('crew', 'viewer')
 
   // 1-4: the bucket, as the migration configured it -------------------------
   const { data: bucket, error: bucketError } = await service.storage.getBucket(BOAT_BUCKET)

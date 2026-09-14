@@ -125,7 +125,7 @@ data. Neither runs in CI, because CI has no database — the CI-side guard is
 properties of the migration's text.
 
 ```bash
-scripts/verify-race-archive-schema.sh              # 93 checks, local stack
+scripts/verify-race-archive-schema.sh              # 94 checks, local stack
 scripts/verify-race-archive-schema.sh "$DB_URL"    # ... or a hosted project
 scripts/verify-boat-storage.sh                     # LAY-92's 17 storage checks
 ```
@@ -137,6 +137,18 @@ two users, a Recording, two Races, some Versions — exist only for the length o
 The storage suite really writes: it uploads, moves and deletes real objects and creates two
 throwaway users. It cleans up after itself, but there is no `ROLLBACK` for bytes. Against a
 hosted project it needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
+
+**It is local-only as of ADR 0020**, which turned the email provider off on the hosted project.
+Both signed-in tiers are reached with `signInWithPassword`, which needs that provider — left on
+locally for exactly this reason, and off hosted because a hosted anon key ships to the browser.
+A hosted run of the thirteen signed-in checks therefore needs a session obtained another way: a
+token minted from the project's JWT secret, or the provider re-enabled for the length of the
+run. The four bucket checks and the service-role cleanup work hosted unchanged.
+
+Neither suite creates a `profiles` row any more. `20260911213000_profile_trigger_and_role_lock.sql`
+makes the Profile from a trigger on `auth.users`, so both now create the account and let the
+Profile follow — the admin fixture is then promoted from `viewer`, which is a role write and only
+permitted because neither suite carries an end-user JWT.
 
 **One hazard worth knowing before a hosted `db push`.** A migration is one transaction, so an
 aborted statement is reported against the *following* one — which makes an innocent

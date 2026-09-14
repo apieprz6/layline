@@ -782,12 +782,19 @@ CREATE POLICY "races writable by admins"
 
 Three things this settles, and one thing it must not do:
 
-- **A signed-in user with `role = NULL` can read.** This closes LAY-95's question 5. `role` is
-  `NULL` by default at sign-up and there is no role-assignment UI, so requiring `'user'` would
-  lock every self-signed-up account out of a section the drawer shows them. It also matches the
-  Storage policy already shipped in `20260909190000_create_boat_storage_bucket.sql`
+- **Every signed-in account reads everything; `role` governs writes only.** This closes LAY-95's
+  question 5, and the reasoning is **ADR 0019's**. A viewer reads the archive in full, so
+  requiring `'admin'` to `SELECT` would lock the crew out of sections the drawer shows them. It
+  also matches the Storage policy already shipped in
+  `20260909190000_create_boat_storage_bucket.sql`
   (`FOR SELECT TO authenticated USING (bucket_id = 'boat')`) — anything stricter here would let
-  a user download a recording's bytes but not see the race list that names it.
+  a viewer download a recording's bytes but not see the race list that names it.
+
+  This clause used to read "a signed-in user with `role = NULL` can read … `role` is `NULL` by
+  default at sign-up". **That rationale is dead**, and LAY-53 flagged it as a loose end for this
+  map: ADR 0017 made a Role `'admin'` or `'viewer'` and **never null**, a trigger creates the
+  Profile, and ADR 0019 closed sign-up. The policies below never changed — only the argument for
+  them. See `20260911213000_profile_trigger_and_role_lock.sql`.
 - **`(SELECT public.is_admin())`** wrapped in a subselect, and `TO authenticated` on every
   policy, so the planner hoists the predicate into an initPlan and evaluates it once per
   statement instead of once per row. Copy this exactly.
@@ -933,12 +940,12 @@ two implementations of a derivation is the thing "derive, don't store" was avoid
 document. Two check suites came with it, both committed and both re-runnable against a hosted
 project:
 
-- `scripts/verify-race-archive-schema.sh` — 93 checks. Attacks every invariant claimed above and
+- `scripts/verify-race-archive-schema.sh` — 94 checks. Attacks every invariant claimed above and
   passes only when Postgres refuses. One transaction, ending in `ROLLBACK`.
 - `scripts/verify-boat-storage.sh` — LAY-92's 17 checks, written down at last, using
   `lib/storage/paths.ts` so the paths under test are the ones the app derives.
 
-Both were run against a local stack: 93/93 and 17/17. The hosted `db push` and the hosted re-run
+Both were run against a local stack: 94/94 and 17/17. The hosted `db push` and the hosted re-run
 of both remain the owner's, as they were for LAY-92.
 
 One correction to this document came out of it, marked at the two sites: a bare

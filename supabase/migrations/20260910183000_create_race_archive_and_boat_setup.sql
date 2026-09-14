@@ -867,12 +867,16 @@ CREATE TRIGGER race_sail_entry_sails_touch_race
 --
 -- Four things this settles, and one thing it must not do:
 --
---   * A signed-in user with role = NULL can read. `role` is NULL by default at sign-up and
---     there is no role-assignment UI, so requiring 'user' would lock every self-signed-up
---     account out of a section the drawer shows them. It also matches the Storage policy in
+--   * Every signed-in account reads everything, and Role governs writes only (ADR 0019).
+--     A viewer reads the archive in full, so requiring 'admin' to SELECT would lock the crew
+--     out of sections the drawer shows them. It also matches the Storage policy in
 --     20260909190000_create_boat_storage_bucket.sql (FOR SELECT TO authenticated USING
---     (bucket_id = 'boat')) -- anything stricter here would let a user download a
+--     (bucket_id = 'boat')) -- anything stricter here would let a viewer download a
 --     recording's bytes but not see the race list that names it.
+--
+--     This used to be argued from `role` being NULL by default at sign-up. ADR 0017 abolished
+--     that: a Role is 'admin' or 'viewer' and never null, a trigger makes the Profile, and
+--     sign-up is closed. The policies below are unchanged -- only the reasoning was stale.
 --
 --   * (SELECT public.is_admin()) wrapped in a subselect, and TO authenticated on every
 --     policy, so the planner hoists the predicate into an initPlan and evaluates it once
