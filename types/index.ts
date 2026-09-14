@@ -629,6 +629,145 @@ export interface RaceSeaStateEntry {
   created_at: string
 }
 
+// ---------------------------------------------------------------------------
+// A parsed Transcription
+// ---------------------------------------------------------------------------
+// What `services/recordings/qtvlm.ts` produces from a file's bytes, and what
+// `reassembleTranscription` reads to reproduce them. Field names are the database's, so a
+// Transcription row is written by adding `recording_id` and a `row_index` and nothing else.
+//
+// Every recorded channel is `string | null` here, not `number | null`, and that is the
+// round trip's load-bearing detail rather than a convenience: `0.0` and `-0.0` and `20.10`
+// are all the JavaScript number they parse to, and none of them renders back as what the
+// file said. Postgres `numeric` preserves the scale it was given, so text in and text out
+// is the one representation that survives both hops — which is why `RecordingRow` above,
+// the shape a plain PostgREST select returns, cannot be used for a round trip.
+
+/** Every recognised field of a Transcription row, in file order, in text form. */
+export interface TranscriptionChannels {
+  longitude: string | null
+  latitude: string | null
+  cog: string | null
+  sog: string | null
+  twd: string | null
+  tws: string | null
+  /** Authoritative for true wind angle. Signed, −180..180, positive = starboard (ADR 0008). */
+  twa: string | null
+  gwd: string | null
+  gws: string | null
+  ctw: string | null
+  stw: string | null
+  pol: string | null
+  pre: string | null
+  xte: string | null
+  rpm: string | null
+  /** `TWA (calc)` — transcribed and read by nothing. */
+  twa_calc: string | null
+  /** `AWA (calc)` — the only apparent wind that exists, and a calculation. Unsigned 0..360. */
+  awa_calc: string | null
+  /** `AWS (calc)` — likewise a calculation, not a masthead reading. */
+  aws_calc: string | null
+  alarm: string | null
+  observations: string | null
+}
+
+/** One row of a parsed Transcription. `recording_id` is added by whoever writes it. */
+export interface TranscriptionRow extends TranscriptionChannels {
+  /** 1-based, preserving file order. */
+  row_index: number
+  /** Exactly as written, whatever the ordering or the format. */
+  date_verbatim: string
+  /** `date_verbatim` resolved under `date_order`: naive wall clock, no conversion, ever. */
+  row_time: string
+  /** One key per unrecognised header, verbatim, value as written. Null when there are none. */
+  extras: RecordingRowExtras | null
+}
+
+/** How `date_order` was arrived at, which is the difference between a fact and a default. */
+export type DateOrderEvidence =
+  /** A day component above 12 settles it. */
+  | 'proven'
+  /** Every component is 12 or below, so the file cannot say. Month-first is the assumption. */
+  | 'assumed'
+  /** The caller said so, which is how a wrong reading is corrected without re-uploading. */
+  | 'supplied'
+
+/**
+ * A file transcribed. The first seven fields are `recordings` columns under their own names;
+ * the last three are sniffed facts with nowhere to be stored, reported so a caller can state
+ * them and so `reassembleTranscription` can be handed them.
+ */
+export interface Transcription {
+  /** The header exactly as recorded, in order: 'TWA (calc)', not the SQL name. */
+  source_columns: string[]
+  date_order: RecordingDateOrder
+  trailing_newline: boolean
+  content_sha256: string
+  row_count: number
+  /** The recording's own naive wall-clock frame. */
+  first_row_time: string
+  last_row_time: string
+  rows: TranscriptionRow[]
+  date_order_evidence: DateOrderEvidence
+  /** Sniffed. `;` in every file seen, but the format does not fix it. */
+  delimiter: string
+  /** Sniffed independently of the delimiter: a real vendor export pairs `;` with `,`. */
+  decimal_separator: '.' | ','
+}
+
+/**
+ * Why a file was refused. Only two conditions refuse a recording (ADR 0009) — it yields no
+ * rows, or it has no `Date` or no position — and these five are those two spelled out plus
+ * the parse's own honesty check. Nothing about a recording's *quality* is ever a reason.
+ */
+export type TranscriptionRefusal =
+  /** Nothing to transcribe: no data rows at all. */
+  | 'no-rows'
+  /** No `Date` column in the header. */
+  | 'no-date-column'
+  /** No `Longitude` or no `Latitude` column in the header. */
+  | 'no-position-column'
+  /** A `Date` column whose values cannot be read as timestamps, which is no `Date` in effect. */
+  | 'date-unreadable'
+  /**
+   * The bytes could not be reproduced, so storing the transcription would store a claim. This
+   * covers everything the file has that no column could hold and nothing about its quality: a
+   * CRLF or a byte-order mark, an encoding that is not UTF-8, a `Date` anywhere but first, a
+   * duplicated column name, a row whose field count is not the header's, a value Postgres
+   * `numeric` would not give back unchanged, and the self-check itself failing.
+   */
+  | 'not-transcribable'
+
+export type TranscriptionOutcome =
+  | { ok: true; transcription: Transcription }
+  | { ok: false; reason: TranscriptionRefusal; message: string }
+
+/**
+ * The format and cadence figures a race page states, computed over whatever rows it is given
+ * — the whole Transcription, or the rows inside a Race Window. Nothing here is stored: every
+ * figure is a function of rows that cannot change (ADR 0009).
+ */
+export interface RecordingProvenance {
+  /** The header, verbatim and in order. */
+  column_set: string[]
+  row_count: number
+  /** Median interval between consecutive rows. Null below two rows. Never assume 30. */
+  median_cadence_seconds: number | null
+  /** The largest interval between consecutive rows. Null below two rows. */
+  largest_gap_seconds: number | null
+  /** Earliest row to latest row, which is first to last only while the clock went forwards. */
+  span_seconds: number | null
+  /**
+   * How many times the naive wall clock stepped backwards — the hour a fall-back repeats. Those
+   * steps are not intervals, so they are counted here instead of being averaged into a cadence.
+   */
+  backwards_steps: number
+  /** Verbatim header names with no value in any row: the channels this boat never fed. */
+  dead_channels: string[]
+  /** Verbatim header names carrying one value throughout, which is nearly as little. */
+  constant_channels: { column: string; value: string }[]
+}
+
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {
   timestamp: Date
