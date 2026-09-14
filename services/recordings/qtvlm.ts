@@ -36,6 +36,7 @@
 
 import { createHash } from 'node:crypto'
 
+import { daysInMonth } from '@/services/recordings/wall-clock'
 import type {
   RecordingDateOrder,
   RecordingRowExtras,
@@ -200,11 +201,6 @@ function refuse(reason: TranscriptionRefusal, message: string): TranscriptionOut
 /** Two digits, for a timestamp component. */
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
-}
-
-/** How long a month is, which is what tells `31/02` from a date. */
-function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
 /**

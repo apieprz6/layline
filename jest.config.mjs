@@ -38,6 +38,9 @@ const config = {
     'services/**/*.{js,jsx,ts,tsx}',
     '!**/*.d.ts',
     '!**/node_modules/**',
+    // A suite's own helpers live beside it — `services/recordings/__tests__/archive.ts` is one —
+    // and coverage of a fixture is not a figure about this application.
+    '!**/__tests__/**',
   ],
 }
 
