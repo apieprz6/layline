@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AppLayout from '../AppLayout'
-import type { Account } from '@/types'
+import { CREW } from '@/__tests__/fixtures/accounts'
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -48,13 +48,6 @@ jest.mock('swr', () => ({
   })),
 }))
 
-const CREW: Account = {
-  userId: '11111111-1111-1111-1111-111111111111',
-  email: 'crew@example.com',
-  displayName: 'Jamie Torres',
-  role: 'viewer',
-}
-
 describe('AppLayout', () => {
   // A Guest by default: the Account is resolved on the server and arrives as a
   // prop, so the layout never asks who is signed in (ADR 0018).
@@ -65,6 +58,9 @@ describe('AppLayout', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // The layout reads `?signin=` off the URL on mount, and jsdom carries one URL
+    // across a whole file, so each test starts on a clean dashboard.
+    window.history.replaceState(null, '', '/')
   })
 
   it('renders RaceHeader with correct props', () => {
@@ -176,6 +172,88 @@ describe('AppLayout', () => {
       expect(signInWithGoogle).toHaveBeenCalledWith('/')
     })
 
+    it("takes a locked section's Sign in as where the sailor was headed", async () => {
+      const user = userEvent.setup({ delay: null })
+      const { signInWithGoogle } = jest.requireMock('@/lib/account/browserAuth')
+      render(<AppLayout {...defaultProps} />)
+
+      await user.click(screen.getByRole('button', { name: 'Menu' }))
+      await user.click(screen.getByRole('button', { name: 'Sign in to open Boat management' }))
+      await user.click(screen.getByRole('button', { name: /continue with google/i }))
+
+      // The offer was for that section, so the sailor arrives there rather than
+      // back on the screen the drawer happened to be open over.
+      expect(signInWithGoogle).toHaveBeenCalledWith('/boat-management')
+    })
+
+    it('forgets that destination if the sheet is dismissed', async () => {
+      const user = userEvent.setup({ delay: null })
+      const { signInWithGoogle } = jest.requireMock('@/lib/account/browserAuth')
+      render(<AppLayout {...defaultProps} />)
+
+      await user.click(screen.getByRole('button', { name: 'Menu' }))
+      await user.click(screen.getByRole('button', { name: 'Sign in to open Boat performance' }))
+      await user.click(screen.getByTestId('auth-sheet-dim'))
+
+      // A later sign-in from the footer means "here", and must not inherit an
+      // offer the sailor already turned down.
+      await user.click(screen.getByRole('button', { name: 'Menu' }))
+      await user.click(screen.getByRole('button', { name: 'Sign in' }))
+      await user.click(screen.getByRole('button', { name: /continue with google/i }))
+
+      expect(signInWithGoogle).toHaveBeenCalledWith('/')
+    })
+  })
+
+  describe('the sheet a redirect asked for', () => {
+    beforeEach(() => {
+      jest.clearAllMocks()
+      window.history.replaceState(null, '', '/')
+    })
+
+    it('opens on arrival, and takes the ask back out of the URL', () => {
+      window.history.replaceState(null, '', '/?signin=%2Fboat-performance&target=1830')
+
+      render(<AppLayout {...defaultProps} />)
+
+      expect(screen.getByTestId('auth-sheet')).toBeInTheDocument()
+      // Only that one param: a reload must not reopen a dismissed sheet, but a
+      // Target Time the sailor set is part of the screen they are on.
+      expect(window.location.search).toBe('?target=1830')
+    })
+
+    it('lands the sailor on the route they were sent back from', async () => {
+      const user = userEvent.setup({ delay: null })
+      const { signInWithGoogle } = jest.requireMock('@/lib/account/browserAuth')
+      window.history.replaceState(null, '', '/?signin=%2Fboat-management')
+
+      render(<AppLayout {...defaultProps} />)
+      await user.click(screen.getByRole('button', { name: /continue with google/i }))
+
+      expect(signInWithGoogle).toHaveBeenCalledWith('/boat-management')
+    })
+
+    it('will not be talked into another origin', async () => {
+      const user = userEvent.setup({ delay: null })
+      const { signInWithGoogle } = jest.requireMock('@/lib/account/browserAuth')
+      // Anyone can write this URL and send it to a sailor, so the value is put
+      // through the same guard as any other next-path (ADR 0018).
+      window.history.replaceState(null, '', '/?signin=https%3A%2F%2Fevil.example%2Fsteal')
+
+      render(<AppLayout {...defaultProps} />)
+      await user.click(screen.getByRole('button', { name: /continue with google/i }))
+
+      expect(signInWithGoogle).toHaveBeenCalledWith('/')
+    })
+
+    it('leaves the sheet closed when nothing asked', () => {
+      render(<AppLayout {...defaultProps} />)
+
+      expect(screen.queryByTestId('auth-sheet')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('signing out', () => {
     it('signs out where the sailor stands — no push, no replace', async () => {
       const user = userEvent.setup({ delay: null })
       const { signOutHere } = jest.requireMock('@/lib/account/browserAuth')

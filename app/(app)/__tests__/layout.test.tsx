@@ -46,14 +46,7 @@ jest.mock('@/lib/account/resolveAccount', () => ({
 }))
 
 import AppGroupLayout from '../layout'
-import type { Account } from '@/types'
-
-const CREW: Account = {
-  userId: '11111111-1111-1111-1111-111111111111',
-  email: 'crew@example.com',
-  displayName: 'Jamie Torres',
-  role: 'admin',
-}
+import { CREW } from '@/__tests__/fixtures/accounts'
 
 function readLayoutCode(): string {
   const source = readFileSync(resolve(__dirname, '../layout.tsx'), 'utf8')
@@ -136,6 +129,8 @@ describe('pages in the (app) group', () => {
     ['page.tsx', '../page.tsx'],
     ['wind-data/page.tsx', '../wind-data/page.tsx'],
     ['settings/page.tsx', '../settings/page.tsx'],
+    ['boat-management/page.tsx', '../boat-management/page.tsx'],
+    ['boat-performance/page.tsx', '../boat-performance/page.tsx'],
   ])('%s does not import AppLayout itself', (_name, relativePath) => {
     const source = readFileSync(resolve(__dirname, relativePath), 'utf8')
 

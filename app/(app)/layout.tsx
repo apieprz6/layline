@@ -3,8 +3,9 @@ import AppLayout from '@/components/dashboard/AppLayout'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 
 /**
- * Layout for the routes that carry the app chrome — `/`, `/wind-data` and
- * `/settings`. The route group keeps every one of those URLs unchanged.
+ * Layout for the routes that carry the app chrome — `/`, `/wind-data`,
+ * `/boat-management`, `/boat-performance` and `/settings`. The route group keeps
+ * every one of those URLs unchanged.
  *
  * This is the one place the **Account** is resolved (ADR 0018): a Server
  * Component verifying the JWT locally with `getClaims()` and reading the **Role**
