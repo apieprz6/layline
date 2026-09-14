@@ -68,9 +68,13 @@ ON CONFLICT (id) DO NOTHING;
 -- Recordings, because a regatta day is uploaded once per race, and a Recording is
 -- never shared between Races (ADR 0010).
 --
--- Only three of the five Boat Setup artifacts are file-backed -- Polar, Crossover
--- Chart, Sail Definitions. A Rig Tune and an Instrument Calibration are entered by
--- hand and never reach Storage at all, so neither has a path here.
+-- Only two of the four Boat Setup artifacts are file-backed -- Polar and Crossover
+-- Chart. A Rig Tune and an Instrument Calibration are entered by hand and never reach
+-- Storage at all, so neither has a path here.
+--
+-- (Comment corrected in LAY-101, which settled the artifact list at four and made
+-- boat_setup_versions.file_backed_kinds_only enforce this. The statements below are
+-- unchanged and already applied; only the prose moved.)
 --
 -- {filename} is the sailor's own filename, sanitised only as far as a Storage key
 -- requires. The verbatim original is a column on the row, so nothing ever parses a
