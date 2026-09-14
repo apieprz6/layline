@@ -1,6 +1,8 @@
+import type React from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AppLayout from '../AppLayout'
+import { useOpenAuthSheet } from '@/components/auth/authSheetOpener'
 import type { Account } from '@/types'
 
 // Mock next/navigation
@@ -174,6 +176,30 @@ describe('AppLayout', () => {
       await user.click(screen.getByRole('button', { name: /continue with google/i }))
 
       expect(signInWithGoogle).toHaveBeenCalledWith('/')
+    })
+
+    it('lets the screen it is wrapping open the sheet in place (ADR 0016)', async () => {
+      const user = userEvent.setup({ delay: null })
+
+      // Stands in for a locked boat screen: a page cannot be handed a prop by a
+      // layout, so the invitation on one reaches the sheet through the opener.
+      function LockedScreenStandIn(): React.ReactElement {
+        const openAuthSheet = useOpenAuthSheet()
+        return <button onClick={openAuthSheet}>Unlock this</button>
+      }
+
+      render(
+        <AppLayout {...defaultProps}>
+          <LockedScreenStandIn />
+        </AppLayout>
+      )
+
+      expect(screen.queryByTestId('auth-sheet')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Unlock this' }))
+
+      // In place: no navigation, and the sheet is over the screen they asked for.
+      expect(screen.getByTestId('auth-sheet')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Unlock this' })).toBeInTheDocument()
     })
 
     it('signs out where the sailor stands — no push, no replace', async () => {

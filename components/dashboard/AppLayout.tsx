@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, ReactNode } from 'react'
+import { useCallback, useState, ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import RaceHeader from './RaceHeader'
 import HamburgerMenu from './HamburgerMenu'
 import AuthSheet from '@/components/auth/AuthSheet'
+import { AuthSheetOpener } from '@/components/auth/authSheetOpener'
 import { signInWithGoogle, signOutHere } from '@/lib/account/browserAuth'
 import { useTheme } from '@/lib/hooks/useTheme'
 import { useRefreshOnIdentityChange } from '@/lib/hooks/useRefreshOnIdentityChange'
@@ -28,6 +29,8 @@ export default function AppLayout({ children, account }: AppLayoutProps) {
 
   // The client learns *when* the identity changed, never who it is.
   useRefreshOnIdentityChange()
+
+  const openAuthSheet = useCallback(() => setSheetOpen(true), [])
 
   return (
     <div className="min-h-screen">
@@ -69,9 +72,13 @@ export default function AppLayout({ children, account }: AppLayoutProps) {
         }}
       />
 
-      <div className="max-w-md mx-auto md:mx-0 md:max-w-none">
-        {children}
-      </div>
+      {/* A **Locked Entry**'s screen is one of these children, and its invitation
+          has to reach the sheet mounted above it. */}
+      <AuthSheetOpener value={openAuthSheet}>
+        <div className="max-w-md mx-auto md:mx-0 md:max-w-none">
+          {children}
+        </div>
+      </AuthSheetOpener>
     </div>
   )
 }

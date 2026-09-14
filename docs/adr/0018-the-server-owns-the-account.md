@@ -167,6 +167,15 @@ discard the screen the sailor had chosen. Only the two boat routes are affected.
   Next 16 allows a cookie write only in phase `'action'`, so nothing rendering a page — including
   `/auth/callback` — can write a session cookie at all; `lib/supabase/server.ts` swallows the throw, which
   is what makes a server-side sign-in fail *silently*. See the LAY-126 amendment on ADR 0021.
+- **Amended by the build, 2026-09-14 (LAY-102): "there is no React context" holds for the **Account**,
+  and the repo now has exactly one provider that is not it.** The locked boat screens are *pages*, and a
+  Next layout cannot pass a prop to a page, so the invitation on one could not reach the **Auth Sheet**
+  mounted above it. `components/auth/authSheetOpener.ts` carries a single `() => void` down from
+  `AppLayout` for that. It is not the thing this ADR rejected: nothing about who is signed in passes
+  through it, it unlocks nothing — the lock/unlock decision is still the server's, made by a second
+  `resolveAccount()` in each boat page — and it holds no state a server could have resolved. Which is also
+  why the two boat pages resolve the Account again rather than reading one from the layout: this ADR's own
+  "a client provider cannot unlock a screen" is the reason a prop was never going to do it.
 - **The middleware matcher already covers the future `/auth/*` routes** — it excludes only
   `_next/static`, `_next/image`, `favicon.ico` and image extensions. The `middleware.ts` → `proxy.ts`
   rename that Next 16 wants is a separate chore and deliberately not bundled here.

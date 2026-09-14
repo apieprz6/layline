@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Fragment, useEffect, type ReactElement } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import AccountBlock from './AccountBlock'
@@ -15,39 +15,138 @@ interface HamburgerMenuProps {
   onSignOut: () => void
 }
 
-const navItems = [
-  {
-    href: '/',
-    label: 'Dashboard',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="3" width="7" height="7" />
-        <rect x="14" y="3" width="7" height="7" />
-        <rect x="14" y="14" width="7" height="7" />
-        <rect x="3" y="14" width="7" height="7" />
-      </svg>
-    ),
-  },
-  {
-    href: '/wind-data',
-    label: 'Wind Data',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
-      </svg>
-    ),
-  },
-  {
-    href: '/settings',
-    label: 'Settings',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-    ),
-  },
+interface NavEntry {
+  href: string
+  label: string
+  icon: ReactElement
+  /**
+   * A **Locked Entry** for a **Guest**: the row still opens its route, and the
+   * screen behind it carries the invitation (ADR 0015).
+   */
+  locksForGuest?: true
+}
+
+/**
+ * The final drawer shape (ADR 0016): five flat entries in one fixed order, the
+ * two boat sections grouped between dividers.
+ *
+ * Membership and order are the same for a Guest and a signed-in sailor. The
+ * padlocks come off and the account block swaps, and that is all — which is why
+ * the locked pair can sit in the middle, and why Settings keeps the last slot
+ * rather than being stranded above the two sections a boat's owner opens most.
+ *
+ * `/station/[buoyId]` is deliberately absent: it is a detail route reached by
+ * tapping a `StationRow`, not a section.
+ */
+const navGroups: NavEntry[][] = [
+  [
+    {
+      href: '/',
+      label: 'Dashboard',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
+      ),
+    },
+    {
+      href: '/wind-data',
+      label: 'Wind Data',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+        </svg>
+      ),
+    },
+  ],
+  [
+    {
+      href: '/boat-management',
+      label: 'Boat management',
+      locksForGuest: true,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 18H2a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z" />
+          <path d="M21 14 10 2 3 14h18Z" />
+          <path d="M10 2v16" />
+        </svg>
+      ),
+    },
+    {
+      href: '/boat-performance',
+      label: 'Boat performance',
+      locksForGuest: true,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+          <polyline points="16 7 22 7 22 13" />
+        </svg>
+      ),
+    },
+  ],
+  [
+    {
+      href: '/settings',
+      label: 'Settings',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      ),
+    },
+  ],
 ]
+
+/**
+ * The padlock and the invitation, right-aligned on a **Locked Entry**'s own row.
+ *
+ * Deliberately not a separate invitation block, and deliberately not a second
+ * tap target: the row is one link to the locked screen, where the Sign in that
+ * opens the **Auth Sheet** actually lives. The offer belongs to the thing being
+ * offered (ADR 0016).
+ *
+ * Which is why the whole mark is `aria-hidden` and a screen reader is told the
+ * same thing in words instead: announcing "Boat management Sign in" would name a
+ * control this row does not contain.
+ */
+function LockedMark(): ReactElement {
+  return (
+    <span
+      data-testid="locked-mark"
+      aria-hidden
+      style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden
+      >
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+      <span
+        style={{
+          fontFamily: 'var(--font-body)',
+          // The prototype's size, and the one that keeps the longest label — "Boat
+          // performance" — on one line inside the fixed 268px.
+          fontSize: 'var(--text-xs)',
+          fontWeight: 'var(--weight-semibold)',
+          color: 'var(--text-accent)',
+        }}
+      >
+        Sign in
+      </span>
+    </span>
+  )
+}
 
 export default function HamburgerMenu({
   isOpen,
@@ -135,33 +234,57 @@ export default function HamburgerMenu({
 
         {/* Navigation items */}
         <div style={{ padding: '10px 8px', flex: 1 }}>
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 12px',
-                  margin: '2px 0',
-                  borderRadius: '6px',
-                  textDecoration: 'none',
-                  background: isActive ? 'var(--blue-muted)' : 'transparent',
-                  border: isActive ? '1px solid var(--surface-border-hover)' : '1px solid transparent',
-                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                  transition: 'all 150ms',
-                }}
-              >
-                {item.icon}
-                <span style={{ fontFamily: 'Inter,sans-serif', fontSize: '14px', fontWeight: isActive ? 600 : 500 }}>{item.label}</span>
-              </Link>
-            )
-          })}
+          {navGroups.map((group, groupIndex) => (
+            <Fragment key={group[0].href}>
+              {/* The dividers are what make the middle pair read as one locked
+                  section rather than two locked items scattered through a list. */}
+              {groupIndex > 0 && (
+                <div
+                  role="separator"
+                  style={{
+                    height: '1px',
+                    background: 'var(--surface-border)',
+                    margin: '8px 12px',
+                  }}
+                />
+              )}
+              {group.map((item) => {
+                const isActive = pathname === item.href
+                const isLocked = item.locksForGuest === true && account === null
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onClose}
+                    // The padlock and its "Sign in" are drawn, not spoken; this is
+                    // the same row in words, and it still opens with the label so
+                    // that saying the label out loud still reaches it.
+                    aria-label={isLocked ? `${item.label}, locked. Sign in to open.` : undefined}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 12px',
+                      margin: '2px 0',
+                      borderRadius: '6px',
+                      textDecoration: 'none',
+                      background: isActive ? 'var(--blue-muted)' : 'transparent',
+                      border: isActive ? '1px solid var(--surface-border-hover)' : '1px solid transparent',
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                      transition: 'all 150ms',
+                    }}
+                  >
+                    {item.icon}
+                    {/* No wrap: "Boat performance" is the longest label in the
+                        drawer, and a second line would move every row below it. */}
+                    <span style={{ fontFamily: 'Inter,sans-serif', fontSize: '14px', fontWeight: isActive ? 600 : 500, whiteSpace: 'nowrap' }}>{item.label}</span>
+                    {isLocked && <LockedMark />}
+                  </Link>
+                )
+              })}
+            </Fragment>
+          ))}
         </div>
 
         {/* Footer — the account block is what this region is for, with the

@@ -136,6 +136,8 @@ describe('pages in the (app) group', () => {
     ['page.tsx', '../page.tsx'],
     ['wind-data/page.tsx', '../wind-data/page.tsx'],
     ['settings/page.tsx', '../settings/page.tsx'],
+    ['boat-management/page.tsx', '../boat-management/page.tsx'],
+    ['boat-performance/page.tsx', '../boat-performance/page.tsx'],
   ])('%s does not import AppLayout itself', (_name, relativePath) => {
     const source = readFileSync(resolve(__dirname, relativePath), 'utf8')
 

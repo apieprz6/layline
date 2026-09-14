@@ -71,12 +71,31 @@ describe('HamburgerMenu', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1)
   })
 
-  it('renders Dashboard, Wind Data, and Settings navigation links', () => {
+  it('renders the five entries in the order ADR 0016 fixed', () => {
+    const { container } = render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+    expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual([
+      '/',
+      '/wind-data',
+      '/boat-management',
+      '/boat-performance',
+      '/settings',
+    ])
+  })
+
+  it('groups the middle pair with two dividers', () => {
     render(<HamburgerMenu {...defaultProps} isOpen={true} />)
 
-    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /wind data/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument()
+    // Two dividers is what makes the locked pair read as one section rather than
+    // two locked items scattered through a list (ADR 0016).
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+  })
+
+  it('keeps the station detail route out of the drawer', () => {
+    const { container } = render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs.some((href) => href?.startsWith('/station'))).toBe(false)
   })
 
   it('Settings link routes to /settings', () => {
@@ -216,7 +235,91 @@ describe('HamburgerMenu', () => {
       )
 
       expect(signedInNav).toEqual(guestNav)
-      expect(guestNav).toEqual(['/', '/wind-data', '/settings'])
+      expect(guestNav).toEqual([
+        '/',
+        '/wind-data',
+        '/boat-management',
+        '/boat-performance',
+        '/settings',
+      ])
+    })
+  })
+
+  describe('the two boat sections', () => {
+    const boatRows = /boat management|boat performance/i
+
+    it('padlocks both of them for a Guest, with the invitation on the row', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+      for (const label of ['Boat management', 'Boat performance']) {
+        const row = screen.getByRole('link', { name: new RegExp(label, 'i') })
+        expect(row).toHaveAttribute('href', `/${label.toLowerCase().replace(' ', '-')}`)
+        expect(row.querySelector('[data-testid="locked-mark"]')).not.toBeNull()
+        expect(row.textContent).toContain('Sign in')
+      }
+    })
+
+    it('says "locked" in words, and names no control the row does not have', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+      // The padlock and its "Sign in" are drawn for the eye. A screen reader that
+      // read them literally would announce a Sign in control on a row that only
+      // navigates, so the mark is hidden and the row is labelled instead.
+      const row = screen.getByRole('link', { name: 'Boat management, locked. Sign in to open.' })
+      expect(row.querySelector('[data-testid="locked-mark"]')).toHaveAttribute('aria-hidden')
+
+      const open = screen.getByRole('link', { name: 'Wind Data' })
+      expect(open).not.toHaveAttribute('aria-label')
+    })
+
+    it('takes the padlocks off once the sailor is signed in', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} account={CREW} />)
+
+      for (const label of ['Boat management', 'Boat performance']) {
+        const row = screen.getByRole('link', { name: new RegExp(label, 'i') })
+        expect(row.querySelector('[data-testid="locked-mark"]')).toBeNull()
+        expect(row.textContent).not.toContain('Sign in')
+      }
+    })
+
+    it('locks nothing else — the three open sections never padlock', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+      for (const label of ['Dashboard', 'Wind Data', 'Settings']) {
+        const row = screen.getByRole('link', { name: new RegExp(label, 'i') })
+        expect(row.querySelector('[data-testid="locked-mark"]')).toBeNull()
+      }
+    })
+
+    it('is the only thing about a row that sign-in changes', () => {
+      const { container: asGuest, unmount } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} />
+      )
+      const guestRows = Array.from(asGuest.querySelectorAll('a'))
+        .filter((a) => boatRows.test(a.textContent ?? ''))
+        .map((a) => a.getAttribute('style'))
+      unmount()
+
+      const { container: signedIn } = render(
+        <HamburgerMenu {...defaultProps} isOpen={true} account={CREW} />
+      )
+      const signedInRows = Array.from(signedIn.querySelectorAll('a'))
+        .filter((a) => boatRows.test(a.textContent ?? ''))
+        .map((a) => a.getAttribute('style'))
+
+      expect(signedInRows).toEqual(guestRows)
+    })
+
+    it('holds "Boat performance" on one line at 268px', () => {
+      render(<HamburgerMenu {...defaultProps} isOpen={true} />)
+
+      // The arithmetic is in ADR 0016 — ~105px of label against a ~196px budget —
+      // so the wrap this guards against would have to come from a style change
+      // rather than from the width. Whether it *lays out* on one line is a browser
+      // question, and `e2e/boat-sections.spec.ts` asks it there.
+      const row = screen.getByRole('link', { name: /boat performance/i })
+      const label = row.querySelector('span')
+      expect(label).toHaveStyle({ whiteSpace: 'nowrap' })
     })
   })
 })
