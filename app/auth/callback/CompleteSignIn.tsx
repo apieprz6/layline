@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import CallbackScreen from './CallbackScreen'
+import SignInDidNotFinish from './SignInDidNotFinish'
 
 interface CompleteSignInProps {
   /** A path on this origin, already guarded by the route. */
@@ -95,18 +96,15 @@ export default function CompleteSignIn({ next }: CompleteSignInProps): ReactElem
   }, [next, router])
 
   if (failed) {
-    // Deliberately plain. The designed screen for a sign-in that did not finish
-    // is LAY-127's, alongside the Refused Stranger it shares a shell with; this
-    // is here so the failure is never a blank page with a query string.
-    return (
-      <CallbackScreen heading="Sign-in didn't finish">
-        Something went wrong on the way back from Google. You can try signing in again.
-      </CallbackScreen>
-    )
+    // The same screen the server arm shows for a handshake that broke: this is
+    // the browser half of "any other error", not a different situation.
+    return <SignInDidNotFinish next={next} />
   }
 
+  // No action while the exchange is in flight: there is nothing to offer yet, and
+  // a retry button under a sailor who is already being signed in is a trap.
   return (
-    <CallbackScreen heading="Signing you in" testId="callback-holding" showBack={false}>
+    <CallbackScreen heading="Signing you in" testId="callback-holding">
       One moment.
     </CallbackScreen>
   )

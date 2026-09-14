@@ -109,6 +109,37 @@ describe('/auth/callback', () => {
       expect(redirect).not.toHaveBeenCalled()
     })
 
+    it('tells them they are not on the crew list yet, and who makes accounts', async () => {
+      await visit(REFUSED)
+
+      expect(
+        screen.getByRole('heading', { name: 'You are not on the crew list yet' })
+      ).toBeInTheDocument()
+      expect(document.body.textContent).toContain(
+        "Layline accounts are made by the boat's owner. Ask them to add the Google address you just used, then sign in again."
+      )
+    })
+
+    it('branches on error_code, so a bare error_code is still the refusal', async () => {
+      // `error` is the generic OAuth code and cannot tell a refusal from a change
+      // of mind; `error_code` is the only thing that can (ADR 0021).
+      await visit({ error_code: 'signup_disabled' })
+
+      expect(redirect).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole('heading', { name: 'You are not on the crew list yet' })
+      ).toBeInTheDocument()
+    })
+
+    it('does not offer to try the same account again', async () => {
+      // The one thing that would fail identically. Their way forward is a person,
+      // not a button.
+      await visit(REFUSED)
+
+      expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/try (signing in )?again/i)
+    })
+
     it("logs Supabase's own words verbatim and shows none of them", async () => {
       await visit(REFUSED)
 
@@ -131,6 +162,40 @@ describe('/auth/callback', () => {
       await visit({ ...REFUSED, error_description: 'Signups not allowed for crew@example.com' })
 
       expect(document.body.textContent).not.toMatch(/@/)
+    })
+  })
+
+  describe('a sign-in that merely broke', () => {
+    const BROKEN = {
+      error: 'server_error',
+      error_code: 'unexpected_failure',
+      error_description: 'Database error saving new user',
+      next: '/wind-data',
+    }
+
+    it('says so, and does not tell the sailor they are off the crew list', async () => {
+      await visit(BROKEN)
+
+      expect(screen.getByRole('heading', { name: "Sign-in didn't finish" })).toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/crew list/i)
+      expect(redirect).not.toHaveBeenCalled()
+    })
+
+    it('offers a way to try again, which a refusal does not', async () => {
+      await visit(BROKEN)
+
+      expect(screen.getByRole('button', { name: /try signing in again/i })).toBeInTheDocument()
+    })
+
+    it("keeps Supabase's own words in the log", async () => {
+      await visit(BROKEN)
+
+      const logged = consoleError.mock.calls.flat().join(' ')
+      expect(logged).toContain('unexpected_failure')
+      expect(logged).toContain('Database error saving new user')
+
+      expect(document.body.textContent).not.toContain('Database error saving new user')
+      expect(document.body.textContent).not.toContain('unexpected_failure')
     })
   })
 

@@ -1,9 +1,15 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 const replace = jest.fn()
 const refresh = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ replace, refresh, push: jest.fn() })),
+}))
+
+const signInWithGoogle = jest.fn()
+jest.mock('@/lib/account/browserAuth', () => ({
+  signInWithGoogle: (next: string) => signInWithGoogle(next),
 }))
 
 const getSession = jest.fn()
@@ -124,6 +130,28 @@ describe('CompleteSignIn', () => {
       const back = await screen.findByRole('link', { name: /back to the weather/i })
       expect(back).toHaveAttribute('href', '/')
       expect(document.body.textContent).not.toContain('code verifier could not be found')
+    })
+
+    it('is the one arm that offers a retry, aimed at the screen they came from', async () => {
+      // A handshake that broke can usefully be run again — unlike a refusal,
+      // where the same Google account is refused identically.
+      getSession.mockResolvedValue({ data: { session: null }, error: null })
+
+      render(<CompleteSignIn next="/wind-data" />)
+
+      const retry = await screen.findByRole('button', { name: /try signing in again/i })
+      await userEvent.click(retry)
+
+      expect(signInWithGoogle).toHaveBeenCalledWith('/wind-data')
+    })
+
+    it('does not tell them they are off the crew list, which nobody here knows', async () => {
+      getSession.mockResolvedValue({ data: { session: null }, error: null })
+
+      render(<CompleteSignIn next="/" />)
+      await screen.findByRole('button', { name: /try signing in again/i })
+
+      expect(document.body.textContent).not.toMatch(/crew list/i)
     })
   })
 
