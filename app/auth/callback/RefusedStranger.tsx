@@ -49,8 +49,8 @@ export default function RefusedStranger(): ReactElement {
       testId="refused-stranger"
       action={<BackToTheWeather />}
     >
-      Layline accounts are made by the boat&apos;s owner. Ask them to add the Google address you
-      just used, then sign in again.
+      Layline accounts are made by the boat’s owner. Ask them to add the Google address you just
+      used, then sign in again.
     </CallbackScreen>
   )
 }

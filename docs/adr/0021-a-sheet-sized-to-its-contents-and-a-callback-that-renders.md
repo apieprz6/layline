@@ -181,7 +181,12 @@ is one character of one.
   re-runs the same handshake the sheet runs, which makes the callback the **second** place in the app that
   starts one — deliberate, chosen over sending the sailor back to hunt for the drawer, and it is not a
   reopened sheet: the sheet still has no error prop and no error region. The refusal itself offers no
-  retry at all, because the same address would be refused identically.
+  retry at all, because the same address would be refused identically. Two smaller deviations from the
+  prototype, both the build's: the generic arm carries a warning-coloured mark of its own, which the
+  prototype drew for the refusal only — two arms sharing one shell, with a mark on one and not the other,
+  reads as a screen somebody left unfinished. And the refusal's heading fills its 330px column almost
+  exactly at 390px, so it is set `text-wrap: balance`: nothing pins the line count, and the failure mode
+  worth guarding is not a wrap but a wrap that leaves one word alone on the second line.
 - **Whoever builds the Auth Sheet must not give it an error prop.** Its only failure mode is shown on
   another route, and an unused error region is how a 250px sheet grows back to 692.
 - **ADR 0015 and ADR 0016 stand unamended.** The inline invitation, the five-entry order, the padlocks

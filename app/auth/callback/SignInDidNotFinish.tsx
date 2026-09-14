@@ -56,8 +56,14 @@ export default function SignInDidNotFinish({ next }: SignInDidNotFinishProps): R
             type="button"
             style={filledActionStyle}
             onClick={() => {
-              // Nothing to await: the SDK navigates the browser to Google.
-              void signInWithGoogle(next)
+              // Nothing to await on the happy path: the SDK navigates the browser
+              // to Google. Caught rather than `void`ed all the same — with no
+              // Supabase configured, `createClient()` throws, and a button that
+              // does nothing on a screen that already says something went wrong
+              // would be the second failure in a row nobody records.
+              signInWithGoogle(next).catch((thrown: unknown) => {
+                console.error('Sign-in: the retry never reached Google:', thrown)
+              })
             }}
           >
             Try signing in again

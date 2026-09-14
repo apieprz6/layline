@@ -7,7 +7,9 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ replace, refresh, push: jest.fn() })),
 }))
 
-const signInWithGoogle = jest.fn()
+// `async`, like the real one: the retry attaches a `.catch()`, because with no
+// Supabase configured the handshake rejects before it reaches Google.
+const signInWithGoogle = jest.fn<Promise<void>, [string]>()
 jest.mock('@/lib/account/browserAuth', () => ({
   signInWithGoogle: (next: string) => signInWithGoogle(next),
 }))
@@ -35,6 +37,7 @@ describe('CompleteSignIn', () => {
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     getSession.mockResolvedValue({ data: { session: SESSION }, error: null })
+    signInWithGoogle.mockResolvedValue()
     // The SDK deletes `code` from the address bar when it spends one, so the
     // ordinary case is a URL that no longer carries it.
     window.history.replaceState({}, '', '/auth/callback')
@@ -143,6 +146,23 @@ describe('CompleteSignIn', () => {
       await userEvent.click(retry)
 
       expect(signInWithGoogle).toHaveBeenCalledWith('/wind-data')
+    })
+
+    it('records a retry that never reached Google instead of doing nothing', async () => {
+      // With no Supabase configured the handshake rejects on the spot, and the
+      // sailor sees a button that appears to do nothing. Two failures in a row is
+      // exactly when a log has to exist.
+      getSession.mockResolvedValue({ data: { session: null }, error: null })
+      signInWithGoogle.mockRejectedValueOnce(new Error('Missing Supabase environment variables.'))
+
+      render(<CompleteSignIn next="/" />)
+      const retry = await screen.findByRole('button', { name: /try signing in again/i })
+      consoleError.mockClear()
+
+      await userEvent.click(retry)
+      await Promise.resolve()
+
+      expect(consoleError).toHaveBeenCalled()
     })
 
     it('does not tell them they are off the crew list, which nobody here knows', async () => {

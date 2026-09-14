@@ -126,7 +126,7 @@ export default function AuthSheet({
             lineHeight: 1.5,
           }}
         >
-          Layline accounts are made by the boat&apos;s owner.
+          Layline accounts are made by the boat’s owner.
         </div>
         <button
           onClick={onContinueWithGoogle}

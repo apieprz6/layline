@@ -31,7 +31,7 @@ test.describe('the Refused Stranger, on a 390px screen', () => {
     await gotoHydrated(page, REFUSED)
 
     await expect(page.getByRole('heading', { name: 'You are not on the crew list yet' })).toBeInViewport()
-    await expect(page.getByText(/Layline accounts are made by the boat's owner/)).toBeInViewport()
+    await expect(page.getByText(/Layline accounts are made by the boat’s owner/)).toBeInViewport()
 
     // The only exit it has, and it has to be reachable without scrolling: this
     // screen has no navigation around it.

@@ -116,7 +116,7 @@ describe('/auth/callback', () => {
         screen.getByRole('heading', { name: 'You are not on the crew list yet' })
       ).toBeInTheDocument()
       expect(document.body.textContent).toContain(
-        "Layline accounts are made by the boat's owner. Ask them to add the Google address you just used, then sign in again."
+        'Layline accounts are made by the boat’s owner. Ask them to add the Google address you just used, then sign in again.'
       )
     })
 

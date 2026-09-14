@@ -82,6 +82,10 @@ export default function CallbackScreen({
             lineHeight: 1.25,
             color: 'var(--text-primary)',
             margin: 0,
+            // The refusal's heading fills this column almost exactly at 390px,
+            // so any copy or type-scale change wraps it. Balanced rather than
+            // left with one word on a line of its own when that happens.
+            textWrap: 'balance',
           }}
         >
           {heading}
