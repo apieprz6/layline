@@ -2,7 +2,8 @@ import type { ReactElement } from 'react'
 import { redirect } from 'next/navigation'
 import { relativePathOrHome } from '@/lib/account/nextPath'
 import CompleteSignIn from './CompleteSignIn'
-import CallbackScreen from './CallbackScreen'
+import RefusedStranger from './RefusedStranger'
+import SignInDidNotFinish from './SignInDidNotFinish'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,9 +26,10 @@ function firstOf(value: string | string[] | undefined): string | null {
  *
  * | On the URL | What happens |
  * |---|---|
- * | `?code=` | exchanged in the browser, then onward to `?next=` |
+ * | `error_code=signup_disabled` | the **Refused Stranger**, full screen |
  * | `error=access_denied`, no `error_code` | nothing at all — straight back |
- * | any other error | a plain notice; the designed screen is LAY-127's |
+ * | `?code=` | exchanged in the browser, then onward to `?next=` |
+ * | any other error | "Sign-in didn't finish", with a retry |
  * | nothing | onward, as if the URL had not been typed |
  *
  * Whatever the URL said is logged verbatim and shown to nobody: it is developer
@@ -47,28 +49,29 @@ export default async function AuthCallbackPage({
   const errorCode = firstOf(params.error_code)
   const errorDescription = firstOf(params.error_description)
 
-  if (error) {
+  if (error || errorCode) {
     console.error(
       'Auth callback carried an error:',
       JSON.stringify({ error, error_code: errorCode, error_description: errorDescription })
     )
 
+    // The refusal. Keyed on `error_code`, because `access_denied` arrives for this
+    // *and* for the Cancel button below, and `error` alone cannot tell a stranger
+    // with no Account from a sailor who changed their mind.
+    if (errorCode === 'signup_disabled') {
+      return <RefusedStranger />
+    }
+
     // Cancel on the consent screen. Someone who changed their mind is owed
-    // silence, not an explanation.
+    // silence, not an explanation — no screen, no message, straight back to where
+    // they were.
     if (error === 'access_denied' && !errorCode) {
       redirect(next)
     }
 
-    // LAY-127 owns what a refused stranger reads, and the branch on `error_code`
-    // that tells one from a sign-in that merely broke. This is deliberately not
-    // that copy — writing it here would settle a question that ticket is for. It
-    // is a floor: never a blank page with a query string on it, and it names no
-    // address, because the URL carries none.
-    return (
-      <CallbackScreen heading="Sign-in didn't finish">
-        Something went wrong on the way back from Google.
-      </CallbackScreen>
-    )
+    // Anything else: the handshake broke rather than being refused, and nobody
+    // here knows why. Supabase's own words went to the log above.
+    return <SignInDidNotFinish next={next} />
   }
 
   if (code) {

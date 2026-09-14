@@ -28,7 +28,9 @@ describe('AuthSheet', () => {
     renderSheet(true)
 
     expect(screen.getByText('Sign in')).toBeInTheDocument()
-    expect(screen.getByText("Layline accounts are made by the boat's owner.")).toBeInTheDocument()
+    // The typographic apostrophe is the prototype's, and the same sentence opens
+    // the Refused Stranger — the two must not drift apart.
+    expect(screen.getByText('Layline accounts are made by the boat’s owner.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Continue with Google/ })).toBeInTheDocument()
   })
 

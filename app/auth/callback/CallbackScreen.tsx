@@ -1,30 +1,37 @@
-import type { ReactElement, ReactNode } from 'react'
+import type { CSSProperties, ReactElement, ReactNode } from 'react'
 import Link from 'next/link'
 
 interface CallbackScreenProps {
   heading: string
+  /** The sailor's own sentence about their situation. */
   children: ReactNode
+  /** A `--state-warning` glyph above the heading. The holding state has none. */
+  mark?: ReactNode
+  /** Whatever this arm can offer. The holding state offers nothing yet. */
+  action?: ReactNode
   testId?: string
-  /** The only exit this route has; the holding state has nowhere to go yet. */
-  showBack?: boolean
 }
 
 /**
- * The shell every arm of `/auth/callback` that *renders* shares: full screen, no
- * drawer and no dashboard behind it (ADR 0021).
+ * The shell every arm of `/auth/callback` that *renders* shares: full screen,
+ * centred, no drawer and no dashboard behind it, because the route sits outside
+ * the `(app)` group that mounts them (ADR 0021).
  *
- * A shell, not a design. The **Refused Stranger** screen — the wordmark, the
- * `--state-warning` mark, the copy and the filled action — is LAY-127's, and it
- * fills this in. What is here keeps a stranger off a blank page with a query
- * string in the meantime.
+ * The drawing is the prototype's winning refusal landing
+ * (`app/prototype/account/RefusalA.tsx` on `prototype/lay-119-account-block`,
+ * `?refused=callback`): the wordmark, one warning-coloured mark, the copy centred
+ * in a 330px column, and a filled action beneath it. **Calm, not alarmed** — no
+ * red card and no `--state-danger` — because nothing the sailor did was wrong and
+ * nothing is broken.
  *
- * No `'use client'`: both the server arm and the browser arm render it.
+ * No `'use client'`: the server arms and the browser arm all render it.
  */
 export default function CallbackScreen({
   heading,
   children,
+  mark,
+  action,
   testId,
-  showBack = true,
 }: CallbackScreenProps): ReactElement {
   return (
     <main
@@ -32,57 +39,134 @@ export default function CallbackScreen({
       style={{
         minHeight: '100vh',
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
         justifyContent: 'center',
-        gap: '10px',
         padding: '24px 20px calc(24px + env(safe-area-inset-bottom))',
-        maxWidth: '430px',
-        margin: '0 auto',
+        background: 'var(--surface-base)',
       }}
     >
-      <div
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 700,
-          fontSize: 'var(--text-md)',
-          letterSpacing: '-0.02em',
-          color: 'var(--text-primary)',
-        }}
-      >
-        layline
-      </div>
-
-      <h1
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 600,
-          fontSize: 'var(--text-xl)',
-          color: 'var(--text-primary)',
-          margin: 0,
-        }}
-      >
-        {heading}
-      </h1>
-
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-        {children}
-      </p>
-
-      {showBack && (
-        <Link
-          href="/"
+      <div style={{ width: '100%', maxWidth: '330px', textAlign: 'center' }}>
+        <div
           style={{
-            marginTop: '8px',
-            alignSelf: 'flex-start',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 600,
-            color: 'var(--accent)',
-            textDecoration: 'none',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: 'var(--text-md)',
+            letterSpacing: 'var(--tracking-tight)',
+            color: 'var(--text-primary)',
+            marginBottom: '28px',
           }}
         >
-          Back to the weather
-        </Link>
-      )}
+          layline
+        </div>
+
+        {mark && (
+          <div
+            data-testid="callback-mark"
+            style={{
+              color: 'var(--state-warning)',
+              display: 'flex',
+              justifyContent: 'center',
+              marginBottom: '10px',
+            }}
+          >
+            {mark}
+          </div>
+        )}
+
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: 'var(--text-xl)',
+            letterSpacing: 'var(--tracking-tight)',
+            lineHeight: 1.25,
+            color: 'var(--text-primary)',
+            margin: 0,
+            // The refusal's heading fills this column almost exactly at 390px,
+            // so any copy or type-scale change wraps it. Balanced rather than
+            // left with one word on a line of its own when that happens.
+            textWrap: 'balance',
+          }}
+        >
+          {heading}
+        </h1>
+
+        <p
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--text-secondary)',
+            lineHeight: 1.55,
+            margin: '8px 0 0',
+          }}
+        >
+          {children}
+        </p>
+
+        {action && (
+          <div
+            style={{
+              marginTop: '22px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: '12px',
+            }}
+          >
+            {action}
+          </div>
+        )}
+      </div>
     </main>
+  )
+}
+
+/**
+ * The filled action, exported because the browser arm's retry is a `<button>`
+ * rather than a link and the two must not drift apart.
+ */
+export const filledActionStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  padding: '13px 16px',
+  borderRadius: 'var(--btn-primary-radius)',
+  border: 'none',
+  background: 'var(--btn-primary-bg)',
+  color: 'var(--btn-primary-fg)',
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 600,
+  textAlign: 'center',
+  textDecoration: 'none',
+  cursor: 'pointer',
+}
+
+const quietActionStyle: CSSProperties = {
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  textDecoration: 'none',
+}
+
+interface BackToTheWeatherProps {
+  /**
+   * `quiet` is for the arm that has something better to offer first, so the
+   * screen never carries two filled buttons competing for the same thumb.
+   */
+  prominence?: 'filled' | 'quiet'
+}
+
+/**
+ * The only exit this route has — every arm that renders is a place with no
+ * navigation around it.
+ */
+export function BackToTheWeather({
+  prominence = 'filled',
+}: BackToTheWeatherProps): ReactElement {
+  return (
+    <Link href="/" style={prominence === 'quiet' ? quietActionStyle : filledActionStyle}>
+      Back to the weather
+    </Link>
   )
 }
