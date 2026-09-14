@@ -1,19 +1,19 @@
 import { render, screen } from '@testing-library/react'
-import { AuthSheetOpener } from '@/components/auth/authSheetOpener'
-import type { Account } from '@/types'
+import { CREW } from '@/__tests__/fixtures/accounts'
+
+const redirect = jest.fn((to: string) => {
+  throw Object.assign(new Error(`NEXT_REDIRECT:${to}`), { digest: 'NEXT_REDIRECT' })
+})
+
+jest.mock('next/navigation', () => ({
+  redirect: (to: string) => redirect(to),
+}))
 
 jest.mock('@/lib/account/resolveAccount', () => ({
   resolveAccount: jest.fn(async () => null),
 }))
 
 import BoatPerformancePage from '../page'
-
-const CREW: Account = {
-  userId: '11111111-1111-1111-1111-111111111111',
-  email: 'crew@example.com',
-  displayName: 'Jamie Torres',
-  role: 'viewer',
-}
 
 describe('/boat-performance', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
@@ -24,29 +24,17 @@ describe('/boat-performance', () => {
   })
 
   async function renderPage(): Promise<HTMLElement> {
-    const { container } = render(
-      <AuthSheetOpener value={jest.fn()}>{await BoatPerformancePage()}</AuthSheetOpener>
-    )
+    const { container } = render(await BoatPerformancePage())
     return container
   }
 
-  it('renders the locked screen for a Guest — no 404 and no redirect', async () => {
-    const container = await renderPage()
+  it('serves a Guest nothing, and sends them to sign in with this route kept', async () => {
+    await expect(BoatPerformancePage()).rejects.toThrow('NEXT_REDIRECT')
 
-    expect(screen.getByRole('heading', { name: 'Boat performance' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.getByTestId('locked-placeholder')).toBeInTheDocument()
-    expect(container.querySelector('a')).toBeNull()
-    // Not even the tab strip: a Guest is shown the shape of nothing, not the
-    // shape of the screen they cannot read.
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
-  })
-
-  it('names no boat and shows no figure to a Guest', async () => {
-    const container = await renderPage()
-
-    expect(container.textContent).not.toMatch(/handsome pete|beneteau/i)
-    expect(container.textContent).not.toMatch(/\d/)
+    expect(redirect).toHaveBeenCalledWith('/?signin=%2Fboat-performance')
+    // Not even the tab strip: a Guest is shown no part of the screen, rather than
+    // its shape with the readings taken out.
+    expect(document.body.textContent).toBe('')
   })
 
   it('opens both tabs once the sailor is signed in', async () => {
@@ -56,6 +44,6 @@ describe('/boat-performance', () => {
 
     expect(screen.getByRole('tab', { name: 'Races' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Overall' })).toBeInTheDocument()
-    expect(screen.queryByTestId('locked-placeholder')).not.toBeInTheDocument()
+    expect(redirect).not.toHaveBeenCalled()
   })
 })

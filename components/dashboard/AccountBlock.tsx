@@ -108,7 +108,9 @@ export default function AccountBlock({
             Weather is open to everyone
           </div>
         </div>
-        <button onClick={onSignIn} style={textLink('var(--text-accent)')}>
+        {/* Called with no argument on purpose: the handler above takes an optional
+            destination, and `onClick={onSignIn}` would hand it a MouseEvent. */}
+        <button onClick={() => onSignIn()} style={textLink('var(--text-accent)')}>
           Sign in
         </button>
       </div>

@@ -111,6 +111,32 @@ The boat sections do not ship their locked state before the Auth Sheet exists.
   one deliberate "coming soon" empty state, which is exactly the shape Boat performance's Overall tab
   will take.
 
+## Amendment (LAY-102, 2026-09-14)
+
+Building this shape settled two things it had left loose, and moved the reason for one of its
+decisions. The five entries, the fixed order and the two dividers are unchanged.
+
+- **"The invitation is inline on the locked row" is now the whole of it.** The row's "Sign in" is not a
+  link into a locked screen — it *is* the control, and the rest of the row is inert (`div`, not `Link`,
+  in `--text-muted`). ADR 0015's amendment records why: there is no signed-out version of either boat
+  screen to navigate to. Each button is labelled with the section it unlocks, since three buttons
+  reading "Sign in" name nothing between them.
+- **The sheet stays in the app layout, for a smaller reason than the one given above.** The deep-link
+  argument no longer applies, because no locked screen exists to tap "Sign in" on. What is left is the
+  drawer: it is mounted on every screen in the group, its account block and its two **Locked Entries**
+  all open the sheet, and the sheet has to be able to open over any of them. That is enough to keep it
+  here, and moving it back into the dashboard would break the drawer rather than a locked screen.
+- **"Route the invitation to the dashboard with the sheet open" is now what a deep link does** — the
+  alternative rejected below, adopted for the one case it fits, with the objection answered. A guest
+  typing `/boat-management` is sent to `/?signin=%2Fboat-management`, and the destination travels with
+  them, so they finish sign-in on the page they were trying to reach rather than on the Dashboard. The
+  objection was that they would complete sign-in on the wrong page; carrying the route is what makes
+  that untrue.
+- **A Locked Entry occupies exactly the space an open row does** — same padding, margin and gap — so
+  signing in does not shift every row beneath the pair. The 268px arithmetic above is now shared with a
+  padlock and a "Sign in" on the same line, which `e2e/boat-sections.spec.ts` measures rather than
+  assumes.
+
 ## Alternatives considered
 
 - **Drop Wind Data, following the mockup.** Rejected: it is a real section with an index-to-detail

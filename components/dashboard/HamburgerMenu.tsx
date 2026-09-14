@@ -11,7 +11,12 @@ interface HamburgerMenuProps {
   onClose: () => void
   /** The signed-in sailor, resolved on the server; `null` is a **Guest**. */
   account: Account | null
-  onSignIn: () => void
+  /**
+   * `destination` is the route sign-in should land on when it finishes. A
+   * **Locked Entry** passes its own; the account block passes nothing, meaning
+   * the screen the sailor is already on.
+   */
+  onSignIn: (destination?: string) => void
   onSignOut: () => void
 }
 
@@ -20,8 +25,8 @@ interface NavEntry {
   label: string
   icon: ReactElement
   /**
-   * A **Locked Entry** for a **Guest**: the row still opens its route, and the
-   * screen behind it carries the invitation (ADR 0015).
+   * A **Locked Entry** for a **Guest**: the row is present and inert, and the
+   * only thing on it that does anything is its Sign in (ADR 0015).
    */
   locksForGuest?: true
 }
@@ -30,10 +35,11 @@ interface NavEntry {
  * The final drawer shape (ADR 0016): five flat entries in one fixed order, the
  * two boat sections grouped between dividers.
  *
- * Membership and order are the same for a Guest and a signed-in sailor. The
- * padlocks come off and the account block swaps, and that is all — which is why
- * the locked pair can sit in the middle, and why Settings keeps the last slot
- * rather than being stranded above the two sections a boat's owner opens most.
+ * Membership and order are the same for a Guest and a signed-in sailor. What
+ * changes is that the boat pair stops being inert, and the account block swaps —
+ * which is why the locked pair can sit in the middle, and why Settings keeps the
+ * last slot rather than being stranded above the two sections a boat's owner
+ * opens most.
  *
  * `/station/[buoyId]` is deliberately absent: it is a detail route reached by
  * tapping a `StationRow`, not a section.
@@ -102,25 +108,50 @@ const navGroups: NavEntry[][] = [
 ]
 
 /**
- * The padlock and the invitation, right-aligned on a **Locked Entry**'s own row.
+ * A **Locked Entry**'s row: the section is named, and the only thing on it that
+ * does anything is its Sign in.
  *
- * Deliberately not a separate invitation block, and deliberately not a second
- * tap target: the row is one link to the locked screen, where the Sign in that
- * opens the **Auth Sheet** actually lives. The offer belongs to the thing being
- * offered (ADR 0016).
+ * Not a link, because there is nowhere to send a **Guest** — there is no
+ * signed-out version of either boat screen, so the row is inert and muted, and
+ * the invitation is the affordance (ADR 0015). Not a separate invitation block
+ * either: the offer belongs to the thing being offered (ADR 0016).
  *
- * Which is why the whole mark is `aria-hidden` and a screen reader is told the
- * same thing in words instead: announcing "Boat management Sign in" would name a
- * control this row does not contain.
+ * The padlock sits directly after the label, as the prototype has it, so the two
+ * read as one phrase — "Boat management, locked" — with the offer out at the far
+ * edge where a control belongs.
  */
-function LockedMark(): ReactElement {
+function LockedEntry({
+  entry,
+  onSignIn,
+}: {
+  entry: NavEntry
+  onSignIn: (destination?: string) => void
+}): ReactElement {
   return (
-    <span
-      data-testid="locked-mark"
-      aria-hidden
-      style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+    <div
+      data-testid="locked-entry"
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '12px 12px',
+        margin: '2px 0',
+        borderRadius: '6px',
+        border: '1px solid transparent',
+        // Muted against the open rows' `--text-secondary`: the row is here to be
+        // read, not followed.
+        color: 'var(--text-muted)',
+      }}
     >
+      {entry.icon}
+      {/* No wrap: "Boat performance" is the longest label in the drawer, and a
+          second line would move every row below it. */}
+      <span style={{ fontFamily: 'Inter,sans-serif', fontSize: '14px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+        {entry.label}
+      </span>
       <svg
+        data-testid="padlock"
         width="12"
         height="12"
         viewBox="0 0 24 24"
@@ -132,19 +163,28 @@ function LockedMark(): ReactElement {
         <rect x="4" y="11" width="16" height="10" rx="2" />
         <path d="M8 11V7a4 4 0 0 1 8 0v4" />
       </svg>
-      <span
+      <button
+        onClick={() => onSignIn(entry.href)}
+        // The padlock is drawn, so the button is what has to say what it unlocks:
+        // a drawer of identical "Sign in" buttons names nothing.
+        aria-label={`Sign in to open ${entry.label}`}
         style={{
+          marginLeft: 'auto',
+          background: 'none',
+          border: 'none',
+          padding: '2px 0',
+          cursor: 'pointer',
           fontFamily: 'var(--font-body)',
-          // The prototype's size, and the one that keeps the longest label — "Boat
-          // performance" — on one line inside the fixed 268px.
+          // The prototype's size, and the one that keeps the longest label on a
+          // single line inside the fixed 268px.
           fontSize: 'var(--text-xs)',
           fontWeight: 'var(--weight-semibold)',
           color: 'var(--text-accent)',
         }}
       >
         Sign in
-      </span>
-    </span>
+      </button>
+    </div>
   )
 }
 
@@ -251,15 +291,16 @@ export default function HamburgerMenu({
               {group.map((item) => {
                 const isActive = pathname === item.href
                 const isLocked = item.locksForGuest === true && account === null
+
+                if (isLocked) {
+                  return <LockedEntry key={item.href} entry={item} onSignIn={onSignIn} />
+                }
+
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={onClose}
-                    // The padlock and its "Sign in" are drawn, not spoken; this is
-                    // the same row in words, and it still opens with the label so
-                    // that saying the label out loud still reaches it.
-                    aria-label={isLocked ? `${item.label}, locked. Sign in to open.` : undefined}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -279,7 +320,6 @@ export default function HamburgerMenu({
                     {/* No wrap: "Boat performance" is the longest label in the
                         drawer, and a second line would move every row below it. */}
                     <span style={{ fontFamily: 'Inter,sans-serif', fontSize: '14px', fontWeight: isActive ? 600 : 500, whiteSpace: 'nowrap' }}>{item.label}</span>
-                    {isLocked && <LockedMark />}
                   </Link>
                 )
               })}
