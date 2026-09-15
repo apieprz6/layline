@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import Link from 'next/link'
 import NotRecorded from '@/components/common/NotRecorded'
-import { BOAT_SETUP_LABEL, boatSetupHref } from '@/lib/boat/artifacts'
+import { BOAT_SETUP_LABEL, boatSetupHref, opensUnrecorded } from '@/lib/boat/artifacts'
 import { formatCalendarDate } from '@/lib/utils/calendarDate'
 import { spacing } from '@/lib/utils/design'
 import type { BoatSetupRow } from '@/types'
@@ -9,6 +9,8 @@ import type { BoatSetupRow } from '@/types'
 interface BoatSetupListProps {
   /** The four artifacts, already in reading order — `readBoatSetup` owns that. */
   artifacts: BoatSetupRow[]
+  /** Whether this sailor may record a Version: `admin` only (ADR 0019). */
+  canWrite: boolean
 }
 
 const ROW_STYLE = {
@@ -59,7 +61,7 @@ const CURRENT_STYLE = {
  * A Server Component: a row either links somewhere or is inert, and neither needs
  * the client.
  */
-export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactElement {
+export default function BoatSetupList({ artifacts, canWrite }: BoatSetupListProps): ReactElement {
   return (
     <div data-testid="boat-setup-list">
       {artifacts.map(({ kind, current }) => {
@@ -69,18 +71,33 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
           </span>
         )
 
-        // Nothing recorded means nothing to open. A row dressed as a control that
-        // leads to an empty screen is the trap LAY-102 fixed on the locked drawer
-        // row, so an unrecorded artifact is plain text with no chevron.
         if (current === null) {
-          return (
-            <div key={kind} style={ROW_STYLE}>
+          // Nothing recorded means nothing to *read*. A row dressed as a control that
+          // leads to an empty screen is the trap LAY-102 fixed on the locked drawer
+          // row, so for a viewer an unrecorded artifact is plain text with no chevron.
+          //
+          // For an admin it is a place to go: a Rig Tune has no file behind it, so its
+          // screen is where the first Version is typed, and a row that waits for a
+          // Version before it opens waits forever. It still says "Not recorded" — what
+          // is offered is an empty form, not a Version.
+          const empty = (
+            <>
               {name}
               {/* Held at its own width: at 390px "Instrument Calibration" and this
                   badge share one line, and a squashed badge is a broken shape. */}
               <span style={{ flexShrink: 0 }}>
                 <NotRecorded />
               </span>
+            </>
+          )
+
+          return opensUnrecorded(kind, canWrite) ? (
+            <Link key={kind} href={boatSetupHref(kind)} style={ROW_STYLE}>
+              {empty}
+            </Link>
+          ) : (
+            <div key={kind} style={ROW_STYLE}>
+              {empty}
             </div>
           )
         }

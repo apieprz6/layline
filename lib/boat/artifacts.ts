@@ -34,9 +34,8 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
  *
- * None of the four routes exists yet — they arrive with the upload and form flows in
- * LAY-106 to LAY-108. Nothing links to one until then either: a row is only made a
- * link once it has a Version to open, and on an empty archive there are none.
+ * The Rig Tune's screen exists (LAY-107). The other three arrive with the upload and
+ * form flows in LAY-106 and LAY-108, so nothing links to those until then.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -47,4 +46,19 @@ const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
 
 export function boatSetupHref(kind: BoatSetupKind): string {
   return `/boat-management/${BOAT_SETUP_SLUG[kind]}`
+}
+
+/** The kinds whose detail screen is built. A row leading to a 404 is worse than an inert one. */
+const BUILT: readonly BoatSetupKind[] = ['rig_tune']
+
+/**
+ * Whether an artifact with **no Version** is still worth opening.
+ *
+ * Only for someone who may write, and only where the screen exists: a Rig Tune is a form,
+ * so its screen is where an unrecorded artifact stops being unrecorded. Leaving the row
+ * inert until a Version exists would leave the first Version with nowhere to be typed.
+ * For a viewer it stays inert, because there is genuinely nothing to read.
+ */
+export function opensUnrecorded(kind: BoatSetupKind, canWrite: boolean): boolean {
+  return canWrite && BUILT.includes(kind)
 }

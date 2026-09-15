@@ -81,7 +81,7 @@ export default function BoatManagementContent({
       ) : (
         <div style={{ padding: spacing(4) }}>
           <div style={EYEBROW_STYLE}>Boat setup</div>
-          <BoatSetupList artifacts={page.artifacts} />
+          <BoatSetupList artifacts={page.artifacts} canWrite={canWrite} />
         </div>
       )}
     </div>
