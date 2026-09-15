@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 
 const MIGRATIONS = resolve(__dirname, '../../supabase/migrations')
-const FILENAME = '20260915040000_mint_boat_setup_version.sql'
+const FILENAME = '20260915210000_mint_boat_setup_version.sql'
 
 const sql = readFileSync(resolve(MIGRATIONS, FILENAME), 'utf8')
 
@@ -22,13 +22,23 @@ const code = sql
   .join('\n')
 
 describe('the Version-minting migration', () => {
-  it('runs after the migration that creates the tables it writes to', () => {
+  it('runs after every migration already applied, not just after the tables it writes to', () => {
     const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()
-    const archive = files.indexOf('20260910183000_create_race_archive_and_boat_setup.sql')
     const mint = files.indexOf(FILENAME)
 
+    // The tables. Nothing here would resolve before them.
+    const archive = files.indexOf('20260910183000_create_race_archive_and_boat_setup.sql')
     expect(archive).toBeGreaterThanOrEqual(0)
     expect(mint).toBeGreaterThan(archive)
+
+    // And after LAY-107's, which is a separate requirement: `supabase db push` refuses a
+    // local migration that sorts *before* one the remote has already applied — "found local
+    // migration files to be inserted before the last migration on remote database". This one
+    // was written first but shipped second, so its timestamp had to move past the migration
+    // that overtook it.
+    const overtook = files.indexOf('20260915190000_rig_tune_stale_gaps_and_mint.sql')
+    expect(overtook).toBeGreaterThanOrEqual(0)
+    expect(mint).toBeGreaterThan(overtook)
   })
 
   it('is SECURITY INVOKER, so RLS decides who may write', () => {

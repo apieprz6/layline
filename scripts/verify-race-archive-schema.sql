@@ -1654,7 +1654,7 @@ $$;
 -- Minting a Version through public.mint_boat_setup_version
 -- ===========================================================================
 -- The insert and the pointer move are one function call because supabase-js has no way to open
--- a transaction; 20260915040000_mint_boat_setup_version.sql says why at length. Every check
+-- a transaction; 20260915210000_mint_boat_setup_version.sql says why at length. Every check
 -- here goes through a request, because the function is SECURITY INVOKER and so the request is
 -- the whole of its authority.
 --

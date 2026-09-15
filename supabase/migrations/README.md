@@ -117,7 +117,7 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
-## Migration: 20260915040000_mint_boat_setup_version.sql
+## Migration: 20260915210000_mint_boat_setup_version.sql
 
 **Purpose**: what LAY-106's upload needs from the database — a way to insert the next Version of
 a file-backed artifact and move the artifact's pointer to it without the two ever being apart.
