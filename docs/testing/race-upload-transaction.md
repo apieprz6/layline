@@ -1,7 +1,7 @@
 # The Race Upload Transaction — Local Verification
 
 Verification record and re-run guide for
-`supabase/migrations/20260915120000_create_race_from_upload.sql` (LAY-110).
+`supabase/migrations/20260915220000_create_race_from_upload.sql` (LAY-110).
 
 LAY-110's ninth acceptance criterion is a claim no Jest test can reach: "on submit, the
 Recording, its Transcription and the Race are written in one transaction, after the bytes have
