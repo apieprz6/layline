@@ -74,11 +74,17 @@ $$;
 -- Every call goes through a subtransaction, which is what lets one suite watch both the
 -- successes and the all-or-nothing rollbacks: a failed call unwinds to the savepoint and
 -- leaves the fixtures standing, exactly as a failed RPC leaves the archive standing.
+--
+-- The two annotation arrays default to empty, because most of what this suite asserts is about
+-- the Recording and the Race and an empty list is the ordinary case: it means that kind was not
+-- recorded (ADR 0010). Section 9 is where they carry something.
 CREATE FUNCTION pg_temp.upload_as(
     p_uid       UUID,
     p_recording JSONB,
     p_rows      JSONB,
     p_race      JSONB,
+    p_sails     JSONB DEFAULT '[]'::JSONB,
+    p_sea_state JSONB DEFAULT '[]'::JSONB,
     OUT race_id UUID,
     OUT err     TEXT
 )
@@ -86,7 +92,8 @@ LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM pg_temp.act_as(p_uid);
     BEGIN
-        race_id := public.create_race_from_upload(p_recording, p_rows, p_race);
+        race_id := public.create_race_from_upload(
+            p_recording, p_rows, p_race, p_sails, p_sea_state);
         -- The window-intersects-rows trigger is deferred to COMMIT and this suite never
         -- commits, so it is made to fire here instead.
         SET CONSTRAINTS ALL IMMEDIATE;
@@ -219,13 +226,13 @@ BEGIN
     PERFORM pg_temp.chk(
         'a guest holds no EXECUTE on the function',
         NOT has_function_privilege('anon',
-            'public.create_race_from_upload(jsonb,jsonb,jsonb)', 'EXECUTE'),
+            'public.create_race_from_upload(jsonb,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'),
         NULL
     );
     PERFORM pg_temp.chk(
         'and any signed-in user does, RLS being what decides the rest',
         has_function_privilege('authenticated',
-            'public.create_race_from_upload(jsonb,jsonb,jsonb)', 'EXECUTE'),
+            'public.create_race_from_upload(jsonb,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'),
         NULL
     );
 
@@ -234,7 +241,7 @@ BEGIN
     BEGIN
         v_id := public.create_race_from_upload(
             jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f003"'),
-            f.rows, f.race
+            f.rows, f.race, '[]'::JSONB, '[]'::JSONB
         );
     EXCEPTION WHEN OTHERS THEN
         v_err := SQLERRM;
@@ -573,6 +580,202 @@ BEGIN
     PERFORM pg_temp.chk(
         'a duplicate content hash is accepted -- it is a confirmation in the UI, not a refusal here',
         v_err IS NULL, COALESCE(v_err, 'accepted'));
+END;
+$$;
+
+-- ===========================================================================
+-- 9. The sailor's Testimony, in the same transaction
+-- ===========================================================================
+-- LAY-111's half of the function. An Annotation is Testimony (ADR 0008): the sailor's answer and
+-- nobody else's, so what matters here is that all of it is written or none of it is, that the
+-- refusals are the database's own, and that an empty list is not a failure.
+--
+-- The sail ids come out of the seeded inventory, because `race_sail_entry_sails.sail_id` is a
+-- foreign key and a literal UUID would only ever prove that.
+
+DO $$
+DECLARE
+    f          RECORD;
+    v_main     UUID;
+    v_jib      UUID;
+    v_a2       UUID;
+    v_race_id  UUID;
+    v_err      TEXT;
+    v_entries  BIGINT;
+    v_sails    TEXT[];
+BEGIN
+    SELECT * INTO f FROM _fixture;
+    SELECT id INTO v_main FROM sails WHERE key = 'main';
+    SELECT id INTO v_jib  FROM sails WHERE key = 'jib-2';
+    SELECT id INTO v_a2   FROM sails WHERE key = 'A2';
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00a"'),
+        f.rows, f.race,
+        jsonb_build_array(
+            -- Before the window's start, deliberately: the sails were set on the way out.
+            jsonb_build_object('at', '2026-06-03 18:40:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array(v_main, v_jib)),
+            jsonb_build_object('at', '2026-06-03 19:01:00', 'reef', 'reef-1',
+                'sail_ids', jsonb_build_array(v_main, v_a2))
+        ),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'sea_state', 'moderate')
+        )
+      );
+
+    PERFORM pg_temp.chk('an upload carrying Testimony is accepted',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT count(*) INTO v_entries FROM race_sail_entries WHERE race_id = v_race_id;
+    PERFORM pg_temp.chk('both Sail Configurations are written -- one ordered list, no initial value apart',
+        v_entries = 2, format('%s entries', v_entries));
+
+    PERFORM pg_temp.chk('an entry before the Race Window is accepted -- the sails were set before the start',
+        (SELECT count(*) FROM race_sail_entries
+          WHERE race_id = v_race_id AND at < '2026-06-03 19:00:00') = 1);
+
+    SELECT array_agg(s.key ORDER BY s.sort_order) INTO v_sails
+      FROM race_sail_entries e
+      JOIN race_sail_entry_sails es ON es.entry_id = e.id
+      JOIN sails s ON s.id = es.sail_id
+     WHERE e.race_id = v_race_id AND e.at = '2026-06-03 19:01:00';
+    PERFORM pg_temp.chk('a Sail Configuration is stored as a set of sails',
+        v_sails = ARRAY['main', 'A2'], array_to_string(v_sails, '+'));
+
+    PERFORM pg_temp.chk('the Reef State is stored with the entry, not with a sail',
+        (SELECT reef FROM race_sail_entries
+          WHERE race_id = v_race_id AND at = '2026-06-03 19:01:00') = 'reef-1');
+
+    PERFORM pg_temp.chk('the Sea State reading is written too',
+        (SELECT sea_state FROM race_sea_state_entries WHERE race_id = v_race_id) = 'moderate');
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_main    UUID;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_left    BIGINT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+    SELECT id INTO v_main FROM sails WHERE key = 'main';
+
+    -- A Sail Configuration that names no sails. Refused by the deferred
+    -- race_sail_entries_non_empty trigger, which pg_temp.upload_as makes fire at the statement.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00b"'),
+        f.rows, f.race,
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array(v_main)),
+            jsonb_build_object('at', '2026-06-03 19:01:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array())
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a Sail Configuration naming no sails is refused', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('in the words the trigger uses',
+        v_err = 'a Sail Configuration must name at least one sail', v_err);
+
+    -- The whole point of doing this in one transaction: the good entry, the race, the Recording and
+    -- its Transcription all went with it.
+    SELECT count(*) INTO v_left FROM recordings
+     WHERE id = 'ffffffff-0000-4000-8000-00000000f00b';
+    PERFORM pg_temp.chk('and nothing of that upload survived -- not the entry that was fine either',
+        v_left = 0, format('%s recordings', v_left));
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_main    UUID;
+    v_jib     UUID;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+    SELECT id INTO v_main FROM sails WHERE key = 'main';
+    SELECT id INTO v_jib  FROM sails WHERE key = 'jib-1';
+
+    -- Two entries at one instant. The wizard steps a taken time forward one row precisely so this
+    -- cannot be built by hand (ADR 0014); the constraint is what makes that a rule rather than a
+    -- courtesy.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00c"'),
+        f.rows, f.race,
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array(v_main)),
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array(v_jib))
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('two Sail Configurations at the same time are refused',
+        v_race_id IS NULL, v_err);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A sail from nobody's locker. The foreign key is what refuses it, which is why the Server
+    -- Action asks the same question before the bytes move.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00d"'),
+        f.rows, f.race,
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
+                'sail_ids', jsonb_build_array('eeeeeeee-0000-4000-8000-00000000ee01'))
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a sail that is not in the inventory is refused', v_race_id IS NULL, v_err);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- Two empty lists: a race whose sails and water were not recorded. Legal, ordinary, and the
+    -- state every other section of this suite has been uploading in.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00e"'),
+        f.rows, f.race, '[]'::JSONB, '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a race with nothing annotated is saved', v_race_id IS NOT NULL,
+        COALESCE(v_err, 'accepted'));
+    PERFORM pg_temp.chk('and holds no annotations rather than a stand-in for one',
+        (SELECT count(*) FROM race_sail_entries WHERE race_id = v_race_id) = 0
+        AND (SELECT count(*) FROM race_sea_state_entries WHERE race_id = v_race_id) = 0);
 END;
 $$;
 

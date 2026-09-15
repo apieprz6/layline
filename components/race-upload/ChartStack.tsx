@@ -26,9 +26,24 @@ import type { RaceChannelKey, RaceChartSeries } from '@/types'
 
 import ChannelChart, { TraceLegend } from './ChannelChart'
 import TrackMap from './TrackMap'
+import type { StackMarker } from './chart-geometry'
 
-/** What the step asks of the stack. Sails and Sea state add their own modes in later tickets. */
-export type StackMode = 'window' | 'readonly'
+/**
+ * What the step asks of the stack, and the only thing that changes between steps (ADR 0014).
+ *
+ * `window` moves the scrubbers; `sail` and `sea` place an annotation of that kind with the window
+ * fixed; `readonly` is Review. Every mode draws every marker — the mode decides which of them can be
+ * touched, never which of them can be seen.
+ */
+export type StackMode = 'window' | 'sail' | 'sea' | 'readonly'
+
+/** What the strip above the charts says the current gesture does. */
+const HINTS: Record<StackMode, string> = {
+  window: 'Drag the ends · tap to snap',
+  sail: 'Tap to place a sail change',
+  sea: 'Tap to place a sea state',
+  readonly: 'The window as saved',
+}
 
 interface ChartStackProps {
   series: RaceChartSeries
@@ -37,10 +52,20 @@ interface ChartStackProps {
   channel: RaceChannelKey
   onChannelChange: (channel: RaceChannelKey) => void
   mode: StackMode
+  /**
+   * What the strip says instead of the mode's own line, for a step whose gesture is off for a reason
+   * of its own — a Sails step with no locker to name sails from is `readonly`, but it is emphatically
+   * not "the window as saved".
+   */
+  hint?: string
   /** Only called in `window` mode. */
   onWindowChange: (window: RaceWindowSeconds) => void
-  /** A tap, in seconds, on either chart. Only called in `window` mode. */
+  /** A tap, in seconds, on either chart. Called in every mode but `readonly`. */
   onTapTime: (seconds: number) => void
+  /** Every annotation placed so far, of either kind, whichever step placed it. */
+  markers?: readonly StackMarker[]
+  /** A tap on a marker the current mode leaves editable. */
+  onSelectMarker?: (key: string) => void
   /** Shorter charts and no legend, for the Review step where the list below is what matters. */
   compact?: boolean
 }
@@ -52,25 +77,31 @@ export default function ChartStack({
   channel,
   onChannelChange,
   mode,
+  hint,
   onWindowChange,
   onTapTime,
+  markers = [],
+  onSelectMarker,
   compact = false,
 }: ChartStackProps): ReactElement {
-  const editing = mode === 'window'
+  // The window is only the Window step's to move; a tap places something on all three working steps,
+  // and what it places is the wizard's business rather than the stack's.
+  const movingWindow = mode === 'window'
+  const tapping = mode !== 'readonly'
   const meta = raceChannel(channel)
 
   const handleWindowChange = useCallback(
     (next: RaceWindowSeconds) => {
-      if (editing) onWindowChange(next)
+      if (movingWindow) onWindowChange(next)
     },
-    [editing, onWindowChange]
+    [movingWindow, onWindowChange]
   )
 
   const handleTap = useCallback(
     (seconds: number) => {
-      if (editing) onTapTime(seconds)
+      if (tapping) onTapTime(seconds)
     },
-    [editing, onTapTime]
+    [tapping, onTapTime]
   )
 
   const mapHeight = compact ? 168 : 214
@@ -114,7 +145,7 @@ export default function ChartStack({
             color: 'var(--text-muted)',
           }}
         >
-          {editing ? 'Drag the ends · tap to snap' : 'The window as saved'}
+          {hint ?? HINTS[mode]}
         </span>
       </div>
 
@@ -125,8 +156,10 @@ export default function ChartStack({
             axis={axis}
             window={window}
             height={mapHeight}
-            onWindowChange={editing ? handleWindowChange : undefined}
-            onTapTrack={editing ? handleTap : undefined}
+            onWindowChange={movingWindow ? handleWindowChange : undefined}
+            onTapTrack={tapping ? handleTap : undefined}
+            markers={markers}
+            onSelectMarker={tapping ? onSelectMarker : undefined}
           />
         </div>
 
@@ -170,8 +203,10 @@ export default function ChartStack({
             axis={axis}
             window={window}
             height={chartHeight}
-            onWindowChange={editing ? handleWindowChange : undefined}
-            onTapTime={editing ? handleTap : undefined}
+            onWindowChange={movingWindow ? handleWindowChange : undefined}
+            onTapTime={tapping ? handleTap : undefined}
+            markers={markers}
+            onSelectMarker={tapping ? onSelectMarker : undefined}
           />
         </div>
       </div>

@@ -117,7 +117,50 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260915230000_create_race_from_upload_with_annotations.sql
+
+**Purpose**: `public.create_race_from_upload(p_recording jsonb, p_rows jsonb, p_race jsonb,
+p_sails jsonb, p_sea_state jsonb)` — the same one transaction, now carrying the sailor's Testimony.
+LAY-111's two annotation steps mean an upload writes five tables instead of three: the Recording,
+its Transcription, the Race, its Sail Configurations and its Sea State readings.
+
+**It replaces the three-argument function rather than overloading it.** The section below documents
+that signature; this migration `DROP FUNCTION`s it in the same file that creates the five-argument
+one. An overload would resolve for any caller still passing three arguments, and that caller would
+write a race with no annotations and no complaint — indistinguishable from a race whose sails
+genuinely were not recorded (ADR 0010).
+
+**Empty arrays are the ordinary case**, not a failure: six of the archive's thirteen recordings have
+no sail or sea-state record at all, so `p_sails => '[]'` means *not recorded* and is written as such.
+Neither kind's `at` is bounded by the Race Window — the sails were set before the start.
+
+**Push it before a deploy, for the reason the section below gives**, and with one extra edge: a
+hosted project that has the old function and not this one has a *working* wizard right up to submit,
+where PostgREST reports no `create_race_from_upload(jsonb, jsonb, jsonb, jsonb, jsonb)` in the schema
+cache — after the bytes have moved (ADR 0013).
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-upload-rpc.sh "$DB_URL"       # 45 checks, safe against real data
+```
+
+The suite grew from 31 checks to 45: the fourteen new ones cover the two annotation tables, the
+empty-array case and an entry placed outside the window. **The fourteen have not been run against a
+database yet** — see the run status in `docs/testing/race-upload-transaction.md`, which is where the
+observed output goes.
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.create_race_from_upload(jsonb, jsonb, jsonb, jsonb, jsonb);
+```
+Restoring the three-argument version means re-running `20260915220000_create_race_from_upload.sql`,
+which this migration's `DROP` leaves intact on disk.
+
 ## Migration: 20260915220000_create_race_from_upload.sql
+
+**Superseded by `20260915230000` above**, which drops this signature and creates the five-argument
+one in its place. Kept here because it is the migration a hosted project applied first, and because
+it is what a rollback of `20260915230000` re-runs.
 
 **Purpose**: `public.create_race_from_upload(p_recording jsonb, p_rows jsonb, p_race jsonb)` — the
 one transaction the upload wizard's submit writes through. It inserts the Recording, its

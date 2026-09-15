@@ -39,6 +39,10 @@ import {
   AXIS_INSET_LEFT,
   AXIS_INSET_RIGHT,
   CHART_WIDTH,
+  MARKER_LANE_HEIGHT,
+  markerColour,
+  markerGlyph,
+  type StackMarker,
 } from './chart-geometry'
 
 // The time axis is shared with the map above, handle for handle, so its insets are not this
@@ -60,6 +64,10 @@ interface ChannelChartProps {
   onWindowChange?: (window: RaceWindowSeconds) => void
   /** A tap on the plot, in seconds. The caller decides which bound it moves and snaps it. */
   onTapTime?: (seconds: number) => void
+  /** The annotations placed so far, drawn in a lane under the plot against the same time axis. */
+  markers?: readonly StackMarker[]
+  /** A tap on an unlocked marker, by its key. Omitted where nothing on the chart is editable. */
+  onSelectMarker?: (key: string) => void
 }
 
 export default function ChannelChart({
@@ -70,6 +78,8 @@ export default function ChannelChart({
   height,
   onWindowChange,
   onTapTime,
+  markers = [],
+  onSelectMarker,
 }: ChannelChartProps): ReactElement {
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef<'start' | 'finish' | null>(null)
@@ -81,6 +91,13 @@ export default function ChannelChart({
 
   const plotHeight = height - PAD_TOP - PAD_BOTTOM
   const innerWidth = AXIS_INNER_WIDTH
+
+  // The lane is added *under* the chart rather than taken out of it: an annotation appearing must not
+  // rescale the trace it was placed against.
+  const laneHeight = markers.length > 0 ? MARKER_LANE_HEIGHT : 0
+  const totalHeight = height + laneHeight
+  const laneY = (lane: 'sail' | 'sea'): number =>
+    PAD_TOP + plotHeight + 11 + (lane === 'sail' ? 0 : laneHeight / 2)
 
   /**
    * The value scale. Angles are fixed by the channel; speeds are read from the file — over every
@@ -199,7 +216,7 @@ export default function ChannelChart({
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${WIDTH} ${height}`}
+      viewBox={`0 0 ${WIDTH} ${totalHeight}`}
       role="img"
       aria-label={`${meta.label} in ${meta.unit}, with the chosen window between the two handles.`}
       style={{
@@ -374,9 +391,93 @@ export default function ChannelChart({
         )
       })}
 
+      {/* The same annotations as the map's, against time instead of against the water. A locked one
+          keeps its place and loses its hit target (ADR 0014). */}
+      {markers.map((marker) => {
+        const colour = markerColour(marker)
+        const centre = laneY(marker.lane)
+        // An entry's time is unbounded: the sails were set before the start, and the by-time path and
+        // the nudges will both carry one past the axis, which is drawn from the rows plus ten minutes.
+        // Held at the edge rather than plotted off the viewBox, because an annotation placed on an
+        // earlier step **stays drawn** (ADR 0014) and a marker at a negative x is a marker gone. The
+        // pin says the entry is out that way and its time is on the label; it is not a claim that the
+        // entry happened here, which is why it is drawn as a pin and not as a marker on the axis.
+        const unclamped = x(marker.at)
+        const at = Math.max(PAD_LEFT, Math.min(WIDTH - PAD_RIGHT, unclamped))
+        const offAxis = Math.abs(unclamped - at) > 0.5
+
+        return (
+          <g
+            key={marker.key}
+            onPointerDown={(event) => {
+              if (marker.locked || !onSelectMarker) return
+              // Or the tap falls through to the plot and places another annotation on top of this one.
+              event.stopPropagation()
+              onSelectMarker(marker.key)
+            }}
+            style={{
+              cursor: marker.locked || !onSelectMarker ? 'default' : 'pointer',
+              opacity: marker.locked ? 0.5 : 1,
+            }}
+          >
+            {/* Up to the trace, so the marker reads as a moment in the race and not as a row of
+                buttons under a chart. Not drawn for one held at the edge: there is no moment of this
+                chart to point at. */}
+            {!offAxis && (
+              <line
+                x1={at}
+                y1={PAD_TOP}
+                x2={at}
+                y2={centre}
+                stroke={colour}
+                strokeWidth="0.8"
+                strokeDasharray="2 2"
+                opacity="0.4"
+              />
+            )}
+            <circle
+              cx={at}
+              cy={centre}
+              r={marker.selected ? 6 : 4.5}
+              fill={colour}
+              stroke={marker.selected ? 'var(--text-primary)' : 'var(--surface-raised)'}
+              strokeWidth="1.5"
+              strokeDasharray={offAxis ? '1.5 1.5' : undefined}
+            />
+            <text
+              x={at}
+              y={centre + 2.5}
+              textAnchor="middle"
+              fontSize="6"
+              fontWeight="700"
+              fontFamily="var(--font-mono)"
+              fill="var(--text-inverse)"
+            >
+              {markerGlyph(marker.lane)}
+            </text>
+            {/* Which way it is off the chart, so the pin cannot be read as a time on the axis. */}
+            {offAxis && (
+              <text
+                x={unclamped < at ? at - 7 : at + 7}
+                y={centre + 2.5}
+                textAnchor="middle"
+                fontSize="7"
+                fontFamily="var(--font-mono)"
+                fill={colour}
+              >
+                {unclamped < at ? '‹' : '›'}
+              </text>
+            )}
+            {!marker.locked && onSelectMarker && (
+              <rect x={at - 16} y={centre - 10} width="32" height="20" fill="transparent" />
+            )}
+          </g>
+        )
+      })}
+
       <text
         x={x(axis.first)}
-        y={height - 5}
+        y={totalHeight - 5}
         fontSize="7"
         fontFamily="var(--font-mono)"
         fill="var(--text-muted)"
@@ -385,7 +486,7 @@ export default function ChannelChart({
       </text>
       <text
         x={x(axis.last)}
-        y={height - 5}
+        y={totalHeight - 5}
         textAnchor="end"
         fontSize="7"
         fontFamily="var(--font-mono)"

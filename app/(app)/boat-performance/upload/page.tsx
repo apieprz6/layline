@@ -4,6 +4,7 @@ import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { spacing } from '@/lib/utils/design'
+import { readSails } from '@/services/boat/readSails'
 
 import { stageRecording, submitRace } from './actions'
 
@@ -18,9 +19,15 @@ export const dynamic = 'force-dynamic'
  * governs writes, and uploading is the write (ADR 0019).
  *
  * The two Server Actions are passed to the wizard as props rather than imported by it. That keeps the
- * wizard a plain client component with an injectable seam — a test drives the whole three-step flow
+ * wizard a plain client component with an injectable seam — a test drives the whole five-step flow
  * against two stubs — and it keeps the `'use server'` module out of the client bundle's import graph
  * except as the two references Next replaces with endpoints.
+ *
+ * The Sail Inventory is read here, on the server, and handed down whole: the Sails step needs the
+ * locker to name a sail plan with, and a client component fetching it would be a spinner between the
+ * sailor and a chip row. Retired sails travel too — a race being entered from the archive may be older
+ * than the locker (`sailsAvailableOn` is what decides per entry, from the race's own day). A null
+ * inventory is passed as null, because "could not be read" is not "the boat has no sails".
  *
  * Both actions re-check the Role anyway. This page decides what to render; a Server Action is a public
  * endpoint and decides for itself.
@@ -51,9 +58,15 @@ export default async function RaceUploadPage(): Promise<ReactElement> {
     )
   }
 
+  const inventory = await readSails()
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
-      <RaceUploadWizard stageRecording={stageRecording} submitRace={submitRace} />
+      <RaceUploadWizard
+        stageRecording={stageRecording}
+        submitRace={submitRace}
+        inventory={inventory}
+      />
     </div>
   )
 }

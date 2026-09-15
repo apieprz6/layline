@@ -10,6 +10,7 @@ import {
   tmpUploadObjectPath,
 } from '@/lib/storage/paths'
 import { createClient } from '@/lib/supabase/server'
+import { refuseAnnotations } from '@/services/races/annotations'
 import { raceChartSeries } from '@/services/recordings/chart-series'
 import { recordingFindings } from '@/services/recordings/coverage'
 import { describeRecording } from '@/services/recordings/provenance'
@@ -228,6 +229,27 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
   // The one failure the sailor is expected to hit and fix: move a handle, press save again.
   if (refusal) return { ok: false, message: refusal, start_over: false }
 
+  // Asked before the move, for the same reason the window is: every one of these refusals is also a
+  // constraint inside the transaction, and a constraint that fires there leaves bytes at a permanent
+  // path with no row pointing at them (ADR 0013). The wizard asks first and the database asks last;
+  // this is the one in the middle, because a Server Action is a public endpoint.
+  // Only asked when there is a sail to check against the locker. A race that names no sails is a
+  // legal race — six of the archive's thirteen recordings have no sail record at all — and refusing
+  // one because the `sails` table could not be read would make the wizard's own promise false: it
+  // tells a sailor with an unreadable inventory that the race still saves and its page will say the
+  // sail plan was not recorded.
+  const inventory = input.sails.length > 0 ? await inventorySailIds(supabase) : []
+
+  if (inventory === null) {
+    return { ok: false, message: UNAVAILABLE, start_over: false }
+  }
+
+  const annotationRefusal = refuseAnnotations(input.sails, input.sea_state, inventory)
+
+  if (annotationRefusal) {
+    return { ok: false, message: annotationRefusal, start_over: false }
+  }
+
   const duplicates = await duplicateFilenames(supabase, transcription.content_sha256)
 
   if (duplicates.length > 0) {
@@ -287,6 +309,10 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
       window_start: input.window_start,
       window_finish: input.window_finish,
     },
+    // Testimony, as given. Both may be empty, and an empty list means that kind was not recorded
+    // (ADR 0010) — which is why nothing here substitutes a configuration or a Sea State.
+    p_sails: input.sails,
+    p_sea_state: input.sea_state,
   })
 
   if (rpcError || typeof raceId !== 'string') {
@@ -338,6 +364,27 @@ async function duplicateFilenames(
   }
 
   return (data ?? []).map((row) => row.filename)
+}
+
+/**
+ * Every sail id in the boat's inventory, or null when the inventory could not be read.
+ *
+ * Null is a refusal here, unlike the duplicate check: `race_sail_entry_sails.sail_id` is a foreign
+ * key, so an unreadable inventory means the one question that has to be answered before the bytes
+ * move cannot be. Retired sails are included — a sail retired in March was flown in February, and
+ * the archive being entered by hand means most of these races are older than the locker is.
+ */
+async function inventorySailIds(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<string[] | null> {
+  const { data, error } = await supabase.from('sails').select('id').returns<{ id: string }[]>()
+
+  if (error) {
+    console.error('Race upload: the sail inventory could not be read:', error.message)
+    return null
+  }
+
+  return (data ?? []).map((row) => row.id)
 }
 
 /**
