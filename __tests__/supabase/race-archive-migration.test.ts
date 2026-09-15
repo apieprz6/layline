@@ -2,7 +2,7 @@
  * Static assertions over the race archive migration.
  *
  * The invariants themselves are proved against a live database by
- * scripts/verify-race-archive-schema.sql (94 checks). That suite needs Postgres, so it cannot
+ * scripts/verify-race-archive-schema.sql. That suite needs Postgres, so it cannot
  * run here. What jest can do is guard the handful of properties that are properties of the
  * *text* of the migration — the ones where the failure mode is a plausible edit that no
  * running database would object to, or that only a hosted project would reject.
@@ -11,6 +11,7 @@
 import { readdirSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 import { CURRENT_VERSION_FK } from '@/services/boat/readBoatSetup'
+import { VERSIONS_FK } from '@/services/boat/readRigTune'
 
 const MIGRATIONS = resolve(__dirname, '../../supabase/migrations')
 const MIGRATION = resolve(MIGRATIONS, '20260910183000_create_race_archive_and_boat_setup.sql')
@@ -164,5 +165,84 @@ describe('the race archive migration', () => {
     // resolve fails at request time, where no mocked client would notice. This is
     // the one place the two strings can be held together cheaply.
     expect(code).toContain(`ADD CONSTRAINT ${CURRENT_VERSION_FK}`)
+  })
+
+  it('declares the other one on the columns its derived name is built from', () => {
+    // The Rig Tune screen embeds the other direction and has to name it too, but this key
+    // is declared unnamed, so the name is Postgres' own: table, then the columns in the
+    // order written, then _fkey. Reordering the pair would silently rename the key and
+    // break the embed, so assert the column order the name encodes.
+    expect(VERSIONS_FK).toBe('boat_setup_versions_artifact_id_kind_fkey')
+    expect(code).toMatch(/FOREIGN KEY \(artifact_id, kind\)\s*\n\s*REFERENCES boat_setup_artifacts/)
+  })
+})
+
+describe('the Rig Tune staleness and minting migration', () => {
+  const RIG_TUNE = resolve(MIGRATIONS, '20260915190000_rig_tune_stale_gaps_and_mint.sql')
+  const rigSql = readFileSync(RIG_TUNE, 'utf8')
+  const rigCode = rigSql
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+
+  it('applies after the migration that creates the table it alters', () => {
+    const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()
+    expect(files.indexOf('20260915190000_rig_tune_stale_gaps_and_mint.sql')).toBeGreaterThan(
+      files.indexOf('20260910183000_create_race_archive_and_boat_setup.sql')
+    )
+  })
+
+  it('mints under the caller own privileges, never as its owner', () => {
+    // The whole point of routing three writes through one function is the transaction, not
+    // authority. SECURITY DEFINER would hand every signed-in account the owner's rights and
+    // quietly undo ADR 0019, and no database would object — only this assertion does.
+    expect(rigCode).toMatch(/SECURITY INVOKER/)
+    expect(rigCode).not.toMatch(/SECURITY DEFINER/)
+    expect(rigCode).toMatch(/SET search_path = ''/)
+  })
+
+  it('leaves the function unreachable by a guest', () => {
+    // ADR 0015: there is no signed-out boat screen, so `anon` has no business holding
+    // EXECUTE — and `public` includes `anon`, which is how EXECUTE arrives by default.
+    expect(rigCode).toMatch(/REVOKE EXECUTE ON FUNCTION public\.mint_rig_tune_version[^;]*FROM PUBLIC;/)
+    expect(rigCode).toMatch(/REVOKE EXECUTE ON FUNCTION public\.mint_rig_tune_version[^;]*FROM anon;/)
+    expect(rigCode).toMatch(/GRANT EXECUTE ON FUNCTION public\.mint_rig_tune_version[^;]*TO authenticated;/)
+  })
+
+  it('keeps the Base Tune out of the set of bands whose Gaps can go stale', () => {
+    // The Base Tune is what the other bands' Turns are counted from, so it is the one band
+    // re-measuring cannot invalidate: it *is* the new measurement (ADR 0007).
+    expect(rigCode).toMatch(
+      /ADD CONSTRAINT base_band_gaps_never_stale CHECK \(NOT \(is_base AND gaps_stale\)\)/
+    )
+  })
+
+  it('counts the Base Tune bands before it writes anything', () => {
+    // "Exactly one per Version, enforced by the database" is two halves: the partial unique
+    // index in the creating migration refuses the second base, and this counts the zeroth.
+    // A table whose Turns are counted from no band at all is figures that mean nothing.
+    expect(rigCode).toMatch(/SELECT count\(\*\) INTO v_bases\s*\n\s*FROM jsonb_array_elements\(p_bands\)/)
+    expect(rigCode).toMatch(/IF v_bases <> 1 THEN\s*\n\s*RAISE EXCEPTION/)
+  })
+
+  it('refuses to guess which boat it is writing to', () => {
+    // The artifact is found by kind alone, so a second boat's row would make the target
+    // arbitrary. STRICT turns that into a failed call rather than a Version on the wrong boat.
+    expect(rigCode).toMatch(/SELECT id INTO STRICT v_artifact_id/)
+    expect(rigCode).toMatch(/WHEN too_many_rows THEN/)
+    // And a viewer, whom RLS leaves with no row to lock, still hears about privileges.
+    expect(rigCode).toMatch(/WHEN no_data_found THEN\s*\n\s*RAISE EXCEPTION[^;]*42501/)
+  })
+
+  it('is idempotent in everything it adds', () => {
+    expect(rigCode).toMatch(/ADD COLUMN IF NOT EXISTS gaps_stale/)
+    // A CHECK cannot say IF NOT EXISTS, so it is dropped first.
+    expect(rigCode).toMatch(/DROP CONSTRAINT IF EXISTS base_band_gaps_never_stale/)
+    expect(rigCode).toMatch(/CREATE OR REPLACE FUNCTION public\.mint_rig_tune_version/)
+  })
+
+  it('comments the column and the function it adds', () => {
+    expect(rigSql).toMatch(/COMMENT ON COLUMN public\.rig_tune_bands\.gaps_stale IS/)
+    expect(rigSql).toMatch(/COMMENT ON FUNCTION public\.mint_rig_tune_version/)
   })
 })

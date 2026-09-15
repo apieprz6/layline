@@ -638,6 +638,12 @@ export interface BoatSetup {
 export type ShroudPosition = 'V1' | 'D1' | 'D2'
 
 /**
+ * Port and starboard, always both: a rig is measured side by side, and one side copied onto
+ * the other would assert a symmetry nobody checked (ADR 0007).
+ */
+export type ShroudSide = 'port' | 'starboard'
+
+/**
  * Both figures for every position and side (ADR 0007): turns re-gear the rig at the dock,
  * the gap restores it when nothing is trusted, and neither derives from the other because
  * no thread pitch is recorded.
@@ -647,10 +653,7 @@ export interface ShroudSideSetting {
   turns_from_base: number
 }
 
-export interface ShroudPositionSetting {
-  port: ShroudSideSetting
-  starboard: ShroudSideSetting
-}
+export type ShroudPositionSetting = Record<ShroudSide, ShroudSideSetting>
 
 export type RigTuneShrouds = Record<ShroudPosition, ShroudPositionSetting>
 
@@ -672,6 +675,134 @@ export interface RigTuneBand {
   label: string | null
   note: string | null
   shrouds: RigTuneShrouds
+  /**
+   * The Gaps no longer describe the rig, because the Base Tune was re-measured and this
+   * band was not. Never recomputed from the base — that would need the thread pitch ADR
+   * 0007 deliberately does not store — and never true of the Base Tune itself, which is
+   * what the others are stale *against* (`base_band_gaps_never_stale`).
+   */
+  gaps_stale: boolean
+}
+
+/**
+ * One Rig Tune Version as its screen reads it: the machinery, plus every Wind Band.
+ *
+ * `note` is the required change reason, so it is a `string` here and not `string | null`
+ * (`rig_tune_note_required`).
+ */
+export interface RigTuneVersionRecord {
+  id: string
+  version_number: number
+  /** Calendar date the sailor says this tune took effect. */
+  effective_from: string
+  /** When Layline recorded it. A moment, not a calendar date. */
+  recorded_at: string
+  /** Why this Version exists. Required on a Rig Tune. */
+  note: string
+  created_by: string
+  /** Ascending by `low_kt`, which is the order the bands are read in. */
+  bands: RigTuneBand[]
+}
+
+/**
+ * The Rig Tune artifact as its screen reads it, all-or-nothing like `BoatSetup`.
+ *
+ * Every Version is carried, not just the current one: a Race freezes a pointer at one,
+ * and that pointer is worthless if nobody can open it (ADR 0007).
+ */
+export interface RigTunePage {
+  boat: Boat
+  artifact_id: string
+  /** Null until the first Version exists. */
+  current_version_id: string | null
+  /** Newest first. Empty on an unrecorded artifact. */
+  versions: RigTuneVersionRecord[]
+}
+
+/**
+ * One side of one Shroud Position as it is being typed.
+ *
+ * Strings, because a form field holds text and an empty field is not a zero: parsing
+ * happens once, in `lib/boat/rigTune.ts`, where a blank is a refusal rather than a
+ * number nobody entered.
+ */
+export interface RigTuneSideDraft {
+  gap_mm: string
+  turns_from_base: string
+}
+
+export type RigTunePositionDraft = Record<ShroudSide, RigTuneSideDraft>
+
+/** The twelve figures of one band, as they are being typed. */
+export type RigTuneDraftShrouds = Record<ShroudPosition, RigTunePositionDraft>
+
+/**
+ * What one band of the draft was seeded from, or `null` when the admin added it.
+ *
+ * `was_base` is what tells re-measuring the Base Tune — which makes the other bands' Gaps
+ * stale — from moving the flag to a different band, which is re-organising the table and
+ * makes nothing stale (ADR 0007).
+ */
+export interface RigTuneBandSeed {
+  shrouds: RigTuneShrouds
+  gaps_stale: boolean
+  was_base: boolean
+}
+
+export interface RigTuneBandDraft {
+  /** Stable for the length of the edit only. Not a database id — a Version mints new rows. */
+  key: string
+  label: string
+  low_kt: string
+  /** Blank is the open-ended top band. */
+  high_kt: string
+  is_base: boolean
+  note: string
+  shrouds: RigTuneDraftShrouds
+  seed: RigTuneBandSeed | null
+}
+
+/**
+ * The whole table as it is being edited. A Version is all of this or none of it.
+ *
+ * Staleness is decided per band, from each band's own `seed`, and there is deliberately no
+ * table-level record of the old Base Tune: comparing a *different* band's Gaps to it would
+ * call every band stale the moment the flag moved.
+ */
+export interface RigTuneDraft {
+  /** `YYYY-MM-DD`. */
+  effective_from: string
+  /** The required change reason. */
+  change_reason: string
+  bands: RigTuneBandDraft[]
+}
+
+/** One band as it is written: numbers, nulls where the sailor left a field empty. */
+export interface RigTuneBandInput {
+  low_kt: number
+  high_kt: number | null
+  is_base: boolean
+  label: string | null
+  note: string | null
+  gaps_stale: boolean
+  shrouds: RigTuneShrouds
+}
+
+/** A whole Version, ready for `mint_rig_tune_version`. Bands ascend by `low_kt`. */
+export interface RigTuneVersionInput {
+  effective_from: string
+  note: string
+  bands: RigTuneBandInput[]
+}
+
+/**
+ * One refusal, tied to the band that caused it where there is one. `band_key` is null for
+ * a problem with the table as a whole — a missing change reason, two base bands, a gap
+ * between two of them.
+ */
+export interface RigTuneProblem {
+  band_key: string | null
+  message: string
 }
 
 /** A dated act on the instruments that changed no stored value (ADR 0005). */
@@ -689,6 +820,59 @@ export interface CalibrationEvent {
   created_at: string
   updated_at: string
 }
+
+/**
+ * The Instrument Calibration artifact, whole: every Version ever minted and every
+ * **Calibration Event** ever written down.
+ *
+ * Read together because the **Calibration Log** is a projection over both, assembled
+ * when read. `null` in place of this is a failed read, never an empty calibration.
+ */
+export interface InstrumentCalibrationRecord {
+  artifactId: string
+  /** The Version in force. Null until the first one is recorded. */
+  currentVersionId: string | null
+  /** Ascending by `version_number`, which is mint order and not date order. */
+  versions: InstrumentCalibrationVersion[]
+  events: CalibrationEvent[]
+}
+
+/**
+ * One figure that moved between two Instrument Calibration Versions.
+ *
+ * `from` is null on the first Version — there was no previous figure, which is not
+ * the same as a previous figure of zero.
+ */
+export interface CalibrationFieldChange {
+  channel: CalibrationChannel
+  field: 'multiplier' | 'offset'
+  from: number | null
+  to: number | null
+}
+
+/**
+ * One line of the **Calibration Log** — the read-time projection, not a table.
+ *
+ * A Version arm carries the Version itself plus what it changed, computed against
+ * the previous one; an Event arm carries the hand-written act. Nothing is stored
+ * twice, so no two representations of one change can disagree (ADR 0005).
+ */
+export type CalibrationLogEntry =
+  | {
+      entry: 'version'
+      /** `effective_from`: the day the numbers went into the box. */
+      date: string
+      version: InstrumentCalibrationVersion
+      /** Every figure on the first Version; only what moved on the rest. */
+      changes: CalibrationFieldChange[]
+      isFirst: boolean
+    }
+  | {
+      entry: 'event'
+      /** `occurred_on`: the day the act was performed. */
+      date: string
+      event: CalibrationEvent
+    }
 
 /**
  * One qtVlm VDR export, as recorded. Every field but `date_order` is a fact about the

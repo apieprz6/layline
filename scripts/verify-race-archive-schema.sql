@@ -725,6 +725,280 @@ SELECT pg_temp.accepts(
 );
 
 -- ===========================================================================
+-- Rig Tune staleness and minting
+-- ===========================================================================
+-- 20260915190000_rig_tune_stale_gaps_and_mint.sql (LAY-107): the gaps_stale column and
+-- mint_rig_tune_version, the one write path the Rig Tune form has.
+
+SELECT pg_temp.accepts(
+    'a band that was not re-measured can be marked stale',
+    $sql$
+    UPDATE rig_tune_bands SET gaps_stale = TRUE
+     WHERE id = '40000000-0000-4000-8000-000000000002'
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'the Base Tune''s own Gaps cannot go stale (base_band_gaps_never_stale)',
+    $sql$
+    UPDATE rig_tune_bands SET gaps_stale = TRUE
+     WHERE id = '40000000-0000-4000-8000-000000000001'
+    $sql$
+);
+
+DO $$
+DECLARE
+    v_secdef BOOLEAN;
+BEGIN
+    SELECT p.prosecdef INTO v_secdef
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'mint_rig_tune_version';
+
+    -- The whole point of the function is a transaction, not a privilege: if it ever becomes
+    -- SECURITY DEFINER, every RLS check below stops proving anything.
+    PERFORM pg_temp.chk(
+        'mint_rig_tune_version runs as its caller, not as its owner',
+        v_secdef IS FALSE,
+        format('prosecdef=%s', COALESCE(v_secdef::TEXT, 'no such function'))
+    );
+END;
+$$;
+
+DO $$
+DECLARE
+    -- Two bands, both figures on both sides of all three positions. The light band's Gaps were
+    -- measured against a base that has since moved, which is what gaps_stale says.
+    v_bands JSONB := $j$[
+        {"low_kt": 0, "high_kt": 9, "is_base": false, "label": "Light", "gaps_stale": true,
+         "note": "flat water, full main",
+         "shrouds": {"V1": {"port": {"gap_mm": 70, "turns_from_base": -1},
+                            "starboard": {"gap_mm": 70, "turns_from_base": -1}},
+                     "D1": {"port": {"gap_mm": 62, "turns_from_base": -1},
+                            "starboard": {"gap_mm": 62, "turns_from_base": -1}},
+                     "D2": {"port": {"gap_mm": 60, "turns_from_base": -1},
+                            "starboard": {"gap_mm": 60, "turns_from_base": -1}}}},
+        {"low_kt": 9, "high_kt": null, "is_base": true, "label": "Mac base",
+         "shrouds": {"V1": {"port": {"gap_mm": 72, "turns_from_base": 0},
+                            "starboard": {"gap_mm": 72, "turns_from_base": 0}},
+                     "D1": {"port": {"gap_mm": 64, "turns_from_base": 0},
+                            "starboard": {"gap_mm": 64, "turns_from_base": 0}},
+                     "D2": {"port": {"gap_mm": 61, "turns_from_base": 0},
+                            "starboard": {"gap_mm": 61, "turns_from_base": 0}}}}
+    ]$j$::JSONB;
+    v_err     TEXT;
+    v_id      UUID;
+    v_num     INTEGER;
+    v_author  UUID;
+    v_pointer UUID;
+    v_count   INTEGER;
+    v_stale   BOOLEAN;
+    v_open    INTEGER;
+    v_before  INTEGER;
+BEGIN
+    v_err := pg_temp.exec_as(
+        'cccccccc-0000-4000-8000-000000000002',
+        format($q$SELECT public.mint_rig_tune_version(
+            DATE '2026-09-14', 'crew retuned the rig', %L::JSONB)$q$, v_bands)
+    );
+    PERFORM pg_temp.chk(
+        'a signed-in non-admin cannot mint a Rig Tune Version, function or no function',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    -- Asserted through the catalog rather than by calling it as `anon`. On the local stack's
+    -- image (PostgreSQL 17.6, Supabase CLI) calling *any* plpgsql function the caller lacks
+    -- EXECUTE on terminates the backend rather than raising permission denied -- reproduced
+    -- with a three-line function, so it is the build and not this one. The grant is the thing
+    -- worth asserting anyway: a guest has no boat screens at all (ADR 0015).
+    PERFORM pg_temp.chk(
+        'and a guest holds no EXECUTE on it at all (ADR 0015)',
+        NOT has_function_privilege(
+            'anon', 'public.mint_rig_tune_version(DATE, TEXT, JSONB)', 'EXECUTE'),
+        format('authenticated=%s anon=%s',
+            has_function_privilege(
+                'authenticated', 'public.mint_rig_tune_version(DATE, TEXT, JSONB)', 'EXECUTE'),
+            has_function_privilege(
+                'anon', 'public.mint_rig_tune_version(DATE, TEXT, JSONB)', 'EXECUTE'))
+    );
+
+    SELECT count(*) INTO v_before FROM boat_setup_versions WHERE kind = 'rig_tune';
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.mint_rig_tune_version(
+            DATE '2026-09-14', 'first tune measured off the boat with a caliper', %L::JSONB)$q$,
+            v_bands)
+    );
+    PERFORM pg_temp.chk('an admin mints a whole Version in one call', v_err IS NULL, v_err);
+
+    SELECT id, version_number, created_by INTO v_id, v_num, v_author
+      FROM boat_setup_versions
+     WHERE kind = 'rig_tune'
+     ORDER BY version_number DESC
+     LIMIT 1;
+
+    PERFORM pg_temp.chk(
+        'the Version number is allocated inside the call, not sent by the client',
+        v_num = v_before + 1,
+        format('v%s after %s Versions', v_num, v_before)
+    );
+
+    PERFORM pg_temp.chk(
+        'the author is the caller''s account, read from the JWT',
+        v_author = 'aaaaaaa1-0000-4000-8000-000000000001',
+        v_author::TEXT
+    );
+
+    SELECT count(*), count(*) FILTER (WHERE high_kt IS NULL)
+      INTO v_count, v_open
+      FROM rig_tune_bands WHERE version_id = v_id;
+    SELECT gaps_stale INTO v_stale
+      FROM rig_tune_bands WHERE version_id = v_id AND NOT is_base;
+
+    PERFORM pg_temp.chk(
+        'both bands landed, one of them open-topped',
+        v_count = 2 AND v_open = 1,
+        format('%s bands, %s open', v_count, v_open)
+    );
+
+    PERFORM pg_temp.chk(
+        'the stale marker the app decided is stored, not recomputed',
+        v_stale IS TRUE,
+        format('gaps_stale=%s', v_stale)
+    );
+
+    SELECT current_version_id INTO v_pointer
+      FROM boat_setup_artifacts WHERE kind = 'rig_tune';
+
+    PERFORM pg_temp.chk(
+        'and the current pointer moved to it in the same transaction',
+        v_pointer = v_id,
+        format('pointer=%s minted=%s', v_pointer, v_id)
+    );
+END;
+$$;
+
+DO $$
+DECLARE
+    v_err    TEXT;
+    v_before INTEGER;
+    v_after  INTEGER;
+BEGIN
+    SELECT count(*) INTO v_before FROM boat_setup_versions WHERE kind = 'rig_tune';
+
+    -- The second band is missing D2, which shrouds_positions_present refuses. The Version row
+    -- and the first band are written before the database sees it.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_rig_tune_version(DATE '2026-09-14', 'half a table', $j$[
+            {"low_kt": 0, "high_kt": 9, "is_base": true,
+             "shrouds": {"V1": {}, "D1": {}, "D2": {}}},
+            {"low_kt": 9, "high_kt": null, "is_base": false,
+             "shrouds": {"V1": {}, "D1": {}}}
+        ]$j$::JSONB)$q$
+    );
+
+    SELECT count(*) INTO v_after FROM boat_setup_versions WHERE kind = 'rig_tune';
+
+    PERFORM pg_temp.chk(
+        'one bad band takes the whole Version with it: no half-written table survives',
+        v_err IS NOT NULL AND v_after = v_before,
+        format('%s; Versions %s -> %s', COALESCE(v_err, 'accepted'), v_before, v_after)
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_rig_tune_version(DATE '2026-09-14', 'no bands at all', '[]'::JSONB)$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a Version with no Wind Bands is refused',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    -- Exactly one Base Tune per Version, from the database and not only from the form: the
+    -- Turns are counted from the base, so a table with none means nothing and a table with two
+    -- means two different things (ADR 0007). Both figures are complete here, so nothing but
+    -- the flag can be what is refused.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_rig_tune_version(DATE '2026-09-14', 'no base at all', $j$[
+            {"low_kt": 0, "high_kt": 9, "is_base": false,
+             "shrouds": {"V1": {}, "D1": {}, "D2": {}}},
+            {"low_kt": 9, "high_kt": null, "is_base": false,
+             "shrouds": {"V1": {}, "D1": {}, "D2": {}}}
+        ]$j$::JSONB)$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a Version with no Base Tune band is refused',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_rig_tune_version(DATE '2026-09-14', 'two bases', $j$[
+            {"low_kt": 0, "high_kt": 9, "is_base": true,
+             "shrouds": {"V1": {}, "D1": {}, "D2": {}}},
+            {"low_kt": 9, "high_kt": null, "is_base": true,
+             "shrouds": {"V1": {}, "D1": {}, "D2": {}}}
+        ]$j$::JSONB)$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'and a Version with two of them is refused as well',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+END;
+$$;
+
+-- The function finds the artifact by kind alone, which `boats_singleton` makes unambiguous
+-- today. That index is documented as "one line to drop when a second boat is real", so this
+-- check drops it and asks what the function does on that day: fail, or write the Version to
+-- whichever row came back first. The drop and the second boat are both undone by raising out
+-- of the block, so nothing after this sees either.
+DO $$
+DECLARE
+    v_err     TEXT;
+    v_fixture TEXT;
+BEGIN
+    BEGIN
+        DROP INDEX public.boats_singleton;
+        INSERT INTO boats (id, name, model)
+        VALUES ('b0a70002-0000-4000-8000-000000000002', 'Second Wind', 'J/109');
+        INSERT INTO boat_setup_artifacts (boat_id, kind)
+        VALUES ('b0a70002-0000-4000-8000-000000000002', 'rig_tune');
+
+        v_err := pg_temp.exec_as(
+            'aaaaaaa1-0000-4000-8000-000000000001',
+            $q$SELECT public.mint_rig_tune_version(DATE '2026-09-14', 'whose rig?', $j$[
+                {"low_kt": 0, "high_kt": null, "is_base": true,
+                 "shrouds": {"V1": {}, "D1": {}, "D2": {}}}
+            ]$j$::JSONB)$q$
+        );
+
+        -- Unwind the second boat. The verdict is already in v_err, which plpgsql does not
+        -- roll back with the subtransaction.
+        RAISE EXCEPTION '__undo_second_boat__';
+    EXCEPTION WHEN OTHERS THEN
+        -- Anything else means the fixture never stood up, so the check has proved nothing and
+        -- says so rather than passing on a refusal it did not cause.
+        IF SQLERRM <> '__undo_second_boat__' THEN v_fixture := SQLERRM; END IF;
+    END;
+
+    PERFORM pg_temp.chk(
+        'with two boats'' Rig Tunes visible the call fails rather than picking one',
+        v_fixture IS NULL AND v_err IS NOT NULL,
+        COALESCE(v_fixture, v_err, 'the call was accepted')
+    );
+END;
+$$;
+
+-- ===========================================================================
 -- Calibration events
 -- ===========================================================================
 

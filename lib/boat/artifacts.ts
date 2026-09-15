@@ -33,6 +33,9 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
 /**
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
+ *
+ * All four are named here whether or not a screen answers at them;
+ * `BOAT_SETUP_DETAIL_BUILT` is what says which ones do.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -42,13 +45,28 @@ const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
 }
 
 /**
- * The kinds whose detail screen exists. The Polar's arrived with LAY-106; the
- * Crossover Chart's and the two hand-entered forms follow in LAY-107 and LAY-108.
+ * The kinds whose detail screen exists. Add a kind here when its route lands. Three of
+ * the four are up: the Polar (LAY-106), the Rig Tune (LAY-107) and the Instrument
+ * Calibration (LAY-108). The Crossover Chart follows, and this list disappears with it.
  *
- * Read by the list to decide whether a row may be a link at all, so nothing on the
- * screen leads anywhere that is not built. It disappears when the fourth one lands.
+ * LAY-104 gated the list's link on a Version being recorded, on the reasoning that a
+ * row leading to an empty screen is a row dressed as a control. That was right while
+ * no detail screen existed and wrong the moment one did: **recording the first Version
+ * is something the detail screen is for**, so a link gated on a current pointer leaves
+ * an empty archive — which is the state this app ships in — with no way to fill itself.
+ *
+ * So the gate is the screen, not the pointer. A kind absent from here is still inert
+ * text, because that row genuinely leads nowhere.
+ *
+ * Nor is the gate the *role*: a viewer opening the Rig Tune with nothing recorded reads
+ * why there is nothing to read (ADR 0019 governs writes only), which is an answer about
+ * the boat and worth a screen.
  */
-export const BOAT_SETUP_DETAIL_BUILT = ['polar'] as const satisfies readonly BoatSetupKind[]
+export const BOAT_SETUP_DETAIL_BUILT = [
+  'polar',
+  'rig_tune',
+  'instrument_calibration',
+] as const satisfies readonly BoatSetupKind[]
 
 export function hasDetailScreen(kind: BoatSetupKind): boolean {
   return (BOAT_SETUP_DETAIL_BUILT as readonly BoatSetupKind[]).includes(kind)

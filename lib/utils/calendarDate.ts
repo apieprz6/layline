@@ -26,31 +26,32 @@ export function formatCalendarDate(date: string): string {
   return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`
 }
 
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const
+/** Days in each month, February aside. */
+const MONTH_LENGTHS = [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const
 
 /**
- * Whether a string is a calendar date that exists — `YYYY-MM-DD`, and a day the month has.
+ * Whether a submitted string is a calendar date Postgres would accept as a `date`.
  *
- * The shape alone is not enough for anything that will be sent to a `date` column: `2026-02-30`
- * matches the shape, and Postgres refuses it far later than the sailor can be told about it.
- *
- * Counted rather than round-tripped through a `Date`, for this file's founding reason: a
- * calendar date that becomes a `Date` has acquired a moment and a zone, and `new Date(...)`
- * rolls February 30th forward to March 2nd instead of objecting to it.
+ * Written by hand rather than through `Date`, for the reason this whole file exists:
+ * `new Date('2026-02-30')` rolls forward to 2 March instead of reporting a day that
+ * does not exist, so round-tripping through a `Date` to validate would accept the
+ * value and change it. `<input type="date">` submits this format, but a Server
+ * Action is a public endpoint and receives whatever the caller sends.
  */
 export function isCalendarDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-
   if (!match) return false
 
   const year = Number(match[1])
   const month = Number(match[2])
   const day = Number(match[3])
 
-  if (month < 1 || month > 12) return false
+  if (month < 1 || month > 12 || day < 1) return false
 
-  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
-  const days = month === 2 && leap ? 29 : DAYS_IN_MONTH[month - 1]
+  if (month === 2) {
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+    return day <= (leap ? 29 : 28)
+  }
 
-  return day >= 1 && day <= days
+  return day <= MONTH_LENGTHS[month - 1]
 }

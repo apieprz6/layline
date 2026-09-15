@@ -117,6 +117,81 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260915040000_mint_boat_setup_version.sql
+
+**Purpose**: what LAY-106's upload needs from the database — a way to insert the next Version of
+a file-backed artifact and move the artifact's pointer to it without the two ever being apart.
+
+**What it creates**: `public.mint_boat_setup_version(uuid, boat_setup_kind, date, jsonb, text,
+text, text)`, returning the `version_number` it minted.
+
+**Why the function exists**: the two writes cannot be two requests. The pointer's foreign key is
+`DEFERRABLE INITIALLY DEFERRED` and `boat_setup_artifacts_forward_only_current` is a deferred
+`CONSTRAINT TRIGGER`, both so that inserting a Version and pointing the artifact at it can be one
+transaction — and supabase-js cannot open one. Two requests would leave, on any failure between
+them, a Version nothing points at. The pointer moving *backwards* is still refused by that
+trigger at commit rather than re-checked here, so the rule lives in one place.
+
+**Why the id is the caller's**: the permanent Storage path contains the version id, and the bytes
+move to that path *before* this transaction commits (ADR 0013) — so the id has to exist before
+the row does. Same reasoning as `recordings.id` having no `DEFAULT`.
+
+**`SECURITY INVOKER`, deliberately.** The function is convenience, not authority: RLS refuses a
+signed-in non-admin inside it exactly as it refuses a direct insert (ADR 0019), and `created_by`
+comes from `auth.uid()` rather than from an argument (ADR 0018). `version_number` is read as
+`MAX + 1` under the caller's own RLS; `UNIQUE (artifact_id, version_number)` is what settles two
+concurrent uploads, and the loser is told to try again rather than overwriting the winner.
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.mint_boat_setup_version(
+    UUID, public.boat_setup_kind, DATE, JSONB, TEXT, TEXT, TEXT);
+```
+
+## Migration: 20260915190000_rig_tune_stale_gaps_and_mint.sql
+
+**Purpose**: what LAY-107's form needs from the database — somewhere to record that a band's
+**Turnbuckle Gaps** went stale, and a way to write a whole Version at once.
+
+**What it creates**: `rig_tune_bands.gaps_stale` (`BOOLEAN NOT NULL DEFAULT FALSE`), the
+`base_band_gaps_never_stale` CHECK, and `public.mint_rig_tune_version(date, text, jsonb)`.
+
+**Why the column exists at all**: staleness is not derivable. Deriving it would mean matching
+bands across two Versions by `low_kt`, and bands are re-cut from one Version to the next — the
+match is a guess, and a guess about whether a stored measurement still describes the rig is
+exactly the kind of invention ADR 0008 rules out. So it is recorded when it becomes true, by
+the one edit that can make it true: re-measuring the Base Tune (ADR 0007). It is never
+recomputed from the base, because no thread pitch is stored, and never true of the Base Tune
+itself, which is what the others are stale *against* — hence the CHECK.
+
+**Why the function exists**: a Version is three writes — the Version row, all of its bands,
+and the artifact's `current_version_id` — and supabase-js has no transaction to hold them in.
+Half a band table is not a tune anybody should set a boat to (ADR 0011), so the three go
+through one `plpgsql` call. It also allocates `version_number` under `SELECT ... FOR UPDATE` on
+the artifact, so two admins cannot mint the same number.
+
+**What the function refuses.** A table with no bands, and a table that does not carry exactly
+one Base Tune band: `rig_tune_bands` already has a partial unique index that refuses the second
+base, and a row-at-a-time constraint cannot see a missing row, so the zeroth is counted here —
+which is what makes "exactly one per Version" a promise of the database rather than of the form.
+The artifact is looked up `INTO STRICT`, so the day a second boat exists the call fails instead
+of writing the Version to whichever row came back first. Band contiguity is *not* checked here:
+it needs the whole table in view and the vocabulary to name the band at fault, which is
+`lib/boat/rigTune.ts`'s job.
+
+**`SECURITY INVOKER`, deliberately.** The function exists for the transaction, not for
+authority: RLS refuses a viewer inside it exactly as it would refuse the three statements
+written out, and `created_by` comes from `auth.uid()` rather than from an argument. `EXECUTE`
+is revoked from `PUBLIC` and `anon` and granted to `authenticated` — which is not a permission
+to write, only permission to be refused by the write policies (ADR 0019).
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.mint_rig_tune_version(DATE, TEXT, JSONB);
+ALTER TABLE public.rig_tune_bands DROP CONSTRAINT IF EXISTS base_band_gaps_never_stale;
+ALTER TABLE public.rig_tune_bands DROP COLUMN IF EXISTS gaps_stale;
+```
+
 ## Verification suites
 
 Both are committed, both are re-runnable, and both are safe against a project holding real
@@ -125,7 +200,7 @@ data. Neither runs in CI, because CI has no database — the CI-side guard is
 properties of the migration's text.
 
 ```bash
-scripts/verify-race-archive-schema.sh              # 94 checks, local stack
+scripts/verify-race-archive-schema.sh              # every schema check, local stack
 scripts/verify-race-archive-schema.sh "$DB_URL"    # ... or a hosted project
 scripts/verify-boat-storage.sh                     # LAY-92's 17 storage checks
 ```

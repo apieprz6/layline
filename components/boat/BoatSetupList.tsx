@@ -9,13 +9,6 @@ import type { BoatSetupRow } from '@/types'
 interface BoatSetupListProps {
   /** The four artifacts, already in reading order — `readBoatSetup` owns that. */
   artifacts: BoatSetupRow[]
-  /**
-   * Whether this sailor may add a Version: `admin` only (ADR 0019).
-   *
-   * It decides one thing here — whether an artifact with nothing recorded is a way in to the
-   * screen that would let them record the first one. It never hides a Version from a viewer.
-   */
-  canWrite: boolean
 }
 
 const ROW_STYLE = {
@@ -60,15 +53,17 @@ const CURRENT_STYLE = {
  * mockup's `Wayward_Wind.rig` and its "Upload a new version any time you refit"
  * subtitle are the shapes being refused.
  *
- * A row is a link only when there is a screen at the other end of it. `Polar`'s
- * arrived with LAY-106; the other three follow, and until then their rows are inert
- * whether or not a Version exists — a row dressed as a control that leads to a 404 is
- * the trap LAY-102 fixed on the locked drawer row.
+ * A row is a link only when there is a screen at the other end of it — the Polar's
+ * (LAY-106), the Rig Tune's (LAY-107) and the Instrument Calibration's (LAY-108) are
+ * up, and the Crossover Chart's row stays inert until its own lands, because a row
+ * dressed as a control that leads to a 404 is the trap LAY-102 fixed on the locked
+ * drawer row.
  *
- * With nothing recorded, the row is still the way in for whoever may record the first
- * one. An admin gets a link, because the screen behind it is where the upload lives;
- * a viewer gets plain text, because for them that screen has nothing on it they have
- * not already been told here.
+ * A row links to its detail once that screen exists — including when nothing is
+ * recorded yet, because recording the first Version is what that screen is for, and
+ * a link gated on a pointer would leave the empty archive this app ships in with no
+ * way to fill itself. Nor is the gate the *role*: a viewer opening an unrecorded
+ * artifact reads why there is nothing to read (ADR 0019 governs writes only).
  *
  * Four rows, not five. A Crossover Chart carries its own Sail Definitions, so there
  * are four Version pointers on the boat (ADR 0012).
@@ -76,10 +71,7 @@ const CURRENT_STYLE = {
  * A Server Component: a row either links somewhere or is inert, and neither needs
  * the client.
  */
-export default function BoatSetupList({
-  artifacts,
-  canWrite,
-}: BoatSetupListProps): ReactElement {
+export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactElement {
   return (
     <div data-testid="boat-setup-list">
       {artifacts.map(({ kind, current }) => {
@@ -109,9 +101,9 @@ export default function BoatSetupList({
             </span>
           ) : null
 
-        // Nothing to open: either the screen is not built yet, or it is built and this
-        // sailor would find nothing on it — no Version to read and no upload to make.
-        if (!hasDetailScreen(kind) || (current === null && !canWrite)) {
+        // Nothing to open, and nothing to dress as a control: this kind's screen has
+        // not landed, so that row genuinely leads nowhere.
+        if (!hasDetailScreen(kind)) {
           return (
             <div key={kind} style={ROW_STYLE}>
               {label}

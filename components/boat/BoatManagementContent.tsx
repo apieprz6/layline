@@ -11,9 +11,9 @@ interface BoatManagementContentProps {
   /** `null` when the boat could not be read — not an empty boat. */
   page: BoatSetup | null
   /**
-   * Whether this sailor may write: `admin` only (ADR 0019). It decides whether the
-   * identity is editable in place, and whether an artifact with nothing recorded is
-   * still a way in to the screen where the first Version is added.
+   * Whether this sailor may write: `admin` only (ADR 0019). It decides one thing here —
+   * whether the identity is editable in place. The list of artifacts is the same list
+   * for everyone; each screen behind it governs its own writes.
    */
   canWrite: boolean
 }
@@ -85,7 +85,7 @@ export default function BoatManagementContent({
       ) : (
         <div style={{ padding: spacing(4) }}>
           <div style={EYEBROW_STYLE}>Boat setup</div>
-          <BoatSetupList artifacts={page.artifacts} canWrite={canWrite} />
+          <BoatSetupList artifacts={page.artifacts} />
         </div>
       )}
     </div>
