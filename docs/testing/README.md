@@ -135,6 +135,9 @@ of file in this folder, and the only honest way to report a trigger as working:
 - [`account-resolution.md`](./account-resolution.md) — the three shapes
   `getClaims()` really returns, and the `profiles` read behind the drawer's
   footer
+- [`instrument-calibration-constraints.md`](./instrument-calibration-constraints.md) —
+  the one correction a Version allows and the four columns it refuses, plus the
+  three rules on a **Calibration Event**
 
 A record like that carries the re-run recipe and the observed output, so the next
 reader can repeat it rather than trust it.

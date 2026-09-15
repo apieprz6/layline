@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import Link from 'next/link'
 import NotRecorded from '@/components/common/NotRecorded'
-import { BOAT_SETUP_LABEL, boatSetupHref } from '@/lib/boat/artifacts'
+import { BOAT_SETUP_LABEL, boatSetupHref, hasDetailScreen } from '@/lib/boat/artifacts'
 import { formatCalendarDate } from '@/lib/utils/calendarDate'
 import { spacing } from '@/lib/utils/design'
 import type { BoatSetupRow } from '@/types'
@@ -56,6 +56,10 @@ const CURRENT_STYLE = {
  * Four rows, not five. A Crossover Chart carries its own Sail Definitions, so there
  * are four Version pointers on the boat (ADR 0012).
  *
+ * A row links to its detail once that screen exists — including when nothing is
+ * recorded yet, because entering the first Version is what the screen is for. Until
+ * then it is inert text.
+ *
  * A Server Component: a row either links somewhere or is inert, and neither needs
  * the client.
  */
@@ -69,24 +73,10 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
           </span>
         )
 
-        // Nothing recorded means nothing to open. A row dressed as a control that
-        // leads to an empty screen is the trap LAY-102 fixed on the locked drawer
-        // row, so an unrecorded artifact is plain text with no chevron.
-        if (current === null) {
-          return (
-            <div key={kind} style={ROW_STYLE}>
-              {name}
-              {/* Held at its own width: at 390px "Instrument Calibration" and this
-                  badge share one line, and a squashed badge is a broken shape. */}
-              <span style={{ flexShrink: 0 }}>
-                <NotRecorded />
-              </span>
-            </div>
-          )
-        }
-
-        return (
-          <Link key={kind} href={boatSetupHref(kind)} style={ROW_STYLE}>
+        const label =
+          current === null ? (
+            name
+          ) : (
             <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
               {name}
               <span style={CURRENT_STYLE}>
@@ -94,6 +84,35 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
                 {formatCalendarDate(current.effective_from)}
               </span>
             </span>
+          )
+
+        const badge =
+          current === null ? (
+            // Held at its own width: at 390px "Instrument Calibration" and this badge
+            // share one line, and a squashed badge is a broken shape.
+            <span style={{ flexShrink: 0 }}>
+              <NotRecorded />
+            </span>
+          ) : null
+
+        // A row opens as soon as its detail screen exists, recorded or not: on the
+        // empty archive this app ships in, that screen is where the first Version is
+        // entered. A kind whose screen has not landed stays plain text with no
+        // chevron — that row leads nowhere, which is the trap LAY-102 fixed on the
+        // locked drawer row.
+        if (!hasDetailScreen(kind)) {
+          return (
+            <div key={kind} style={ROW_STYLE}>
+              {label}
+              {badge}
+            </div>
+          )
+        }
+
+        return (
+          <Link key={kind} href={boatSetupHref(kind)} style={ROW_STYLE}>
+            {label}
+            {badge}
             <span aria-hidden="true" style={CHEVRON_STYLE}>
               ›
             </span>
