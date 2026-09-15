@@ -156,6 +156,28 @@ BEGIN
 END;
 $$;
 
+-- Evaluate a scalar query as somebody. `val` is the result as text and `err` the refusal, so a
+-- function's own return value can be asserted rather than inferred from what it wrote.
+CREATE FUNCTION pg_temp.value_as(p_uid UUID, p_sql TEXT, OUT val TEXT, OUT err TEXT)
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_temp.act_as(p_uid);
+    BEGIN
+        EXECUTE p_sql INTO val;
+        -- Immediate, so a deferred constraint trigger the call ought to satisfy is made to fire
+        -- here rather than at the end of the whole suite.
+        SET CONSTRAINTS ALL IMMEDIATE;
+    EXCEPTION WHEN OTHERS THEN
+        err := SQLERRM;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+    IF err IS NULL THEN
+        SET CONSTRAINTS ALL DEFERRED;
+    END IF;
+END;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Fixtures
 -- ---------------------------------------------------------------------------
@@ -1624,6 +1646,279 @@ BEGIN
         'boat_setup_versions has no DELETE or FOR ALL policy',
         v_bad IS NULL,
         COALESCE(v_bad::TEXT, '-')
+    );
+END;
+$$;
+
+-- ===========================================================================
+-- Minting a Version through public.mint_boat_setup_version
+-- ===========================================================================
+-- The insert and the pointer move are one function call because supabase-js has no way to open
+-- a transaction; 20260915210000_mint_boat_setup_version.sql says why at length. Every check
+-- here goes through a request, because the function is SECURITY INVOKER and so the request is
+-- the whole of its authority.
+--
+-- The polar artifact arrives here with Versions on it and the pointer on the newest, and the
+-- crossover_chart artifact with none at all — which is the other case worth having: the first
+-- Version of an artifact, whose pointer moves from NULL.
+--
+-- What the next number should be is read off the table rather than written in, so that adding a
+-- fixture Version above does not turn these into failures about the fixtures.
+
+DO $$
+DECLARE
+    v_number  TEXT;
+    v_err     TEXT;
+    v_row     RECORD;
+    v_next    INT;
+BEGIN
+    SELECT COALESCE(max(v.version_number), 0) + 1 INTO v_next
+      FROM boat_setup_versions v
+      JOIN boat_setup_artifacts a ON a.id = v.artifact_id
+     WHERE a.kind = 'polar';
+
+    SELECT val, err INTO v_number, v_err FROM pg_temp.value_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_boat_setup_version(
+               '10000000-0000-4000-8000-000000000003'::UUID,
+               'polar',
+               DATE '2026-07-01',
+               '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[3.4]]}'::JSONB,
+               '   ',
+               'Beneteau10R-v3.pol',
+               repeat('d', 64)
+           )$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'an admin mints the next Version through the function, and is told its number',
+        COALESCE(v_err IS NULL AND v_number = v_next::TEXT, FALSE),
+        format('number=%s expected=%s err=%s',
+               COALESCE(v_number, '-'), v_next, COALESCE(v_err, '-'))
+    );
+
+    SELECT v.version_number, v.created_by, v.note, v.filename, v.content_sha256,
+           a.current_version_id
+      INTO v_row
+      FROM boat_setup_versions v
+      JOIN boat_setup_artifacts a ON a.id = v.artifact_id
+     WHERE v.id = '10000000-0000-4000-8000-000000000003';
+
+    PERFORM pg_temp.chk(
+        'the number it reports is the number it wrote, and the pointer is on that Version',
+        -- COALESCE because a missing row makes every comparison NULL, and the verdict column
+        -- is NOT NULL: a FAIL is wanted here, not an error that abandons the rest of the suite.
+        COALESCE(
+            v_row.version_number = v_next
+            AND v_row.current_version_id = '10000000-0000-4000-8000-000000000003',
+            FALSE
+        ),
+        format('number=%s pointer=%s',
+               COALESCE(v_row.version_number::TEXT, '-'),
+               COALESCE(v_row.current_version_id::TEXT, '-'))
+    );
+
+    PERFORM pg_temp.chk(
+        'the author is the session''s, which is not one of the arguments (ADR 0018)',
+        COALESCE(v_row.created_by = 'aaaaaaa1-0000-4000-8000-000000000001', FALSE),
+        COALESCE(v_row.created_by::TEXT, '-')
+    );
+
+    PERFORM pg_temp.chk(
+        'a note of nothing but spaces is stored as no note',
+        v_row.note IS NULL,
+        format('note=%s', COALESCE(quote_literal(v_row.note), 'NULL'))
+    );
+
+    PERFORM pg_temp.chk(
+        'the filename and the hash are carried through verbatim',
+        COALESCE(
+            v_row.filename = 'Beneteau10R-v3.pol' AND v_row.content_sha256 = repeat('d', 64),
+            FALSE
+        ),
+        format('filename=%s hash=%s',
+               COALESCE(v_row.filename, '-'), COALESCE(v_row.content_sha256, '-'))
+    );
+END;
+$$;
+
+DO $$
+DECLARE
+    v_number TEXT;
+    v_err    TEXT;
+    v_ptr    UUID;
+    v_next   INT;
+BEGIN
+    SELECT COALESCE(max(v.version_number), 0) + 1 INTO v_next
+      FROM boat_setup_versions v
+      JOIN boat_setup_artifacts a ON a.id = v.artifact_id
+     WHERE a.kind = 'polar';
+
+    SELECT val, err INTO v_number, v_err FROM pg_temp.value_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_boat_setup_version(
+               '10000000-0000-4000-8000-000000000004'::UUID,
+               'polar',
+               DATE '2026-08-01',
+               '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[3.5]]}'::JSONB,
+               'measured on the delivery',
+               'Beneteau10R-v4.pol',
+               repeat('e', 64)
+           )$q$
+    );
+
+    SELECT current_version_id INTO v_ptr FROM boat_setup_artifacts WHERE kind = 'polar';
+
+    PERFORM pg_temp.chk(
+        'a second upload mints the next number and carries the pointer forward again',
+        COALESCE(
+            v_err IS NULL AND v_number = v_next::TEXT
+            AND v_ptr = '10000000-0000-4000-8000-000000000004',
+            FALSE
+        ),
+        format('number=%s expected=%s pointer=%s err=%s',
+               COALESCE(v_number, '-'), v_next,
+               COALESCE(v_ptr::TEXT, '-'), COALESCE(v_err, '-'))
+    );
+
+    PERFORM pg_temp.chk(
+        'and the superseded Version is still there, its own grid and file intact',
+        EXISTS (
+            SELECT 1 FROM boat_setup_versions
+            WHERE id = '10000000-0000-4000-8000-000000000003'
+              AND filename = 'Beneteau10R-v3.pol'
+              AND payload = '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[3.4]]}'::JSONB
+        ),
+        NULL
+    );
+END;
+$$;
+
+-- Backwards is refused by boat_setup_artifacts_forward_only_current, which the pointer section
+-- above already exercises. The function does not re-implement that check, so there is nothing
+-- new to assert here: any backwards move it could make would be refused by that trigger.
+
+DO $$
+DECLARE
+    v_number TEXT;
+    v_err    TEXT;
+    v_ptr    UUID;
+    v_had    BIGINT;
+BEGIN
+    -- 1 is written out rather than derived here, because 1 is the whole claim: the first Version
+    -- of an artifact that has none. So the premise is asserted instead.
+    SELECT count(*) INTO v_had
+      FROM boat_setup_versions v
+      JOIN boat_setup_artifacts a ON a.id = v.artifact_id
+     WHERE a.kind = 'crossover_chart';
+
+    PERFORM pg_temp.chk(
+        'the crossover_chart artifact starts this section with no Version on it',
+        v_had = 0,
+        format('versions=%s', v_had)
+    );
+
+    SELECT val, err INTO v_number, v_err FROM pg_temp.value_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_boat_setup_version(
+               '11000000-0000-4000-8000-000000000001'::UUID,
+               'crossover_chart',
+               DATE '2026-07-01',
+               '{"twa_axis": [], "tws_axis": [], "cells": [], "sail_definitions": []}'::JSONB,
+               NULL,
+               'Handsome_Pete_crossover.csv',
+               repeat('f', 64)
+           )$q$
+    );
+
+    SELECT current_version_id INTO v_ptr
+    FROM boat_setup_artifacts WHERE kind = 'crossover_chart';
+
+    PERFORM pg_temp.chk(
+        'the same function mints the first Version of another artifact, numbered 1',
+        COALESCE(
+            v_err IS NULL AND v_number = '1'
+            AND v_ptr = '11000000-0000-4000-8000-000000000001',
+            FALSE
+        ),
+        format('number=%s pointer=%s err=%s',
+               COALESCE(v_number, '-'), COALESCE(v_ptr::TEXT, '-'), COALESCE(v_err, '-'))
+    );
+END;
+$$;
+
+DO $$
+DECLARE
+    v_err TEXT;
+BEGIN
+    -- The function validates no payload of its own: the CHECK on the table is the floor under
+    -- the Zod schema, and being SECURITY INVOKER means the function cannot get out from under it.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_boat_setup_version(
+               '10000000-0000-4000-8000-000000000009'::UUID,
+               'polar', DATE '2026-09-01', '{}'::JSONB, NULL, 'empty.pol', repeat('9', 64)
+           )$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a payload with no axes is refused through the function exactly as it is directly',
+        v_err IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM boat_setup_versions WHERE id = '10000000-0000-4000-8000-000000000009'
+        ),
+        COALESCE(v_err, 'expected a refusal; the call was accepted')
+    );
+END;
+$$;
+
+DO $$
+DECLARE
+    v_err TEXT;
+    v_ptr UUID;
+BEGIN
+    v_err := pg_temp.exec_as(
+        'cccccccc-0000-4000-8000-000000000002',
+        $q$SELECT public.mint_boat_setup_version(
+               '10000000-0000-4000-8000-00000000000a'::UUID,
+               'polar', DATE '2026-09-01',
+               '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[9.9]]}'::JSONB,
+               NULL, 'crew.pol', repeat('1', 64)
+           )$q$
+    );
+
+    SELECT current_version_id INTO v_ptr FROM boat_setup_artifacts WHERE kind = 'polar';
+
+    PERFORM pg_temp.chk(
+        'a signed-in non-admin is refused, and leaves the pointer where it was',
+        COALESCE(
+            v_err IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM boat_setup_versions
+                WHERE id = '10000000-0000-4000-8000-00000000000a'
+            )
+            AND v_ptr = '10000000-0000-4000-8000-000000000004',
+            FALSE
+        ),
+        COALESCE(v_err, 'expected a refusal; the call was accepted')
+    );
+
+    -- A guest has no EXECUTE at all, so the refusal comes from the grant rather than from the
+    -- policies: the function is not a way around `TO authenticated`.
+    v_err := pg_temp.exec_as(
+        NULL,
+        $q$SELECT public.mint_boat_setup_version(
+               '10000000-0000-4000-8000-00000000000b'::UUID,
+               'polar', DATE '2026-09-01',
+               '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[9.9]]}'::JSONB,
+               NULL, 'guest.pol', repeat('2', 64)
+           )$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a guest cannot execute it at all',
+        COALESCE(v_err LIKE '%permission denied for function%', FALSE),
+        COALESCE(v_err, 'expected a refusal; the call was accepted')
     );
 END;
 $$;

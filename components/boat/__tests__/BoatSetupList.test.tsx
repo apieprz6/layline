@@ -38,17 +38,31 @@ describe('the Boat Setup list', () => {
   it('opens a recorded artifact to its own detail', () => {
     render(
       <BoatSetupList
-        artifacts={withCurrent('instrument_calibration', {
+        artifacts={withCurrent('polar', { version_number: 1, effective_from: '2026-05-02' })}
+      />
+    )
+
+    expect(screen.getByRole('link', { name: /Polar/ })).toHaveAttribute(
+      'href',
+      '/boat-management/polar'
+    )
+  })
+
+  it('leaves a recorded artifact inert while its screen is unbuilt', () => {
+    // The Crossover Chart's screen is the one still to land. A row that leads to a 404
+    // is worse than a row that leads nowhere, so until it exists the row states the
+    // Version and stops there.
+    render(
+      <BoatSetupList
+        artifacts={withCurrent('crossover_chart', {
           version_number: 1,
           effective_from: '2026-05-02',
         })}
       />
     )
 
-    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
-      'href',
-      '/boat-management/instrument-calibration'
-    )
+    expect(screen.getByText('v1 · effective 2 May 2026')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Crossover Chart/ })).not.toBeInTheDocument()
   })
 
   it('opens an artifact with a detail screen even before its first Version', () => {
@@ -77,13 +91,25 @@ describe('the Boat Setup list', () => {
     expect(screen.getAllByTestId('not-recorded')).toHaveLength(4)
   })
 
+  it('opens the Polar with nothing recorded, which is where the first upload is made', () => {
+    // Otherwise the first upload is unreachable: the Polar screen is where a Polar is
+    // uploaded, and with no Version there would be no row to open it from.
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    const polar = screen.getByRole('link', { name: /Polar/ })
+    expect(polar).toHaveAttribute('href', '/boat-management/polar')
+    // And it still says the truth about the artifact on the way through.
+    expect(polar.textContent).toMatch(/Not recorded/)
+  })
+
   it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
     render(<BoatSetupList artifacts={EMPTY} />)
 
     // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control. Polar and the Crossover Chart join the
-    // link the moment LAY-106 lands their upload screens.
-    expect(screen.queryAllByRole('link')).toHaveLength(2)
+    // nowhere is not dressed as a control. Three screens exist; the Crossover
+    // Chart's row joins them when its own lands.
+    expect(screen.queryAllByRole('link')).toHaveLength(3)
+    expect(screen.queryByRole('link', { name: /Crossover Chart/ })).not.toBeInTheDocument()
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 
@@ -105,10 +131,10 @@ describe('the Boat Setup list', () => {
       />
     )
 
-    // This ticket ships the list and the empty states; the upload and the form
-    // flows are LAY-106 to LAY-108. A Rig Tune and an Instrument Calibration have
-    // no file behind them at all, so no filename and no Download can ever appear
-    // on those two — the mockup's `Wayward_Wind.rig` is the mistake being avoided.
+    // The uploads and the form flows live on the detail screens, not here. A Rig Tune
+    // and an Instrument Calibration have no file behind them at all, so no filename and
+    // no Download can ever appear on those two — the mockup's `Wayward_Wind.rig` is the
+    // mistake being avoided.
     const list = screen.getByTestId('boat-setup-list')
     expect(list.textContent).not.toMatch(/download|upload|refit/i)
     expect(list.textContent).not.toMatch(/\.(rig|cal|csv|pol)\b/i)

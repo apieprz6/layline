@@ -47,18 +47,26 @@ const CURRENT_STYLE = {
  * The four Boat Setup artifacts, one row each.
  *
  * A row states what it is and what Version is in force, and nothing else. There is
- * deliberately no filename, no Download and no upload affordance on any row: a Rig
- * Tune and an Instrument Calibration have no file behind them at all — they are
- * entered as forms — and the two that do are uploaded from their own detail screen
- * (LAY-106 to LAY-108), not from this list. The mockup's `Wayward_Wind.rig` and its
- * "Upload a new version any time you refit" subtitle are the shapes being refused.
+ * deliberately no filename and no Download on any row: a Rig Tune and an Instrument
+ * Calibration have no file behind them at all — they are entered as forms — and the
+ * two that do are uploaded from their own detail screen, not from this list. The
+ * mockup's `Wayward_Wind.rig` and its "Upload a new version any time you refit"
+ * subtitle are the shapes being refused.
+ *
+ * A row is a link only when there is a screen at the other end of it — the Polar's
+ * (LAY-106), the Rig Tune's (LAY-107) and the Instrument Calibration's (LAY-108) are
+ * up, and the Crossover Chart's row stays inert until its own lands, because a row
+ * dressed as a control that leads to a 404 is the trap LAY-102 fixed on the locked
+ * drawer row.
+ *
+ * A row links to its detail once that screen exists — including when nothing is
+ * recorded yet, because recording the first Version is what that screen is for, and
+ * a link gated on a pointer would leave the empty archive this app ships in with no
+ * way to fill itself. Nor is the gate the *role*: a viewer opening an unrecorded
+ * artifact reads why there is nothing to read (ADR 0019 governs writes only).
  *
  * Four rows, not five. A Crossover Chart carries its own Sail Definitions, so there
  * are four Version pointers on the boat (ADR 0012).
- *
- * A row links to its detail once that screen exists — including when nothing is
- * recorded yet, because entering the first Version is what the screen is for. Until
- * then it is inert text.
  *
  * A Server Component: a row either links somewhere or is inert, and neither needs
  * the client.
@@ -73,20 +81,18 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
           </span>
         )
 
-        const label =
-          current === null ? (
-            name
-          ) : (
-            <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-              {name}
+        const label = (
+          <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            {name}
+            {current !== null && (
               <span style={CURRENT_STYLE}>
-                v{current.version_number} · effective{' '}
-                {formatCalendarDate(current.effective_from)}
+                v{current.version_number} · effective {formatCalendarDate(current.effective_from)}
               </span>
-            </span>
-          )
+            )}
+          </span>
+        )
 
-        const badge =
+        const absence =
           current === null ? (
             // Held at its own width: at 390px "Instrument Calibration" and this badge
             // share one line, and a squashed badge is a broken shape.
@@ -95,16 +101,13 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
             </span>
           ) : null
 
-        // A row opens as soon as its detail screen exists, recorded or not: on the
-        // empty archive this app ships in, that screen is where the first Version is
-        // entered. A kind whose screen has not landed stays plain text with no
-        // chevron — that row leads nowhere, which is the trap LAY-102 fixed on the
-        // locked drawer row.
+        // Nothing to open, and nothing to dress as a control: this kind's screen has
+        // not landed, so that row genuinely leads nowhere.
         if (!hasDetailScreen(kind)) {
           return (
             <div key={kind} style={ROW_STYLE}>
               {label}
-              {badge}
+              {absence}
             </div>
           )
         }
@@ -112,9 +115,11 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
         return (
           <Link key={kind} href={boatSetupHref(kind)} style={ROW_STYLE}>
             {label}
-            {badge}
-            <span aria-hidden="true" style={CHEVRON_STYLE}>
-              ›
+            <span style={{ display: 'flex', alignItems: 'center', gap: spacing(2), flexShrink: 0 }}>
+              {absence}
+              <span aria-hidden="true" style={CHEVRON_STYLE}>
+                ›
+              </span>
             </span>
           </Link>
         )

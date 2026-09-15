@@ -1,4 +1,4 @@
-import type { BoatSetupKind } from '@/types'
+import type { BoatSetupKind, FileBackedBoatSetupKind } from '@/types'
 
 /**
  * The four **Boat Setup** artifacts as the app reads them: their order, their
@@ -34,8 +34,8 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
  *
- * The Rig Tune's and the Instrument Calibration's screens are here; the two upload
- * flows arrive with LAY-106. `BOAT_SETUP_DETAIL_BUILT` says which are which.
+ * All four are named here whether or not a screen answers at them;
+ * `BOAT_SETUP_DETAIL_BUILT` is what says which ones do.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -44,12 +44,10 @@ const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   instrument_calibration: 'instrument-calibration',
 }
 
-export function boatSetupHref(kind: BoatSetupKind): string {
-  return `/boat-management/${BOAT_SETUP_SLUG[kind]}`
-}
-
 /**
- * The kinds whose detail screen exists. Add a kind here when its route lands.
+ * The kinds whose detail screen exists. Add a kind here when its route lands. Three of
+ * the four are up: the Polar (LAY-106), the Rig Tune (LAY-107) and the Instrument
+ * Calibration (LAY-108). The Crossover Chart follows, and this list disappears with it.
  *
  * LAY-104 gated the list's link on a Version being recorded, on the reasoning that a
  * row leading to an empty screen is a row dressed as a control. That was right while
@@ -64,8 +62,32 @@ export function boatSetupHref(kind: BoatSetupKind): string {
  * why there is nothing to read (ADR 0019 governs writes only), which is an answer about
  * the boat and worth a screen.
  */
-const BOAT_SETUP_DETAIL_BUILT: readonly BoatSetupKind[] = ['rig_tune', 'instrument_calibration']
+export const BOAT_SETUP_DETAIL_BUILT = [
+  'polar',
+  'rig_tune',
+  'instrument_calibration',
+] as const satisfies readonly BoatSetupKind[]
 
 export function hasDetailScreen(kind: BoatSetupKind): boolean {
-  return BOAT_SETUP_DETAIL_BUILT.includes(kind)
+  return (BOAT_SETUP_DETAIL_BUILT as readonly BoatSetupKind[]).includes(kind)
+}
+
+export function boatSetupHref(kind: BoatSetupKind): string {
+  return `/boat-management/${BOAT_SETUP_SLUG[kind]}`
+}
+
+/** One Version's own screen, which every Version has whether or not it is the one in force. */
+export function boatSetupVersionHref(kind: BoatSetupKind, versionId: string): string {
+  return `${boatSetupHref(kind)}/${versionId}`
+}
+
+/**
+ * Where a Version's original bytes are downloaded from. Only the two file-backed kinds have
+ * bytes at all, which is why the type says so.
+ */
+export function boatSetupDownloadHref(
+  kind: FileBackedBoatSetupKind,
+  versionId: string
+): string {
+  return `/api/boat-setup/${BOAT_SETUP_SLUG[kind]}/${versionId}/download`
 }
