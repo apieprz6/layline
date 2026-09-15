@@ -22,6 +22,10 @@ import type { PolarParseWarningCode, PolarUploadPreview } from '@/types'
  * A Client Component, because the two steps are one screen: the preview has to survive between
  * them, and the file cannot be re-read from a form once it has been submitted once.
  *
+ * The first step is one control, drawn as one: a file input's default rendering reads as a
+ * caption, and the card's whole purpose is the thing it asks for — so the input wears a button
+ * and the file it holds is named beside it.
+ *
  * `accept` on the input is a convenience for the file chooser and nothing more. A browser types
  * a `.pol` as `text/plain`, as `application/octet-stream`, or as nothing at all depending on the
  * machine, so a MIME check would refuse good files and admit bad ones. Parsing is the gate
@@ -33,6 +37,7 @@ export default function PolarUploadPanel(): ReactElement {
   const [message, setMessage] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [focused, setFocused] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
   function reset(): void {
@@ -91,19 +96,61 @@ export default function PolarUploadPanel(): ReactElement {
     <section data-testid="polar-upload-panel" style={PANEL_STYLE}>
       <div style={EYEBROW_STYLE}>Upload a Polar</div>
 
-      <label htmlFor="polar-file" style={FIELD_LABEL_STYLE}>
-        The `.pol` from the certificate or the router, exactly as it came.
-      </label>
-      <input
-        ref={input}
-        id="polar-file"
-        data-testid="polar-file-input"
-        type="file"
-        accept=".pol,.txt,.csv,text/plain"
-        disabled={pending}
-        onChange={(event) => onChoose(event.target.files?.[0] ?? null)}
-        style={INPUT_STYLE}
-      />
+      {/* No backticks around the extension: this is a sentence a sailor reads, not markdown,
+          and the card carried them into the rendered page. */}
+      <p id="polar-file-hint" style={FIELD_LABEL_STYLE}>
+        The .pol from the certificate or the router, exactly as it came.
+      </p>
+
+      <div style={CHOOSE_ROW_STYLE}>
+        {/*
+          The control is the file input itself, wearing a button. Its default rendering — a
+          grey "Choose File" beside the words "No file chosen" — reads as a caption rather
+          than as the one thing to do on this card, so the input is taken out of the flow and
+          the label around it is drawn as the action. It is not replaced by a `button` that
+          clicks it from JavaScript: the real input stays in the page, so a click, a tap, a
+          Space press and a dropped file all land where the browser expects them to.
+        */}
+        <label
+          htmlFor="polar-file"
+          data-testid="polar-file-button"
+          style={{
+            ...CHOOSE_STYLE,
+            cursor: pending ? 'progress' : 'pointer',
+            opacity: pending ? 0.6 : 1,
+            // The focus ring belongs on what is drawn, and the input that has the focus is
+            // invisible — so the ring is moved by hand rather than by `:focus-visible`. Not
+            // `--focus-ring`: it is the same blue as this button, and a blue ring drawn
+            // against blue is no ring at all. The card's own surface makes the gap.
+            boxShadow: focused
+              ? '0 0 0 2px var(--surface-raised), 0 0 0 4px var(--blue-500)'
+              : undefined,
+          }}
+        >
+          <input
+            ref={input}
+            id="polar-file"
+            data-testid="polar-file-input"
+            type="file"
+            accept=".pol,.txt,.csv,text/plain"
+            aria-describedby="polar-file-hint"
+            disabled={pending}
+            onChange={(event) => onChoose(event.target.files?.[0] ?? null)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            style={HIDDEN_INPUT_STYLE}
+          />
+          <span aria-hidden="true">↑</span>
+          Choose a .pol file
+        </label>
+
+        <span
+          data-testid="polar-chosen-file"
+          style={file === null ? NO_FILE_STYLE : CHOSEN_FILE_STYLE}
+        >
+          {file === null ? 'No file chosen yet' : file.name}
+        </span>
+      </div>
 
       {pending && preview === null && (
         <p data-testid="polar-upload-reading" style={MUTED_STYLE}>
@@ -261,18 +308,64 @@ const PANEL_STYLE: CSSProperties = {
 }
 
 const FIELD_LABEL_STYLE: CSSProperties = {
-  display: 'block',
   fontFamily: 'var(--font-body)',
   fontSize: 'var(--text-sm)',
   color: 'var(--text-primary)',
-  marginBottom: spacing(2),
+  margin: `0 0 ${spacing(3)}`,
 }
 
-const INPUT_STYLE: CSSProperties = {
+const CHOOSE_ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  // Wraps at 390px, where a long filename and the button do not share a line.
+  flexWrap: 'wrap',
+  gap: spacing(3),
+}
+
+const CHOOSE_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: spacing(2),
+  // Its own line height, so the card's one action is the size of a thumb on the phone this
+  // is read on.
+  padding: '11px 16px',
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
+  color: 'var(--btn-primary-fg)',
+  background: 'var(--btn-primary-bg)',
+  border: '1px solid var(--btn-primary-bg)',
+  borderRadius: 'var(--btn-primary-radius)',
+  // The input inside is absolutely positioned against this.
+  position: 'relative',
+}
+
+/**
+ * Out of the flow but still the focusable control: `display: none` would take the input out
+ * of the tab order and out of the accessibility tree, leaving a label that only a mouse can
+ * use.
+ */
+const HIDDEN_INPUT_STYLE: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  opacity: 0,
+  // Under the label it belongs to, so the browser's own focus outline — where it draws one
+  // anyway — lands on the button rather than beside it.
+  inset: 0,
+}
+
+const CHOSEN_FILE_STYLE: CSSProperties = {
   fontFamily: 'var(--font-body)',
   fontSize: 'var(--text-sm)',
   color: 'var(--text-primary)',
-  maxWidth: '100%',
+  overflowWrap: 'anywhere',
+  minWidth: 0,
+}
+
+const NO_FILE_STYLE: CSSProperties = {
+  ...CHOSEN_FILE_STYLE,
+  color: 'var(--text-muted)',
 }
 
 const TEXT_INPUT_STYLE: CSSProperties = {
@@ -334,10 +427,10 @@ const CONFIRM_STYLE: CSSProperties = {
   fontFamily: 'var(--font-body)',
   fontSize: 'var(--text-base)',
   fontWeight: 'var(--weight-semibold)',
-  color: '#FFFFFF',
-  background: 'var(--blue-500)',
-  border: 'none',
-  borderRadius: 'var(--radius-sm)',
+  color: 'var(--btn-primary-fg)',
+  background: 'var(--btn-primary-bg)',
+  border: '1px solid var(--btn-primary-bg)',
+  borderRadius: 'var(--btn-primary-radius)',
   cursor: 'pointer',
 }
 
@@ -345,9 +438,9 @@ const CANCEL_STYLE: CSSProperties = {
   padding: '11px 16px',
   fontFamily: 'var(--font-body)',
   fontSize: 'var(--text-base)',
-  color: 'var(--text-primary)',
-  background: 'transparent',
-  border: '1px solid var(--surface-border)',
-  borderRadius: 'var(--radius-sm)',
+  color: 'var(--btn-ghost-fg)',
+  background: 'var(--btn-ghost-bg)',
+  border: '1px solid var(--btn-ghost-border)',
+  borderRadius: 'var(--btn-primary-radius)',
   cursor: 'pointer',
 }

@@ -186,6 +186,45 @@ describe('the Polar upload panel', () => {
     expect(commitPolarVersion).not.toHaveBeenCalled()
   })
 
+  it('names its own action, rather than leaving the browser to call it "Choose File"', () => {
+    render(<PolarUploadPanel />)
+
+    // The control the sailor sees and the control the browser fires are the same element: the
+    // label is drawn as the button, so a keyboard reaches it and no `button` clicks a hidden
+    // input from JavaScript.
+    expect(screen.getByLabelText(/choose a \.pol file/i)).toBe(
+      screen.getByTestId('polar-file-input')
+    )
+    expect(screen.getByTestId('polar-file-button').textContent).toMatch(/Choose a \.pol file/)
+    // And no markdown left in the copy on the way: the card printed its own backticks.
+    expect(screen.getByTestId('polar-upload-panel').textContent).not.toMatch(/`/)
+  })
+
+  it('says which file is in hand, before and after one is chosen', async () => {
+    render(<PolarUploadPanel />)
+
+    // The native "No file chosen" goes with the native button, so the card says it itself —
+    // otherwise a chosen file leaves no trace on screen until the preview arrives.
+    expect(screen.getByTestId('polar-chosen-file').textContent).toBe('No file chosen yet')
+
+    await drop('FIRST_10R.pol')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('polar-chosen-file').textContent).toBe('FIRST_10R.pol')
+    )
+  })
+
+  it('describes the file it wants without swallowing the button that asks for it', () => {
+    render(<PolarUploadPanel />)
+
+    // The sentence about certificates and routers describes the input; it is not its name,
+    // which is the action. Both have to reach a screen reader, so one is the label and the
+    // other is `aria-describedby`.
+    const hint = screen.getByTestId('polar-file-input').getAttribute('aria-describedby')
+    expect(hint).toBe('polar-file-hint')
+    expect(document.getElementById(hint as string)?.textContent).toMatch(/exactly as it came/)
+  })
+
   it('filters the file chooser without treating the type as validation', async () => {
     render(<PolarUploadPanel />)
 
