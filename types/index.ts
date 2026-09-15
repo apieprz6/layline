@@ -1022,7 +1022,21 @@ export interface SubmitRaceInput {
   duplicate_acknowledged: boolean
 }
 
-export type SubmitRaceResult = { ok: true; race_id: string } | { ok: false; message: string }
+/**
+ * What submit answers with, and — on a failure — whether the staged upload survived it.
+ *
+ * `start_over` is the difference between a failure the sailor can fix from where they stand and one
+ * that has taken the staged bytes with it. A window that holds no rows is the first: edit the window,
+ * press save again. Anything after the move to the permanent path is the second, because the bytes
+ * are no longer at the staging path a second attempt would look for — so re-arming the same button
+ * offers a retry that can only ever come back "the staged bytes are gone".
+ *
+ * Required rather than optional, so a failure path added later has to say which kind it is instead of
+ * defaulting into the answer that is wrong more often.
+ */
+export type SubmitRaceResult =
+  | { ok: true; race_id: string }
+  | { ok: false; message: string; start_over: boolean }
 
 /** A race as the Races tab lists it. */
 export interface RaceListEntry {

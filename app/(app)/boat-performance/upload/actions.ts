@@ -160,7 +160,7 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
   const account = await resolveAccount()
 
   if (!account || !canWrite(account)) {
-    return { ok: false, message: ONLY_ADMIN }
+    return { ok: false, message: ONLY_ADMIN, start_over: false }
   }
 
   let supabase: Awaited<ReturnType<typeof createClient>>
@@ -172,7 +172,8 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
       'Race upload: Supabase client unavailable:',
       thrown instanceof Error ? thrown.message : thrown
     )
-    return { ok: false, message: UNAVAILABLE }
+    // Nothing has been read or moved, so the bytes are still where a second attempt will look.
+    return { ok: false, message: UNAVAILABLE, start_over: false }
   }
 
   // Derived, never taken from the request: the path is a function of who is signed in and which
@@ -191,6 +192,7 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
     return {
       ok: false,
       message: 'The uploaded file is no longer where it was put. Start the upload again.',
+      start_over: true,
     }
   }
 
@@ -204,6 +206,7 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
       message:
         'The file in storage is not the one that was charted, so nothing has been saved. Start the ' +
         'upload again.',
+      start_over: true,
     }
   }
 
@@ -214,13 +217,16 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
 
   if (!outcome.ok) {
     console.error('Race upload: the staged file no longer parses:', outcome.message)
-    return { ok: false, message: UNAVAILABLE }
+    // The same bytes will not parse on a second attempt either, so pressing save again is not the
+    // way out of this one.
+    return { ok: false, message: UNAVAILABLE, start_over: true }
   }
 
   const transcription = outcome.transcription
   const refusal = windowRefusal(transcription, input)
 
-  if (refusal) return { ok: false, message: refusal }
+  // The one failure the sailor is expected to hit and fix: move a handle, press save again.
+  if (refusal) return { ok: false, message: refusal, start_over: false }
 
   const duplicates = await duplicateFilenames(supabase, transcription.content_sha256)
 
@@ -234,6 +240,7 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
         message:
           `These bytes are already in the archive as ${duplicates.join(', ')}. Say that this really ` +
           'is a second race from the same log, then save again.',
+        start_over: false,
       }
     }
 
@@ -255,7 +262,9 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
 
   if (moveError) {
     console.error('Race upload: moving the bytes out of tmp/ failed:', moveError.message)
-    return { ok: false, message: UNAVAILABLE }
+    // The move is the line. It did not happen, so the bytes are still staged and save can be
+    // pressed again.
+    return { ok: false, message: UNAVAILABLE, start_over: false }
   }
 
   const { data: raceId, error: rpcError } = await supabase.rpc('create_race_from_upload', {
@@ -290,8 +299,11 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
     return {
       ok: false,
       message:
-        'The race could not be saved and nothing was written to the archive. The file has already ' +
-        'been moved out of its staging area, so choose it again to start over.',
+        'The race could not be saved: no race, no recording and no row was written. The file itself ' +
+        'has already been moved out of its staging area, so choose it again to start over.',
+      // Past the move, so there is nothing left at the staging path for a second attempt to read.
+      // The wizard has to send the sailor back to the file picker rather than re-arm this button.
+      start_over: true,
     }
   }
 

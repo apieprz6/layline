@@ -18,6 +18,7 @@ import { assessRowQuality } from '@/services/recordings/row-quality'
 import type {
   StagedRecording,
   SubmitRaceInput,
+  SubmitRaceResult,
   TranscriptionChannels,
   TranscriptionRow,
 } from '@/types'
@@ -367,5 +368,62 @@ describe('a refusal from the server', () => {
     // No stack, because there is nothing to draw, and Next has nothing to advance to.
     expect(screen.queryByRole('img', { name: /GPS track/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+  })
+})
+
+describe('a failure that took the staged bytes with it', () => {
+  /** The wizard with a submit that fails the way a post-move failure fails. */
+  function mountFailing(start_over: boolean) {
+    const stage = jest.fn<Promise<{ ok: true; staged: StagedRecording }>, [FormData]>(async () => ({
+      ok: true as const,
+      staged: stagedOf(),
+    }))
+    const submit = jest.fn<Promise<SubmitRaceResult>, [SubmitRaceInput]>(async () => ({
+      ok: false as const,
+      message: 'The race could not be saved: no race, no recording and no row was written.',
+      start_over,
+    }))
+
+    render(<RaceUploadWizard stageRecording={stage} submitRace={submit} />)
+    return { submit }
+  }
+
+  it('sends the sailor back to the file picker instead of re-arming a save that cannot work', async () => {
+    // The sequence this shipped broken in: the transaction failed *after* the bytes had moved to
+    // their permanent path (ADR 0013), the wizard left Save live on Review, and the second press
+    // came back "the staged bytes are gone" — because there was nothing at the staging path any
+    // more. A failure past the move is terminal for that upload and the wizard has to say so.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mountFailing(true)
+
+    await pickFile(user)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/no race, no recording and no row was written/)).toBeInTheDocument()
+
+    // Back at step 0: the charts are gone with the staged upload they were drawn from, and there is
+    // no Save to press a second time.
+    expect(screen.queryByRole('img', { name: /GPS track/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save race' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('qtVlm CSV export')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+  })
+
+  it('leaves a fixable failure exactly where it was, so the sailor can fix it and save again', async () => {
+    // The other half of the same flag. A window refusal or an unticked duplicate box happens before
+    // anything moved, and throwing the sailor back to the picker over one would be this wizard
+    // punishing them for a thing they can correct in one gesture.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mountFailing(false)
+
+    await pickFile(user)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(screen.getByRole('img', { name: /GPS track/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+    expect(submit).toHaveBeenCalledTimes(2)
   })
 })

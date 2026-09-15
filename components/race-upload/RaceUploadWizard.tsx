@@ -230,6 +230,21 @@ export default function RaceUploadWizard({
     if (!result.ok) {
       setBusy(false)
       setMessage(result.message)
+
+      // Some failures take the staged bytes with them — anything past the move to the permanent path
+      // (ADR 0013). Leaving the sailor on Review with a live Save button offers a retry that can only
+      // come back "the staged bytes are gone", which is what happened the first time this shipped. So
+      // the wizard goes back to the file picker and says why, which is what the message already asks
+      // them to do.
+      if (result.start_over) {
+        setStaged(null)
+        setRaceWindow(null)
+        // The acknowledgement was about one set of bytes, so it does not carry to the next upload.
+        // The title does: the sailor wrote it, it is about the race and not about the file, and
+        // making them type it twice would be this failure charging them for it.
+        setDuplicateAccepted(false)
+        setStep(0)
+      }
       return
     }
 

@@ -117,6 +117,35 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260915120000_create_race_from_upload.sql
+
+**Purpose**: `public.create_race_from_upload(p_recording jsonb, p_rows jsonb, p_race jsonb)` — the
+one transaction the upload wizard's submit writes through. It inserts the Recording, its
+Transcription rows and the Race together, or none of them.
+
+**Why a function and not three client calls**: a Transcription is immutable and the Race's
+`races_window_intersects_rows` trigger is deferred, so the rows have to be in the same transaction
+as the Race that is judged against them. Three round trips from a Server Action cannot be one
+transaction, and a half-written Recording is unrepairable.
+
+**It must be pushed to the hosted project before a preview or production deploy can save a race.**
+It is a `CREATE FUNCTION`, so nothing else in the app notices its absence — the wizard charts,
+crops, refuses and confirms exactly as it should, and then submit fails at the very last step with
+`Could not find the function public.create_race_from_upload(...) in the schema cache`, which is
+PostgREST reporting a function that is not there. That failure lands **after** the bytes have moved
+to their permanent path (ADR 0013), so each attempt leaves one orphaned object under
+`recordings/{recording_id}/` for a sweep to collect.
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-upload-rpc.sh "$DB_URL"       # 31 checks, safe against real data
+```
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.create_race_from_upload(jsonb, jsonb, jsonb);
+```
+
 ## Verification suites
 
 Both are committed, both are re-runnable, and both are safe against a project holding real
