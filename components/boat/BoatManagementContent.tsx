@@ -1,25 +1,34 @@
 import type { ReactElement } from 'react'
+import BoatIdentityEditor from '@/components/boat/BoatIdentityEditor'
+import BoatIdentityHeader from '@/components/boat/BoatIdentityHeader'
+import BoatSetupList from '@/components/boat/BoatSetupList'
 import EmptyState from '@/components/common/EmptyState'
+import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { spacing } from '@/lib/utils/design'
+import type { BoatSetup } from '@/types'
+
+interface BoatManagementContentProps {
+  /** `null` when the boat could not be read — not an empty boat. */
+  page: BoatSetup | null
+  /** Whether this sailor may edit the identity: `admin` only (ADR 0019). */
+  canWrite: boolean
+}
 
 /**
- * **Boat management**, once the padlock is off: the section's own shell, and
- * nothing in it yet.
+ * **Boat management**: the boat's identity, and its four **Boat Setup** artifacts.
  *
- * Its header will *be* the boat's identity — name and model, edited in place by an
- * **admin** — and beneath it the four **Boat Setup** artifacts, each with a "not
- * recorded" row. LAY-104 lands all of that against real `boats` rows. This ticket
- * is the navigation shape, so the route exists, opens for a signed-in sailor, and
- * says plainly that it is empty.
+ * The header *is* the identity — name and model, read from `boats` and edited in
+ * place by an admin. Beneath it, one list of four rows: Polar, Crossover Chart, Rig
+ * Tune, Instrument Calibration. Four, not five: a Crossover Chart carries its own
+ * Sail Definitions (ADR 0012).
  *
- * No boat is named here either, and not out of caution: there is nothing to read
- * one from yet, and a placeholder name would be a value that looks like a record
- * and is not one.
- *
- * A Server Component — nothing on it is interactive until there is something to
- * edit.
+ * A Server Component apart from the admin's editor, which is the only interactive
+ * thing on the screen.
  */
-export default function BoatManagementContent(): ReactElement {
+export default function BoatManagementContent({
+  page,
+  canWrite,
+}: BoatManagementContentProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       <div
@@ -29,26 +38,52 @@ export default function BoatManagementContent(): ReactElement {
           padding: `${spacing(4)} ${spacing(4)}`,
         }}
       >
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '16px',
-            fontWeight: 'var(--weight-bold)',
-            color: 'var(--text-primary)',
-            margin: 0,
-          }}
-        >
-          Boat management
-        </h1>
+        {page === null ? (
+          // With no row to read from, the section falls back to naming itself. It
+          // does not name the boat: a blank identity, or a remembered one, would be
+          // this screen inventing its own subject.
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--text-xl)',
+              fontWeight: 'var(--weight-bold)',
+              letterSpacing: '-0.02em',
+              color: 'var(--text-primary)',
+            }}
+          >
+            Boat management
+          </h1>
+        ) : (
+          <>
+            {/* Above the identity in both its states, open and being edited, so the
+                sailor never loses which section they are on while the name itself is
+                in a text field. The mockup keeps its "Boat identity" label for the
+                same reason. */}
+            <div style={EYEBROW_STYLE}>Boat management</div>
+            {canWrite ? (
+              <BoatIdentityEditor boat={page.boat} />
+            ) : (
+              <BoatIdentityHeader name={page.boat.name} model={page.boat.model} />
+            )}
+          </>
+        )}
       </div>
 
-      <div style={{ padding: spacing(4) }}>
-        <EmptyState
-          mark="⚓"
-          title="Nothing recorded yet"
-          detail="The boat's identity and its Polar, Crossover Chart, Rig Tune and Instrument Calibration will live here."
-        />
-      </div>
+      {page === null ? (
+        <div style={{ padding: spacing(4) }}>
+          <EmptyState
+            mark="⚓"
+            title="The boat could not be read"
+            detail="Nothing about the boat is shown rather than a guess at it. Sign in again, or try once more in a moment."
+          />
+        </div>
+      ) : (
+        <div style={{ padding: spacing(4) }}>
+          <div style={EYEBROW_STYLE}>Boat setup</div>
+          <BoatSetupList artifacts={page.artifacts} />
+        </div>
+      )}
     </div>
   )
 }

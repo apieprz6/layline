@@ -101,7 +101,12 @@ test.describe('the locked boat sections', () => {
     await gotoHydrated(page, '/boat-management')
 
     await expect(page.getByTestId('auth-sheet')).toBeInViewport()
-    await expect(page.getByRole('heading', { name: 'Boat management' })).toHaveCount(0)
+    // The screen's own content, not its title: since LAY-104 the header of Boat
+    // management is the boat's *name*, so a heading is no longer the thing a guest
+    // must not be served — the boat is. Both halves of that: the list of artifacts,
+    // and the identity itself, which no signed-out screen may ever name.
+    await expect(page.getByTestId('boat-setup-list')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('Handsome Pete')
     // The ask is taken back out of the URL once it has been read, so a reload does
     // not reopen a sheet the sailor has dismissed.
     await expect(page).toHaveURL(/\/$/)

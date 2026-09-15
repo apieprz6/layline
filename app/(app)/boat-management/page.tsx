@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react'
 import BoatManagementContent from '@/components/boat/BoatManagementContent'
+import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
+import { readBoatSetup } from '@/services/boat/readBoatSetup'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,5 +30,9 @@ export default async function BoatManagementPage(): Promise<ReactElement> {
 
   if (!account) signInFirst('/boat-management')
 
-  return <BoatManagementContent />
+  // Read only after the Guest has been turned away, so a signed-out request costs
+  // nothing and reveals nothing — not even that the boat has a name.
+  const page = await readBoatSetup()
+
+  return <BoatManagementContent page={page} canWrite={canWrite(account)} />
 }

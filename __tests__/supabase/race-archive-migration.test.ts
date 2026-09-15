@@ -10,6 +10,7 @@
 
 import { readdirSync, readFileSync } from 'fs'
 import { resolve } from 'path'
+import { CURRENT_VERSION_FK } from '@/services/boat/readBoatSetup'
 
 const MIGRATIONS = resolve(__dirname, '../../supabase/migrations')
 const MIGRATION = resolve(MIGRATIONS, '20260910183000_create_race_archive_and_boat_setup.sql')
@@ -155,5 +156,13 @@ describe('the race archive migration', () => {
     for (const [, policy, table] of named) {
       expect(code).toContain(`DROP POLICY IF EXISTS "${policy}" ON ${table};`)
     }
+  })
+
+  it('declares the current-version foreign key under the name PostgREST is asked for', () => {
+    // Two foreign keys join boat_setup_artifacts and boat_setup_versions, so the
+    // Boat management screen's embed has to name one — and a name PostgREST cannot
+    // resolve fails at request time, where no mocked client would notice. This is
+    // the one place the two strings can be held together cheaply.
+    expect(code).toContain(`ADD CONSTRAINT ${CURRENT_VERSION_FK}`)
   })
 })
