@@ -7,79 +7,21 @@
  * rules were the right ones.
  *
  * The recordings are the owner's sailing data and are not vendored into this repo, so this
- * suite finds them and skips loudly when it cannot. Point `LAYLINE_ARCHIVE_DIR` at a directory
- * of exports to run it anywhere; otherwise it looks for `Handsome-Pete/raw-regatta-recordings`
- * beside the checkout, which is where they sit on the owner's machine. Everything that has to
+ * suite finds them through `archive.ts` and skips loudly when it cannot. Everything that has to
  * run in CI is in `qtvlm.test.ts` and `provenance.test.ts`, against the vendored third-party
  * export.
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 
+import {
+  archiveFilenames as filenames,
+  describeArchive,
+  transcribe,
+} from '@/services/recordings/__tests__/archive'
 import { describeRecording } from '@/services/recordings/provenance'
-import { parseQtvlmRecording, reassembleTranscription } from '@/services/recordings/qtvlm'
-import type { RecordingProvenance, Transcription } from '@/types'
-
-/** Where the recordings are, or null. */
-function findArchive(): string | null {
-  const named = process.env.LAYLINE_ARCHIVE_DIR
-  if (named) {
-    // Someone who set this asked for the round trip to run. Skipping a typo'd path would report
-    // all green for the one claim they were trying to check.
-    if (!existsSync(named)) {
-      throw new Error(`LAYLINE_ARCHIVE_DIR is set to ${named}, which does not exist`)
-    }
-    return named
-  }
-
-  // Up from the checkout — which may be a worktree several levels down — until the sibling
-  // repository turns up or the root does.
-  let at = process.cwd()
-  for (;;) {
-    const candidate = join(at, 'Handsome-Pete', 'raw-regatta-recordings')
-    if (existsSync(candidate)) return candidate
-
-    const up = dirname(at)
-    if (up === at) return null
-    at = up
-  }
-}
-
-const archive = findArchive()
-const filenames = archive
-  ? readdirSync(archive)
-      .filter((name) => name.endsWith('.csv'))
-      .sort()
-  : []
-
-if (filenames.length === 0) {
-  console.warn(
-    'Skipping the archive round trip: no qtVlm exports found. Set LAYLINE_ARCHIVE_DIR to a ' +
-      'directory of recordings, or check out Handsome-Pete/raw-regatta-recordings beside this repo.'
-  )
-}
-
-function bytesOf(filename: string): Buffer {
-  return readFileSync(join(archive as string, filename))
-}
-
-/**
- * The bytes, not a string: this is the path an upload takes, so the hash is over what Storage
- * holds. A refusal throws, which is the assertion that every one of these files is storable —
- * including that no value in them is a form Postgres `numeric` would give back changed.
- */
-function transcribe(filename: string): { bytes: Buffer; transcription: Transcription } {
-  const bytes = bytesOf(filename)
-  const outcome = parseQtvlmRecording(bytes)
-  if (!outcome.ok) {
-    throw new Error(`${filename} was refused as ${outcome.reason}: ${outcome.message}`)
-  }
-  return { bytes, transcription: outcome.transcription }
-}
-
-const describeArchive = filenames.length > 0 ? describe : describe.skip
+import { reassembleTranscription } from '@/services/recordings/qtvlm'
+import type { RecordingProvenance } from '@/types'
 
 describeArchive('every recording in the archive', () => {
   it.each(filenames)('%s is reproduced byte for byte from its Transcription', (filename) => {

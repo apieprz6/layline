@@ -768,6 +768,70 @@ export interface RecordingProvenance {
   constant_channels: { column: string; value: string }[]
 }
 
+/**
+ * What one row is worth, as three independent tests rather than three levels of one.
+ *
+ * A row may carry more than one of them and most carry none. They are separate fields because
+ * they are separate questions, and because the prior art's single `STATUS` column is what lost
+ * 34 rows their maneuver marker to low-speed precedence (ADR 0009).
+ */
+export interface RowQuality {
+  /** The row this is about, so a filtered set still says which rows it describes. */
+  row_index: number
+  row_time: string
+  /**
+   * Inside a **Dropout**: this row's position, course and speed are a verbatim copy of the
+   * previous row's, in a run long enough that the feed was dead rather than the boat slow.
+   *
+   * Read this one first. It says the row's values are a copy, so the two below — which are
+   * computed on those values and never suppressed — describe copied values rather than readings.
+   * Suppressing them would also destroy the two figures that prove neither can stand in for this
+   * one: 856 of the archive's 870 frozen rows are not Low-Speed, and 25 of them are still
+   * water-referenced (ADR 0009).
+   */
+  frozen: boolean
+  /**
+   * `STW` or `CTW` absent, so the wind columns were computed from GPS and mean something
+   * different from their neighbours. The same predicate as the stored generated column.
+   */
+  not_water_referenced: boolean
+  /** `SOG` below the gate. Gated on GPS speed, which is verifiable, and never on `STW`. */
+  low_speed: boolean
+  /**
+   * Elapsed seconds since the previous non-**Frozen** row. Null for the first row in hand.
+   * Anything computing a row-to-row rate must read this rather than assume the cadence.
+   */
+  gap_seconds: number | null
+}
+
+/** A channel a **Dropout** freezes, and so one the detector compares row to row. */
+export type DropoutChannel = 'latitude' | 'longitude' | 'cog' | 'sog'
+
+/**
+ * Row Quality over a set of rows, with the rules that produced it.
+ *
+ * The constants and the version ride along because nothing here is stored: a page states which
+ * rules it is showing, and a changed gate is a redeploy rather than a migration (ADR 0009).
+ */
+export interface TranscriptionQuality {
+  /** Bumped whenever a rule or a constant below changes. */
+  detector_version: string
+  /** The `SOG` a row is Low-Speed below, in knots. */
+  low_speed_sog_knots: number
+  /** How many verbatim repeats in a run make a Dropout. */
+  dropout_min_rows: number
+  /**
+   * Which channels the recording fed, and so which the comparison could use. All four for every
+   * recording in the archive; fewer for a boat that logs no `COG`.
+   *
+   * Empty means no Dropout could be detected at all, because the recording carries no position.
+   * A page must say so rather than show no dropouts, which is the same output as a clean track.
+   */
+  dropout_channels: DropoutChannel[]
+  /** One entry per row it was given, in that order. */
+  rows: RowQuality[]
+}
+
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {
   timestamp: Date

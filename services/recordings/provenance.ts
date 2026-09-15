@@ -13,31 +13,13 @@
  */
 
 import { DATE_COLUMN, recordedValue } from '@/services/recordings/qtvlm'
+import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type { RecordingProvenance, TranscriptionRow } from '@/types'
 
 /** Rows in hand and the header they were read under. A whole Transcription satisfies this. */
 export interface DescribableRecording {
   source_columns: string[]
   rows: TranscriptionRow[]
-}
-
-const NAIVE_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
-
-/**
- * A naive stamp as seconds, for subtracting one from another.
- *
- * `Date.UTC` is the arithmetic and not a timezone claim: it is the one frame in which an hour
- * is always an hour, so an interval measured across a daylight-saving change is the interval
- * the sailor's own clock showed. Reading these stamps as local time would make a 30-second
- * cadence read as 3,630 seconds once a year.
- */
-function wallClockSeconds(row_time: string): number {
-  const match = NAIVE_TIMESTAMP.exec(row_time)
-  if (!match) {
-    throw new TypeError(`row_time is not a naive timestamp: ${JSON.stringify(row_time)}`)
-  }
-  const [, year, month, day, hour, minute, second] = match.map(Number)
-  return Date.UTC(year, month - 1, day, hour, minute, second) / 1000
 }
 
 /** The middle value, or the mean of the middle pair. Null when there is nothing to take. */
