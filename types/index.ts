@@ -856,6 +856,209 @@ export interface TranscriptionQuality {
   rows: RowQuality[]
 }
 
+// ---------------------------------------------------------------------------
+// Uploading a race, and what a race states afterwards
+// ---------------------------------------------------------------------------
+// The wizard's shapes (ADR 0014). Two things are worth knowing before reading them.
+//
+// First, every time here is a naive wall-clock stamp or a count of seconds in the recording's own
+// frame, and the two convert through `services/recordings/wall-clock.ts` and nothing else. There
+// is no `Date` in this section on purpose: a `Date` carries an offset, and an offset is a claim
+// about a timezone the recording never made.
+//
+// Second, `RaceChartSeries` is the only place in Layline where a recorded value is a `number`. It
+// is a projection for drawing and is never written back: what a chart needs is a coordinate, and
+// what the database needs is the file's own text (see `TranscriptionChannels`).
+
+/** The channels the swappable chart offers, in pill order. `awa` is qtVlm's `AWA (calc)`. */
+export type RaceChannelKey = 'sog' | 'tws' | 'twa' | 'awa'
+
+/**
+ * A whole recording as the arrays the map and the channel chart read.
+ *
+ * Parallel arrays rather than an array of rows: both charts walk one channel at a time over
+ * thousands of rows, and this is the shape that crosses the server boundary without repeating a
+ * key per row. Every array is the same length and in file order, so index `i` is one row
+ * throughout — including `frozen` and `not_water_referenced`, which come from Row Quality
+ * assessed over the whole recording before any window narrowed it (ADR 0009).
+ */
+export interface RaceChartSeries {
+  /** The recording's bounds, restated so a chart can label an axis without scanning. */
+  first_row_time: string
+  last_row_time: string
+  /** Absolute seconds in the recording's own frame — the one time axis both charts share. */
+  row_seconds: number[]
+  latitude: (number | null)[]
+  longitude: (number | null)[]
+  /** Null is absent and draws as a break. `-1` is a wind angle, never a missing one. */
+  channels: Record<RaceChannelKey, (number | null)[]>
+  /**
+   * Whether the file writes this channel negative anywhere, which is what makes its axis
+   * −180..180 instead of 0..180. Judged over the whole recording so cropping never rescales it.
+   */
+  signed: Record<RaceChannelKey, boolean>
+  frozen: boolean[]
+  not_water_referenced: boolean[]
+  /**
+   * `SOG` below the gate. Carried so the wizard's Review step can state the same Row Quality notes
+   * the race page will, from the arrays it already has, rather than a shorter list that would look
+   * like a cleaner race.
+   */
+  low_speed: boolean[]
+  /** Empty means no Dropout could be detected at all — which a page must say, not hide. */
+  dropout_channels: DropoutChannel[]
+}
+
+/**
+ * How much of a Race Window the recording actually covers, in time and never in rows.
+ *
+ * A row count answers a question nobody asked: 6,337 rows is meaningless without the cadence, and
+ * it counts frozen rows as evidence. Seconds are what a sailor can check against their own memory
+ * of the race.
+ */
+export interface RaceCoverage {
+  /** Finish minus start, in the recording's frame. */
+  window_seconds: number
+  /** Start to the first row inside the window. A race whose recording began late. */
+  lead_gap_seconds: number
+  /** The last row inside the window to the finish — the gap a window past the last row states. */
+  tail_gap_seconds: number
+  /** Seconds spanned by rows that were measured. */
+  live_seconds: number
+  /** Seconds spanned by rows inside a Dropout, which are a copy rather than a reading. */
+  frozen_seconds: number
+  /**
+   * How many times the clock stepped backwards between consecutive in-window rows. Those steps
+   * are not durations, so they are counted rather than folded into either bucket above — which is
+   * also why the four figures sum to `window_seconds` only while this is zero.
+   */
+  backwards_steps: number
+  /** In-window rows, for the seams that genuinely need it. Never presented as coverage. */
+  row_count: number
+  /**
+   * The middle interval between consecutive in-window rows, or null below two of them.
+   *
+   * The cadence as this window actually recorded it, which is what tells an edge gap worth stating
+   * from the fraction of a sample a handle lands on between two rows (see `statesAGap`). Median, so
+   * one dropout of an hour does not become the cadence.
+   */
+  median_interval_seconds: number | null
+}
+
+/**
+ * How firmly a finding stands in the way (ADR 0009).
+ *
+ * Three levels, and the count of each that exists is the point: exactly two refusals, exactly one
+ * confirmation, and everything else a note. Adding a fourth refusal is an ADR, not a commit.
+ */
+export type RaceFindingSeverity =
+  /** Cannot proceed. A finish at or before the start, or a window with no rows in it. */
+  | 'refusal'
+  /** Proceeds once the sailor says so. Only ever a duplicate content hash. */
+  | 'confirmation'
+  /** Stated and never in the way. Recomputed at read, so it is never stored. */
+  | 'note'
+
+export interface RaceFinding {
+  severity: RaceFindingSeverity
+  /** Addressed to the sailor, and specific enough to act on. */
+  message: string
+}
+
+/**
+ * A file parsed and its bytes parked in `tmp/`, with nothing written to the database (ADR 0013).
+ *
+ * `recording_id` is generated here, before the bytes move, because the object path contains it:
+ * the id has to exist before there is anywhere to put the file, so it comes from the client rather
+ * than from a `DEFAULT` (ADR 0013). Abandoning the wizard at any step leaves exactly this — one
+ * `tmp/` object and no row.
+ *
+ * Only what the wizard draws or sends back. The staging path, the row count, the row times and the
+ * provenance figures all stay on the server: the browser has the series it charts and the findings it
+ * states, and submit re-derives everything else from the bytes rather than trusting a round trip.
+ */
+export interface StagedRecording {
+  /** Scopes the `tmp/` object to this attempt, so two uploads of one file cannot collide. */
+  upload_id: string
+  /** The id the Recording will have, fixed now because `storage_path` will contain it. */
+  recording_id: string
+  filename: string
+  /** Checked again on submit: the bytes that get written are the bytes that were charted. */
+  content_sha256: string
+  series: RaceChartSeries
+  /** Everything the file said about itself that is worth stating. Never a refusal. */
+  findings: RaceFinding[]
+}
+
+export type StageRecordingResult =
+  | { ok: true; staged: StagedRecording }
+  | { ok: false; message: string }
+
+/**
+ * What submit sends back about a staged upload: which attempt it was, and the sailor's Testimony.
+ *
+ * Nothing derived travels — no rows, no series, no coverage. The server re-reads the bytes it parked
+ * and re-parses them, so what gets written is a function of the file rather than of anything the
+ * browser could have edited on the way back. `tmp_path` is absent for the same reason: it is derived
+ * from the signed-in user and `upload_id`, never taken from the request.
+ */
+export interface SubmitRaceInput {
+  upload_id: string
+  recording_id: string
+  filename: string
+  /** Checked against the bytes in `tmp/`: the bytes written are the bytes that were charted. */
+  content_sha256: string
+  /** The recording's own naive frame, both of them. No offset, no conversion. */
+  window_start: string
+  window_finish: string
+  /** Blank is stored as null — an untitled race is normal (ADR 0010). */
+  title: string
+  /**
+   * The sailor's answer to the duplicate-hash confirmation, carried so the server can ask again.
+   *
+   * A Server Action is a public endpoint, so a confirmation that lived only in a checkbox would be
+   * one anything else could skip. False on every upload that had nothing to confirm.
+   */
+  duplicate_acknowledged: boolean
+}
+
+export type SubmitRaceResult = { ok: true; race_id: string } | { ok: false; message: string }
+
+/** A race as the Races tab lists it. */
+export interface RaceListEntry {
+  id: string
+  /**
+   * Null where the sailor gave none, and left null all the way to the screen. An untitled race is
+   * normal (ADR 0010), so a generated stand-in here would be Layline writing Testimony.
+   */
+  title: string | null
+  window_start: string
+  window_finish: string
+  filename: string
+  /** Finish minus start. The list states a duration; the detail page states the coverage. */
+  window_seconds: number
+}
+
+/** A race as its own page states it: its window, its coverage in time, and its Row Quality. */
+export interface RaceDetail {
+  id: string
+  /** Null where the sailor gave none. See `RaceListEntry.title`. */
+  title: string | null
+  window_start: string
+  window_finish: string
+  recording: {
+    id: string
+    filename: string
+    first_row_time: string
+    last_row_time: string
+    source_columns: string[]
+  }
+  coverage: RaceCoverage
+  /** Assessed over the whole Transcription, then filtered to the window (ADR 0009). */
+  quality: TranscriptionQuality
+  findings: RaceFinding[]
+}
+
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {
   timestamp: Date
