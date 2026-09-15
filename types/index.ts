@@ -652,6 +652,59 @@ export interface CalibrationEvent {
 }
 
 /**
+ * The Instrument Calibration artifact, whole: every Version ever minted and every
+ * **Calibration Event** ever written down.
+ *
+ * Read together because the **Calibration Log** is a projection over both, assembled
+ * when read. `null` in place of this is a failed read, never an empty calibration.
+ */
+export interface InstrumentCalibrationRecord {
+  artifactId: string
+  /** The Version in force. Null until the first one is recorded. */
+  currentVersionId: string | null
+  /** Ascending by `version_number`, which is mint order and not date order. */
+  versions: InstrumentCalibrationVersion[]
+  events: CalibrationEvent[]
+}
+
+/**
+ * One figure that moved between two Instrument Calibration Versions.
+ *
+ * `from` is null on the first Version — there was no previous figure, which is not
+ * the same as a previous figure of zero.
+ */
+export interface CalibrationFieldChange {
+  channel: CalibrationChannel
+  field: 'multiplier' | 'offset'
+  from: number | null
+  to: number | null
+}
+
+/**
+ * One line of the **Calibration Log** — the read-time projection, not a table.
+ *
+ * A Version arm carries the Version itself plus what it changed, computed against
+ * the previous one; an Event arm carries the hand-written act. Nothing is stored
+ * twice, so no two representations of one change can disagree (ADR 0005).
+ */
+export type CalibrationLogEntry =
+  | {
+      entry: 'version'
+      /** `effective_from`: the day the numbers went into the box. */
+      date: string
+      version: InstrumentCalibrationVersion
+      /** Every figure on the first Version; only what moved on the rest. */
+      changes: CalibrationFieldChange[]
+      isFirst: boolean
+    }
+  | {
+      entry: 'event'
+      /** `occurred_on`: the day the act was performed. */
+      date: string
+      event: CalibrationEvent
+    }
+
+/**
  * One qtVlm VDR export, as recorded. Every field but `date_order` is a fact about the
  * file, written once and never updated.
  */

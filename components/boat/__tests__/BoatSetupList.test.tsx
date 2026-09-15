@@ -12,21 +12,20 @@ function withCurrent(kind: BoatSetupKind, current: CurrentBoatSetupVersion): Boa
 
 describe('the Boat Setup list', () => {
   it('lists the four artifacts, in reading order', () => {
-    render(<BoatSetupList artifacts={EMPTY} canWrite={false} />)
+    render(<BoatSetupList artifacts={EMPTY} />)
 
     const names = screen.getAllByTestId('artifact-name').map((el) => el.textContent)
     expect(names).toEqual(['Polar', 'Crossover Chart', 'Rig Tune', 'Instrument Calibration'])
   })
 
   it('says "not recorded" against each one on an empty database', () => {
-    render(<BoatSetupList artifacts={EMPTY} canWrite={false} />)
+    render(<BoatSetupList artifacts={EMPTY} />)
     expect(screen.getAllByTestId('not-recorded')).toHaveLength(4)
   })
 
   it('states the Version in force by number and effective date', () => {
     render(
       <BoatSetupList
-        canWrite={false}
         artifacts={withCurrent('polar', { version_number: 2, effective_from: '2026-06-14' })}
       />
     )
@@ -39,52 +38,58 @@ describe('the Boat Setup list', () => {
   it('opens a recorded artifact to its own detail', () => {
     render(
       <BoatSetupList
-        canWrite={false}
-        artifacts={withCurrent('crossover_chart', {
+        artifacts={withCurrent('instrument_calibration', {
           version_number: 1,
           effective_from: '2026-05-02',
         })}
       />
     )
 
-    expect(screen.getByRole('link', { name: /Crossover Chart/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
       'href',
-      '/boat-management/crossover-chart'
+      '/boat-management/instrument-calibration'
     )
   })
 
-  it('leaves an unrecorded artifact inert for a viewer — there is nothing to open', () => {
-    render(<BoatSetupList artifacts={EMPTY} canWrite={false} />)
+  it('opens an artifact with a detail screen even before its first Version', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
 
-    // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control. A viewer cannot record a first Version,
-    // so an unrecorded artifact holds nothing for them either way.
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    // Gating this on a Version would leave the archive the app ships in — four
+    // artifacts, none recorded — with no way to fill itself, because entering the
+    // first Version is one of the things that screen is for.
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
+      'href',
+      '/boat-management/instrument-calibration'
+    )
   })
 
-  it('opens the Rig Tune for an admin before anything is recorded', () => {
-    // Otherwise the first Version can never be typed: the Rig Tune is a form, so its
-    // screen is where an unrecorded artifact stops being unrecorded, and a row that
-    // waits for a Version to exist waits forever.
-    render(<BoatSetupList artifacts={EMPTY} canWrite />)
+  it('opens the Rig Tune before anything is recorded, for the same reason', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
 
+    // A Rig Tune is a form and has no file behind it (ADR 0007), so its screen is
+    // where an unrecorded artifact stops being unrecorded — and a row that waits for
+    // a Version before it opens waits forever.
     expect(screen.getByRole('link', { name: /Rig Tune/ })).toHaveAttribute(
       'href',
       '/boat-management/rig-tune'
     )
-    // Only that one. The other three have no screen to open yet (LAY-106, LAY-108),
-    // and a row leading to a 404 is worse than an inert one.
-    expect(screen.getAllByRole('link')).toHaveLength(1)
-    // And it still says what it is: an admin is being shown an empty form to fill,
-    // not a Version that exists.
+    // And the row still says what it is: an empty form is being offered, not a Version.
     expect(screen.getAllByTestId('not-recorded')).toHaveLength(4)
+  })
+
+  it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    // The same choice LAY-102 made for a locked drawer row: a row that leads
+    // nowhere is not dressed as a control. Polar and the Crossover Chart join the
+    // link the moment LAY-106 lands their upload screens.
+    expect(screen.queryAllByRole('link')).toHaveLength(2)
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 
   it('offers no upload or download anywhere, on any row', () => {
     render(
       <BoatSetupList
-        canWrite={false}
         artifacts={[
           { kind: 'polar', current: { version_number: 1, effective_from: '2026-05-02' } },
           {
@@ -110,14 +115,14 @@ describe('the Boat Setup list', () => {
   })
 
   it('carries no placeholder identity copy, and no fifth artifact by name', () => {
-    render(<BoatSetupList artifacts={EMPTY} canWrite={false} />)
+    render(<BoatSetupList artifacts={EMPTY} />)
     expect(screen.getByTestId('boat-setup-list').textContent).not.toMatch(
       /Wayward Wind|J\/105|Sail Definitions/
     )
   })
 
   it('is four artifacts, not five — Sail Definitions belong to the Crossover Chart', () => {
-    render(<BoatSetupList artifacts={EMPTY} canWrite={false} />)
+    render(<BoatSetupList artifacts={EMPTY} />)
     // ADR 0012: a Crossover Chart carries its own Sail Definitions, which is why
     // there are four Version pointers and not five.
     expect(screen.getAllByTestId('artifact-name')).toHaveLength(4)
