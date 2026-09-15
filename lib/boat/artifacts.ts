@@ -1,4 +1,4 @@
-import type { BoatSetupKind } from '@/types'
+import type { BoatSetupKind, FileBackedBoatSetupKind } from '@/types'
 
 /**
  * The four **Boat Setup** artifacts as the app reads them: their order, their
@@ -33,10 +33,6 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
 /**
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
- *
- * None of the four routes exists yet — they arrive with the upload and form flows in
- * LAY-106 to LAY-108. Nothing links to one until then either: a row is only made a
- * link once it has a Version to open, and on an empty archive there are none.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -45,6 +41,35 @@ const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   instrument_calibration: 'instrument-calibration',
 }
 
+/**
+ * The kinds whose detail screen exists. The Polar's arrived with LAY-106; the
+ * Crossover Chart's and the two hand-entered forms follow in LAY-107 and LAY-108.
+ *
+ * Read by the list to decide whether a row may be a link at all, so nothing on the
+ * screen leads anywhere that is not built. It disappears when the fourth one lands.
+ */
+export const BOAT_SETUP_DETAIL_BUILT = ['polar'] as const satisfies readonly BoatSetupKind[]
+
+export function hasDetailScreen(kind: BoatSetupKind): boolean {
+  return (BOAT_SETUP_DETAIL_BUILT as readonly BoatSetupKind[]).includes(kind)
+}
+
 export function boatSetupHref(kind: BoatSetupKind): string {
   return `/boat-management/${BOAT_SETUP_SLUG[kind]}`
+}
+
+/** One Version's own screen, which every Version has whether or not it is the one in force. */
+export function boatSetupVersionHref(kind: BoatSetupKind, versionId: string): string {
+  return `${boatSetupHref(kind)}/${versionId}`
+}
+
+/**
+ * Where a Version's original bytes are downloaded from. Only the two file-backed kinds have
+ * bytes at all, which is why the type says so.
+ */
+export function boatSetupDownloadHref(
+  kind: FileBackedBoatSetupKind,
+  versionId: string
+): string {
+  return `/api/boat-setup/${BOAT_SETUP_SLUG[kind]}/${versionId}/download`
 }

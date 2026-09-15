@@ -112,10 +112,33 @@ test.describe('the locked boat sections', () => {
     await expect(page).toHaveURL(/\/$/)
   })
 
+  test('serves a guest no part of the Polar, at either depth', async ({ page }) => {
+    // The Polar is the first artifact with screens of its own beneath Boat
+    // management, and a nested route is the easy one to leave open: the guard is per
+    // page, so the child does not inherit the parent's. Both are asked for directly.
+    for (const route of [
+      '/boat-management/polar',
+      '/boat-management/polar/3f1b2c4d-0000-4000-8000-000000000001',
+    ]) {
+      // Bare `page.goto()`, deliberately: the redirect is the assertion and only
+      // `goto` returns a response. Nothing is clicked on this navigation, so the
+      // hydration trap `gotoHydrated` exists for cannot bite.
+      const response = await page.goto(route)
+
+      expect(response?.status()).toBe(200)
+      expect(response?.url()).toContain('signin=%2Fboat-management%2Fpolar')
+      // Nothing of the grid, and nothing of the boat: the whole screen, not just
+      // the upload, is behind the session.
+      await expect(page.getByTestId('polar-grid')).toHaveCount(0)
+      await expect(page.getByTestId('polar-version-list')).toHaveCount(0)
+      await expect(page.getByTestId('polar-upload-panel')).toHaveCount(0)
+      await expect(page.locator('body')).not.toContainText('Handsome Pete')
+    }
+  })
+
   test('serves a guest no part of a boat screen', async ({ page }) => {
-    // The one bare `page.goto()` in the suite, deliberately: the redirect chain is
-    // the assertion, and only `goto` returns a response. Nothing is clicked on this
-    // navigation, so the hydration trap `gotoHydrated` exists for cannot bite.
+    // Bare `page.goto()` for the same reason as the Polar test above: the redirect
+    // chain is the assertion, and only `goto` hands back a response to assert on.
     const response = await page.goto('/boat-performance')
 
     expect(response?.status()).toBe(200)

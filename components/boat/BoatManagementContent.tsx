@@ -10,7 +10,11 @@ import type { BoatSetup } from '@/types'
 interface BoatManagementContentProps {
   /** `null` when the boat could not be read — not an empty boat. */
   page: BoatSetup | null
-  /** Whether this sailor may edit the identity: `admin` only (ADR 0019). */
+  /**
+   * Whether this sailor may write: `admin` only (ADR 0019). It decides whether the
+   * identity is editable in place, and whether an artifact with nothing recorded is
+   * still a way in to the screen where the first Version is added.
+   */
   canWrite: boolean
 }
 
@@ -81,7 +85,7 @@ export default function BoatManagementContent({
       ) : (
         <div style={{ padding: spacing(4) }}>
           <div style={EYEBROW_STYLE}>Boat setup</div>
-          <BoatSetupList artifacts={page.artifacts} />
+          <BoatSetupList artifacts={page.artifacts} canWrite={canWrite} />
         </div>
       )}
     </div>

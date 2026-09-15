@@ -1,4 +1,4 @@
-import { formatCalendarDate } from '../calendarDate'
+import { formatCalendarDate, isCalendarDate } from '../calendarDate'
 
 /**
  * A Boat Setup Version's `effective_from` is a Postgres `date` — a calendar day a
@@ -30,5 +30,44 @@ describe('formatCalendarDate', () => {
   it('handles both ends of the year without an off-by-one month', () => {
     expect(formatCalendarDate('2026-01-01')).toBe('1 Jan 2026')
     expect(formatCalendarDate('2026-12-31')).toBe('31 Dec 2026')
+  })
+})
+
+/**
+ * The guard in front of a `date` column. The shape alone is not enough: `2026-02-30` matches it,
+ * and Postgres refuses the value far later than the sailor can usefully be told about it.
+ */
+describe('isCalendarDate', () => {
+  it('accepts a day the month has', () => {
+    expect(isCalendarDate('2026-06-14')).toBe(true)
+    expect(isCalendarDate('2026-01-01')).toBe(true)
+    expect(isCalendarDate('2026-12-31')).toBe(true)
+  })
+
+  it('refuses a date that does not exist', () => {
+    // The hole a bare `YYYY-MM-DD` regex leaves, and the one `new Date()` papers over by rolling
+    // February 30th forward to March 2nd instead of objecting to it.
+    expect(isCalendarDate('2026-02-30')).toBe(false)
+    expect(isCalendarDate('2026-04-31')).toBe(false)
+    expect(isCalendarDate('2026-13-01')).toBe(false)
+    expect(isCalendarDate('2026-00-10')).toBe(false)
+    expect(isCalendarDate('2026-06-00')).toBe(false)
+    expect(isCalendarDate('2026-06-32')).toBe(false)
+  })
+
+  it('knows which Februaries have a 29th', () => {
+    expect(isCalendarDate('2028-02-29')).toBe(true)
+    expect(isCalendarDate('2026-02-29')).toBe(false)
+    // The centuries, which the four-year rule alone gets wrong in both directions.
+    expect(isCalendarDate('2000-02-29')).toBe(true)
+    expect(isCalendarDate('1900-02-29')).toBe(false)
+  })
+
+  it('refuses anything that is not the shape at all', () => {
+    expect(isCalendarDate('')).toBe(false)
+    expect(isCalendarDate('14 Jun 2026')).toBe(false)
+    expect(isCalendarDate('2026-6-14')).toBe(false)
+    // A moment is not a calendar date, and accepting one would smuggle a zone in.
+    expect(isCalendarDate('2026-06-14T00:00:00Z')).toBe(false)
   })
 })
