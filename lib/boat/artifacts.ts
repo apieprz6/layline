@@ -34,8 +34,8 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
  *
- * The four routes arrive with the upload and form flows in LAY-106 to LAY-108;
- * `BOAT_SETUP_DETAIL_BUILT` says which are here.
+ * The Rig Tune's and the Instrument Calibration's screens are here; the two upload
+ * flows arrive with LAY-106. `BOAT_SETUP_DETAIL_BUILT` says which are which.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -59,8 +59,12 @@ export function boatSetupHref(kind: BoatSetupKind): string {
  *
  * So the gate is the screen, not the pointer. A kind absent from here is still inert
  * text, because that row genuinely leads nowhere.
+ *
+ * Nor is the gate the *role*: a viewer opening the Rig Tune with nothing recorded reads
+ * why there is nothing to read (ADR 0019 governs writes only), which is an answer about
+ * the boat and worth a screen.
  */
-const BOAT_SETUP_DETAIL_BUILT: readonly BoatSetupKind[] = ['instrument_calibration']
+const BOAT_SETUP_DETAIL_BUILT: readonly BoatSetupKind[] = ['rig_tune', 'instrument_calibration']
 
 export function hasDetailScreen(kind: BoatSetupKind): boolean {
   return BOAT_SETUP_DETAIL_BUILT.includes(kind)

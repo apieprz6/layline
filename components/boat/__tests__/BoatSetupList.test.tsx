@@ -63,13 +63,27 @@ describe('the Boat Setup list', () => {
     )
   })
 
+  it('opens the Rig Tune before anything is recorded, for the same reason', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    // A Rig Tune is a form and has no file behind it (ADR 0007), so its screen is
+    // where an unrecorded artifact stops being unrecorded — and a row that waits for
+    // a Version before it opens waits forever.
+    expect(screen.getByRole('link', { name: /Rig Tune/ })).toHaveAttribute(
+      'href',
+      '/boat-management/rig-tune'
+    )
+    // And the row still says what it is: an empty form is being offered, not a Version.
+    expect(screen.getAllByTestId('not-recorded')).toHaveLength(4)
+  })
+
   it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
     render(<BoatSetupList artifacts={EMPTY} />)
 
     // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control. Polar, Crossover Chart and Rig Tune
-    // join the link the moment LAY-106 and LAY-107 land their screens.
-    expect(screen.queryAllByRole('link')).toHaveLength(1)
+    // nowhere is not dressed as a control. Polar and the Crossover Chart join the
+    // link the moment LAY-106 lands their upload screens.
+    expect(screen.queryAllByRole('link')).toHaveLength(2)
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 

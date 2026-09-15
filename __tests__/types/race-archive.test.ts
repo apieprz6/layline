@@ -244,6 +244,8 @@ describe('the twelve row types', () => {
       label: 'medium',
       note: null,
       shrouds,
+      // The Gaps still describe the rig: the Base Tune has not been re-measured under them.
+      gaps_stale: false,
     }
 
     expect(Object.keys(band.shrouds)).toEqual(['V1', 'D1', 'D2'])
