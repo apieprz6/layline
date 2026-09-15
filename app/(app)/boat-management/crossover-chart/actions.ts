@@ -12,11 +12,12 @@ import {
   parseCrossoverDefinitionsFile,
 } from '@/services/boat/crossoverDefinitionsFile'
 import { CROSSOVER_GRID_FORMAT, parseCrossoverGridFile } from '@/services/boat/crossoverGridFile'
+import { crossoverDefinitionUsage } from '@/services/boat/crossoverDefinitionUsage'
 import {
-  crossoverDefinitionUsage,
   validateCrossoverChartPayload,
   type ValidCrossoverChartPayload,
 } from '@/services/boat/crossoverPayload'
+import { nextBoatSetupVersionNumber } from '@/services/boat/nextBoatSetupVersionNumber'
 import { readBoatSetupUpload, type BoatSetupUpload } from '@/services/boat/readBoatSetupUpload'
 import type {
   CrossoverChartUploadPreview,
@@ -366,39 +367,7 @@ function checkUnchanged(
   return null
 }
 
-/**
- * What the next Version would be numbered, for the confirm button to say.
- *
- * Advisory: the real number is computed inside `mint_boat_setup_version`'s transaction, where
- * `UNIQUE (artifact_id, version_number)` settles a race. Falls back to 1, which is what an empty
- * archive would give anyway.
- */
-async function nextVersionNumber(): Promise<number> {
-  try {
-    const supabase = await createClient()
-
-    const { data, error } = await supabase
-      .from('boat_setup_versions')
-      .select('version_number')
-      .eq('kind', 'crossover_chart')
-      .order('version_number', { ascending: false })
-      .limit(1)
-      .maybeSingle<{ version_number: number }>()
-
-    if (error) {
-      console.error(
-        'Crossover Chart upload: could not read the current version number:',
-        error.message
-      )
-      return 1
-    }
-
-    return (data?.version_number ?? 0) + 1
-  } catch (thrown: unknown) {
-    console.error(
-      'Crossover Chart upload: Supabase client unavailable while numbering:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return 1
-  }
+/** What the next Version would be numbered, for the confirm button to say. Advisory only. */
+function nextVersionNumber(): Promise<number> {
+  return nextBoatSetupVersionNumber({ kind: 'crossover_chart', label: 'Crossover Chart' })
 }

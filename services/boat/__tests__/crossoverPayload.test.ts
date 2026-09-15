@@ -1,6 +1,6 @@
 import {
-  crossoverDefinitionUsage,
   validateCrossoverChartPayload,
+  validateCrossoverChartStructure,
 } from '@/services/boat/crossoverPayload'
 import type { CrossoverChartPayload } from '@/types'
 
@@ -12,6 +12,10 @@ import type { CrossoverChartPayload } from '@/types'
  * `cells` and `sail_definitions`; it cannot see that the rows are the width of the wind speed axis
  * or that every cell resolves to a definition. Those live here, and so does the one rule that is
  * about Layline's vocabulary rather than about the file: no legacy sail spelling gets in.
+ *
+ * That last rule is the one difference between the two gates the module exports, and the last
+ * `describe` here is about the difference: the write gate refuses a legacy spelling, and the
+ * reader's structural gate hands back a Version recorded before the refusal existed.
  *
  * The grid below is qtVlm's documented example (p. 33) trimmed to a shape a reader can check by
  * eye. The definitions are Layline's own, because the vocabulary rule is about Layline's names.
@@ -309,31 +313,48 @@ describe('validateCrossoverChartPayload', () => {
   })
 })
 
-describe('crossoverDefinitionUsage', () => {
-  it('counts the cells each definition is called for by, in the definitions own order', () => {
-    const usage = crossoverDefinitionUsage(payload())
-
-    expect(usage).toEqual([
-      { definition: { number: 1, label: 'Main + Jib 1' }, cells: 2 },
-      { definition: { number: 2, label: 'Main + Jib 2' }, cells: 2 },
-      { definition: { number: 6, label: 'Main + A3' }, cells: 3 },
-      { definition: { number: 8, label: 'Main + A2' }, cells: 2 },
-    ])
+describe('validateCrossoverChartStructure', () => {
+  /**
+   * The reader's gate, which is the write gate minus the naming policy.
+   *
+   * A rename table that grows must not reach back into the archive: the Version below was authored
+   * and accepted before `reaching-spin` was a refusal, and it is still the chart the boat sailed
+   * with. The write gate refuses it, so nothing like it can be recorded from now on; the read path
+   * hands it back, because the alternative is a screen that says "No such Crossover Chart Version"
+   * about a Version that is right there — the same mistake the download route refuses to make.
+   */
+  const legacy = payload({
+    sail_definitions: [
+      { number: 1, label: 'Main + Jib 1' },
+      { number: 2, label: 'Main + Jib 2' },
+      { number: 6, label: 'Main + Reaching Spin' },
+      { number: 8, label: 'Main + A2' },
+    ],
   })
 
-  it('reports zero for a definition no cell references', () => {
-    const usage = crossoverDefinitionUsage(
+  it('hands back a stored chart the naming policy has since come to refuse', () => {
+    expect(validateCrossoverChartPayload(legacy).ok).toBe(false)
+
+    expect(validateCrossoverChartStructure(legacy)).toEqual({ ok: true, payload: legacy })
+  })
+
+  it('still refuses a chart that cannot be drawn', () => {
+    // Structure is checked both ways round: a row that is not the width of its own wind speed axis
+    // would render as a table with holes in it, and a cell naming no sail names nothing.
+    const short = validateCrossoverChartStructure(
+      payload({ cells: [[1, 1, 2], [6, 6], [8, 8, 6]] })
+    )
+    const dangling = validateCrossoverChartStructure(
       payload({
-        sail_definitions: [
-          { number: 1, label: 'Main + Jib 1' },
-          { number: 2, label: 'Main + Jib 2' },
-          { number: 6, label: 'Main + A3' },
-          { number: 7, label: 'Reef + A3' },
-          { number: 8, label: 'Main + A2' },
+        cells: [
+          [1, 1, 2],
+          [6, 6, 2],
+          [8, 8, 9],
         ],
       })
     )
 
-    expect(usage.find((entry) => entry.definition.number === 7)?.cells).toBe(0)
+    expect(short.ok).toBe(false)
+    expect(dangling.ok).toBe(false)
   })
 })

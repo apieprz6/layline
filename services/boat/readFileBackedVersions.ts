@@ -53,6 +53,13 @@ export interface FileBackedVersionReaderOptions<Payload> {
   label: string
   /** What its payload is, for the log line that says a stored one is not it: `a grid`, `a chart`. */
   payloadIs: string
+  /**
+   * Structure only. A payload that fails this is reported as unreadable, so what is asked here must
+   * be what the payload has to be to be drawn at all — never a policy that may tighten later, which
+   * would make a Version already in the archive vanish. The Crossover Chart hands over
+   * `validateCrossoverChartStructure` and keeps its sail-naming rule on the write path for exactly
+   * that reason.
+   */
   validate: PayloadValidator<Payload>
 }
 

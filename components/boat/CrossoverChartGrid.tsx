@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from 'react'
-import { crossoverDefinitionUsage } from '@/services/boat/crossoverPayload'
+import { crossoverDefinitionUsage } from '@/services/boat/crossoverDefinitionUsage'
 import { spacing } from '@/lib/utils/design'
 import type { CrossoverChartPayload } from '@/types'
 
@@ -164,9 +164,9 @@ const CORNER_STYLE: CSSProperties = {
   ...HEAD_CELL_STYLE,
   width: 40,
   minWidth: 40,
-  padding: '4px 4px',
-  // Small enough for `°\kn` to sit in the corner without widening the angle column.
-  fontSize: '0.5625rem',
+  // Tighter than a wind-speed heading so `°\kn` sits in the corner without widening the angle
+  // column, at the table's own `--text-xs` rather than a size of its own.
+  padding: '4px 2px',
 }
 
 const ROW_HEAD_STYLE: CSSProperties = {

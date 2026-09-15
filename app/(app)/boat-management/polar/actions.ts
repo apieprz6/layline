@@ -8,6 +8,7 @@ import { BOAT_BUCKET, boatSetupObjectPath } from '@/lib/storage/paths'
 import { isCalendarDate } from '@/lib/utils/calendarDate'
 import { createClient } from '@/lib/supabase/server'
 import { parsePolarFile } from '@/services/boat/polarFile'
+import { nextBoatSetupVersionNumber } from '@/services/boat/nextBoatSetupVersionNumber'
 import { validatePolarPayload, type ValidPolarPayload } from '@/services/boat/polarPayload'
 import { readBoatSetupUpload, type BoatSetupUpload } from '@/services/boat/readBoatSetupUpload'
 import { polarSuppression } from '@/services/boat/polarSyntheticRows'
@@ -232,36 +233,7 @@ export async function commitPolarVersion(formData: FormData): Promise<CommitPola
   return { ok: true, version_id: versionId, version_number: versionNumber }
 }
 
-/**
- * What the next Version would be numbered, for the confirm button to say.
- *
- * Advisory: the real number is computed inside `mint_boat_setup_version`'s transaction, where
- * `UNIQUE (artifact_id, version_number)` settles a race. Falls back to 1, which is what an empty
- * archive would give anyway.
- */
-async function nextVersionNumber(): Promise<number> {
-  try {
-    const supabase = await createClient()
-
-    const { data, error } = await supabase
-      .from('boat_setup_versions')
-      .select('version_number')
-      .eq('kind', 'polar')
-      .order('version_number', { ascending: false })
-      .limit(1)
-      .maybeSingle<{ version_number: number }>()
-
-    if (error) {
-      console.error('Polar upload: could not read the current version number:', error.message)
-      return 1
-    }
-
-    return (data?.version_number ?? 0) + 1
-  } catch (thrown: unknown) {
-    console.error(
-      'Polar upload: Supabase client unavailable while numbering:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return 1
-  }
+/** What the next Version would be numbered, for the confirm button to say. Advisory only. */
+function nextVersionNumber(): Promise<number> {
+  return nextBoatSetupVersionNumber({ kind: 'polar', label: 'Polar' })
 }

@@ -24,6 +24,17 @@
  * exactly the overwriting the core beliefs forbid. So the message names the correction and the
  * admin makes it.
  *
+ * It is also the one rule an already-stored Version is not held to. Two schemas leave here: the
+ * **structure**, which is rules 1 and 2 and is what a payload must be to *be* a chart, and the
+ * **write gate**, which is that plus rule 3. The reader validates structure only, because a policy
+ * can tighten — the next rename is one line in `RENAMED_SAILS` — and a chart written years before
+ * that line existed is still the chart the boat sailed with. Running the whole gate on the way out
+ * would turn such a Version into "No such Crossover Chart Version", which is exactly the mistake
+ * the download route already refuses to make: a rule tightened later must not take the sailor's own
+ * file down with it. Structure is different, and is checked both ways for the reason
+ * `readFileBackedVersions` gives — a grid whose rows are not the width of its own wind speed axis
+ * cannot be drawn at all.
+ *
  * The two halves are one payload on purpose. Two artifacts with separate version histories would
  * let a Race freeze a pairing that never existed aboard the boat — a grid from March against
  * definitions from June, with sail 7 meaning two different things (ADR 0012). So the definitions
@@ -38,7 +49,7 @@
 import { z } from 'zod'
 
 import { MAX_TWA, ascendingAxis } from '@/services/boat/gridPayloadAxis'
-import type { CrossoverChartPayload, CrossoverDefinitionUsage } from '@/types'
+import type { CrossoverChartPayload } from '@/types'
 
 /**
  * A sail Layline has renamed, and what it is called now.
@@ -71,7 +82,12 @@ const sailDefinitionSchema = z.strictObject({
   label: z.string().trim().min(1, 'a sail definition needs a label; a bare number names nothing'),
 })
 
-export const crossoverChartPayloadSchema = z
+/**
+ * What a payload must be to be a chart at all: the shape, and the two rules about how its own parts
+ * fit together. Everything here would make the grid unrenderable if it were false, which is why it
+ * is checked on the way out of the database as well as on the way in.
+ */
+export const crossoverChartStructureSchema = z
   .strictObject({
     twa_axis: ascendingAxis('twa_axis', MAX_TWA),
     tws_axis: ascendingAxis('tws_axis'),
@@ -158,18 +174,6 @@ export const crossoverChartPayloadSchema = z
           message: `sail ${definition.number} is defined twice, at ${first} and ${index}; a cell holding it would resolve to both`,
         })
       }
-
-      for (const renamed of RENAMED_SAILS) {
-        const found = definition.label.match(renamed.was)
-        if (found === null) continue
-
-        ctx.issues.push({
-          code: 'custom',
-          input: definition.label,
-          path: ['sail_definitions', index, 'label'],
-          message: `${JSON.stringify(definition.label)} uses the superseded name ${JSON.stringify(found[0])}; that sail is the ${renamed.now}, so this definition is ${JSON.stringify(definition.label.replace(renamed.was, renamed.now))}. Correct it in the file and upload again — Layline will not rewrite what you gave it.`,
-        })
-      }
     }
 
     // Reported once per number rather than once per cell: a chart missing sail 7 is one mistake,
@@ -193,6 +197,30 @@ export const crossoverChartPayloadSchema = z
   })
 
 /**
+ * The structure, plus the one rule that is Layline's own: no superseded sail name gets written.
+ *
+ * This is the gate every write goes through, and only writes. The corrections are a table that may
+ * grow, and a payload already in the archive was authored against the table as it stood — so the
+ * reader is given the structure alone, and a stored Version stays readable when a name policy
+ * tightens.
+ */
+export const crossoverChartPayloadSchema = crossoverChartStructureSchema.check((ctx) => {
+  for (const [index, definition] of ctx.value.sail_definitions.entries()) {
+    for (const renamed of RENAMED_SAILS) {
+      const found = definition.label.match(renamed.was)
+      if (found === null) continue
+
+      ctx.issues.push({
+        code: 'custom',
+        input: definition.label,
+        path: ['sail_definitions', index, 'label'],
+        message: `${JSON.stringify(definition.label)} uses the superseded name ${JSON.stringify(found[0])}; that sail is the ${renamed.now}, so this definition is ${JSON.stringify(definition.label.replace(renamed.was, renamed.now))}. Correct it in the file and upload again — Layline will not rewrite what you gave it.`,
+      })
+    }
+  }
+})
+
+/**
  * A payload that has passed the schema. Identical in shape to `CrossoverChartPayload` except that
  * `source` is no longer optional, which is what the schema adds.
  */
@@ -208,14 +236,28 @@ export type CrossoverChartPayloadValidation =
   | { ok: false; issues: string[] }
 
 /**
- * Validate a payload, reporting every problem rather than only the first.
+ * Validate a payload for writing, reporting every problem rather than only the first.
  *
  * Each issue is rendered as `path: message`, because "the grid calls for sail 7, which no
  * definition defines" is a fixable complaint and "invalid payload" is not.
  */
 export function validateCrossoverChartPayload(payload: unknown): CrossoverChartPayloadValidation {
-  const result = crossoverChartPayloadSchema.safeParse(payload)
+  return report(crossoverChartPayloadSchema.safeParse(payload))
+}
 
+/**
+ * Validate a payload that has already been written: is it still a chart that can be drawn?
+ *
+ * The reader's gate, and deliberately the smaller one. The naming policy is not asked of a Version
+ * the archive already holds — see the note at the top of this file.
+ */
+export function validateCrossoverChartStructure(payload: unknown): CrossoverChartPayloadValidation {
+  return report(crossoverChartStructureSchema.safeParse(payload))
+}
+
+function report(
+  result: z.ZodSafeParseResult<ValidCrossoverChartPayload>
+): CrossoverChartPayloadValidation {
   if (result.success) return { ok: true, payload: result.data }
 
   return {
@@ -225,32 +267,4 @@ export function validateCrossoverChartPayload(payload: unknown): CrossoverChartP
       return path === '' ? issue.message : `${path}: ${issue.message}`
     }),
   }
-}
-
-/**
- * How much of the chart each definition accounts for, in the definitions' own order.
- *
- * Derived at read rather than stored (ADR 0009): it is a fact about the payload that the payload
- * already contains, and the legend that shows it must be able to re-answer the question about a
- * Version written years ago.
- *
- * Zero is the answer worth having. Sail 7 of the boat's own chart is defined and called for by no
- * cell at all, and sail 4 by five cells out of 338 — "rarely used" and "never recommended" are
- * both real states, and the legend says so rather than dropping the row.
- */
-export function crossoverDefinitionUsage(
-  payload: CrossoverChartPayload
-): CrossoverDefinitionUsage[] {
-  const counts = new Map<number, number>()
-
-  for (const row of payload.cells) {
-    for (const sail of row) {
-      counts.set(sail, (counts.get(sail) ?? 0) + 1)
-    }
-  }
-
-  return payload.sail_definitions.map((definition) => ({
-    definition,
-    cells: counts.get(definition.number) ?? 0,
-  }))
 }
