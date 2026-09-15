@@ -30,12 +30,37 @@ const range = jest.fn((fromRow: number, toRow: number) => {
   }
 })
 
+/** The sailor's Testimony, as the two annotation tables hold it. Empty by default. */
+let sailEntries: Record<string, unknown>[] = []
+let seaStateEntries: Record<string, unknown>[] = []
+let annotationError: { message: string } | null = null
+
+/** Both annotation reads have the same shape: select, eq, order, and no paging. */
+const annotationTable = (rows: () => Record<string, unknown>[]) => ({
+  select: () => ({
+    eq: () => ({
+      order: () => ({
+        returns: async () =>
+          annotationError !== null
+            ? { data: null, error: annotationError }
+            : { data: rows(), error: null },
+      }),
+    }),
+  }),
+})
+
 const from = jest.fn((table: string) => {
   if (table === 'races') {
     return { select: () => ({ eq: () => ({ maybeSingle: raceMaybeSingle }) }) }
   }
   if (table === 'recording_rows') {
     return { select: () => ({ eq: () => ({ order: () => ({ range }) }) }) }
+  }
+  if (table === 'race_sail_entries') {
+    return annotationTable(() => sailEntries)
+  }
+  if (table === 'race_sea_state_entries') {
+    return annotationTable(() => seaStateEntries)
   }
   throw new Error(`readRace asked for an unexpected table: ${table}`)
 })
@@ -115,6 +140,9 @@ describe('readRace', () => {
     ranges.length = 0
     stored = LATCHED_FEED
     pageError = null
+    sailEntries = []
+    seaStateEntries = []
+    annotationError = null
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -280,5 +308,79 @@ describe('readRace', () => {
 
     await expect(readRace('race-1')).resolves.toBeNull()
     expect(consoleError).toHaveBeenCalled()
+  })
+
+  describe('the sailor’s Testimony', () => {
+    it('states an unannotated race as two empty lists', async () => {
+      // Which the page renders as "not recorded". An empty list is a legal, ordinary race (ADR
+      // 0010), so this is not a failure and does not read like one here either.
+      const race = await readRace('race-1')
+
+      expect(race?.annotations).toEqual({ sails: [], sea_state: [] })
+    })
+
+    it('reads each kind as one ordered list, with the sails as a set in inventory order', async () => {
+      sailEntries = [
+        {
+          at: '2026-08-22 10:40:00',
+          reef: 'full',
+          // Returned kite-first by the join, deliberately: order comes from `sort_order`, never from
+          // the order rows happen to arrive in.
+          race_sail_entry_sails: [
+            { sails: { key: 'A2', label: 'A2', sort_order: 5 } },
+            { sails: { key: 'main', label: 'Main', sort_order: 1 } },
+          ],
+        },
+        {
+          at: '2026-08-22 11:02:00',
+          reef: 'reef-1',
+          race_sail_entry_sails: [{ sails: { key: 'main', label: 'Main', sort_order: 1 } }],
+        },
+      ]
+      seaStateEntries = [{ at: '2026-08-22 11:01:30', sea_state: 'moderate' }]
+
+      const race = await readRace('race-1')
+
+      expect(race?.annotations.sails).toEqual([
+        {
+          at: '2026-08-22 10:40:00',
+          reef: 'full',
+          sails: [
+            { key: 'main', label: 'Main' },
+            { key: 'A2', label: 'A2' },
+          ],
+        },
+        { at: '2026-08-22 11:02:00', reef: 'reef-1', sails: [{ key: 'main', label: 'Main' }] },
+      ])
+      expect(race?.annotations.sea_state).toEqual([
+        { at: '2026-08-22 11:01:30', sea_state: 'moderate' },
+      ])
+    })
+
+    it('keeps an entry timestamped before the window, because the sails were set before the start', async () => {
+      sailEntries = [
+        {
+          at: '2026-08-22 10:40:00',
+          reef: 'full',
+          race_sail_entry_sails: [{ sails: { key: 'main', label: 'Main', sort_order: 1 } }],
+        },
+      ]
+
+      const race = await readRace('race-1')
+
+      expect(race?.annotations.sails[0].at).toBe('2026-08-22 10:40:00')
+    })
+
+    it('refuses the page when the Testimony cannot be read, rather than saying none was given', async () => {
+      // The failure mode this exists for: an empty list means the sailor recorded nothing, so a
+      // failed read rendered as one would have Layline state that the sailor said nothing.
+      annotationError = { message: 'statement timeout' }
+
+      await expect(readRace('race-1')).resolves.toBeNull()
+      expect(consoleError).toHaveBeenCalledWith(
+        'Race: annotation read failed:',
+        'statement timeout'
+      )
+    })
   })
 })

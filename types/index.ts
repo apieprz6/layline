@@ -1545,6 +1545,74 @@ export type StageRecordingResult =
   | { ok: true; staged: StagedRecording }
   | { ok: false; message: string }
 
+// ---------------------------------------------------------------------------
+// Annotations, as the wizard holds them and as submit sends them
+// ---------------------------------------------------------------------------
+// One ordered list per kind, every entry timestamped, and no initial value sitting apart from a
+// list of changes (ADR 0010). An empty list is legal and means the race is not remembered — so
+// none of these has a default, and nothing here is pre-selected.
+//
+// A draft is in absolute seconds of the recording's own naive frame, because that is the axis the
+// charts are tapped on; a submission is in stamps, because that is what a `timestamp` column
+// takes. Neither is bounded by the Race Window: the sails were set before the start.
+
+/**
+ * One sail as a picker offers it: the id an entry stores, and the name the sailor reads.
+ *
+ * `retired_on` travels because a retired sail was still flown before it was retired, so a race in
+ * the archive from last season has to be able to name it. The picker offers what was available on
+ * the race's own day rather than what is in the locker today.
+ */
+export interface SailChoice {
+  id: string
+  key: string
+  label: string
+  /** Calendar date, or null for a sail still in the locker. */
+  retired_on: string | null
+}
+
+/** One Sail Configuration as the wizard holds it, before anything has been written. */
+export interface SailEntryDraft {
+  /**
+   * Client-side identity, so the list has stable keys and one entry can be the selected one. Not
+   * sent and not stored: the database's own key is `(race_id, at)`.
+   */
+  key: string
+  /** Absolute seconds in the recording's own naive frame. */
+  at: number
+  /**
+   * The set of Sails flown, by `sails.id`, in inventory order. Empty while the sailor is still
+   * choosing — and refused on submit, which is what the deferred `race_sail_entries_non_empty`
+   * trigger says too.
+   */
+  sail_ids: string[]
+  /** Null until stated. Nothing is pre-selected, so there is no `full` by default. */
+  reef: ReefState | null
+}
+
+/** One Sea State reading as the wizard holds it. */
+export interface SeaStateEntryDraft {
+  key: string
+  at: number
+  /** Null until stated, for the same reason `SailEntryDraft.reef` is. */
+  sea_state: SeaState | null
+}
+
+/** One Sail Configuration on its way to the database, with everything stated. */
+export interface SubmitSailEntry {
+  /** The recording's own naive frame. Unbounded by the window. */
+  at: string
+  reef: ReefState
+  /** At least one, by `sails.id`. */
+  sail_ids: string[]
+}
+
+/** One Sea State reading on its way to the database. */
+export interface SubmitSeaStateEntry {
+  at: string
+  sea_state: SeaState
+}
+
 /**
  * What submit sends back about a staged upload: which attempt it was, and the sailor's Testimony.
  *
@@ -1564,6 +1632,13 @@ export interface SubmitRaceInput {
   window_finish: string
   /** Blank is stored as null — an untitled race is normal (ADR 0010). */
   title: string
+  /**
+   * The sailor's Testimony about the sails, in time order. Empty is legal and means the sail plan
+   * was not recorded — never a stand-in configuration.
+   */
+  sails: SubmitSailEntry[]
+  /** The same, for the Sea State. Empty means not recorded. */
+  sea_state: SubmitSeaStateEntry[]
   /**
    * The sailor's answer to the duplicate-hash confirmation, carried so the server can ask again.
    *
@@ -1604,6 +1679,36 @@ export interface RaceListEntry {
   window_seconds: number
 }
 
+/**
+ * One Sail Configuration as a page states it: the sails by the name the sailor reads, and the Reef
+ * State. Named sails rather than ids, because a page states what was flying.
+ */
+export interface RaceSailAnnotation {
+  /** The recording's own naive frame. Ordered with the rest of the list, earliest first. */
+  at: string
+  reef: ReefState
+  /** In inventory order, never empty — the database refuses an entry that names no sails. */
+  sails: { key: string; label: string }[]
+}
+
+/** One Sea State reading as a page states it. */
+export interface RaceSeaStateAnnotation {
+  at: string
+  sea_state: SeaState
+}
+
+/**
+ * The sailor's Testimony about a race, both kinds, earliest first.
+ *
+ * Either list may be empty, and an empty list means that kind was not recorded (ADR 0010). Nothing
+ * here is resolved onto a row: resolution happens at read, from these lists, and is never stored
+ * (see `annotationInForce` in services/races/annotations.ts).
+ */
+export interface RaceAnnotations {
+  sails: RaceSailAnnotation[]
+  sea_state: RaceSeaStateAnnotation[]
+}
+
 /** A race as its own page states it: its window, its coverage in time, and its Row Quality. */
 export interface RaceDetail {
   id: string
@@ -1622,6 +1727,8 @@ export interface RaceDetail {
   /** Assessed over the whole Transcription, then filtered to the window (ADR 0009). */
   quality: TranscriptionQuality
   findings: RaceFinding[]
+  /** Testimony, as given. Either list may be empty, and the page says so in words. */
+  annotations: RaceAnnotations
 }
 
 // Purdue Buoy (IISEAGrant) reading row

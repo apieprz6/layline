@@ -1,7 +1,10 @@
 # The Race Upload Transaction — Local Verification
 
-Verification record and re-run guide for
-`supabase/migrations/20260915220000_create_race_from_upload.sql` (LAY-110).
+Verification record and re-run guide for `create_race_from_upload`, in two parts: the
+three-argument function of `20260915220000_create_race_from_upload.sql` (LAY-110), **run and
+recorded below**, and the five-argument function of
+`20260915230000_create_race_from_upload_with_annotations.sql` (LAY-111), **written and not yet
+run** — see [Not run yet: LAY-111's fourteen checks](#not-run-yet-lay-111s-fourteen-checks).
 
 LAY-110's ninth acceptance criterion is a claim no Jest test can reach: "on submit, the
 Recording, its Transcription and the Race are written in one transaction, after the bytes have
@@ -10,7 +13,40 @@ moved; a failure leaves bytes and no row, never a row and no bytes". The bytes h
 inserts either roll back together or they do not.
 
 **Run on 2026-09-15 against the local stack** (Supabase CLI containers, PostgreSQL 17.6, DB on
-`127.0.0.1:54322`): **31 of 31 checks passed**.
+`127.0.0.1:54322`): **31 of 31 checks passed**. That run was of sections 1–8, against the
+three-argument function. Section 9 came later and is not part of it.
+
+## Not run yet: LAY-111's fourteen checks
+
+`scripts/verify-race-upload-rpc.sql` now carries a ninth section — the sailor's Testimony in the
+same transaction — which takes the suite from 31 checks to 45. **Nobody has run those fourteen.**
+The environment LAY-111 was written in has no `psql`, no Postgres client library and no permission
+to start the CLI's containers, so the five-argument function has never been called.
+
+What that leaves unverified, and what it does not:
+
+- **Unverified**: everything section 9 asserts — that both kinds of entry are written in the same
+  transaction as the Race, that a Sail Configuration naming no sails is refused by
+  `race_sail_entries_non_empty` *in those words*, that a failed entry takes the Recording and its
+  Transcription with it, that `'[]'` is accepted as *not recorded* rather than refused, and that an
+  entry timestamped before the window's start is stored as given.
+- **Still verified**: sections 1–8. The function body they exercise is unchanged apart from the two
+  new arguments and the two new inserts, and the run above is their record.
+- **Guarded meanwhile by text, not by a database**:
+  `__tests__/supabase/race-upload-migration.test.ts`, which asserts the properties that are
+  properties of the migration's SQL — the dropped three-argument signature, the empty
+  `search_path`, `SECURITY INVOKER`, the `REVOKE … FROM PUBLIC, anon`, and that neither annotation
+  insert invents a value the payload did not carry. A text assertion cannot tell you a trigger
+  fires; that is the gap.
+
+```bash
+npx supabase start
+npx supabase db reset
+scripts/verify-race-upload-rpc.sh            # expect 45 of 45
+```
+
+Anyone with a database in reach should run it and replace this section with what came back — and if
+a check fails, the failure is the record, not this note.
 
 ## Re-running it
 
