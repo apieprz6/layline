@@ -140,6 +140,10 @@ of file in this folder, and the only honest way to report a trigger as working:
   three rules on a **Calibration Event**
 - [`race-upload-transaction.md`](./race-upload-transaction.md) — that a Recording,
   its Transcription and its Race are written in one transaction or not at all
+- [`race-delete-cascade.md`](./race-delete-cascade.md) — that one `DELETE` against
+  `recordings` empties six tables, that a viewer's identical statement empties
+  none and says nothing about it, what a Storage `move` does to an object's
+  timestamps, and how to run the sweeper
 
 A record like that carries the re-run recipe and the observed output, so the next
 reader can repeat it rather than trust it.
