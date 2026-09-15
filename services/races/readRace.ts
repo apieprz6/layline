@@ -3,7 +3,7 @@ import { coverageRowsFrom, raceCoverage, windowFindings } from '@/services/recor
 import { raceWindowSeconds } from '@/services/recordings/race-window'
 import { assessRowQuality, withinRaceWindow } from '@/services/recordings/row-quality'
 import type { QualityAssessableRow } from '@/services/recordings/row-quality'
-import type { RaceDetail } from '@/types'
+import type { RaceAnnotations, RaceDetail, ReefState, SeaState } from '@/types'
 
 /**
  * One race, with everything its page states about itself.
@@ -52,6 +52,18 @@ interface RaceRow {
     source_columns: string[]
     row_count: number
   }
+}
+
+/** One Sail Configuration with its set of sails, as PostgREST nests them through the join table. */
+interface SailEntryRow {
+  at: string
+  reef: ReefState
+  race_sail_entry_sails: { sails: { key: string; label: string; sort_order: number } }[]
+}
+
+interface SeaStateEntryRow {
+  at: string
+  sea_state: SeaState
 }
 
 /**
@@ -141,6 +153,60 @@ async function readTranscription(
 }
 
 /**
+ * The two annotation lists, earliest first, or null when either could not be read.
+ *
+ * Null rather than empty, and that distinction is the whole of this function's care: an empty list
+ * means the sailor did not record that kind, and the page says so in words (ADR 0010). A failed read
+ * rendered as an empty list would put those words on a race that *was* annotated — Layline stating
+ * that the sailor said nothing, which is the one thing a page about Testimony must never do.
+ *
+ * A Sail Configuration is a set of sails, so it arrives through the join table and is ordered by
+ * `sails.sort_order` here: the same set has to read the same way on every entry and on every page.
+ */
+async function readAnnotations(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  raceId: string
+): Promise<RaceAnnotations | null> {
+  const [sails, seaState] = await Promise.all([
+    supabase
+      .from('race_sail_entries')
+      .select('at, reef, race_sail_entry_sails(sails(key, label, sort_order))')
+      .eq('race_id', raceId)
+      .order('at', { ascending: true })
+      .returns<SailEntryRow[]>(),
+    supabase
+      .from('race_sea_state_entries')
+      .select('at, sea_state')
+      .eq('race_id', raceId)
+      .order('at', { ascending: true })
+      .returns<SeaStateEntryRow[]>(),
+  ])
+
+  if (sails.error || seaState.error) {
+    console.error(
+      'Race: annotation read failed:',
+      sails.error?.message ?? seaState.error?.message ?? 'no rows and no error'
+    )
+    return null
+  }
+
+  return {
+    sails: (sails.data ?? []).map((entry) => ({
+      at: entry.at,
+      reef: entry.reef,
+      sails: entry.race_sail_entry_sails
+        .map((each) => each.sails)
+        .sort((left, right) => left.sort_order - right.sort_order)
+        .map(({ key, label }) => ({ key, label })),
+    })),
+    sea_state: (seaState.data ?? []).map((entry) => ({
+      at: entry.at,
+      sea_state: entry.sea_state,
+    })),
+  }
+}
+
+/**
  * One race, or null when it cannot be read whole.
  *
  * All-or-nothing for the same reason `readBoatSetup` is: half this page would have to state a
@@ -179,6 +245,11 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
   const rows = await readTranscription(supabase, race.recordings.id, race.recordings.row_count)
   if (!rows) return null
 
+  // All-or-nothing, like the Transcription: a page that could not read the Testimony would otherwise
+  // state that none was given.
+  const annotations = await readAnnotations(supabase, race.id)
+  if (!annotations) return null
+
   try {
     // Assessed over the whole Transcription, then filtered — in that order, always (ADR 0009).
     const whole = assessRowQuality(rows)
@@ -201,6 +272,7 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
       coverage,
       quality: inWindow,
       findings: windowFindings(coverage, inWindow),
+      annotations,
     }
   } catch (thrown: unknown) {
     // A stamp the wall clock refuses: a fractional second, or an offset, in a column Layline only

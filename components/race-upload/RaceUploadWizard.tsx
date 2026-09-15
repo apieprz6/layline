@@ -1,12 +1,19 @@
 'use client'
 
 /**
- * File → Window → Review, over a chart stack that never leaves the screen.
+ * File → Window → Sails → Sea state → Review, over a chart stack that never leaves the screen.
  *
  * The wizard is the steps and the state; the charts are one component mounted once and handed a
  * `mode` (ADR 0014). Nothing about the stack is conditional on the step, which is what makes the
  * channel choice survive a step change and the track stay put instead of blinking away and coming
- * back re-projected. Sails and Sea state are two more steps and two more modes, later.
+ * back re-projected. Every annotation placed on an earlier step stays drawn for the rest of the flow,
+ * dimmed and with nothing to tap, so the sailor answers each question against the same picture.
+ *
+ * The two annotation steps are **Testimony** (ADR 0010), and everything about how they behave follows
+ * from that. Nothing is pre-selected — a default would be a guess presented as a memory. Both steps
+ * are skippable and two empty lists are a legal race whose page will say the sails and the water were
+ * not recorded. A new sail entry inherits the previous one, because a change alters one sail rather
+ * than all of them. Entry times are not bounded by the window: the sails were set before the start.
  *
  * **Nothing is written to the database until Save race.** Picking a file parks its bytes under
  * `tmp/{user_id}/{upload_id}/` and returns a projection to draw; every step after that is state in
@@ -17,13 +24,38 @@
  * Nothing here builds a `Date`, because a `Date` would put the reader's offset between the sailor and
  * the clock their own instruments showed.
  *
- * A clean race costs three actions here: pick the file, one Next, Save race. The two annotation steps
- * add one Next each, which is the five ADR 0014 measured the old flow's twenty-four against.
+ * A clean race costs five actions: pick the file, three Nexts, Save race. The archive's worst case —
+ * seven sail changes — costs 24 by ADR 0014's own count, and both figures are pinned by test, so a
+ * change that costs the sailor more taps fails rather than passing quietly.
  */
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { spacing } from '@/lib/utils/design'
+import { sailsAvailableOn } from '@/services/boat/sails'
+import {
+  REEF_STATES,
+  SEA_STATES,
+  byTime,
+  newSailEntry,
+  newSeaStateEntry,
+  placeAnnotationTime,
+  reefLabel,
+  refuseEntryTimes,
+  refuseSailEntry,
+  refuseSeaStateEntry,
+  sailEntriesToSubmit,
+  seaStateEntriesToSubmit,
+  seaStateLabel,
+  toggleSail,
+} from '@/services/races/annotations'
 import type { RaceChartAxis } from '@/services/recordings/chart-series'
 import { raceChartAxis } from '@/services/recordings/chart-series'
 import { raceCoverage, windowFindings, type CoverageRow } from '@/services/recordings/coverage'
@@ -40,24 +72,41 @@ import {
   wallClockInputValue,
   wallClockSecondsFromInput,
   wallClockStamp,
+  wallClockTime,
 } from '@/services/recordings/wall-clock'
 import type {
   RaceChannelKey,
   RaceFinding,
+  SailChoice,
+  SailEntryDraft,
+  SeaStateEntryDraft,
   StagedRecording,
   StageRecordingResult,
   SubmitRaceInput,
   SubmitRaceResult,
 } from '@/types'
 
-import ChartStack from './ChartStack'
+import ChartStack, { type StackMode } from './ChartStack'
+import type { StackMarker } from './chart-geometry'
 import RaceFindings from '../race/RaceFindings'
 import CoverageReadout from '../race/CoverageReadout'
 
-/** This ticket's three. Sails and Sea state slot between Window and Review (ADR 0014). */
-const STEPS = ['File', 'Window', 'Review'] as const
+/** ADR 0014's five. */
+const STEPS = ['File', 'Window', 'Sails', 'Sea state', 'Review'] as const
 
-type Step = 0 | 1 | 2
+type Step = 0 | 1 | 2 | 3 | 4
+
+const REVIEW: Step = 4
+
+/**
+ * What the sailor is told when every row already carries an entry of this kind.
+ *
+ * Reachable only on a very short recording, and refused rather than fudged: an entry at a time the
+ * file does not have would be a time nobody tapped.
+ */
+const NO_ROW_LEFT =
+  'Every row in this recording already has an entry on it, so there is no time left to place another. ' +
+  'Move or take off one of the entries below.'
 
 /**
  * The two Server Actions, as props.
@@ -70,11 +119,21 @@ type Step = 0 | 1 | 2
 interface RaceUploadWizardProps {
   stageRecording: (formData: FormData) => Promise<StageRecordingResult>
   submitRace: (input: SubmitRaceInput) => Promise<SubmitRaceResult>
+  /**
+   * The boat's Sail Inventory, in `sort_order`, retired sails included — or null where it could not
+   * be read.
+   *
+   * Null is not an empty locker and is not treated as one: with no inventory the Sails step says so
+   * and offers nothing, rather than presenting an empty chip row as "the boat has no sails". The rest
+   * of the upload still saves, because a race with no sail plan recorded is a legal race (ADR 0010).
+   */
+  inventory: SailChoice[] | null
 }
 
 export default function RaceUploadWizard({
   stageRecording,
   submitRace,
+  inventory,
 }: RaceUploadWizardProps): ReactElement {
   const router = useRouter()
 
@@ -89,6 +148,20 @@ export default function RaceUploadWizard({
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [duplicateAccepted, setDuplicateAccepted] = useState(false)
+
+  // Two lists of Testimony, and which entry is open. Both start empty and stay empty unless the
+  // sailor says something: there is no initial value beside a list of changes (ADR 0010).
+  const [sailEntries, setSailEntries] = useState<SailEntryDraft[]>([])
+  const [seaEntries, setSeaEntries] = useState<SeaStateEntryDraft[]>([])
+  const [selected, setSelected] = useState<string | null>(null)
+
+  // A counter rather than a uuid: these keys exist so React and the charts can tell two drafts apart,
+  // they are never sent, and the database's own key is `(race_id, at)`.
+  const minted = useRef(0)
+  const mintKey = useCallback((): string => {
+    minted.current += 1
+    return `entry-${minted.current}`
+  }, [])
 
   const axis: RaceChartAxis | null = useMemo(
     () => (staged ? raceChartAxis(staged.series) : null),
@@ -142,6 +215,150 @@ export default function RaceUploadWizard({
   )
 
   /**
+   * Whether there is anything to name a sail plan with.
+   *
+   * A locker with nothing in it and an inventory that could not be read are different sentences, and
+   * both mean the same thing for the chart: no tap on this step could produce an entry that is ever
+   * finishable, so the step does not offer one.
+   */
+  const canNameSails = (inventory ?? []).length > 0
+
+  /** The step, as the one thing that changes about the stack. */
+  const mode: StackMode =
+    step === 1
+      ? 'window'
+      : step === 2
+        ? canNameSails
+          ? 'sail'
+          : 'readonly'
+        : step === 3
+          ? 'sea'
+          : 'readonly'
+
+  /** A sail's own short key, for a marker label that fits on a chart. */
+  const sailKeys = useMemo(
+    () => new Map((inventory ?? []).map((sail) => [sail.id, sail.key])),
+    [inventory]
+  )
+
+  const sailLabels = useMemo(
+    () => new Map((inventory ?? []).map((sail) => [sail.id, sail.label])),
+    [inventory]
+  )
+
+  /**
+   * Every annotation, of both kinds, on every step.
+   *
+   * `locked` is what the step decides — not whether a marker is drawn. An answer given on an earlier
+   * step stays visible for the rest of the flow so the sailor can place a sea state against the sail
+   * change it went with (ADR 0014).
+   */
+  const markers: StackMarker[] = useMemo(
+    () => [
+      ...sailEntries.map((entry) => ({
+        key: entry.key,
+        at: entry.at,
+        lane: 'sail' as const,
+        label:
+          entry.sail_ids.length > 0
+            ? entry.sail_ids.map((id) => sailKeys.get(id) ?? '?').join('+')
+            : '?',
+        selected: selected === entry.key,
+        incomplete: refuseSailEntry(entry) !== null,
+        locked: mode !== 'sail',
+      })),
+      ...seaEntries.map((entry) => ({
+        key: entry.key,
+        at: entry.at,
+        lane: 'sea' as const,
+        label: entry.sea_state ? seaStateLabel(entry.sea_state) : '?',
+        selected: selected === entry.key,
+        incomplete: refuseSeaStateEntry(entry) !== null,
+        locked: mode !== 'sea',
+      })),
+    ],
+    [sailEntries, seaEntries, selected, mode, sailKeys]
+  )
+
+  /**
+   * Why an annotation step will not advance yet.
+   *
+   * A collision first, because it is about the list, then the first half-finished entry. Both are also
+   * database constraints, and both are re-asked by the Server Action — this is the copy that answers
+   * before anything has been written at all.
+   */
+  const sailStepRefusal = useMemo(
+    () =>
+      refuseEntryTimes(sailEntries) ??
+      sailEntries.map(refuseSailEntry).find((each): each is string => each !== null) ??
+      null,
+    [sailEntries]
+  )
+
+  const seaStepRefusal = useMemo(
+    () =>
+      refuseEntryTimes(seaEntries) ??
+      seaEntries.map(refuseSeaStateEntry).find((each): each is string => each !== null) ??
+      null,
+    [seaEntries]
+  )
+
+  /**
+   * A tap places an entry of the step's own kind, at the nearest free recorded row.
+   *
+   * The new entry is selected, because placing one and then having to find it is two gestures for one
+   * intention — and a sail entry arrives carrying the previous entry's configuration, which is what
+   * makes seven changes on one race affordable.
+   */
+  const placeAnnotation = useCallback(
+    (seconds: number): void => {
+      if (!staged) return
+
+      const rows = staged.series.row_seconds
+
+      if (mode === 'sail') {
+        const at = placeAnnotationTime(rows, seconds, sailEntries.map((entry) => entry.at))
+        if (at === null) {
+          setMessage(NO_ROW_LEFT)
+          return
+        }
+
+        const entry = newSailEntry(sailEntries, at, mintKey())
+        setSailEntries([...sailEntries, entry])
+        setSelected(entry.key)
+        setMessage(null)
+        return
+      }
+
+      if (mode === 'sea') {
+        const at = placeAnnotationTime(rows, seconds, seaEntries.map((entry) => entry.at))
+        if (at === null) {
+          setMessage(NO_ROW_LEFT)
+          return
+        }
+
+        const entry = newSeaStateEntry(at, mintKey())
+        setSeaEntries([...seaEntries, entry])
+        setSelected(entry.key)
+        setMessage(null)
+      }
+    },
+    [staged, mode, sailEntries, seaEntries, mintKey]
+  )
+
+  const patchSail = useCallback((key: string, change: Partial<SailEntryDraft>): void => {
+    setSailEntries((current) =>
+      current.map((entry) => (entry.key === key ? { ...entry, ...change } : entry))
+    )
+  }, [])
+
+  const patchSea = useCallback((key: string, change: Partial<SeaStateEntryDraft>): void => {
+    setSeaEntries((current) =>
+      current.map((entry) => (entry.key === key ? { ...entry, ...change } : entry))
+    )
+  }, [])
+
+  /**
    * Picking the file is one gesture and it advances the step.
    *
    * The auto-advance is not a flourish — it is where two of the five actions ADR 0014 counted went.
@@ -184,7 +401,7 @@ export default function RaceUploadWizard({
    * be the window that gets stored. Dragging is deliberately *not* snapped: a finish past the last
    * row is legal, and snapping the drag would make it unreachable.
    */
-  const onTapTime = useCallback(
+  const moveNearerBound = useCallback(
     (seconds: number): void => {
       if (!staged || !raceWindow) return
 
@@ -201,12 +418,54 @@ export default function RaceUploadWizard({
     [staged, raceWindow]
   )
 
+  /**
+   * A tap on either chart, dispatched by the step: it moves a window bound, or it places an entry.
+   *
+   * One gesture with one meaning per step is the whole of ADR 0014's "only the permissions change".
+   * The sailor points at the same place on the same track and the wizard knows which question is
+   * being answered, because the step already said.
+   */
+  const onTapTime = useCallback(
+    (seconds: number): void => {
+      if (mode === 'window') {
+        moveNearerBound(seconds)
+        return
+      }
+
+      placeAnnotation(seconds)
+    },
+    [mode, moveNearerBound, placeAnnotation]
+  )
+
+  /**
+   * The other way in: place an entry without tapping, at the first free row from the window's start.
+   *
+   * For a change the sailor knows the time of and cannot find on a 390px track — a headsail change
+   * logged at 19:07 on paper. It places a real recorded row like a tap does, and the entry's own
+   * datetime field is what moves it to the minute.
+   */
+  const addByTime = useCallback((): void => {
+    if (raceWindow) onTapTime(raceWindow.start)
+  }, [raceWindow, onTapTime])
+
   const moveBound = useCallback(
     (which: 'start' | 'finish', seconds: number): void => {
       setRaceWindow((current) => (current ? { ...current, [which]: seconds } : current))
     },
     []
   )
+
+  /**
+   * A step change, with nothing open.
+   *
+   * The selection is which entry's editor is expanded, and an editor belonging to the step just left
+   * would be an open form the sailor can no longer see the markers for.
+   */
+  const goToStep = useCallback((next: Step): void => {
+    setSelected(null)
+    setMessage(null)
+    setStep(next)
+  }, [])
 
   const onSubmit = useCallback(async (): Promise<void> => {
     if (!staged || !raceWindow) return
@@ -223,6 +482,10 @@ export default function RaceUploadWizard({
       window_start: stamps.window_start,
       window_finish: stamps.window_finish,
       title,
+      // Two lists, either of which may be empty — a race whose sails and water were not recorded is
+      // an ordinary race, and an empty list is how it says so (ADR 0010).
+      sails: sailEntriesToSubmit(sailEntries),
+      sea_state: seaStateEntriesToSubmit(seaEntries),
       // Carried so the server can ask the same question again, since it cannot see the checkbox.
       duplicate_acknowledged: duplicateAccepted,
     })
@@ -243,6 +506,12 @@ export default function RaceUploadWizard({
         // The title does: the sailor wrote it, it is about the race and not about the file, and
         // making them type it twice would be this failure charging them for it.
         setDuplicateAccepted(false)
+        // The annotations go for the same reason the window does: every one of them is anchored to a
+        // row of *that* recording, and carrying them onto a different file would be testimony about
+        // times the new file may not have.
+        setSailEntries([])
+        setSeaEntries([])
+        setSelected(null)
         setStep(0)
       }
       return
@@ -251,13 +520,36 @@ export default function RaceUploadWizard({
     // Straight to the race, which is what the sailor came to make. `busy` stays true through the
     // navigation so the button cannot be pressed twice into a second race.
     router.push(`/boat-performance/races/${result.race_id}`)
-  }, [staged, raceWindow, title, duplicateAccepted, submitRace, router])
+  }, [
+    staged,
+    raceWindow,
+    title,
+    sailEntries,
+    seaEntries,
+    duplicateAccepted,
+    submitRace,
+    router,
+  ])
 
-  // Step 0 needs a staged file; every step after it needs a window that could be a race.
-  const canAdvance = step === 0 ? staged !== null : refusal === null
+  /**
+   * Why the step will not go forward, or null.
+   *
+   * The annotation steps are skippable — an empty list has nothing to refuse — so what blocks them is
+   * only ever an entry the sailor started and did not finish. Save asks all three at once, because
+   * Review's button is reachable by the Back arrow from anywhere.
+   */
+  const stepRefusal: string | null =
+    step === 1 ? (refusal?.message ?? null) : step === 2 ? sailStepRefusal : step === 3 ? seaStepRefusal : null
+
+  const canAdvance = step === 0 ? staged !== null : stepRefusal === null
 
   const canSave =
-    step === 2 && refusal === null && (!needsDuplicateConfirmation || duplicateAccepted) && !busy
+    step === REVIEW &&
+    refusal === null &&
+    sailStepRefusal === null &&
+    seaStepRefusal === null &&
+    (!needsDuplicateConfirmation || duplicateAccepted) &&
+    !busy
 
   return (
     <div
@@ -301,10 +593,13 @@ export default function RaceUploadWizard({
           window={raceWindow}
           channel={channel}
           onChannelChange={setChannel}
-          mode={step === 1 ? 'window' : 'readonly'}
+          mode={mode}
+          hint={step === 2 && !canNameSails ? 'No sails to name' : undefined}
           onWindowChange={setRaceWindow}
           onTapTime={onTapTime}
-          compact={step === 2}
+          markers={markers}
+          onSelectMarker={setSelected}
+          compact={step === REVIEW}
         />
       )}
 
@@ -330,9 +625,129 @@ export default function RaceUploadWizard({
         </section>
       )}
 
-      {step === 2 && staged && coverage && (
+      {step === 2 && staged && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+          <StepIntro
+            heading="What was up, and when?"
+            prose={
+              canNameSails
+                ? 'Tap the track where it happened — the time comes from the recording, not from a keypad. Leave it empty if nobody wrote it down.'
+                : inventory === null
+                  ? 'The boat’s sail inventory could not be read just now, so there is nothing here to name a sail plan with. The race still saves; its page will say the sail plan was not recorded.'
+                  : 'There are no sails in the boat’s locker yet, so there is nothing here to name a sail plan with. Add them under Boat, or save the race without a sail plan — its page will say it was not recorded.'
+            }
+          />
+
+          {canNameSails && (
+            <>
+              {sailEntries.length === 0 && (
+                <EmptyNote>
+                  No sail changes recorded. The race is still savable; its page will say the sail plan
+                  was not recorded.
+                </EmptyNote>
+              )}
+
+              <AddByTimeButton onPress={addByTime} />
+
+              {byTime(sailEntries).map((entry) =>
+                entry.key === selected ? (
+                  <SailEntryEditor
+                    key={entry.key}
+                    entry={entry}
+                    inventory={inventory ?? []}
+                    onChange={(change) => patchSail(entry.key, change)}
+                    onRemove={() => {
+                      setSailEntries((current) => current.filter((each) => each.key !== entry.key))
+                      setSelected(null)
+                    }}
+                    onDone={() => setSelected(null)}
+                  />
+                ) : (
+                  <EntryRow
+                    key={entry.key}
+                    at={entry.at}
+                    text={
+                      entry.sail_ids.length > 0
+                        ? `${entry.sail_ids.map((id) => sailLabels.get(id) ?? id).join(' + ')} · ${
+                            entry.reef ? reefLabel(entry.reef) : 'reef not stated'
+                          }`
+                        : 'nothing named yet'
+                    }
+                    incomplete={refuseSailEntry(entry) !== null}
+                    onPress={() => setSelected(entry.key)}
+                  />
+                )
+              )}
+            </>
+          )}
+
+          {sailStepRefusal && (
+            <RaceFindings findings={[{ severity: 'refusal', message: sailStepRefusal }]} />
+          )}
+        </section>
+      )}
+
+      {step === 3 && staged && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+          <StepIntro
+            heading="What was the water doing?"
+            prose="Same gesture. The sail changes stay on the chart so you can place sea state against them, but they are locked here."
+          />
+
+          {seaEntries.length === 0 && (
+            <EmptyNote>
+              No sea state recorded. The race is still savable; its page will say the sea state was not
+              recorded.
+            </EmptyNote>
+          )}
+
+          <AddByTimeButton onPress={addByTime} />
+
+          {byTime(seaEntries).map((entry) =>
+            entry.key === selected ? (
+              <SeaStateEntryEditor
+                key={entry.key}
+                entry={entry}
+                onChange={(change) => patchSea(entry.key, change)}
+                onRemove={() => {
+                  setSeaEntries((current) => current.filter((each) => each.key !== entry.key))
+                  setSelected(null)
+                }}
+                onDone={() => setSelected(null)}
+              />
+            ) : (
+              <EntryRow
+                key={entry.key}
+                at={entry.at}
+                text={entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet'}
+                incomplete={refuseSeaStateEntry(entry) !== null}
+                onPress={() => setSelected(entry.key)}
+              />
+            )
+          )}
+
+          {seaStepRefusal && (
+            <RaceFindings findings={[{ severity: 'refusal', message: seaStepRefusal }]} />
+          )}
+        </section>
+      )}
+
+      {step === REVIEW && staged && coverage && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <TitleField value={title} onChange={setTitle} />
+
+          <AnnotationSummary
+            sails={byTime(sailEntries).map((entry) => ({
+              at: entry.at,
+              text: `${entry.sail_ids.map((id) => sailLabels.get(id) ?? id).join(' + ')} · ${
+                entry.reef ? reefLabel(entry.reef) : 'reef not stated'
+              }`,
+            }))}
+            seaState={byTime(seaEntries).map((entry) => ({
+              at: entry.at,
+              text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
+            }))}
+          />
 
           <CoverageReadout coverage={coverage} />
 
@@ -364,14 +779,14 @@ export default function RaceUploadWizard({
 
       <FooterNav
         canBack={step > 0 && !busy}
-        onBack={() => setStep((current) => (current === 0 ? 0 : ((current - 1) as Step)))}
+        onBack={() => goToStep(step === 0 ? 0 : ((step - 1) as Step))}
         primary={
-          step === 2
+          step === REVIEW
             ? { label: busy ? 'Saving' : 'Save race', enabled: canSave, onPress: onSubmit }
             : {
                 label: 'Next',
                 enabled: canAdvance && !busy,
-                onPress: () => setStep((current) => ((current + 1) as Step)),
+                onPress: () => goToStep((step + 1) as Step),
               }
         }
       />
@@ -382,7 +797,7 @@ export default function RaceUploadWizard({
 /**
  * The step bars.
  *
- * Bars rather than numbered circles: the wizard is three steps of one job, not a form in chapters,
+ * Bars rather than numbered circles: the wizard is five steps of one job, not a form in chapters,
  * and what a sailor needs from it is how much is left.
  */
 function Stepper({ step }: { step: Step }): ReactElement {
@@ -616,6 +1031,497 @@ function TitleField({
       <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
         Never generated — a race with no title is shown by its date.
       </p>
+    </div>
+  )
+}
+
+/** What this step is asking, in the sailor's words rather than the schema's. */
+function StepIntro({ heading, prose }: { heading: string; prose: string }): ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+      <h2
+        style={{
+          margin: 0,
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--text-base)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        {heading}
+      </h2>
+      <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        {prose}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * What an empty step means, said before the sailor wonders whether they are stuck.
+ *
+ * Not a warning and not styled as one: an empty list is a legal answer and the commonest one in the
+ * archive (ADR 0010). What it must not be is silent, because "not recorded" on the race's page ought
+ * not to be a surprise.
+ */
+function EmptyNote({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <p
+      style={{
+        margin: 0,
+        padding: spacing(3),
+        border: '1px dashed var(--surface-border)',
+        borderRadius: 'var(--radius-md)',
+        background: 'var(--surface-elevated)',
+        fontSize: 'var(--text-sm)',
+        color: 'var(--text-muted)',
+        lineHeight: 1.5,
+      }}
+    >
+      {children}
+    </p>
+  )
+}
+
+/** The way in for a change the sailor knows the time of but cannot find on the track. */
+function AddByTimeButton({ onPress }: { onPress: () => void }): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      style={{
+        alignSelf: 'flex-start',
+        padding: '7px 10px',
+        borderRadius: 6,
+        border: '1px solid var(--surface-border)',
+        background: 'var(--surface-raised)',
+        color: 'var(--text-accent)',
+        fontSize: 'var(--text-sm)',
+        cursor: 'pointer',
+      }}
+    >
+      + Add one by time instead
+    </button>
+  )
+}
+
+/**
+ * One entry, closed: its clock and what it says.
+ *
+ * The clock is the heading because that is what distinguishes two entries from each other — a race
+ * with two "Main + jib 2" entries has two of them for a reason, and the reason is the time.
+ */
+function EntryRow({
+  at,
+  text,
+  incomplete,
+  onPress,
+}: {
+  at: number
+  text: string
+  incomplete: boolean
+  onPress: () => void
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: spacing(2),
+        width: '100%',
+        textAlign: 'left',
+        padding: '9px 11px',
+        borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${incomplete ? 'var(--state-warning)' : 'var(--surface-border)'}`,
+        background: 'var(--surface-raised)',
+        cursor: 'pointer',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--text-accent)',
+        }}
+      >
+        {wallClockTime(wallClockStamp(at))}
+      </span>
+      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{text}</span>
+    </button>
+  )
+}
+
+/**
+ * One Sail Configuration, open: its time, its set of sails, its Reef State.
+ *
+ * The chips are the whole interaction, and a new entry arrives carrying the previous one — so a
+ * headsail change is the old sail off and the new one on, and everything else about the boat stays as
+ * the sailor already said it was.
+ */
+function SailEntryEditor({
+  entry,
+  inventory,
+  onChange,
+  onRemove,
+  onDone,
+}: {
+  entry: SailEntryDraft
+  inventory: readonly SailChoice[]
+  onChange: (change: Partial<SailEntryDraft>) => void
+  onRemove: () => void
+  onDone: () => void
+}): ReactElement {
+  const day = wallClockStamp(entry.at).slice(0, 10)
+  // The locker as it was on the race's own day, plus anything already named — a sail retired since is
+  // still what was flying then.
+  const offered = sailsAvailableOn(inventory, day, entry.sail_ids)
+  const order = inventory.map((sail) => sail.id)
+  const refused = refuseSailEntry(entry)
+
+  return (
+    <EntryCard at={entry.at} onChangeTime={(seconds) => onChange({ at: seconds })}>
+      <ChipRow label="Sails up">
+        {offered.map((sail) => (
+          <Chip
+            key={sail.id}
+            on={entry.sail_ids.includes(sail.id)}
+            onPress={() => onChange({ sail_ids: toggleSail(entry.sail_ids, sail.id, order) })}
+          >
+            {sail.label}
+          </Chip>
+        ))}
+      </ChipRow>
+
+      <ChipRow label="Mainsail">
+        {REEF_STATES.map((reef) => (
+          <Chip
+            key={reef.value}
+            on={entry.reef === reef.value}
+            onPress={() => onChange({ reef: reef.value })}
+          >
+            {reef.label}
+          </Chip>
+        ))}
+      </ChipRow>
+
+      {refused && (
+        <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--state-warning)' }}>
+          {refused}
+        </p>
+      )}
+
+      <EntryActions onRemove={onRemove} onDone={onDone} />
+    </EntryCard>
+  )
+}
+
+/** One Sea State reading, open. Four chips, nothing pre-selected. */
+function SeaStateEntryEditor({
+  entry,
+  onChange,
+  onRemove,
+  onDone,
+}: {
+  entry: SeaStateEntryDraft
+  onChange: (change: Partial<SeaStateEntryDraft>) => void
+  onRemove: () => void
+  onDone: () => void
+}): ReactElement {
+  const refused = refuseSeaStateEntry(entry)
+
+  return (
+    <EntryCard at={entry.at} onChangeTime={(seconds) => onChange({ at: seconds })}>
+      <ChipRow label="Sea state">
+        {SEA_STATES.map((sea) => (
+          <Chip
+            key={sea.value}
+            on={entry.sea_state === sea.value}
+            onPress={() => onChange({ sea_state: sea.value })}
+          >
+            {sea.label}
+            <span style={{ fontSize: 9, opacity: 0.75, marginLeft: 4 }}>{sea.height}</span>
+          </Chip>
+        ))}
+      </ChipRow>
+
+      {refused && (
+        <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--state-warning)' }}>
+          {refused}
+        </p>
+      )}
+
+      <EntryActions onRemove={onRemove} onDone={onDone} />
+    </EntryCard>
+  )
+}
+
+/**
+ * The frame an open entry sits in, and the time controls both kinds share.
+ *
+ * The nudges and the field are here for the reason the window's are: a tap lands on a recorded row,
+ * and the rows are half a minute apart at best, so an entry the sailor knows to the minute would
+ * otherwise be unreachable. An entry's time is *not* clamped to the window — the sails were set
+ * before the start (ADR 0010).
+ */
+function EntryCard({
+  at,
+  onChangeTime,
+  children,
+}: {
+  at: number
+  onChangeTime: (seconds: number) => void
+  children: ReactNode
+}): ReactElement {
+  const inputId = `race-entry-${at}`
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: spacing(2),
+        padding: spacing(3),
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--text-accent)',
+        background: 'var(--surface-raised)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing(2), flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-base)',
+            color: 'var(--text-accent)',
+          }}
+        >
+          {wallClockTime(wallClockStamp(at))}
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {RACE_WINDOW_NUDGE_MINUTES.map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              onClick={() => onChangeTime(at + minutes * 60)}
+              aria-label={`${minutes > 0 ? 'Later' : 'Earlier'} by ${Math.abs(minutes)} minutes`}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                padding: '5px 7px',
+                borderRadius: 4,
+                border: '1px solid var(--surface-border)',
+                background: 'var(--surface-elevated)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              {minutes > 0 ? `+${minutes}` : minutes}
+            </button>
+          ))}
+          <span style={{ fontSize: 8.5, color: 'var(--text-muted)', alignSelf: 'center' }}>min</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+        <label
+          htmlFor={inputId}
+          style={{
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--text-muted)',
+          }}
+        >
+          Exact time, if you know it
+        </label>
+        <input
+          id={inputId}
+          type="datetime-local"
+          value={wallClockInputValue(wallClockStamp(at))}
+          step={60}
+          onChange={(event) => {
+            const parsed = wallClockSecondsFromInput(event.target.value)
+            if (parsed !== null) onChangeTime(parsed)
+          }}
+          style={{
+            alignSelf: 'flex-start',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-sm)',
+            padding: '6px 8px',
+            background: 'var(--input-bg)',
+            border: '1px solid var(--input-border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-primary)',
+          }}
+        />
+      </div>
+
+      {children}
+    </div>
+  )
+}
+
+function ChipRow({ label, children }: { label: string; children: ReactNode }): ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+      <span
+        style={{
+          fontSize: 9.5,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          color: 'var(--text-muted)',
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }} role="group" aria-label={label}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Chip({
+  on,
+  onPress,
+  children,
+}: {
+  on: boolean
+  onPress: () => void
+  children: ReactNode
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-pressed={on}
+      style={{
+        padding: '7px 10px',
+        borderRadius: 999,
+        border: `1px solid ${on ? 'var(--blue-500)' : 'var(--surface-border)'}`,
+        background: on ? 'var(--blue-500)' : 'var(--surface-elevated)',
+        color: on ? '#fff' : 'var(--text-secondary)',
+        fontSize: 'var(--text-sm)',
+        fontWeight: on ? 600 : 500,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * Remove, and done.
+ *
+ * "Done with this one" only closes the editor — nothing is written by it, and nothing is written
+ * until Save race (ADR 0013). It is there because a sailor who has finished an entry wants the chart
+ * back, not because the entry needed committing.
+ */
+function EntryActions({
+  onRemove,
+  onDone,
+}: {
+  onRemove: () => void
+  onDone: () => void
+}): ReactElement {
+  return (
+    <div style={{ display: 'flex', gap: spacing(2) }}>
+      <button
+        type="button"
+        onClick={onRemove}
+        style={{
+          padding: '7px 10px',
+          borderRadius: 6,
+          border: '1px solid var(--surface-border)',
+          background: 'var(--surface-elevated)',
+          color: 'var(--wind-storm)',
+          fontSize: 'var(--text-sm)',
+          cursor: 'pointer',
+        }}
+      >
+        Remove
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        style={{
+          padding: '7px 10px',
+          borderRadius: 6,
+          border: '1px solid var(--surface-border)',
+          background: 'var(--surface-elevated)',
+          color: 'var(--text-secondary)',
+          fontSize: 'var(--text-sm)',
+          cursor: 'pointer',
+        }}
+      >
+        Done with this one
+      </button>
+    </div>
+  )
+}
+
+/**
+ * What Review says the sailor said, including when they said nothing.
+ *
+ * "Not recorded" is stated here in the same words the race's page will use, so Save is not the moment
+ * a sailor discovers that a step they skipped was a step that mattered.
+ */
+function AnnotationSummary({
+  sails,
+  seaState,
+}: {
+  sails: readonly { at: number; text: string }[]
+  seaState: readonly { at: number; text: string }[]
+}): ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+      <SummaryList heading="Sails" entries={sails} missing="Sail plan not recorded" />
+      <SummaryList heading="Sea state" entries={seaState} missing="Sea state not recorded" />
+    </div>
+  )
+}
+
+function SummaryList({
+  heading,
+  entries,
+  missing,
+}: {
+  heading: string
+  entries: readonly { at: number; text: string }[]
+  missing: string
+}): ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+      <span
+        style={{
+          fontSize: 9.5,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          color: 'var(--text-muted)',
+        }}
+      >
+        {heading}
+      </span>
+      {entries.length === 0 ? (
+        <span style={{ fontSize: 'var(--text-sm)', fontStyle: 'italic', color: 'var(--text-muted)' }}>
+          {missing}
+        </span>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          {entries.map((entry) => (
+            <li
+              key={entry.at}
+              style={{ display: 'flex', gap: spacing(2), fontSize: 'var(--text-sm)' }}
+            >
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-accent)' }}>
+                {wallClockTime(wallClockStamp(entry.at))}
+              </span>
+              <span style={{ color: 'var(--text-secondary)' }}>{entry.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
