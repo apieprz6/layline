@@ -1,0 +1,608 @@
+-- Verification suite for public.create_race_from_upload -- LAY-110's one transaction.
+--
+-- The ticket's ninth acceptance criterion is a claim no Jest test can reach: "the Recording,
+-- its Transcription and the Race are written in one transaction, after the bytes have moved;
+-- a failure leaves bytes and no row, never a row and no bytes". The bytes half is
+-- scripts/verify-boat-storage.mjs. This is the row half: that the three inserts are one
+-- transaction, that the two Race Window refusals still fire through the function, that a
+-- viewer is refused by RLS rather than by a check restated inside it, and -- the quiet one --
+-- that a Transcription's text values survive the NUMERIC round trip byte for byte, because
+-- the function is where they are cast.
+--
+-- Run it with scripts/verify-race-upload-rpc.sh, which points psql at either the local stack
+-- or a hosted project.
+--
+-- SAFE AGAINST A LIVE PROJECT. Everything happens inside one transaction that ends in
+-- ROLLBACK. The Recordings, Races and two auth users it creates exist only for the length of
+-- the run, and a crash aborts the transaction, which has the same effect.
+--
+-- Two mechanics, both inherited from scripts/verify-race-archive-schema.sql, which this suite
+-- deliberately mirrors so the two read as one body of work:
+--
+--   * The suite never commits, so a deferred constraint trigger would never fire and every
+--     deferred refusal would look like a pass. The helpers call SET CONSTRAINTS ALL IMMEDIATE
+--     to make them fire at the statement instead. races_window_intersects_rows is deferred,
+--     so this is what makes section 6, the window with no rows inside it, mean anything.
+--   * The RLS tiers are exercised with SET LOCAL ROLE plus a request.jwt.claims setting, which
+--     is what auth.uid() reads -- and therefore also what the function writes into
+--     recordings.uploaded_by and races.created_by.
+
+\set ON_ERROR_STOP on
+\pset pager off
+\timing off
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Harness
+-- ---------------------------------------------------------------------------
+
+CREATE TEMP TABLE _results (
+    n       SERIAL PRIMARY KEY,
+    name    TEXT NOT NULL,
+    ok      BOOLEAN NOT NULL,
+    detail  TEXT
+);
+
+CREATE FUNCTION pg_temp.chk(p_name TEXT, p_ok BOOLEAN, p_detail TEXT DEFAULT NULL)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO _results (name, ok, detail) VALUES (p_name, p_ok, p_detail);
+END;
+$$;
+
+-- Become a request: `anon` for a guest, `authenticated` with a sub claim for a signed-in user.
+CREATE FUNCTION pg_temp.act_as(p_uid UUID)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    IF p_uid IS NULL THEN
+        PERFORM set_config('request.jwt.claims', '', TRUE);
+        EXECUTE 'SET LOCAL ROLE anon';
+    ELSE
+        PERFORM set_config(
+            'request.jwt.claims',
+            json_build_object('sub', p_uid, 'role', 'authenticated')::TEXT,
+            TRUE
+        );
+        EXECUTE 'SET LOCAL ROLE authenticated';
+    END IF;
+END;
+$$;
+
+-- Call the function as somebody. Returns the new race id, or NULL with the message in `err`.
+--
+-- Every call goes through a subtransaction, which is what lets one suite watch both the
+-- successes and the all-or-nothing rollbacks: a failed call unwinds to the savepoint and
+-- leaves the fixtures standing, exactly as a failed RPC leaves the archive standing.
+CREATE FUNCTION pg_temp.upload_as(
+    p_uid       UUID,
+    p_recording JSONB,
+    p_rows      JSONB,
+    p_race      JSONB,
+    OUT race_id UUID,
+    OUT err     TEXT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_temp.act_as(p_uid);
+    BEGIN
+        race_id := public.create_race_from_upload(p_recording, p_rows, p_race);
+        -- The window-intersects-rows trigger is deferred to COMMIT and this suite never
+        -- commits, so it is made to fire here instead.
+        SET CONSTRAINTS ALL IMMEDIATE;
+    EXCEPTION WHEN OTHERS THEN
+        err := SQLERRM;
+        race_id := NULL;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+    IF err IS NULL THEN
+        SET CONSTRAINTS ALL DEFERRED;
+    END IF;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Fixtures
+-- ---------------------------------------------------------------------------
+-- The Profile trigger (20260911213000) makes a Profile per auth user, defaulting to viewer, so
+-- these two inserts are all it takes to get both tiers.
+
+INSERT INTO auth.users (id, email) VALUES
+    ('aaaaaaa1-0000-4000-8000-000000000001', 'admin@layline.test'),
+    ('cccccccc-0000-4000-8000-000000000002', 'crew@layline.test');
+
+UPDATE profiles SET role = 'admin'
+ WHERE id = 'aaaaaaa1-0000-4000-8000-000000000001';
+
+-- A five-row Transcription at the archive's own 30-second cadence and its own value shapes.
+--
+-- The values are chosen to be the ones a round trip loses: `0.0` is not `0`, `20.10` is not
+-- `20.1`, `-1` is an angle and not a missing value, and an empty channel is NULL and not zero.
+-- Every one of them is text on the way in, because that is how Layline transcribes a recording
+-- (types/index.ts), and the function is where they are cast.
+--
+-- `-0.0` is deliberately not among them. NUMERIC has one zero and it is positive, so `-0.0`
+-- reads back as `0.0` and no cast can save it -- which is why the parser refuses a file
+-- containing one outright (qtvlm.ts, NEGATIVE_ZERO) rather than storing a value it could not
+-- reproduce. That refusal is the reason this suite can assert byte-for-byte equality at all,
+-- and it is checked below rather than assumed.
+CREATE TEMP VIEW _fixture AS
+SELECT
+    'ffffffff-0000-4000-8000-00000000f001'::UUID AS recording_id,
+    jsonb_build_object(
+        'id', 'ffffffff-0000-4000-8000-00000000f001',
+        'filename', '06-03-26-beer-can.csv',
+        'content_sha256', repeat('a', 64),
+        'source_columns', jsonb_build_array(
+            'Date', 'Longitude', 'Latitude', 'COG', 'SOG', 'TWD', 'TWS', 'TWA',
+            'TWA (calc)', 'AWA (calc)', 'AWS (calc)', 'STW', 'CTW', 'ALARM'
+        ),
+        'date_order', 'MDY',
+        'trailing_newline', TRUE,
+        'row_count', 5,
+        'first_row_time', '2026-06-03T19:00:00',
+        'last_row_time', '2026-06-03T19:02:00'
+    ) AS recording,
+    jsonb_build_array(
+        jsonb_build_object(
+            'row_index', 1, 'date_verbatim', '06/03/2026 19:00:00',
+            'row_time', '2026-06-03T19:00:00',
+            'longitude', '-87.5568333300', 'latitude', '41.8528333300',
+            'cog', '0.0', 'sog', '20.10', 'twa', '-45.5', 'tws', '11.4',
+            'stw', '6.0', 'ctw', '12.0', 'awa_calc', '38.0', 'alarm', 'None'
+        ),
+        jsonb_build_object(
+            'row_index', 2, 'date_verbatim', '06/03/2026 19:00:30',
+            'row_time', '2026-06-03T19:00:30',
+            'longitude', '-87.5568400000', 'latitude', '41.8528400000',
+            'cog', '0', 'sog', '0.0', 'twa', '0.0', 'tws', '11.5',
+            'stw', NULL, 'ctw', NULL, 'awa_calc', '40.0', 'alarm', 'None'
+        ),
+        jsonb_build_object(
+            'row_index', 3, 'date_verbatim', '06/03/2026 19:01:00',
+            'row_time', '2026-06-03T19:01:00',
+            'longitude', '-87.5568500000', 'latitude', '41.8528500000',
+            'cog', '10.5', 'sog', '6.2', 'twa', '-1', 'tws', NULL,
+            'stw', '6.1', 'ctw', '13.0', 'awa_calc', NULL, 'alarm', 'None'
+        ),
+        jsonb_build_object(
+            'row_index', 4, 'date_verbatim', '06/03/2026 19:01:30',
+            'row_time', '2026-06-03T19:01:30',
+            'longitude', '-87.5568600000', 'latitude', '41.8528600000',
+            'cog', '11.0', 'sog', '6.3', 'twa', '45.0', 'tws', '11.9',
+            'stw', '6.2', 'ctw', '14.0', 'awa_calc', '41.0', 'alarm', 'None'
+        ),
+        jsonb_build_object(
+            'row_index', 5, 'date_verbatim', '06/03/2026 19:02:00',
+            'row_time', '2026-06-03T19:02:00',
+            'longitude', '-87.5568700000', 'latitude', '41.8528700000',
+            'cog', '11.5', 'sog', '6.4', 'twa', '46.0', 'tws', '12.0',
+            'stw', '6.3', 'ctw', '15.0', 'awa_calc', '42.0', 'alarm', 'None'
+        )
+    ) AS rows,
+    jsonb_build_object(
+        'title', '  Wednesday beer can  ',
+        'window_start', '2026-06-03T19:00:00',
+        'window_finish', '2026-06-03T19:02:00'
+    ) AS race;
+
+-- ===========================================================================
+-- 1. The door: a guest cannot call it at all
+-- ===========================================================================
+-- The guest's call is written out here rather than made through pg_temp.upload_as, and written
+-- as a plain call rather than an EXECUTE, and both departures are deliberate. Reductions for
+-- the two observations behind them are in docs/testing/race-upload-transaction.md:
+--
+--   * EXECUTE on a function is checked when a statement is planned, and plpgsql caches a
+--     statement's plan for the session -- so pg_temp.upload_as, once it has planned that call
+--     as somebody who may make it, lets a guest straight past the door on every later call.
+--     Observed: the guest reached the body and came back with the function's own complaint
+--     about a missing boat. A DO block is planned afresh every time it runs, so the door is
+--     really tried here.
+--   * The call is not dynamic, because on PostgreSQL 17.6 an `EXECUTE 'SELECT f(...)'` by a
+--     role without EXECUTE on f terminates the backend, where the same call written plainly
+--     raises `permission denied for function f`. It reduces to two lines against a function
+--     with an empty body, so it is the server's, not this schema's -- and nothing the running
+--     application does goes near it: Layline never calls this function dynamically, and `anon`
+--     never calls it at all.
+--
+-- The two catalog checks beside it say the same thing without calling anything, so the claim
+-- does not rest on either subtlety.
+
+DO $$
+DECLARE
+    f     RECORD;
+    v_err TEXT;
+    v_id  UUID;
+BEGIN
+    PERFORM pg_temp.chk(
+        'a guest holds no EXECUTE on the function',
+        NOT has_function_privilege('anon',
+            'public.create_race_from_upload(jsonb,jsonb,jsonb)', 'EXECUTE'),
+        NULL
+    );
+    PERFORM pg_temp.chk(
+        'and any signed-in user does, RLS being what decides the rest',
+        has_function_privilege('authenticated',
+            'public.create_race_from_upload(jsonb,jsonb,jsonb)', 'EXECUTE'),
+        NULL
+    );
+
+    SELECT * INTO f FROM _fixture;
+    PERFORM pg_temp.act_as(NULL);
+    BEGIN
+        v_id := public.create_race_from_upload(
+            jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f003"'),
+            f.rows, f.race
+        );
+    EXCEPTION WHEN OTHERS THEN
+        v_err := SQLERRM;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+
+    PERFORM pg_temp.chk('a guest cannot even call it', v_id IS NULL AND v_err IS NOT NULL, v_err);
+    -- Postgres grants EXECUTE to PUBLIC on a new function and Supabase's defaults grant it to
+    -- `anon` by name, so without the REVOKE in the migration naming both, a guest reaches the
+    -- body and is refused by something internal instead.
+    PERFORM pg_temp.chk('and is refused at the door rather than inside the body',
+        v_err ILIKE '%permission denied%', v_err);
+END;
+$$;
+
+-- ===========================================================================
+-- 2. An admin's upload writes all three, and writes them as recorded
+-- ===========================================================================
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_rows    BIGINT;
+    v_title   TEXT;
+    v_by      UUID;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as('aaaaaaa1-0000-4000-8000-000000000001', f.recording, f.rows, f.race);
+
+    PERFORM pg_temp.chk('an admin''s upload is accepted and returns the new race id',
+        v_race_id IS NOT NULL, COALESCE(v_err, v_race_id::TEXT));
+
+    SELECT count(*) INTO v_rows FROM recording_rows WHERE recording_id = f.recording_id;
+    PERFORM pg_temp.chk('the whole Transcription is there -- five rows, one statement',
+        v_rows = 5, format('%s rows', v_rows));
+
+    SELECT title INTO v_title FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('the title is trimmed, and an empty one would be NULL rather than ''''',
+        v_title = 'Wednesday beer can', format('%L', v_title));
+
+    SELECT uploaded_by INTO v_by FROM recordings WHERE id = f.recording_id;
+    PERFORM pg_temp.chk('uploaded_by is the caller, not a value the client supplied',
+        v_by = 'aaaaaaa1-0000-4000-8000-000000000001', v_by::TEXT);
+
+    SELECT created_by INTO v_by FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('created_by likewise',
+        v_by = 'aaaaaaa1-0000-4000-8000-000000000001', v_by::TEXT);
+
+    PERFORM pg_temp.chk('the race hangs off the one boat, read from the singleton rather than passed in',
+        (SELECT boat_id FROM races WHERE id = v_race_id) = (SELECT id FROM boats LIMIT 1));
+END;
+$$;
+
+-- ===========================================================================
+-- 3. The values survive the NUMERIC round trip byte for byte
+-- ===========================================================================
+-- This is the check the function exists to be worth: Layline transcribes every channel as text
+-- precisely because 0.0, -0.0 and 20.10 are one JavaScript number, and NUMERIC is the only
+-- Postgres type that gives back the scale it was handed. If a cast in the function ever became
+-- ::FLOAT or ::REAL, every assertion below breaks and the archive quietly stops round-tripping.
+
+DO $$
+DECLARE
+    f RECORD;
+    v_bad TEXT[];
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT array_agg(format('row %s %s: wrote %L, read %L', row_index, channel, wrote, read))
+      INTO v_bad
+      FROM (
+        SELECT r.row_index, x.channel, x.wrote, x.read
+          FROM recording_rows r
+          CROSS JOIN LATERAL (VALUES
+              ('longitude', (f.rows -> (r.row_index - 1) ->> 'longitude'), r.longitude::TEXT),
+              ('latitude',  (f.rows -> (r.row_index - 1) ->> 'latitude'),  r.latitude::TEXT),
+              ('cog',       (f.rows -> (r.row_index - 1) ->> 'cog'),       r.cog::TEXT),
+              ('sog',       (f.rows -> (r.row_index - 1) ->> 'sog'),       r.sog::TEXT),
+              ('tws',       (f.rows -> (r.row_index - 1) ->> 'tws'),       r.tws::TEXT),
+              ('twa',       (f.rows -> (r.row_index - 1) ->> 'twa'),       r.twa::TEXT),
+              ('stw',       (f.rows -> (r.row_index - 1) ->> 'stw'),       r.stw::TEXT),
+              ('ctw',       (f.rows -> (r.row_index - 1) ->> 'ctw'),       r.ctw::TEXT),
+              ('awa_calc',  (f.rows -> (r.row_index - 1) ->> 'awa_calc'),  r.awa_calc::TEXT)
+          ) AS x(channel, wrote, read)
+         WHERE r.recording_id = f.recording_id
+           AND x.wrote IS DISTINCT FROM x.read
+      ) AS mismatched;
+
+    PERFORM pg_temp.chk(
+        'every channel reads back exactly as it was written -- 0, 0.0, 20.10 and -1 included',
+        v_bad IS NULL,
+        COALESCE(array_to_string(v_bad, '; '), 'every value identical')
+    );
+
+    -- The one form that cannot survive, and the reason the parser refuses a file containing it
+    -- instead of leaving this suite to discover it after the bytes had moved.
+    PERFORM pg_temp.chk(
+        'NUMERIC has one zero and it is positive, which is why qtvlm.ts refuses -0.0 upstream',
+        ('-0.0'::NUMERIC)::TEXT = '0.0',
+        format('%L', ('-0.0'::NUMERIC)::TEXT)
+    );
+
+    PERFORM pg_temp.chk('a blank channel is NULL and not zero',
+        (SELECT stw IS NULL AND ctw IS NULL AND tws IS NOT NULL
+           FROM recording_rows WHERE recording_id = f.recording_id AND row_index = 2));
+
+    PERFORM pg_temp.chk('water_referenced is generated from the row''s own values',
+        (SELECT array_agg(water_referenced ORDER BY row_index)
+           FROM recording_rows WHERE recording_id = f.recording_id)
+        = ARRAY[TRUE, FALSE, TRUE, TRUE, TRUE]);
+
+    PERFORM pg_temp.chk('the window is stored in the recording''s own naive frame, unconverted',
+        (SELECT window_start::TEXT FROM races WHERE recording_id = f.recording_id)
+        = '2026-06-03 19:00:00');
+END;
+$$;
+
+-- ===========================================================================
+-- 4. A viewer is refused, and refused by RLS
+-- ===========================================================================
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_left    BIGINT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'cccccccc-0000-4000-8000-000000000002',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f002"'),
+        f.rows, f.race
+      );
+
+    PERFORM pg_temp.chk('a signed-in non-admin cannot upload a race', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk(
+        'and it is the row-level policy that says so, not a check restated in the function',
+        v_err ILIKE '%row-level security%', v_err
+    );
+
+    SELECT count(*) INTO v_left FROM recordings
+     WHERE id = 'ffffffff-0000-4000-8000-00000000f002';
+    PERFORM pg_temp.chk('the refused upload left no Recording behind', v_left = 0,
+        format('%s recordings', v_left));
+END;
+$$;
+
+-- ===========================================================================
+-- 5. The first Race Window refusal, through the function
+-- ===========================================================================
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_left    BIGINT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f004"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'window_start', '2026-06-03T19:02:00', 'window_finish', '2026-06-03T19:00:00')
+      );
+
+    PERFORM pg_temp.chk('a finish before the start is refused', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('by race_window_ordered, the CHECK that has always said so',
+        v_err ILIKE '%race_window_ordered%', v_err);
+
+    SELECT count(*) INTO v_left FROM recording_rows
+     WHERE recording_id = 'ffffffff-0000-4000-8000-00000000f004';
+    PERFORM pg_temp.chk(
+        'and the Transcription it had already inserted went with it -- one transaction, not three',
+        v_left = 0, format('%s rows survived', v_left));
+END;
+$$;
+
+DO $$
+DECLARE
+    f RECORD;
+    v_err TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+    SELECT err INTO v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f005"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'window_start', '2026-06-03T19:01:00', 'window_finish', '2026-06-03T19:01:00')
+      );
+
+    PERFORM pg_temp.chk('a zero-length window is refused too -- the CHECK is strictly greater',
+        v_err ILIKE '%race_window_ordered%', v_err);
+END;
+$$;
+
+-- ===========================================================================
+-- 6. The second Race Window refusal, and the legal case beside it
+-- ===========================================================================
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_left    BIGINT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- Ordered, an hour long, and nothing recorded inside it.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f006"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'window_start', '2026-06-03T21:00:00', 'window_finish', '2026-06-03T22:00:00')
+      );
+
+    PERFORM pg_temp.chk('a window with no Recording Rows in it is refused', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('by the deferred trigger, in the words the trigger uses',
+        v_err = 'the Race Window contains no Recording Rows', v_err);
+
+    SELECT count(*) INTO v_left FROM recordings
+     WHERE id = 'ffffffff-0000-4000-8000-00000000f006';
+    PERFORM pg_temp.chk('and nothing of that upload survived either', v_left = 0,
+        format('%s recordings', v_left));
+END;
+$$;
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- 08-22-26-glr's shape: the logger stopped 19.25 minutes before the race was over.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f007"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'window_start', '2026-06-03T19:00:00', 'window_finish', '2026-06-03T19:21:15')
+      );
+
+    PERFORM pg_temp.chk(
+        'a window reaching past the last row is accepted -- the recording dropped out, the race did not',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+END;
+$$;
+
+-- ===========================================================================
+-- 7. A truncated payload is refused rather than stored short
+-- ===========================================================================
+-- The Transcription is immutable: there is no UPDATE policy on recording_rows and no way to
+-- add the missing rows later. So a payload that lost rows in transit has to be refused at the
+-- door, and row_count -- a fact about the file, written from the same parse -- is what catches it.
+
+DO $$
+DECLARE
+    f RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f008"'),
+        -- Three of the five rows arrive.
+        jsonb_build_array(f.rows -> 0, f.rows -> 1, f.rows -> 2),
+        f.race
+      );
+
+    PERFORM pg_temp.chk('a Transcription short of its own row_count is refused',
+        v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('and the refusal says how short', v_err LIKE '%3 rows%5%', v_err);
+END;
+$$;
+
+-- ===========================================================================
+-- 8. One Recording, one Race
+-- ===========================================================================
+
+DO $$
+DECLARE
+    f RECORD;
+    v_err TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- The same recording id again: the id is client-generated, so this is the collision a
+    -- retry after a partial failure would cause.
+    SELECT err INTO v_err
+      FROM pg_temp.upload_as('aaaaaaa1-0000-4000-8000-000000000001', f.recording, f.rows, f.race);
+
+    PERFORM pg_temp.chk('the same recording id cannot be uploaded twice', v_err IS NOT NULL, v_err);
+
+    PERFORM pg_temp.chk('the first upload''s race is untouched by the failed retry',
+        (SELECT count(*) FROM races WHERE recording_id = f.recording_id) = 1);
+END;
+$$;
+
+DO $$
+DECLARE
+    f RECORD;
+    v_err TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A second file with the same bytes. ADR 0009 makes a duplicate hash a confirmation and
+    -- never a refusal, so the database must not have an opinion about it.
+    SELECT err INTO v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f009"'),
+        f.rows, f.race
+      );
+
+    PERFORM pg_temp.chk(
+        'a duplicate content hash is accepted -- it is a confirmation in the UI, not a refusal here',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Report
+-- ---------------------------------------------------------------------------
+
+\echo ''
+\echo '=== create_race_from_upload: one transaction, and the refusals through it ==='
+
+SELECT n,
+       CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS result,
+       name,
+       left(regexp_replace(COALESCE(detail, ''), '\s+', ' ', 'g'), 78) AS detail
+FROM _results
+ORDER BY n;
+
+SELECT count(*) FILTER (WHERE ok) AS passed,
+       count(*) FILTER (WHERE NOT ok) AS failed,
+       count(*) AS total
+FROM _results;
+
+DO $$
+DECLARE v_failed BIGINT;
+BEGIN
+    SELECT count(*) INTO v_failed FROM _results WHERE NOT ok;
+    IF v_failed > 0 THEN
+        RAISE EXCEPTION '% check(s) failed', v_failed;
+    END IF;
+END;
+$$;
+
+ROLLBACK;
