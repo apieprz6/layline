@@ -34,42 +34,27 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
  *
- * All four are named here whether or not a screen answers at them;
- * `BOAT_SETUP_DETAIL_BUILT` is what says which ones do.
+ * All four answer. There is no longer a list of which ones do: the Polar (LAY-106), the
+ * Rig Tune (LAY-107), the Instrument Calibration (LAY-108) and now the Crossover Chart
+ * (LAY-109) each have a screen, so a gate would only ever say "yes".
+ *
+ * The gate that stood here was never the *pointer*, and this is worth keeping said.
+ * LAY-104 gated the Boat Setup list's link on a Version being recorded, on the
+ * reasoning that a row leading to an empty screen is a row dressed as a control. That
+ * was right while no detail screen existed and wrong the moment one did: **recording
+ * the first Version is something the detail screen is for**, so a link gated on a
+ * current pointer leaves an empty archive — which is the state this app ships in —
+ * with no way to fill itself.
+ *
+ * Nor is it the *role*: a viewer opening the Rig Tune with nothing recorded reads why
+ * there is nothing to read (ADR 0019 governs writes only), which is an answer about the
+ * boat and worth a screen.
  */
-const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
+export const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
   crossover_chart: 'crossover-chart',
   rig_tune: 'rig-tune',
   instrument_calibration: 'instrument-calibration',
-}
-
-/**
- * The kinds whose detail screen exists. Add a kind here when its route lands. Three of
- * the four are up: the Polar (LAY-106), the Rig Tune (LAY-107) and the Instrument
- * Calibration (LAY-108). The Crossover Chart follows, and this list disappears with it.
- *
- * LAY-104 gated the list's link on a Version being recorded, on the reasoning that a
- * row leading to an empty screen is a row dressed as a control. That was right while
- * no detail screen existed and wrong the moment one did: **recording the first Version
- * is something the detail screen is for**, so a link gated on a current pointer leaves
- * an empty archive — which is the state this app ships in — with no way to fill itself.
- *
- * So the gate is the screen, not the pointer. A kind absent from here is still inert
- * text, because that row genuinely leads nowhere.
- *
- * Nor is the gate the *role*: a viewer opening the Rig Tune with nothing recorded reads
- * why there is nothing to read (ADR 0019 governs writes only), which is an answer about
- * the boat and worth a screen.
- */
-export const BOAT_SETUP_DETAIL_BUILT = [
-  'polar',
-  'rig_tune',
-  'instrument_calibration',
-] as const satisfies readonly BoatSetupKind[]
-
-export function hasDetailScreen(kind: BoatSetupKind): boolean {
-  return (BOAT_SETUP_DETAIL_BUILT as readonly BoatSetupKind[]).includes(kind)
 }
 
 export function boatSetupHref(kind: BoatSetupKind): string {
@@ -82,12 +67,24 @@ export function boatSetupVersionHref(kind: BoatSetupKind, versionId: string): st
 }
 
 /**
+ * Which file of a Version to download, for the one kind whose Version is backed by two.
+ *
+ * A Crossover Chart absorbs its Sail Definitions (ADR 0012), so one Version has two source files
+ * under one Storage prefix. `definitions` asks for the second; absent asks for the file the
+ * artifact is named for, which is the only file every other file-backed kind has.
+ */
+export type BoatSetupFileSelector = 'definitions'
+
+/**
  * Where a Version's original bytes are downloaded from. Only the two file-backed kinds have
  * bytes at all, which is why the type says so.
  */
 export function boatSetupDownloadHref(
   kind: FileBackedBoatSetupKind,
-  versionId: string
+  versionId: string,
+  file?: BoatSetupFileSelector
 ): string {
-  return `/api/boat-setup/${BOAT_SETUP_SLUG[kind]}/${versionId}/download`
+  const href = `/api/boat-setup/${BOAT_SETUP_SLUG[kind]}/${versionId}/download`
+
+  return file === undefined ? href : `${href}?file=${file}`
 }

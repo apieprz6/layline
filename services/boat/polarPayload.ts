@@ -19,29 +19,8 @@
 
 import { z } from 'zod'
 
+import { MAX_TWA, ascendingAxis } from '@/services/boat/gridPayloadAxis'
 import type { PolarPayload } from '@/types'
-
-/** Whole degrees of true wind angle, port side, bow to stern. */
-const MIN_TWA = 0
-const MAX_TWA = 180
-
-/**
- * An axis: at least one value, every value a real non-negative number, strictly ascending.
- *
- * Strictly, so a repeated value is refused too. A duplicated axis entry gives two rows the
- * same coordinate, and no interpolation over that grid has an answer.
- */
-function ascendingAxis(label: string, max?: number): z.ZodType<number[]> {
-  const value = max === undefined ? z.number().nonnegative() : z.number().min(MIN_TWA).max(max)
-
-  return z
-    .array(value)
-    .min(1, `${label} must carry at least one value`)
-    .refine(
-      (values) => values.every((entry, index) => index === 0 || entry > values[index - 1]),
-      `${label} must ascend, with no value repeated`
-    )
-}
 
 export const polarPayloadSchema = z
   .strictObject({

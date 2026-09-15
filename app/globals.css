@@ -62,6 +62,21 @@
   --trend-backing-bg:     rgba(204, 17, 0, 0.07);
   --trend-backing-border: rgba(204, 17, 0, 0.20);
 
+  /* Semantic — Crossover Chart sail bands.
+     One tint per sail, so the blocks of a crossover chart read as blocks. Backgrounds only:
+     the cell always prints its sail number, because a colour is how the shape of the chart is
+     seen at a glance and never how a sail is identified. Assigned by position in the Version's
+     own definitions list and cycled beyond the eighth — a boat with nine Sail Configurations
+     gets a repeated tint and still reads its numbers. */
+  --sail-band-1: rgba(0, 122, 82, 0.16);
+  --sail-band-2: rgba(0, 85, 187, 0.16);
+  --sail-band-3: rgba(0, 68, 204, 0.30);
+  --sail-band-4: rgba(196, 112, 0, 0.16);
+  --sail-band-5: rgba(204, 17, 0, 0.16);
+  --sail-band-6: rgba(112, 0, 153, 0.14);
+  --sail-band-7: rgba(0, 122, 82, 0.34);
+  --sail-band-8: rgba(196, 112, 0, 0.34);
+
   /* Semantic — UI states */
   --state-success: #007A2F;
   --state-warning: #C47000;
@@ -336,6 +351,18 @@
   --trend-backing: #FF2222;
   --trend-backing-bg: rgba(255, 34, 34, 0.07);
   --trend-backing-border: rgba(255, 34, 34, 0.20);
+
+  /* Sail bands — night vision. A ramp of one red rather than eight hues: a hue that is not red
+     defeats the whole point of this theme, so after dark the bands separate by depth alone. Which
+     is enough, because the number in the cell is what names the sail either way. */
+  --sail-band-1: rgba(180, 0, 0, 0.10);
+  --sail-band-2: rgba(180, 0, 0, 0.18);
+  --sail-band-3: rgba(200, 0, 0, 0.26);
+  --sail-band-4: rgba(200, 0, 0, 0.34);
+  --sail-band-5: rgba(220, 0, 0, 0.42);
+  --sail-band-6: rgba(220, 0, 0, 0.50);
+  --sail-band-7: rgba(240, 0, 0, 0.58);
+  --sail-band-8: rgba(240, 0, 0, 0.66);
 
   --state-success: #AA2222;
   --state-warning: #CC3300;

@@ -101,5 +101,39 @@ angles and agree that nothing below 45° can be trusted. That disagreement is wh
 `services/boat/polarSyntheticRows.ts` measures the ramp out of the grid instead of suppressing
 a fixed angle.
 
+## `qtvlm-doc-example.sailselect` / `qtvlm-doc-example.saildesc`
+
+The **vendor's own documented example** of the sail-selection pair, transcribed verbatim from the
+[qtVlm manual](https://download.meltemus.com/qtvlm/qtVlm_documentation_en.pdf) p. 33 and quoted in
+full in `../orc-polar-file-formats.md`. Not our data and not our boat: the sail names are the
+manual's French ones (`GV + Genois`, `1ris + Inter`, `GV + Assym`). A 9 × 7 grid — TWA
+`40, 80, 100, 110, 120, 130, 140, 150, 180` against TWS `8, 12, 16, 20, 25, 30, 32` — and eight
+numbered definitions.
+
+This is the closest thing either of these formats has to a specification, which is why the parsers
+are tested against it rather than against something we wrote. Four things it settles that no
+fixture we authored could:
+
+1. **The axes are irregular and the steps are not uniform.** TWA jumps 40 → 80 and 150 → 180; TWS
+   carries a `25` breakpoint between 20 and 30. The manual is explicit that *"the steps between
+   TWAs and TWs is free of constraints"*, so a parser that infers a step or resamples the axis is
+   wrong on the vendor's own example.
+2. **Rows are legitimately non-monotonic.** Row 80 reads `6;6;6;2;2;4;5` — a downwind sail with a
+   high index giving way to an upwind jib with a low one as it blows on. Monotonicity is therefore
+   never validated; 15 of the 26 rows in the boat's own chart are non-monotonic too.
+3. **The extension on the definitions half is `.saildesc`.** The manual says *"Its extension must
+   be `.saildesc`"*. The boat's own file is named `.saildef`, which is a correctly-formatted
+   `.saildesc` with the wrong extension — so Layline accepts either and records what it was given.
+4. **Labels are free text, in whatever language the sailor writes.** `GV + Assym` shares no token
+   with `Main + A2`. There is nothing in the label to parse, and the `+` is a human convention
+   rather than syntax.
+
+**What it does not exercise:** a definition that no cell references. All eight of its definitions
+are used, whereas sail 7 of the boat's own chart (`Reef + Reaching Spin`) is defined and called for
+by zero cells — a state that must be *legal*, since it is an inventory entry the chart simply never
+recommends. That case is covered by hand in `services/boat/__tests__/crossoverPayload.test.ts`, as
+is the 26 × 13 shape: the boat's own pair lives outside this repository, and the owner enters the
+archive by hand through the finished UI rather than from a fixture.
+
 See `../qtvlm-csv-columns.md` for the column reference and `../orc-polar-file-formats.md`
 for the polar and sail-chart formats.

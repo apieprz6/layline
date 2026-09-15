@@ -32,10 +32,18 @@
  * from the file at any time but the file is never re-derived from the grid.
  */
 
+import {
+  GridWarnings,
+  PLAIN_NUMBER,
+  readGridHeader,
+  readGridLines,
+  readRowFields,
+  findHeaderIndex,
+  warnAboutHeaderToken,
+} from '@/services/boat/delimitedGrid'
 import type {
   PolarParseOutcome,
   PolarParseRefusal,
-  PolarParseWarning,
   PolarParseWarningCode,
   PolarPayload,
 } from '@/types'
@@ -53,49 +61,13 @@ const MAX_CHARACTERS = 1_048_576
 const MAX_TWA_ROWS = 181
 const MAX_TWS_COLUMNS = 200
 
-/** `twa/tws`, `TWA\TWS`, `Twa/Tws` — the separator and the casing are both free. */
-const HEADER_SENTINEL = /^twa[/\\]tws$/i
-
-/** A bare `TWA` first field, which 86 of the corpus's 273 files use. */
-const BARE_TWA = /^twa$/i
-
-/**
- * A number in the form the file may write one. Deliberately narrower than `Number()`, which
- * also reads `0x10`, `Infinity`, `1e3` and whitespace — none of which any exporter emits, and
- * all of which would be a sign we are reading something that is not a polar.
- */
-const PLAIN_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
-
 /** A number written with a comma for its decimal point, as a French-locale export does. */
 const COMMA_DECIMAL = /^[+-]?\d+,\d+$/
 
-/** Sniffed from the header, most distinctive first; whitespace is the fallback. */
-const DELIMITERS = ['\t', ';', ','] as const
-
-/** One line of the file, carrying the number it had before anything was skipped. */
-interface NumberedLine {
-  line: number
-  text: string
-}
-
 export function parsePolarFile(contents: string): PolarParseOutcome {
-  const warnings: PolarParseWarning[] = []
-  const seen = new Set<PolarParseWarningCode>()
-
-  /**
-   * File-wide oddities are reported once with the line they were first seen on. A trailing
-   * tab on all 38 lines of a qtVlm library file is one fact about the file, and 38 copies of
-   * it would bury the warning that matters.
-   */
-  function warnOnce(code: PolarParseWarningCode, line?: number, detail?: string): void {
-    if (seen.has(code)) return
-    seen.add(code)
-    warnings.push({ code, ...(line === undefined ? {} : { line }), ...(detail === undefined ? {} : { detail }) })
-  }
-
-  function warn(code: PolarParseWarningCode, line: number, detail?: string): void {
-    warnings.push({ code, line, ...(detail === undefined ? {} : { detail }) })
-  }
+  // The polar's own extra code sits alongside the shared ones; `delimitedGrid` only ever adds
+  // the shared ones, and `decimal-comma-normalised` is added here.
+  const warnings = new GridWarnings<PolarParseWarningCode>()
 
   function refuse(reason: PolarParseRefusal, message: string, line?: number): PolarParseOutcome {
     return { ok: false, reason, message, ...(line === undefined ? {} : { line }) }
@@ -108,42 +80,7 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
     )
   }
 
-  let text = contents
-
-  if (text.startsWith('﻿')) {
-    text = text.slice(1)
-    warnOnce('bom-stripped', 1)
-  }
-
-  if (text.includes('\r')) {
-    // Normalised for reading only. The bytes in Storage keep their own line endings, which is
-    // what `content_sha256` is over.
-    text = text.replace(/\r\n?/g, '\n')
-    warnOnce('crlf-line-endings', 1)
-  }
-
-  // Numbered before anything is dropped, so a refusal points at the line the admin will count
-  // to in their own editor rather than at a line in some filtered version of their file.
-  const lines: NumberedLine[] = text.split('\n').map((value, index) => ({
-    line: index + 1,
-    text: value,
-  }))
-
-  const content: NumberedLine[] = []
-  for (const line of lines) {
-    const trimmed = line.text.trim()
-    if (trimmed === '') {
-      // A file ends in a newline far more often than not, so the empty final line is not an
-      // oddity worth reporting.
-      if (line.line < lines.length) warn('blank-line-skipped', line.line)
-      continue
-    }
-    if (trimmed.startsWith('#') || trimmed.startsWith('!')) {
-      warn('comment-line-skipped', line.line, trimmed.slice(0, 60))
-      continue
-    }
-    content.push({ line: line.line, text: line.text })
-  }
+  const content = readGridLines(contents, warnings)
 
   if (content.length < 2) {
     return refuse(
@@ -152,33 +89,12 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
     )
   }
 
-  // The header is the first content line, unless the second one carries the sentinel — some
-  // exporters put the boat's name or the certificate number on a line of its own first.
-  let headerIndex = 0
-  const firstFieldOf = (line: NumberedLine): string =>
-    splitFields(line.text, sniffDelimiter(line.text))[0]?.trim() ?? ''
+  const headerIndex = findHeaderIndex(content, warnings)
+  const header = readGridHeader(content[headerIndex], warnings)
+  const headerLine = header.line
+  const { delimiter } = header
 
-  if (!HEADER_SENTINEL.test(firstFieldOf(content[0])) && !BARE_TWA.test(firstFieldOf(content[0]))) {
-    const second = firstFieldOf(content[1])
-    if (HEADER_SENTINEL.test(second) || BARE_TWA.test(second)) {
-      warn('description-line-skipped', content[0].line, content[0].text.trim().slice(0, 60))
-      headerIndex = 1
-    }
-  }
-
-  const headerLine = content[headerIndex]
-  const delimiter = sniffDelimiter(headerLine.text)
-  const headerFields = splitFields(headerLine.text, delimiter).map((field) => field.trim())
-
-  // The trailing delimiter is decided on the header and applied to the whole file: a file that
-  // ends every line with a tab ends the header with one too.
-  const trailingDelimiter = headerFields.length > 1 && headerFields.at(-1) === ''
-  if (trailingDelimiter) {
-    headerFields.pop()
-    warnOnce('trailing-empty-field', headerLine.line)
-  }
-
-  if (headerFields.length < 2) {
+  if (header.fields.length < 2) {
     return refuse(
       'no-header',
       'the first line carries no wind speeds, so there is no grid to read',
@@ -186,14 +102,10 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
     )
   }
 
-  const headerToken = headerFields[0]
-  if (BARE_TWA.test(headerToken)) {
-    warnOnce('bare-twa-header', headerLine.line, headerToken)
-  } else if (!HEADER_SENTINEL.test(headerToken)) {
-    warnOnce('unexpected-header-token', headerLine.line, headerToken)
-  }
+  warnAboutHeaderToken(header, warnings)
 
-  const width = headerFields.length - 1
+  const headerToken = header.token
+  const width = header.fields.length - 1
   if (width > MAX_TWS_COLUMNS) {
     return refuse(
       'grid-too-large',
@@ -215,7 +127,7 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
     }
 
     if ((delimiter === ';' || delimiter === '\t') && COMMA_DECIMAL.test(value)) {
-      warnOnce('decimal-comma-normalised', line, value)
+      warnings.once('decimal-comma-normalised', line, value)
       value = value.replace(',', '.')
     }
 
@@ -227,7 +139,7 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
   }
 
   const tws_axis: number[] = []
-  for (const [index, field] of headerFields.slice(1).entries()) {
+  for (const [index, field] of header.fields.slice(1).entries()) {
     const value = readNumber(field, headerLine.line, `wind speed ${index + 1}`)
     if (typeof value !== 'number') return value
     if (value < 0) {
@@ -247,11 +159,7 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
   const boat_speed: number[][] = []
 
   for (const row of content.slice(headerIndex + 1)) {
-    const fields = splitFields(row.text, delimiter)
-
-    if (trailingDelimiter && fields.length === width + 2 && fields.at(-1)?.trim() === '') {
-      fields.pop()
-    }
+    const fields = readRowFields(row, header, width)
 
     if (fields.length !== width + 1) {
       return refuse(
@@ -313,24 +221,5 @@ export function parsePolarFile(contents: string): PolarParseOutcome {
     source: { format: POLAR_FORMAT, header_token: headerToken },
   }
 
-  return { ok: true, payload, warnings }
-}
-
-/**
- * The delimiter this file uses, sniffed rather than inferred from the extension — the corpus
- * has TAB, `;`, `,` and space files all named `.pol`.
- *
- * `null` means whitespace, which is both the fallback and a real format: a run of spaces is
- * one delimiter, so it cannot be handled by splitting on a single character.
- */
-function sniffDelimiter(headerLine: string): string | null {
-  for (const candidate of DELIMITERS) {
-    if (headerLine.includes(candidate)) return candidate
-  }
-  return null
-}
-
-function splitFields(line: string, delimiter: string | null): string[] {
-  if (delimiter === null) return line.trim().split(/\s+/)
-  return line.split(delimiter)
+  return { ok: true, payload, warnings: warnings.all() }
 }

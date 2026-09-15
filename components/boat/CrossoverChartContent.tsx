@@ -1,43 +1,46 @@
 import type { CSSProperties, ReactElement } from 'react'
 import Link from 'next/link'
 import BoatSetupVersionList from '@/components/boat/BoatSetupVersionList'
-import PolarGrid from '@/components/boat/PolarGrid'
-import PolarUploadPanel from '@/components/boat/PolarUploadPanel'
+import CrossoverChartGrid from '@/components/boat/CrossoverChartGrid'
+import CrossoverChartUploadPanel from '@/components/boat/CrossoverChartUploadPanel'
 import EmptyState from '@/components/common/EmptyState'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { formatCalendarDate } from '@/lib/utils/calendarDate'
 import { spacing } from '@/lib/utils/design'
-import type { PolarVersionDetail, PolarVersionList as PolarVersions } from '@/types'
+import type { CrossoverChartVersionDetail, FileBackedVersionList } from '@/types'
 
-interface PolarContentProps {
+interface CrossoverChartContentProps {
   /** `null` when the read failed — not an empty archive, which is `versions: []`. */
-  list: PolarVersions | null
-  /** The Version the pointer is at, with its grid. `null` before the first upload. */
-  current: PolarVersionDetail | null
+  list: FileBackedVersionList | null
+  /** The Version the pointer is at, with its chart. `null` before the first upload. */
+  current: CrossoverChartVersionDetail | null
   /** Whether this sailor may upload: `admin` only (ADR 0019). */
   canWrite: boolean
 }
 
 /**
- * The **Polar** screen: the grid in force, every Version behind it, and — for an admin — the
- * upload.
+ * The **Crossover Chart** screen: the chart in force, every Version behind it, and — for an admin —
+ * the upload.
  *
- * The first of the four Boat Setup artifacts to get a screen of its own, and the shape the
- * Crossover Chart now reuses: a current Version drawn as its own thing, a list of all of them
- * beneath it, and the write offered only to whoever may make it. The list itself is literally
- * shared — `BoatSetupVersionList` takes the kind — because a Version list is machinery both
- * file-backed kinds have (ADR 0011). What is not shared is the artifact drawn above it: a grid of
- * boat speeds and a grid of sail choices are read differently and are two components.
+ * The last of the four Boat Setup artifacts to get a screen, and the second one whose Versions are
+ * backed by files. It is the Polar's shape deliberately: a current Version drawn as its own thing, a
+ * list of all of them beneath it, and the write offered only to whoever may make it. The Version list
+ * is literally the same component (ADR 0011); the chart above it is not, because a grid of boat
+ * speeds and a grid of sail choices are read differently.
  *
- * A signed-in non-admin sees everything on this screen except the upload panel. That is the whole
- * of the difference: the Role governs writes and nothing else (ADR 0019), so a viewer reads every
+ * **One artifact, two files.** The chart and its Sail Definitions are one Version and are never
+ * versioned apart, so this screen is not a screen about two things — the subtitle says so, and the
+ * definitions appear as the chart's legend rather than as a section of their own (ADR 0012).
+ *
+ * A signed-in non-admin sees everything on this screen except the upload panel. That is the whole of
+ * the difference: the Role governs writes and nothing else (ADR 0019), so a viewer reads every
  * Version and downloads every file.
  */
-export default function PolarContent({
+export default function CrossoverChartContent({
   list,
   current,
   canWrite,
-}: PolarContentProps): ReactElement {
+}: CrossoverChartContentProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       <header style={HEADER_STYLE}>
@@ -47,9 +50,10 @@ export default function PolarContent({
           ‹ Boat management
         </Link>
         <div style={{ ...EYEBROW_STYLE, marginTop: spacing(2) }}>Boat setup</div>
-        <h1 style={TITLE_STYLE}>Polar</h1>
+        <h1 style={TITLE_STYLE}>Crossover Chart</h1>
         <p style={SUBTITLE_STYLE}>
-          Target boat speed at each wind angle and wind speed — speed through the water, not VMG.
+          Which sail to be carrying at each wind angle and wind speed — the chart and the sail
+          definitions that name it, kept as one Version so neither can drift from the other.
         </p>
       </header>
 
@@ -57,20 +61,22 @@ export default function PolarContent({
         <div style={{ padding: spacing(4) }}>
           <EmptyState
             mark="◳"
-            title="The Polar could not be read"
-            detail="Nothing about the boat's polar is shown rather than a guess at it. Sign in again, or try once more in a moment."
+            title="The Crossover Chart could not be read"
+            detail="Nothing about the boat's sail choices is shown rather than a guess at them. Sign in again, or try once more in a moment."
           />
         </div>
       ) : (
-        <div style={{ padding: spacing(4), display: 'flex', flexDirection: 'column', gap: spacing(6) }}>
+        <div
+          style={{ padding: spacing(4), display: 'flex', flexDirection: 'column', gap: spacing(6) }}
+        >
           {list.versions.length === 0 ? (
             <EmptyState
               mark="◳"
-              title="No Polar recorded"
+              title="No Crossover Chart recorded"
               detail={
                 canWrite
-                  ? 'Upload the .pol from the boat’s certificate or router below. Nothing about it will be corrected on the way in.'
-                  : 'Nobody has uploaded one yet. An admin adds the boat’s polar; it will appear here as soon as they do.'
+                  ? 'Upload the sail chart and its definitions from the router below. Both go in together, and nothing in either will be corrected on the way in.'
+                  : 'Nobody has uploaded one yet. An admin adds the boat’s sail chart; it will appear here as soon as they do.'
               }
             />
           ) : (
@@ -79,12 +85,12 @@ export default function PolarContent({
                 <div style={EYEBROW_STYLE}>In force</div>
                 {current === null ? (
                   // Versions exist but the pointer is not at a readable one: either the read of
-                  // that one row failed, or its stored payload is not a grid. Said rather than
+                  // that one row failed, or its stored payload is not a chart. Said rather than
                   // covered over by silently drawing the next Version down, which would show the
-                  // sailor a polar that is not the boat's current one.
+                  // sailor sail choices that are not the boat's current ones.
                   <p style={MUTED_STYLE}>
-                    The Version in force could not be read. Every Version is still listed below
-                    and can be opened on its own.
+                    The Version in force could not be read. Every Version is still listed below and
+                    can be opened on its own.
                   </p>
                 ) : (
                   <>
@@ -93,7 +99,7 @@ export default function PolarContent({
                       {formatCalendarDate(current.effective_from)}
                       {current.note !== null && ` · ${current.note}`}
                     </p>
-                    <PolarGrid payload={current.payload} />
+                    <CrossoverChartGrid payload={current.payload} />
                   </>
                 )}
               </section>
@@ -102,18 +108,18 @@ export default function PolarContent({
                 <div style={EYEBROW_STYLE}>
                   {list.versions.length === 1 ? '1 Version' : `${list.versions.length} Versions`}
                 </div>
-                <BoatSetupVersionList kind="polar" versions={list.versions} />
-                {/* Superseded is not retired: a season's races were sailed against whatever
-                    polar was in force then, so every Version stays here. */}
+                <BoatSetupVersionList kind="crossover_chart" versions={list.versions} />
+                {/* Superseded is not retired: a season's races were sailed against whatever chart
+                    was in force then, so every Version stays here. */}
                 <p style={MUTED_STYLE}>
                   Every Version ever uploaded stays here, openable and downloadable, including the
-                  ones a later upload superseded.
+                  ones a later upload superseded. Open one to download both of its files.
                 </p>
               </section>
             </>
           )}
 
-          {canWrite && <PolarUploadPanel />}
+          {canWrite && <CrossoverChartUploadPanel />}
         </div>
       )}
     </div>

@@ -48,10 +48,7 @@ describe('the Boat Setup list', () => {
     )
   })
 
-  it('leaves a recorded artifact inert while its screen is unbuilt', () => {
-    // The Crossover Chart's screen is the one still to land. A row that leads to a 404
-    // is worse than a row that leads nowhere, so until it exists the row states the
-    // Version and stops there.
+  it('opens the Crossover Chart, whose screen is the last of the four to land', () => {
     render(
       <BoatSetupList
         artifacts={withCurrent('crossover_chart', {
@@ -62,7 +59,12 @@ describe('the Boat Setup list', () => {
     )
 
     expect(screen.getByText('v1 · effective 2 May 2026')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Crossover Chart/ })).not.toBeInTheDocument()
+    // One Version for both halves, so one row and one link: the Sail Definitions are
+    // inside this artifact rather than beside it (ADR 0012).
+    expect(screen.getByRole('link', { name: /Crossover Chart/ })).toHaveAttribute(
+      'href',
+      '/boat-management/crossover-chart'
+    )
   })
 
   it('opens an artifact with a detail screen even before its first Version', () => {
@@ -102,14 +104,14 @@ describe('the Boat Setup list', () => {
     expect(polar.textContent).toMatch(/Not recorded/)
   })
 
-  it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
+  it('opens all four rows, and offers no button anywhere', () => {
     render(<BoatSetupList artifacts={EMPTY} />)
 
-    // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control. Three screens exist; the Crossover
-    // Chart's row joins them when its own lands.
-    expect(screen.queryAllByRole('link')).toHaveLength(3)
-    expect(screen.queryByRole('link', { name: /Crossover Chart/ })).not.toBeInTheDocument()
+    // Every artifact has a detail screen now, so the gate that kept an unbuilt row
+    // inert — LAY-102's rule that a row leading nowhere is not dressed as a control —
+    // has nothing left to hold back. Opening a row is still a navigation and never a
+    // button: the writes live on the screen at the other end.
+    expect(screen.queryAllByRole('link')).toHaveLength(4)
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 

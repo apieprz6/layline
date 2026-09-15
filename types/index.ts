@@ -387,40 +387,56 @@ export interface PolarUploadPreview {
 }
 
 /**
- * One Polar **Version** as a list row states it: which number it is, when it took effect, what
- * the file was called, and whether it is the one in force.
+ * One **Version** of a file-backed artifact as a list row states it: which number it is, when it
+ * took effect, what the file was called, and whether it is the one in force.
  *
- * `Pick`ed from the Version itself wherever the field is the same field, so the two spellings
- * of a column name cannot drift.
+ * `Pick`ed from the Versions themselves wherever the field is the same field, so the two spellings
+ * of a column name cannot drift. Shared by the Polar and the Crossover Chart, because a list row
+ * is machinery: it states the columns every file-backed kind has and says nothing about the payload.
  */
-export type PolarVersionSummary = Pick<
-  PolarVersion,
+export type FileBackedVersionSummary = Pick<
+  PolarVersion | CrossoverChartVersion,
   'id' | 'version_number' | 'effective_from' | 'recorded_at' | 'note' | 'filename' | 'content_sha256'
 > & {
   /** Whether the artifact's current pointer is at this Version. */
   is_current: boolean
 }
 
-/** A Polar Version with its grid, which is what the Version's own screen shows. */
-export type PolarVersionDetail = PolarVersionSummary & { payload: PolarPayload }
-
-/** Every Polar Version, newest first, and which of them is in force. */
-export interface PolarVersionList {
+/** Every Version of one file-backed artifact, newest first, and which of them is in force. */
+export interface FileBackedVersionList {
   /** Null until the first upload. */
   current_version_id: string | null
   /** Newest first, which is the order the screen reads them in. */
-  versions: PolarVersionSummary[]
+  versions: FileBackedVersionSummary[]
 }
 
-/** What the Polar screen shows: every Version, and the grid the pointer is at. */
-export interface PolarScreen {
-  list: PolarVersionList
+/** A Version with its payload, which is what the Version's own screen shows. */
+export type FileBackedVersionDetail<Payload> = FileBackedVersionSummary & { payload: Payload }
+
+/** What an artifact's screen shows: every Version, and the payload the pointer is at. */
+export interface FileBackedScreen<Payload> {
+  list: FileBackedVersionList
   /**
-   * Null on an empty archive, and also when the Version in force holds a payload that is not a
-   * grid — the list still renders, and the screen says why there is no grid under it.
+   * Null on an empty archive, and also when the Version in force holds a payload the schema does
+   * not accept — the list still renders, and the screen says why there is nothing under it.
    */
-  current: PolarVersionDetail | null
+  current: FileBackedVersionDetail<Payload> | null
 }
+
+export type PolarVersionSummary = FileBackedVersionSummary
+export type PolarVersionList = FileBackedVersionList
+
+/** A Polar Version with its grid, which is what the Version's own screen shows. */
+export type PolarVersionDetail = FileBackedVersionDetail<PolarPayload>
+
+/** What the Polar screen shows: every Version, and the grid the pointer is at. */
+export type PolarScreen = FileBackedScreen<PolarPayload>
+
+/** A Crossover Chart Version with its grid and its definitions — one payload, both halves. */
+export type CrossoverChartVersionDetail = FileBackedVersionDetail<CrossoverChartPayload>
+
+/** What the Crossover Chart screen shows: every Version, and the chart the pointer is at. */
+export type CrossoverChartScreen = FileBackedScreen<CrossoverChartPayload>
 
 /**
  * Where one row of a Polar grid came from, read off the grid itself.
@@ -459,12 +475,16 @@ export interface PolarSuppression {
 }
 
 /**
- * Something a Polar file did that is worth telling the admin about but is not worth
- * refusing it over. Every one of these is a shape seen in the 273-file corpus surveyed in
+ * Something a `TWA/TWS` grid file did that is worth telling the admin about but is not worth
+ * refusing it over.
+ *
+ * Shared by the Polar's `.pol` and the Crossover Chart's `.sailselect`, which are the same
+ * document with different cells — qtVlm documents the shape once (p. 38) and both files obey it.
+ * Every one of these is a shape seen in the 273-file corpus surveyed in
  * `docs/research/orc-polar-file-formats.md`, so all of them are tolerated — and all of them
  * are *reported*, because a file quietly repaired is a file nobody knows was odd.
  */
-export type PolarParseWarningCode =
+export type GridParseWarningCode =
   /** A UTF-8 byte-order mark before the header token. Stripped. */
   | 'bom-stripped'
   /** CRLF or bare-CR line endings. Normalised for parsing; the stored bytes keep them. */
@@ -479,25 +499,39 @@ export type PolarParseWarningCode =
   | 'trailing-empty-field'
   /** A header token that is neither `twa/tws` nor `TWA\TWS` in any casing. Kept verbatim. */
   | 'unexpected-header-token'
-  /** A header whose first field is a bare `TWA` — 86 of the corpus's 273 files. */
+  /** A header whose first field is a bare `TWA` — 86 of the polar corpus's 273 files. */
   | 'bare-twa-header'
+
+/** A Polar file's oddities: every grid oddity, plus the one that is about decimals. */
+export type PolarParseWarningCode =
+  | GridParseWarningCode
   /** Decimal commas, normalised to points. Only ever read this way under `;` or TAB. */
   | 'decimal-comma-normalised'
 
-export interface PolarParseWarning {
-  code: PolarParseWarningCode
+/**
+ * A Crossover Chart grid's oddities are exactly the shared ones. A sail id is a whole number, so
+ * there is no decimal separator for a locale to disagree about.
+ */
+export type CrossoverGridParseWarningCode = GridParseWarningCode
+
+export interface GridParseWarning<Code extends string = GridParseWarningCode> {
+  code: Code
   /** 1-based line in the file as given, so a warning can be pointed at. */
   line?: number
   /** What was actually seen, when the code alone does not say. */
   detail?: string
 }
 
+export type PolarParseWarning = GridParseWarning<PolarParseWarningCode>
+
+export type CrossoverGridParseWarning = GridParseWarning<CrossoverGridParseWarningCode>
+
 /**
- * Why a Polar file was refused. Parsing is the gate (ADR 0009), so each of these is a
+ * Why a `TWA/TWS` grid file was refused. Parsing is the gate (ADR 0009), so each of these is a
  * reason the file cannot be read as a grid — never a judgement about the sailing in it.
  */
-export type PolarParseRefusal =
-  /** Larger than any polar plausibly is, so it is some other file. */
+export type GridParseRefusal =
+  /** Larger than any grid plausibly is, so it is some other file. */
   | 'too-large'
   /** Fewer than two lines: a header with no grid, or an empty file. */
   | 'too-few-lines'
@@ -505,7 +539,7 @@ export type PolarParseRefusal =
   | 'no-header'
   /** A row whose field count is not the header's. */
   | 'row-width-mismatch'
-  /** An empty cell in the grid. A polar has no missing entries, so this is a broken file. */
+  /** An empty cell in the grid. Neither format has missing entries, so this is a broken file. */
   | 'empty-cell'
   /** An axis value or a cell that is not a number. */
   | 'not-a-number'
@@ -514,10 +548,19 @@ export type PolarParseRefusal =
    * qtVlm silently drops the rest of such a file, which loses data without saying so.
    */
   | 'axis-not-ascending'
-  /** A TWA outside 0..180, or a negative TWS or boat speed. */
+  /** A TWA outside 0..180, or a negative TWS or cell value. */
   | 'value-out-of-range'
-  /** More angles or wind speeds than any polar has: 181 × 200 is already absurd. */
+  /** More angles or wind speeds than any grid has: 181 × 200 is already absurd. */
   | 'grid-too-large'
+
+/** Every refusal a Polar file can earn is a refusal any `TWA/TWS` grid can earn. */
+export type PolarParseRefusal = GridParseRefusal
+
+/**
+ * A Crossover Chart grid's refusals, which add the one thing its cells are that a polar's are
+ * not: whole numbers. A sail id is an identifier, and `2.5` identifies nothing.
+ */
+export type CrossoverGridParseRefusal = GridParseRefusal | 'not-an-integer'
 
 /**
  * What `parsePolarFile` gives back. A refusal carries the line it was decided on wherever
@@ -527,9 +570,112 @@ export type PolarParseOutcome =
   | { ok: true; payload: PolarPayload; warnings: PolarParseWarning[] }
   | { ok: false; reason: PolarParseRefusal; message: string; line?: number }
 
+/**
+ * What `parseCrossoverGridFile` gives back: the grid half of a Crossover Chart, on its own.
+ *
+ * Only half a payload, because the other half arrives in a second file. The two are joined into
+ * one payload — and so into one Version — by the action that uploads them (ADR 0012).
+ */
+export type CrossoverGridParseOutcome =
+  | { ok: true; grid: CrossoverGrid; warnings: CrossoverGridParseWarning[] }
+  | { ok: false; reason: CrossoverGridParseRefusal; message: string; line?: number }
+
+export interface CrossoverGrid {
+  twa_axis: number[]
+  tws_axis: number[]
+  /** One row per TWA, one cell per TWS, each cell a sail definition's number. */
+  cells: number[][]
+  /** The header token the file carried, verbatim, for `payload.source` to record. */
+  header_token: string
+}
+
+/**
+ * A Sail Definitions file's oddities. Its lines are `number;label` and it has no header, so it
+ * shares the four that are about the *text* of a delimited file and none of the ones about a grid.
+ */
+export type CrossoverDefinitionsParseWarningCode =
+  | Extract<
+      GridParseWarningCode,
+      'bom-stripped' | 'crlf-line-endings' | 'blank-line-skipped' | 'comment-line-skipped'
+    >
+  /**
+   * Definition numbers that do not ascend. Tolerated and kept in the file's own order: the
+   * numbers are external ids and nothing reads them in sequence, so an out-of-order file is odd
+   * rather than wrong.
+   */
+  | 'numbers-not-ascending'
+  /** A label with leading or trailing whitespace, which is trimmed for the label only. */
+  | 'label-whitespace-trimmed'
+
+export type CrossoverDefinitionsParseWarning = GridParseWarning<CrossoverDefinitionsParseWarningCode>
+
+/**
+ * Why a Sail Definitions file was refused.
+ *
+ * The research (`docs/research/orc-polar-file-formats.md`) says to be permissive and constructive
+ * with the sail files, so this list is short: it holds only the things that would make the
+ * definitions unusable as a lookup, and every one of them is something the admin can fix.
+ */
+export type CrossoverDefinitionsParseRefusal =
+  /** Larger than any list of sail configurations plausibly is. */
+  | 'too-large'
+  /** Not one definition in the whole file, so there is nothing for the grid to resolve against. */
+  | 'no-definitions'
+  /** A line with no delimiter at all, so it is neither a number nor a label. */
+  | 'no-delimiter'
+  /** A number that is not a number, or not a whole one. A sail id of `2.5` identifies nothing. */
+  | 'not-an-integer'
+  /** A negative definition number. */
+  | 'value-out-of-range'
+  /** Two definitions claiming the same number, so a cell holding it resolves to both. */
+  | 'duplicate-number'
+  /** A definition with a number and no label. */
+  | 'empty-label'
+  /**
+   * A `;` inside a label. The delimiter is the only structure the format has, so a label
+   * containing one is unrepresentable — and silently keeping the first fragment would be
+   * overwriting what the source gave us.
+   */
+  | 'delimiter-in-label'
+
+export type CrossoverDefinitionsParseOutcome =
+  | { ok: true; definitions: CrossoverSailDefinition[]; warnings: CrossoverDefinitionsParseWarning[] }
+  | { ok: false; reason: CrossoverDefinitionsParseRefusal; message: string; line?: number }
+
+/**
+ * One Sail Configuration the chart can call for: the set of sails plus a Reef State, named.
+ *
+ * `number` is the integer the grid's cells hold. It is qtVlm's external id and not a Layline
+ * concept — nothing else in the archive points at it — so it is stored as the file gave it and
+ * never renumbered.
+ *
+ * `label` is free text. Layline's own sail names are the corrected ones (`A3`), and the payload
+ * gate refuses a legacy spelling rather than rewriting it: v1 of this artifact is authored right
+ * rather than recording a correction to a name Layline never used.
+ */
 export interface CrossoverSailDefinition {
   number: number
   label: string
+}
+
+/**
+ * Where a Crossover Chart payload came from — both halves of it.
+ *
+ * The grid file's own filename and hash are columns on the Version, as they are for a Polar. The
+ * definitions file has no columns of its own, so its provenance lives here, beside the
+ * definitions it describes (ADR 0022).
+ */
+export interface CrossoverChartSource {
+  /** The format the grid was read as, and the header token that grid file carried. */
+  format: string
+  header_token: string
+  definitions: {
+    format: string
+    /** The sailor's own filename for the definitions half, verbatim. */
+    filename: string
+    /** Hex SHA-256 of the definitions file's bytes, which Storage holds under the same prefix. */
+    content_sha256: string
+  }
 }
 
 export interface CrossoverChartPayload {
@@ -538,7 +684,58 @@ export interface CrossoverChartPayload {
   /** One row per TWA, one cell per TWS, each cell a `sail_definitions` number. */
   cells: number[][]
   sail_definitions: CrossoverSailDefinition[]
-  source?: { format: string; header_token: string }
+  source?: CrossoverChartSource
+}
+
+/** One definition and how much of the chart calls for it. */
+export interface CrossoverDefinitionUsage {
+  definition: CrossoverSailDefinition
+  /** How many cells hold this definition's number. Zero is legal. */
+  cells: number
+}
+
+/** One of the two files a Crossover Chart upload carries, as the admin dropped it. */
+export interface CrossoverChartUploadFile {
+  /** The sailor's own filename, verbatim. */
+  filename: string
+  /** Size of the file as dropped, for the admin to recognise it by. */
+  byte_length: number
+  /** Hex SHA-256 of those bytes. Posted back on confirm, so the confirm is of *these* files. */
+  content_sha256: string
+}
+
+/**
+ * What an admin is shown after dropping a `.sailselect` and its definitions, and before committing
+ * them — the whole of the first step of the two-step confirm.
+ *
+ * It crosses the server/client boundary in both directions: the server parses both files and returns
+ * this, and the panel shows it and posts both files a second time to confirm. The bytes themselves
+ * are not in it. The client keeps the files it already has, and the server re-parses what it is given
+ * on confirm rather than trusting a chart the client hands back (ADR 0009).
+ *
+ * One preview for two files, because they commit as one Version. There is no state in which the grid
+ * is accepted and the definitions are not (ADR 0012).
+ */
+export interface CrossoverChartUploadPreview {
+  grid: CrossoverChartUploadFile
+  definitions: CrossoverChartUploadFile
+  /** Both halves joined, which is what will be stored. */
+  payload: CrossoverChartPayload
+  /** Everything tolerated in the grid file, so nothing was quietly repaired. */
+  grid_warnings: CrossoverGridParseWarning[]
+  /** Everything tolerated in the definitions file, for the same reason. */
+  definitions_warnings: CrossoverDefinitionsParseWarning[]
+  /**
+   * How much of the chart each definition accounts for. Shown because zero is *legal* and worth
+   * seeing before committing: a definition the chart never recommends is an inventory entry, not a
+   * mistake, and the admin is the one who can tell which.
+   */
+  usage: CrossoverDefinitionUsage[]
+  /**
+   * The number this upload would take, read before the confirm. Advisory only: the version number
+   * is minted inside the transaction, so a second upload racing this one wins it.
+   */
+  next_version_number: number
 }
 
 /**

@@ -1,9 +1,6 @@
 'use server'
 
-import { createHash, randomUUID } from 'node:crypto'
-// From `node:util` rather than the global, which jsdom does not define — and this action only ever
-// runs on the server, where both are the same class.
-import { TextDecoder } from 'node:util'
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
@@ -12,6 +9,7 @@ import { isCalendarDate } from '@/lib/utils/calendarDate'
 import { createClient } from '@/lib/supabase/server'
 import { parsePolarFile } from '@/services/boat/polarFile'
 import { validatePolarPayload, type ValidPolarPayload } from '@/services/boat/polarPayload'
+import { readBoatSetupUpload, type BoatSetupUpload } from '@/services/boat/readBoatSetupUpload'
 import { polarSuppression } from '@/services/boat/polarSyntheticRows'
 import type { PolarParseWarning, PolarUploadPreview } from '@/types'
 
@@ -34,9 +32,8 @@ import type { PolarParseWarning, PolarUploadPreview } from '@/types'
  * an orphaned object is invisible and sweepable while an orphaned row is a Version of the boat's
  * polar that no file backs.
  *
- * `allowed_mime_types` on the bucket is NULL and nothing here reads `file.type`. A browser calls
- * a `.pol` anything or nothing, so a MIME check would refuse good files and admit bad ones;
- * parsing is the gate.
+ * Reading the dropped file — its bytes, its text and its hash — is `readBoatSetupUpload`'s, shared
+ * with the Crossover Chart, and so is the reasoning about why nothing checks its MIME type.
  */
 
 export type PreviewPolarUploadResult =
@@ -54,44 +51,11 @@ const NOT_ADMIN = 'Only an admin can upload a Polar.'
 
 const NO_FILE = 'Choose a polar file to upload.'
 
-/**
- * A megabyte, the same ceiling the parser applies to what it reads. The bucket's own limit is
- * 10 MB and would refuse a larger file anyway; refusing it here means the admin is told why
- * instead of being handed a storage error.
- */
-const MAX_UPLOAD_BYTES = 1_048_576
-
-/** The file as dropped: its name, its bytes, and its bytes decoded. */
-interface Upload {
-  filename: string
-  bytes: Uint8Array
-  text: string
-  content_sha256: string
-}
-
-async function readUpload(formData: FormData): Promise<Upload | { message: string }> {
-  const file = formData.get('file')
-
-  if (!(file instanceof File) || file.size === 0) return { message: NO_FILE }
-
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return {
-      message: `A polar is a few kilobytes; this file is ${Math.round(file.size / 1024)} KB.`,
-    }
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer())
-
-  return {
-    filename: file.name,
-    bytes,
-    // `ignoreBOM` so a byte-order mark reaches the parser, which reports it. Decoding it away
-    // here would leave the parser silent about a file that carries one.
-    text: new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes),
-    // Over the bytes as dropped, which are the bytes that will be stored — not over the text,
-    // which has been through a decoder.
-    content_sha256: createHash('sha256').update(bytes).digest('hex'),
-  }
+function readUpload(formData: FormData): Promise<BoatSetupUpload | { message: string }> {
+  return readBoatSetupUpload(formData, 'file', {
+    missing: NO_FILE,
+    tooLarge: 'A polar is a few kilobytes;',
+  })
 }
 
 /** Parse and validate, giving back either the grid or the sentence to show the admin. */

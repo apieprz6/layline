@@ -842,7 +842,15 @@ the filler is stored as given.
     { "number": 1, "label": "Main + Jib 1" },
     { "number": 8, "label": "Main + A2" }
   ],
-  "source": { "format": "qtvlm-sailselect", "header_token": "TWA/TWS" }
+  "source": {
+    "format": "qtvlm-sailselect",
+    "header_token": "TWA/TWS",
+    "definitions": {
+      "format": "qtvlm-saildesc",
+      "filename": "HandsomePete_2026.saildesc",
+      "content_sha256": "…64 hex characters"
+    }
+  }
 }
 ```
 
@@ -851,6 +859,12 @@ not appear in any cell (number 7 is referenced by zero cells and is legal). Defi
 authored with the corrected sail names at seed time — `A3`, not "Reaching Spin" — because nothing
 outside Layline reads those files, so v1 starts right rather than recording a correction to a
 name Layline never used.
+
+`source.definitions` is where the *second* file's provenance lives. The Version's `filename` and
+`content_sha256` columns are the grid file's, as they are for a Polar; the definitions half has no
+columns of its own, because a second file is not machinery every kind shares and one artifact in
+four does not earn two more columns on the shared table (ADR 0022). Both sets of bytes are in
+Storage under the one prefix, which is why the upload refuses two files with the same name.
 
 **Instrument Calibration**, keyed by the same enum the database uses:
 
