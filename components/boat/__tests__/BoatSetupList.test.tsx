@@ -38,25 +38,38 @@ describe('the Boat Setup list', () => {
   it('opens a recorded artifact to its own detail', () => {
     render(
       <BoatSetupList
-        artifacts={withCurrent('crossover_chart', {
+        artifacts={withCurrent('instrument_calibration', {
           version_number: 1,
           effective_from: '2026-05-02',
         })}
       />
     )
 
-    expect(screen.getByRole('link', { name: /Crossover Chart/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
       'href',
-      '/boat-management/crossover-chart'
+      '/boat-management/instrument-calibration'
     )
   })
 
-  it('leaves an unrecorded artifact inert — there is nothing to open', () => {
+  it('opens an artifact with a detail screen even before its first Version', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    // Gating this on a Version would leave the archive the app ships in — four
+    // artifacts, none recorded — with no way to fill itself, because entering the
+    // first Version is one of the things that screen is for.
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
+      'href',
+      '/boat-management/instrument-calibration'
+    )
+  })
+
+  it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
     render(<BoatSetupList artifacts={EMPTY} />)
 
     // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control.
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    // nowhere is not dressed as a control. Polar, Crossover Chart and Rig Tune
+    // join the link the moment LAY-106 and LAY-107 land their screens.
+    expect(screen.queryAllByRole('link')).toHaveLength(1)
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 
