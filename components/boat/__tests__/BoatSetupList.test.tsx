@@ -38,25 +38,52 @@ describe('the Boat Setup list', () => {
   it('opens a recorded artifact to its own detail', () => {
     render(
       <BoatSetupList
-        artifacts={withCurrent('crossover_chart', {
+        artifacts={withCurrent('instrument_calibration', {
           version_number: 1,
           effective_from: '2026-05-02',
         })}
       />
     )
 
-    expect(screen.getByRole('link', { name: /Crossover Chart/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
       'href',
-      '/boat-management/crossover-chart'
+      '/boat-management/instrument-calibration'
     )
   })
 
-  it('leaves an unrecorded artifact inert — there is nothing to open', () => {
+  it('opens an artifact with a detail screen even before its first Version', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    // Gating this on a Version would leave the archive the app ships in — four
+    // artifacts, none recorded — with no way to fill itself, because entering the
+    // first Version is one of the things that screen is for.
+    expect(screen.getByRole('link', { name: /Instrument Calibration/ })).toHaveAttribute(
+      'href',
+      '/boat-management/instrument-calibration'
+    )
+  })
+
+  it('opens the Rig Tune before anything is recorded, for the same reason', () => {
+    render(<BoatSetupList artifacts={EMPTY} />)
+
+    // A Rig Tune is a form and has no file behind it (ADR 0007), so its screen is
+    // where an unrecorded artifact stops being unrecorded — and a row that waits for
+    // a Version before it opens waits forever.
+    expect(screen.getByRole('link', { name: /Rig Tune/ })).toHaveAttribute(
+      'href',
+      '/boat-management/rig-tune'
+    )
+    // And the row still says what it is: an empty form is being offered, not a Version.
+    expect(screen.getAllByTestId('not-recorded')).toHaveLength(4)
+  })
+
+  it('leaves an artifact with no detail screen inert — that row leads nowhere', () => {
     render(<BoatSetupList artifacts={EMPTY} />)
 
     // The same choice LAY-102 made for a locked drawer row: a row that leads
-    // nowhere is not dressed as a control.
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    // nowhere is not dressed as a control. Polar and the Crossover Chart join the
+    // link the moment LAY-106 lands their upload screens.
+    expect(screen.queryAllByRole('link')).toHaveLength(2)
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 

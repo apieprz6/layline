@@ -34,9 +34,8 @@ export const BOAT_SETUP_LABEL: Record<BoatSetupKind, string> = {
  * The route segment an artifact's detail lives at. Kebab-case rather than the
  * enum's snake_case, because it is a URL a sailor may read and share.
  *
- * None of the four routes exists yet — they arrive with the upload and form flows in
- * LAY-106 to LAY-108. Nothing links to one until then either: a row is only made a
- * link once it has a Version to open, and on an empty archive there are none.
+ * The Rig Tune's and the Instrument Calibration's screens are here; the two upload
+ * flows arrive with LAY-106. `BOAT_SETUP_DETAIL_BUILT` says which are which.
  */
 const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
   polar: 'polar',
@@ -47,4 +46,26 @@ const BOAT_SETUP_SLUG: Record<BoatSetupKind, string> = {
 
 export function boatSetupHref(kind: BoatSetupKind): string {
   return `/boat-management/${BOAT_SETUP_SLUG[kind]}`
+}
+
+/**
+ * The kinds whose detail screen exists. Add a kind here when its route lands.
+ *
+ * LAY-104 gated the list's link on a Version being recorded, on the reasoning that a
+ * row leading to an empty screen is a row dressed as a control. That was right while
+ * no detail screen existed and wrong the moment one did: **recording the first Version
+ * is something the detail screen is for**, so a link gated on a current pointer leaves
+ * an empty archive — which is the state this app ships in — with no way to fill itself.
+ *
+ * So the gate is the screen, not the pointer. A kind absent from here is still inert
+ * text, because that row genuinely leads nowhere.
+ *
+ * Nor is the gate the *role*: a viewer opening the Rig Tune with nothing recorded reads
+ * why there is nothing to read (ADR 0019 governs writes only), which is an answer about
+ * the boat and worth a screen.
+ */
+const BOAT_SETUP_DETAIL_BUILT: readonly BoatSetupKind[] = ['rig_tune', 'instrument_calibration']
+
+export function hasDetailScreen(kind: BoatSetupKind): boolean {
+  return BOAT_SETUP_DETAIL_BUILT.includes(kind)
 }

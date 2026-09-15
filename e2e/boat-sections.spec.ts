@@ -10,7 +10,9 @@ import { gotoHydrated } from './hydrated'
  * ends up.
  *
  * Everything here runs as a **Guest** — no session is established — which is the
- * state the locks exist for.
+ * state the locks exist for. There is no sign-in helper in this suite, so what a
+ * signed-in sailor sees is out of reach here: the Rig Tune form's 390px layout is
+ * asserted in jsdom instead, which cannot answer a question about position.
  */
 
 test.describe('the locked boat sections', () => {
@@ -110,6 +112,22 @@ test.describe('the locked boat sections', () => {
     // The ask is taken back out of the URL once it has been read, so a reload does
     // not reopen a sheet the sailor has dismissed.
     await expect(page).toHaveURL(/\/$/)
+  })
+
+  test('serves a guest no part of the Rig Tune either, deep link or not', async ({ page }) => {
+    // The Rig Tune is a screen *under* Boat management (LAY-107), and a nested route is
+    // exactly where a guard is forgotten. A guest asking for it lands on the dashboard with
+    // the sheet open and this route remembered — no band table, no Version, and not even the
+    // fact that a tune is recorded (ADR 0015).
+    const response = await page.goto('/boat-management/rig-tune')
+
+    expect(response?.status()).toBe(200)
+    expect(response?.url()).toContain('signin=%2Fboat-management%2Frig-tune')
+    expect(response?.request().redirectedFrom()?.url()).toContain('/boat-management/rig-tune')
+
+    await expect(page.getByTestId('rig-tune-band')).toHaveCount(0)
+    await expect(page.getByTestId('shown-version')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('Turnbuckle Gap')
   })
 
   test('serves a guest no part of a boat screen', async ({ page }) => {
