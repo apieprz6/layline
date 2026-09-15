@@ -47,6 +47,7 @@ describe('isCalendarDate', () => {
     expect(isCalendarDate('2026-13-01')).toBe(false)
     expect(isCalendarDate('2026-00-10')).toBe(false)
     expect(isCalendarDate('2026-06-00')).toBe(false)
+    expect(isCalendarDate('2026-06-32')).toBe(false)
   })
 
   it('refuses anything that is not a bare YYYY-MM-DD', () => {
@@ -55,7 +56,10 @@ describe('isCalendarDate', () => {
     }
   })
 
-  it('knows which centuries are leap years', () => {
+  it('knows which Februaries have a 29th, centuries included', () => {
+    expect(isCalendarDate('2028-02-29')).toBe(true)
+    expect(isCalendarDate('2026-02-29')).toBe(false)
+    // The centuries, which the four-year rule alone gets wrong in both directions.
     expect(isCalendarDate('2000-02-29')).toBe(true)
     expect(isCalendarDate('1900-02-29')).toBe(false)
   })

@@ -357,6 +357,176 @@ export interface PolarPayload {
   source?: { format: string; header_token: string }
 }
 
+/**
+ * What an admin is shown after dropping a `.pol` and before committing it — the whole of the
+ * first step of the two-step confirm.
+ *
+ * It crosses the server/client boundary in both directions: the server parses the file and
+ * returns this, and the panel shows it and posts the file a second time to confirm. The bytes
+ * themselves are not in it. The client keeps the file it already has, and the server re-parses
+ * what it is given on confirm rather than trusting a grid the client hands back (ADR 0009).
+ */
+export interface PolarUploadPreview {
+  /** The sailor's own filename, verbatim. */
+  filename: string
+  /** Size of the file as dropped, for the admin to recognise it by. */
+  byte_length: number
+  /** Hex SHA-256 of those bytes. Posted back on confirm, so the confirm is of *this* file. */
+  content_sha256: string
+  /** The grid as parsed, which is what will be stored. */
+  payload: PolarPayload
+  /** Everything tolerated on the way in, so nothing was quietly repaired. */
+  warnings: PolarParseWarning[]
+  /** Which angles the file fills in rather than measures, and why they are not shown. */
+  suppression: PolarSuppression
+  /**
+   * The number this upload would take, read before the confirm. Advisory only: the version
+   * number is minted inside the transaction, so a second upload racing this one wins it.
+   */
+  next_version_number: number
+}
+
+/**
+ * One Polar **Version** as a list row states it: which number it is, when it took effect, what
+ * the file was called, and whether it is the one in force.
+ *
+ * `Pick`ed from the Version itself wherever the field is the same field, so the two spellings
+ * of a column name cannot drift.
+ */
+export type PolarVersionSummary = Pick<
+  PolarVersion,
+  'id' | 'version_number' | 'effective_from' | 'recorded_at' | 'note' | 'filename' | 'content_sha256'
+> & {
+  /** Whether the artifact's current pointer is at this Version. */
+  is_current: boolean
+}
+
+/** A Polar Version with its grid, which is what the Version's own screen shows. */
+export type PolarVersionDetail = PolarVersionSummary & { payload: PolarPayload }
+
+/** Every Polar Version, newest first, and which of them is in force. */
+export interface PolarVersionList {
+  /** Null until the first upload. */
+  current_version_id: string | null
+  /** Newest first, which is the order the screen reads them in. */
+  versions: PolarVersionSummary[]
+}
+
+/** What the Polar screen shows: every Version, and the grid the pointer is at. */
+export interface PolarScreen {
+  list: PolarVersionList
+  /**
+   * Null on an empty archive, and also when the Version in force holds a payload that is not a
+   * grid — the list still renders, and the screen says why there is no grid under it.
+   */
+  current: PolarVersionDetail | null
+}
+
+/**
+ * Where one row of a Polar grid came from, read off the grid itself.
+ *
+ * A certificate polar tabulates angles the boat cannot sail, and fills them by ramping up from
+ * zero — Handsome Pete's row 35 is exactly twice its row 30 in every column. Nothing in the
+ * file says so, which is why this is detected rather than declared, and derived at read rather
+ * than stored (ADR 0009): a better detector must be able to re-answer the question about a
+ * Version written years ago.
+ */
+export type PolarRowOrigin =
+  /** Every cell zero — the file's own statement that it has nothing at this angle. */
+  | 'no-data'
+  /** A multiple of the lowest tabulated row, in every column. Generated, not measured. */
+  | 'ramp-filler'
+  /** Still on that ramp in light air, off it where the boat's real speed binds. */
+  | 'partial-ramp-filler'
+  /** The exact arithmetic mean of the rows either side, in every column. */
+  | 'interpolated'
+  /** Nothing about it says generated, so it is read as the boat's own speed. */
+  | 'measured'
+
+/**
+ * Which angles a Polar grid may be displayed at, and why the rest are not.
+ *
+ * The suppression is a display rule and never a storage rule: the payload keeps every row the
+ * file gave, including the filler.
+ */
+export interface PolarSuppression {
+  /** The lowest angle worth showing. The whole axis is shown when no filler is found. */
+  firstTrustworthyTwa: number
+  /** The angles below it, in axis order. Empty when nothing is suppressed. */
+  suppressedTwa: number[]
+  /** What to tell the sailor, or `null` when there is nothing to explain. */
+  reason: string | null
+}
+
+/**
+ * Something a Polar file did that is worth telling the admin about but is not worth
+ * refusing it over. Every one of these is a shape seen in the 273-file corpus surveyed in
+ * `docs/research/orc-polar-file-formats.md`, so all of them are tolerated — and all of them
+ * are *reported*, because a file quietly repaired is a file nobody knows was odd.
+ */
+export type PolarParseWarningCode =
+  /** A UTF-8 byte-order mark before the header token. Stripped. */
+  | 'bom-stripped'
+  /** CRLF or bare-CR line endings. Normalised for parsing; the stored bytes keep them. */
+  | 'crlf-line-endings'
+  /** A blank line inside the file. Skipped. */
+  | 'blank-line-skipped'
+  /** A line beginning `#` or `!`. Skipped. */
+  | 'comment-line-skipped'
+  /** One free-text line before the header, which some exporters put the boat's name on. */
+  | 'description-line-skipped'
+  /** One trailing delimiter per line, so every line parses one field wider than it reads. */
+  | 'trailing-empty-field'
+  /** A header token that is neither `twa/tws` nor `TWA\TWS` in any casing. Kept verbatim. */
+  | 'unexpected-header-token'
+  /** A header whose first field is a bare `TWA` — 86 of the corpus's 273 files. */
+  | 'bare-twa-header'
+  /** Decimal commas, normalised to points. Only ever read this way under `;` or TAB. */
+  | 'decimal-comma-normalised'
+
+export interface PolarParseWarning {
+  code: PolarParseWarningCode
+  /** 1-based line in the file as given, so a warning can be pointed at. */
+  line?: number
+  /** What was actually seen, when the code alone does not say. */
+  detail?: string
+}
+
+/**
+ * Why a Polar file was refused. Parsing is the gate (ADR 0009), so each of these is a
+ * reason the file cannot be read as a grid — never a judgement about the sailing in it.
+ */
+export type PolarParseRefusal =
+  /** Larger than any polar plausibly is, so it is some other file. */
+  | 'too-large'
+  /** Fewer than two lines: a header with no grid, or an empty file. */
+  | 'too-few-lines'
+  /** No line that reads as a header of at least two fields. */
+  | 'no-header'
+  /** A row whose field count is not the header's. */
+  | 'row-width-mismatch'
+  /** An empty cell in the grid. A polar has no missing entries, so this is a broken file. */
+  | 'empty-cell'
+  /** An axis value or a cell that is not a number. */
+  | 'not-a-number'
+  /**
+   * An axis that repeats or goes backwards. A hard refusal rather than a truncation point:
+   * qtVlm silently drops the rest of such a file, which loses data without saying so.
+   */
+  | 'axis-not-ascending'
+  /** A TWA outside 0..180, or a negative TWS or boat speed. */
+  | 'value-out-of-range'
+  /** More angles or wind speeds than any polar has: 181 × 200 is already absurd. */
+  | 'grid-too-large'
+
+/**
+ * What `parsePolarFile` gives back. A refusal carries the line it was decided on wherever
+ * there is one, because "line 14" is the difference between a fixable file and a mystery.
+ */
+export type PolarParseOutcome =
+  | { ok: true; payload: PolarPayload; warnings: PolarParseWarning[] }
+  | { ok: false; reason: PolarParseRefusal; message: string; line?: number }
+
 export interface CrossoverSailDefinition {
   number: number
   label: string

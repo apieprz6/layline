@@ -146,6 +146,37 @@ scripts/verify-race-upload-rpc.sh "$DB_URL"       # 31 checks, safe against real
 DROP FUNCTION IF EXISTS public.create_race_from_upload(jsonb, jsonb, jsonb);
 ```
 
+## Migration: 20260915210000_mint_boat_setup_version.sql
+
+**Purpose**: what LAY-106's upload needs from the database — a way to insert the next Version of
+a file-backed artifact and move the artifact's pointer to it without the two ever being apart.
+
+**What it creates**: `public.mint_boat_setup_version(uuid, boat_setup_kind, date, jsonb, text,
+text, text)`, returning the `version_number` it minted.
+
+**Why the function exists**: the two writes cannot be two requests. The pointer's foreign key is
+`DEFERRABLE INITIALLY DEFERRED` and `boat_setup_artifacts_forward_only_current` is a deferred
+`CONSTRAINT TRIGGER`, both so that inserting a Version and pointing the artifact at it can be one
+transaction — and supabase-js cannot open one. Two requests would leave, on any failure between
+them, a Version nothing points at. The pointer moving *backwards* is still refused by that
+trigger at commit rather than re-checked here, so the rule lives in one place.
+
+**Why the id is the caller's**: the permanent Storage path contains the version id, and the bytes
+move to that path *before* this transaction commits (ADR 0013) — so the id has to exist before
+the row does. Same reasoning as `recordings.id` having no `DEFAULT`.
+
+**`SECURITY INVOKER`, deliberately.** The function is convenience, not authority: RLS refuses a
+signed-in non-admin inside it exactly as it refuses a direct insert (ADR 0019), and `created_by`
+comes from `auth.uid()` rather than from an argument (ADR 0018). `version_number` is read as
+`MAX + 1` under the caller's own RLS; `UNIQUE (artifact_id, version_number)` is what settles two
+concurrent uploads, and the loser is told to try again rather than overwriting the winner.
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.mint_boat_setup_version(
+    UUID, public.boat_setup_kind, DATE, JSONB, TEXT, TEXT, TEXT);
+```
+
 ## Migration: 20260915190000_rig_tune_stale_gaps_and_mint.sql
 
 **Purpose**: what LAY-107's form needs from the database — somewhere to record that a band's
@@ -198,7 +229,7 @@ data. Neither runs in CI, because CI has no database — the CI-side guard is
 properties of the migration's text.
 
 ```bash
-scripts/verify-race-archive-schema.sh              # 110 checks, local stack
+scripts/verify-race-archive-schema.sh              # every schema check, local stack
 scripts/verify-race-archive-schema.sh "$DB_URL"    # ... or a hosted project
 scripts/verify-boat-storage.sh                     # LAY-92's 17 storage checks
 ```

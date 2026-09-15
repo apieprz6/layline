@@ -10,7 +10,11 @@ import type { BoatSetup } from '@/types'
 interface BoatManagementContentProps {
   /** `null` when the boat could not be read — not an empty boat. */
   page: BoatSetup | null
-  /** Whether this sailor may edit the identity: `admin` only (ADR 0019). */
+  /**
+   * Whether this sailor may write: `admin` only (ADR 0019). It decides one thing here —
+   * whether the identity is editable in place. The list of artifacts is the same list
+   * for everyone; each screen behind it governs its own writes.
+   */
   canWrite: boolean
 }
 
