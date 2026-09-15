@@ -17,6 +17,7 @@ import { assessRowQuality } from '@/services/recordings/row-quality'
 import type { RaceChannelKey, TranscriptionChannels, TranscriptionRow } from '@/types'
 import ChannelChart from '../ChannelChart'
 import TrackMap from '../TrackMap'
+import { AXIS_INSET_LEFT, AXIS_INSET_RIGHT, CHART_WIDTH, type StackMarker } from '../chart-geometry'
 
 const BLANK: TranscriptionChannels = {
   longitude: null,
@@ -77,7 +78,11 @@ function mapOf(rows: TranscriptionRow[]) {
   return { container, series }
 }
 
-function chartOf(rows: TranscriptionRow[], channel: RaceChannelKey = 'sog') {
+function chartOf(
+  rows: TranscriptionRow[],
+  channel: RaceChannelKey = 'sog',
+  markers: StackMarker[] = []
+) {
   const series = seriesOf(rows)
   const axis = raceChartAxis(series)
   const { container } = render(
@@ -87,9 +92,14 @@ function chartOf(rows: TranscriptionRow[], channel: RaceChannelKey = 'sog') {
       axis={axis}
       window={{ start: axis.first, finish: axis.last }}
       height={124}
+      markers={markers}
     />
   )
-  return { container, series }
+  return { container, series, axis }
+}
+
+function markerAt(at: number, key = 'm1'): StackMarker {
+  return { key, at, lane: 'sail', label: 'main+j2', selected: false, incomplete: false, locked: true }
 }
 
 /**
@@ -244,5 +254,52 @@ describe('an angle axis does not move under the sailor', () => {
 
     const breezy = chartOf([row(0, { sog: '6.2' }), row(1, { sog: '21.4' })])
     expect(ticks(breezy.container)).toEqual(['0', '11', '22'])
+  })
+})
+
+/**
+ * An annotation's time is unbounded by the recording — the sails were set before the boat's log
+ * started — and the axis is drawn from the rows plus ten minutes of slack. So a legal entry can sit
+ * off the chart, and an entry off the chart still has to be *on screen*: ADR 0014's rule is that an
+ * annotation placed on an earlier step stays drawn, and a marker at a negative x is a marker gone.
+ */
+describe('the channel chart keeps every annotation on screen', () => {
+  const ROWS = [row(0, { sog: '6.2' }), row(1, { sog: '6.3' }), row(2, { sog: '6.4' })]
+  const AXIS = raceChartAxis(seriesOf(ROWS))
+
+  function markerCentres(container: HTMLElement): number[] {
+    return Array.from(container.querySelectorAll('circle[r="4.5"]')).map((circle) =>
+      Number(circle.getAttribute('cx'))
+    )
+  }
+
+  it('plots one inside the axis at its own time, with a line up to the trace', () => {
+    const { container } = chartOf(ROWS, 'sog', [markerAt(AXIS.first)])
+
+    const [cx] = markerCentres(container)
+    expect(cx).toBeGreaterThan(AXIS_INSET_LEFT)
+    expect(cx).toBeLessThan(CHART_WIDTH - AXIS_INSET_RIGHT)
+    // Dashed leader up to the plot: the marker is a moment of this chart.
+    expect(container.querySelectorAll('line[stroke-dasharray="2 2"]').length).toBeGreaterThan(0)
+  })
+
+  it('holds one from before the axis at the near edge, and says which way it went', () => {
+    // An hour before the first row: legal testimony, and a full 50 minutes past the axis's slack.
+    const { container } = chartOf(ROWS, 'sog', [markerAt(AXIS.first - 3600)])
+
+    expect(markerCentres(container)[0]).toBe(AXIS_INSET_LEFT)
+    // Drawn as a pin rather than a marker on the axis, so it cannot be read as a time on this chart.
+    expect(container.querySelector('circle[r="4.5"]')?.getAttribute('stroke-dasharray')).toBe(
+      '1.5 1.5'
+    )
+    expect(container.textContent).toContain('\u2039')
+    expect(container.querySelectorAll('line[stroke-dasharray="2 2"]')).toHaveLength(0)
+  })
+
+  it('holds one from after the axis at the far edge', () => {
+    const { container } = chartOf(ROWS, 'sog', [markerAt(AXIS.last + 3600)])
+
+    expect(markerCentres(container)[0]).toBe(CHART_WIDTH - AXIS_INSET_RIGHT)
+    expect(container.textContent).toContain('\u203a')
   })
 })

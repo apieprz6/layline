@@ -37,6 +37,9 @@ import {
   AXIS_INSET_LEFT,
   AXIS_INSET_RIGHT,
   CHART_WIDTH,
+  markerColour,
+  markerGlyph,
+  type StackMarker,
 } from './chart-geometry'
 
 /** The viewBox is fixed and the element is fluid, so the projection stays geographically true. */
@@ -55,6 +58,15 @@ interface TrackMapProps {
   onWindowChange?: (window: RaceWindowSeconds) => void
   /** A tap on the track, in seconds. The caller decides which bound it moves and snaps it. */
   onTapTrack?: (seconds: number) => void
+  /**
+   * The annotations placed so far, drawn where they happened on the water.
+   *
+   * On the map an annotation is a *place*, which is the point of drawing them here at all: "the kite
+   * went up at the windward mark" is a thing a sailor can see on a track and cannot see on a clock.
+   */
+  markers?: readonly StackMarker[]
+  /** A tap on an unlocked marker, by its key. Omitted where nothing on the map is editable. */
+  onSelectMarker?: (key: string) => void
 }
 
 export default function TrackMap({
@@ -64,6 +76,8 @@ export default function TrackMap({
   height,
   onWindowChange,
   onTapTrack,
+  markers = [],
+  onSelectMarker,
 }: TrackMapProps): ReactElement {
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef<'start' | 'finish' | null>(null)
@@ -393,6 +407,70 @@ export default function TrackMap({
           </text>
         </g>
       )}
+
+      {/* The sailor's own annotations, at the place on the water they were placed. A locked one is
+          drawn and dimmed and given no hit target, which is ADR 0014's rule verbatim: an earlier
+          step's answer stays visible and stops being editable. */}
+      {markers.map((marker) => {
+        const point = pointAt(marker.at)
+        if (!point) return null
+
+        const colour = markerColour(marker)
+
+        return (
+          <g
+            key={marker.key}
+            // So a test can assert what ADR 0014 asks of a locked marker — still drawn, dimmed —
+            // which is a claim about an SVG group that carries no text of its own.
+            data-testid={`marker-${marker.key}`}
+            onPointerDown={(event) => {
+              if (marker.locked || !onSelectMarker) return
+              // Otherwise the tap reaches the track underneath and places a second annotation on top
+              // of the one being reached for.
+              event.stopPropagation()
+              onSelectMarker(marker.key)
+            }}
+            style={{
+              cursor: marker.locked || !onSelectMarker ? 'default' : 'pointer',
+              opacity: marker.locked ? 0.45 : 1,
+            }}
+          >
+            <circle
+              cx={point.cx}
+              cy={point.cy}
+              r={marker.selected ? 7 : 5.2}
+              fill={colour}
+              stroke={marker.selected ? 'var(--text-primary)' : 'var(--surface-raised)'}
+              strokeWidth={marker.selected ? 1.8 : 1.4}
+            />
+            <text
+              x={point.cx}
+              y={point.cy + 2.6}
+              textAnchor="middle"
+              fontSize="6.5"
+              fontWeight="700"
+              fontFamily="var(--font-mono)"
+              fill="var(--text-inverse)"
+            >
+              {markerGlyph(marker.lane)}
+            </text>
+            <text
+              x={point.cx}
+              y={point.cy - 8}
+              textAnchor="middle"
+              fontSize="7"
+              fontFamily="var(--font-mono)"
+              fill="var(--text-secondary)"
+            >
+              {marker.label}
+            </text>
+            {/* A thumb at 390px, and only where there is something to hit. */}
+            {!marker.locked && onSelectMarker && (
+              <circle cx={point.cx} cy={point.cy} r="13" fill="transparent" />
+            )}
+          </g>
+        )
+      })}
 
       {/* A track with no scale invites a guess about distance. */}
       <g opacity="0.75">
