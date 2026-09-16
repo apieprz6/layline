@@ -7,9 +7,10 @@ import type { ThemePreference, ResolvedTheme } from '@/types'
 /**
  * The theme preference, held once per tab.
  *
- * Module state rather than per-component state, and no provider: two screens need
- * it — the chrome, which owns the class on the document, and the Settings picker,
- * which writes it — and before this they each held their own copy. Neither learned
+ * Module state rather than per-component state, and no provider: several screens
+ * need it — the root layout, which runs it on every route, the chrome, which says
+ * who the sailor is, and the Settings picker, which writes the preference — and
+ * before this the chrome and the picker each held their own copy. Neither learned
  * that the other had changed anything, so a stale copy still holding `auto` would
  * re-assert time-based theming at the next dawn and undo an explicit choice
  * (LAY-128). One store makes that unrepresentable.
@@ -64,6 +65,30 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 /** The sailor the store has been told about, `null` for a **Guest**. */
 let accountUserId: string | null = null
+/**
+ * Whether the chrome has said who the sailor is, which is a different fact from it
+ * having said `null`. Only a route inside `app/(app)/` has chrome to say either.
+ */
+let identityAnnounced = false
+/**
+ * Bumped when the chrome names a sailor in place of a *different* one — a sign-out
+ * and sign-in inside one tab's life. An answer from the **Profile** that went out
+ * under an earlier generation belongs to nobody now, and the store no longer knows
+ * whose an answer is: `readThemePreference` resolves the sailor server-side, which
+ * is what lets a screen with no chrome ask at all.
+ */
+let identityGeneration = 0
+/** The generation a question has already gone out for. One per tab, per sailor. */
+let askedGeneration = -1
+/**
+ * Whether that question went out before anyone had said who the sailor is.
+ *
+ * Such an answer is for whoever the cookies named at the time, which on
+ * `/auth/callback` is nobody: the browser is still exchanging the code. So it cannot
+ * stand as the answer for a sailor the chrome names afterwards, and the chrome doing
+ * so is a fresh question rather than a repeat of that one.
+ */
+let askedAnonymously = false
 /**
  * Bumped by every choice the sailor makes, so that a read of the **Profile** which
  * started before a tap can tell that it did and decline to overrule it, and so that
@@ -154,14 +179,51 @@ function commit(preference: ThemePreference): void {
 
 /**
  * Reads storage, puts the class on the document and starts the twilight timer, once
- * per tab. Both entry points call it, so the store is running whether or not
- * anything is reading from it — the chrome starts it without subscribing, precisely
- * so that a screen nobody reads the theme from still crosses dusk.
+ * per tab. Every entry point calls it, so the store is running whether or not
+ * anything is reading from it — the root layout starts it without subscribing,
+ * precisely so that a screen nobody reads the theme from still crosses dusk.
  */
 function ensureStarted(): void {
   if (started) return
   started = true
   commit(readStoredPreference())
+}
+
+/**
+ * Runs the theme on this screen, whatever screen it is.
+ *
+ * Called from the **root** layout, which is the only layout every route has. The
+ * chrome is not: `/station/[buoyId]` is outside `app/(app)/`, so a tab opened cold
+ * on a station screen used to run no store at all — it kept whatever the blocking
+ * script had made of `localStorage`, never adopted the preference on the sailor's
+ * **Profile**, and never crossed twilight. The theme only appeared once a routing
+ * action took the sailor into the group and mounted the chrome.
+ *
+ * The question to the **Profile** needs no identity, because `readThemePreference`
+ * resolves the sailor itself. What it waits for is the *chrome*, if there is one:
+ * a **Guest** the chrome has vouched for is not worth a round trip, and only the
+ * chrome knows, having been handed the server-resolved **Account**. A microtask is
+ * enough to wait — React runs every effect in a commit before the queue drains —
+ * and unlike reading it out of the tree, that does not depend on where this was
+ * mounted relative to the chrome. If some later `loading.tsx` or `<Suspense>` above
+ * the chrome does put its effect in a later commit, the cost is one wasted question,
+ * not a wrong theme: the chrome's answer supersedes an identity-less one.
+ *
+ * A resolved promise rather than `queueMicrotask` because Jest's fake timers stub
+ * the latter, and the twilight suites need those timers.
+ *
+ * `askProfile: false` runs the theme without asking, for a screen where nobody knows
+ * who the sailor is yet — see `useThemeRuntime`.
+ */
+export function startTheme(options?: { askProfile?: boolean }): void {
+  ensureStarted()
+
+  if (options?.askProfile === false) return
+
+  void Promise.resolve().then(() => {
+    if (identityAnnounced) return
+    readFromProfile(false)
+  })
 }
 
 export function subscribeToTheme(onStoreChange: () => void): () => void {
@@ -251,12 +313,42 @@ function storeOnProfile(
 export function syncThemeWithAccount(userId: string | null): void {
   ensureStarted()
 
-  if (userId === accountUserId) return
-  accountUserId = userId
+  const replaced = identityAnnounced && userId !== accountUserId
+  if (identityAnnounced && !replaced) return
 
+  identityAnnounced = true
+  accountUserId = userId
+  // A sailor in place of a different one: whatever is in flight was asked on behalf
+  // of somebody who is no longer here.
+  if (replaced) identityGeneration += 1
+
+  // Signing out changes no theme — it is not a request to, and there is nobody left
+  // to ask. `localStorage` still holds whatever the **Profile** last said.
   if (!userId) return
 
+  readFromProfile(true)
+}
+
+/**
+ * Asks the sailor's **Profile** what they chose, once per tab per sailor.
+ *
+ * Both entry points call it, and either may be the one that gets there first: the
+ * root layout runs on every route, the chrome only inside `app/(app)/`. `named` says
+ * whether the caller knew who the sailor is — the chrome does, the root layout does
+ * not — and a named question is worth asking even where an identity-less one has
+ * already been answered, because that answer may have been for nobody.
+ *
+ * The answer is dropped rather than applied if the sailor has tapped since, or has
+ * been replaced, while it was in flight.
+ */
+function readFromProfile(named: boolean): void {
+  const answered = askedGeneration === identityGeneration
+  if (answered && (!named || !askedAnonymously)) return
+  askedGeneration = identityGeneration
+  askedAnonymously = !named
+
   const asked = choices
+  const generation = identityGeneration
 
   void readThemePreference()
     .then((stored) => {
@@ -268,19 +360,25 @@ export function syncThemeWithAccount(userId: string | null): void {
       // answer and beats it, however slow the round trip was.
       if (choices !== asked) return
 
-      // A slower read for a sailor who has since been replaced. Applying it would put
-      // one sailor's preference on another's screen, and the next tap would then
-      // store it on that other sailor's **Profile**.
-      if (accountUserId !== userId) return
+      // A slower answer for a sailor who has since been replaced. Applying it would
+      // put one sailor's preference on another's screen, and the next tap would then
+      // store it on that other sailor's **Profile**. The generation stands in for the
+      // id because the question did not carry one.
+      if (identityGeneration !== generation) return
 
       writeStoredPreference(stored)
       commit(stored)
     })
     .catch((thrown: unknown) => {
-      // The round trip failed rather than answering. `accountUserId` deliberately
-      // stays set: a failed read says nothing about whether anybody is signed in, and
-      // clearing it would quietly stop this sailor's later choices reaching their
-      // Profile. What is lost is only a preference set on another device, this tab.
+      // Nothing was answered, so this must not count as the question — a tab that
+      // asked while the dock had no signal would otherwise never ask again. Nothing
+      // retries on its own; what this allows is the chrome, arriving later, to try.
+      if (askedGeneration === generation) askedGeneration = -1
+
+      // `accountUserId` deliberately stays set: a failed read says nothing about
+      // whether anybody is signed in, and clearing it would quietly stop this
+      // sailor's later choices reaching their Profile. What is lost is only a
+      // preference set on another device, this tab.
       console.error(
         'Theme preference: could not be read from the Profile:',
         thrown instanceof Error ? thrown.message : thrown
@@ -302,6 +400,10 @@ export function resetThemeStore(): void {
   subscribers.clear()
   snapshot = SERVER_SNAPSHOT
   accountUserId = null
+  identityAnnounced = false
+  identityGeneration = 0
+  askedGeneration = -1
+  askedAnonymously = false
   choices = 0
   writes = Promise.resolve()
 }

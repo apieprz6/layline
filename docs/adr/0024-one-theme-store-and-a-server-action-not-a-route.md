@@ -5,6 +5,10 @@
 Accepted. Supersedes the transport LAY-52 specified. Closes the drift ADR 0018 predicted in
 `useTheme`.
 
+Amended 2026-09-16, before merge: the store runs from the **root** layout rather than the chrome. As
+first written it never started on `/station/[buoyId]`, which is outside `app/(app)/`. See "Every route
+runs the store, from the root layout".
+
 ## Context
 
 The theme preference — `auto`, `solar` or `nightvision`, where `auto` follows civil twilight at Navy
@@ -53,6 +57,55 @@ fixed: there is no second holder left to disagree.
 an effect and subscribes to nothing — so a theme change does not re-render the entire app, which the
 old side-effect-only call would now have done.
 
+### Every route runs the store, from the root layout
+
+The chrome is not on every screen. `app/station/[buoyId]` sits outside `app/(app)/` deliberately, and
+`app/auth/callback` does too. A tab opened cold on a station screen mounted no `AppLayout`, so the
+store never started: it kept whatever the blocking script had made of `localStorage`, never adopted the
+preference on the sailor's **Profile**, and never crossed twilight. Because a station screen has no
+in-app links at all, the only way out was a routing action back into the group — which is exactly when
+the theme appeared. Measured in Chromium against `next build && next start`, on a browser whose
+`localStorage` had never held the preference: `/` went light at 134 ms and dark at 422 ms, and
+`/station/45198` stayed light indefinitely. With the runtime in the root layout it goes light at 136 ms
+and dark at 316 ms. Once `localStorage` holds the preference — the sailor's own device, from the second
+load on — every route is dark from the first paint with no flip, which is what the blocking script is
+for.
+
+So `useThemeRuntime()` runs from `app/layout.tsx`, the one layout every route has, through
+`components/theme/ThemeRuntime.tsx` — a client component that renders `null`, needed only because the
+root layout is a Server Component.
+
+It asks the **Profile** without being told who the sailor is, because `readThemePreference` resolves
+them server-side. What it does wait for is the chrome, *if there is one*: a **Guest** the chrome has
+vouched for is not worth a round trip, and only the chrome knows, holding the server-resolved
+**Account**. One microtask is enough of a wait — React runs every effect in a commit before the queue
+drains — and unlike reading the identity out of the tree, that does not depend on where the runtime
+sits relative to the chrome. The store then asks at most once per tab per sailor, whichever of the two
+gets there first.
+
+Resolving the **Account** in the root layout instead was rejected: it would double the auth work on
+every request, make every route dynamic, and put a second reader beside `resolveAccount()`'s one
+designated place (ADR 0018).
+
+An identity *generation* guards the answer. Because the question carries no id, a read that went out
+before a sign-out-and-sign-in in the same tab cannot be matched to a sailor when it lands; the
+generation counter is what lets it be dropped rather than applied to whoever is there now.
+
+An identity-less question also does not use up the tab's question. `/auth/callback` is outside
+`app/(app)/` as well, and there the answer is `null` whatever the sailor has chosen — the browser is
+still exchanging the code, so the server can resolve nobody. `CompleteSignIn` then calls
+`router.replace`, which is a client-side navigation, so the same module state meets the chrome. If that
+first `null` counted, **the sailor would lose their cross-device preference for the whole tab on the
+primary sign-in path** — the exact case LAY-52 exists for. So the store records whether a question went
+out before anyone was named, and the chrome naming somebody is a fresh question rather than a repeat.
+A question that *failed* does not count either, or a tab that asked while the dock had no signal could
+never ask again.
+
+On the callback screen the runtime does not ask at all: `useThemeRuntime` starts the theme there with
+`askProfile: false`. Beyond being answerable only with `null`, that request passes through the
+middleware, which refreshes auth cookies — alongside the exchange that is writing them. The class and
+the twilight timer still run; it is the one screen where the store waits to be told.
+
 ### A Server Action, and `/api/preferences` does not come back
 
 `lib/theme/actions.ts` exposes `readThemePreference` and `saveThemePreference`. This is the repo's
@@ -92,8 +145,9 @@ sign-in part way through a tab's life pick up a preference set on another device
   the same for all four — keep using `localStorage` — and no screen would say anything different.
 - The hydration snapshot is the constant `{ preference: 'auto', theme: 'solar' }`. The server cannot
   know what time it is where the sailor is, and does not need to: the blocking script has already put
-  the right class on the document before React runs. `/settings` still prerenders statically, which
-  it could not do against a clock-dependent snapshot.
+  the right class on the document before React runs. A clock-dependent snapshot would also make the
+  theme un-prerenderable, which is a constraint worth keeping even though `app/(app)/` is dynamic
+  today for an unrelated reason — its layout resolves the **Account** from cookies.
 
 ### A failed write does not take the theme back off the screen
 
@@ -130,9 +184,29 @@ Auto, whatever their phone last said.
   `THEME_STORAGE_KEY` with a comment pointing at the script.
 - `resetThemeStore()` is exported for tests, because module state outlives a test the way it outlives
   a navigation. `clearCache()` in `services/buoys/ndbc.ts` exists for the same reason.
-- A sailor with no chrome around them is treated as a **Guest** by the store — `localStorage` only.
-  Every screen that reads the theme is inside the route group today, so this is a degradation and not
-  a live case.
+- A sailor with no chrome around them still gets their **Profile**'s preference; what they cannot do
+  until the chrome names them is *store* a new choice, since a write needs an id. The only screens
+  outside `app/(app)/` are the station screen and the auth callback, neither of which offers the
+  picker, so nothing reaches that window in practice.
+- A cold load of `/station/[buoyId]` costs one `readThemePreference` even for a signed-out visitor —
+  the station screen is public and has no chrome to vouch for a **Guest**, so nobody can say the
+  question is pointless before it is asked. One `getClaims` per tab, answered `null`. Cheaper than the
+  alternative: the auth cookie is not reliably readable from the browser.
+- `useThemeRuntime` knows one route by name, `/auth/callback`. A special case in a hook that otherwise
+  knows nothing about routing, accepted because that screen is genuinely different — it is the only one
+  where who the sailor is changes *while it is open*. If a second such screen ever appears the test to
+  extend is "themes the sign-in handshake screen without asking the Profile".
+- A `loading.tsx` or a `<Suspense>` above the chrome would put its effect in a later commit than the
+  root layout's, so the microtask would no longer find the chrome's word. The cost then is one wasted
+  question per Guest load of a group route, not a wrong theme — the chrome's answer supersedes an
+  identity-less one. jsdom always commits in one pass, so no test would notice; the note is here and in
+  `startTheme`'s docstring.
+- **A device that has never held the preference locally still shows the wrong theme for ~300–500 ms.**
+  First paint happens before the server can be asked, and the blocking script has only `localStorage`
+  to go on. Accepted: it is the cross-device case LAY-52 exists for, it happens once per browser, and
+  the alternatives are worse — a server-rendered class means resolving the Account on every request and
+  no static prerender, and blocking the paint on a round trip is a worse trade on the dock than a brief
+  flash. The second load on that device is correct, because the answer is written to `localStorage`.
 - Cross-tab theme is still absent. A `storage` listener on this store would now get it in a few
   lines; it was not in either ticket's scope.
 - **Storing one enum costs four sequential round trips** — `getClaims`, `profiles` for the **Role**,
@@ -141,7 +215,9 @@ Auto, whatever their phone last said.
   widening its contract or duplicating its logic, and the read before the write is what stops the
   buoy settings being overwritten. This is Postgres on a rare deliberate tap, not the metered LLM and
   weather calls the AGENTS.md budget is about.
-- No browser evidence. There is a real Chromium here, but nothing in this change is about position,
-  layout or a real click, and simulating two twilight crossings is what jsdom and fake timers are
-  good at. The build was run to confirm a `'use client'` store importing a `'use server'` module
-  bundles.
+- The behaviour is asserted in jsdom, not Playwright: nothing here is about position, layout or a real
+  click, and simulating two twilight crossings is what fake timers are good at. A real signed-in
+  Chromium against `next build && next start` was used once, to *diagnose* the missing runtime above and
+  to time the first paint — the numbers in this ADR come from there. No e2e test was added, because the
+  cheap part of that reproduction was the browser and the expensive part was minting a Supabase session
+  by hand.

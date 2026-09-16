@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import ThemeRuntime from "@/components/theme/ThemeRuntime";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -44,7 +45,15 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {/*
+          The script above gets the first paint right from `localStorage`; this keeps
+          the theme running afterwards on every route, including the ones outside
+          `app/(app)/` that have no chrome to do it.
+        */}
+        <ThemeRuntime />
+        {children}
+      </body>
     </html>
   );
 }

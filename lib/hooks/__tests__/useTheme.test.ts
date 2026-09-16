@@ -1,9 +1,14 @@
 import { renderHook, act } from '@testing-library/react'
-import { useTheme, useThemeSync } from '../useTheme'
+import { useTheme, useThemeRuntime, useThemeSync } from '../useTheme'
 import { resetThemeStore } from '@/lib/theme/store'
 import { AFTER_DAWN, AFTER_DUSK, mockSunTimes } from '@/lib/theme/__tests__/sunTimes'
 
 jest.mock('suncalc')
+/** The screen the runtime is on: only `/auth/callback` changes what it does. */
+let pathname = '/'
+jest.mock('next/navigation', () => ({
+  usePathname: () => pathname,
+}))
 jest.mock('@/lib/theme/actions', () => ({
   readThemePreference: jest.fn(),
   saveThemePreference: jest.fn(),
@@ -18,6 +23,7 @@ describe('useTheme', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    pathname = '/'
     localStorageStore = {}
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation(
       (key: string) => localStorageStore[key] ?? null
@@ -210,6 +216,97 @@ describe('useTheme', () => {
       })
 
       expect(chrome.result.current.preference).toBe('nightvision')
+    })
+  })
+
+  describe('useThemeRuntime', () => {
+    // From the root layout, so that a tab opened cold on a screen outside
+    // `app/(app)/` — `/station/[buoyId]` — themes itself without a routing action
+    // first mounting the chrome.
+    it('adopts the preference on the Profile with no chrome to say who the sailor is', async () => {
+      mockSunTimes({ isNight: false })
+      readThemePreference.mockResolvedValue('nightvision')
+
+      await act(async () => {
+        renderHook(() => useThemeRuntime())
+      })
+
+      expect(document.documentElement.classList.contains('theme-nightvision')).toBe(true)
+    })
+
+    it('crosses twilight on a screen the chrome never wrapped', () => {
+      mockSunTimes({ isNight: false })
+
+      renderHook(() => useThemeRuntime())
+
+      jest.setSystemTime(AFTER_DUSK)
+      act(() => {
+        jest.advanceTimersByTime(60_000)
+      })
+
+      expect(document.documentElement.classList.contains('theme-nightvision')).toBe(true)
+    })
+
+    it('asks the Profile once when the chrome is mounted as well', async () => {
+      mockSunTimes({ isNight: false })
+      readThemePreference.mockResolvedValue('nightvision')
+
+      await act(async () => {
+        renderHook(() => {
+          useThemeRuntime()
+          useThemeSync(A_SAILOR)
+        })
+      })
+
+      expect(readThemePreference).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks nothing at all when a chrome in the same commit says Guest', async () => {
+      mockSunTimes({ isNight: false })
+
+      await act(async () => {
+        renderHook(() => {
+          useThemeRuntime()
+          useThemeSync(null)
+        })
+      })
+
+      expect(readThemePreference).not.toHaveBeenCalled()
+    })
+
+    it('themes the sign-in handshake screen without asking the Profile', async () => {
+      // `/auth/callback` is outside `app/(app)/` as well, but the browser is still
+      // exchanging the code there: the server would answer for nobody, and the
+      // request would refresh auth cookies alongside the one writing them.
+      mockSunTimes({ isNight: true })
+      pathname = '/auth/callback'
+
+      await act(async () => {
+        renderHook(() => useThemeRuntime())
+      })
+
+      expect(readThemePreference).not.toHaveBeenCalled()
+      expect(document.documentElement.classList.contains('theme-nightvision')).toBe(true)
+    })
+
+    it('asks once the sailor is named, after the handshake screen routed onward', async () => {
+      // `CompleteSignIn` calls `router.replace`, so there is no document load: this
+      // same module state meets the chrome, which is the first thing in the tab that
+      // knows who signed in.
+      mockSunTimes({ isNight: false })
+      readThemePreference.mockResolvedValue('nightvision')
+      pathname = '/auth/callback'
+
+      const runtime = renderHook(() => useThemeRuntime())
+
+      pathname = '/'
+      await act(async () => {
+        runtime.rerender()
+        renderHook(() => useThemeSync(A_SAILOR))
+      })
+
+      expect(readThemePreference).toHaveBeenCalledTimes(1)
+      expect(document.documentElement.classList.contains('theme-nightvision')).toBe(true)
     })
   })
 

@@ -4,6 +4,7 @@ import {
   getThemeSnapshot,
   resetThemeStore,
   setThemePreference,
+  startTheme,
   subscribeToTheme,
   syncThemeWithAccount,
 } from '../store'
@@ -180,6 +181,192 @@ describe('the theme store', () => {
       syncThemeWithAccount(null)
 
       expect(isNightVision()).toBe(true)
+    })
+  })
+
+  describe('every screen, chrome or not', () => {
+    // LAY-52 follow-up: the store used to be started only by the chrome, which is
+    // `app/(app)/layout.tsx` alone. A tab opened cold on `/station/[buoyId]` — a
+    // live route outside that group — therefore ran no store at all: it kept
+    // whatever the blocking script had worked out from `localStorage`, never
+    // adopted the preference on the sailor's **Profile**, and never crossed
+    // twilight. The theme only appeared once a routing action took the sailor into
+    // the group and mounted the chrome. `startTheme()` runs from the root layout,
+    // which every route has.
+
+    it('adopts the Profile’s preference without being told who the sailor is', async () => {
+      // The Server Action resolves the sailor itself, so a screen with no chrome to
+      // hand an id down can still be given the preference chosen on another device.
+      mockSunTimes({ isNight: false })
+      localStorageStore[THEME_STORAGE_KEY] = 'solar'
+      readThemePreference.mockResolvedValue('nightvision')
+
+      startTheme()
+      await settle()
+
+      expect(getThemeSnapshot()).toEqual({ preference: 'nightvision', theme: 'nightvision' })
+      expect(isNightVision()).toBe(true)
+      expect(localStorageStore[THEME_STORAGE_KEY]).toBe('nightvision')
+    })
+
+    it('crosses twilight on a screen the chrome never wrapped', () => {
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      jest.setSystemTime(AFTER_DUSK)
+      jest.advanceTimersByTime(60_000)
+
+      expect(isNightVision()).toBe(true)
+    })
+
+    it('asks the Profile once when there is a chrome as well', async () => {
+      // Both entry points run on a route inside the group. One tab, one question —
+      // and the chrome's answer is the one that arrives, since it knows whether
+      // there is anybody to ask.
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+
+      expect(readThemePreference).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks nothing at all when the chrome says the sailor is a Guest', async () => {
+      // The store cannot tell a **Guest** from a sailor, but the chrome can — it was
+      // handed the server-resolved **Account**. So on a route that has chrome, its
+      // word saves the round trip; `startTheme` waits for it before asking.
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      syncThemeWithAccount(null)
+      await settle()
+
+      expect(readThemePreference).not.toHaveBeenCalled()
+    })
+
+    it('asks again when the chrome names a sailor the first question could not have been for', async () => {
+      // Signing in. `/auth/callback` is outside `app/(app)/` too, so the store asks
+      // while the browser is still exchanging the code — nobody is signed in yet and
+      // the answer is `null`. `CompleteSignIn` then routes onward without a document
+      // load, so this same module state meets the chrome, which finally knows who the
+      // sailor is. A question asked on behalf of nobody cannot stand as their answer.
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      await settle()
+      readThemePreference.mockResolvedValue('nightvision')
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+
+      expect(readThemePreference).toHaveBeenCalledTimes(2)
+      expect(getThemeSnapshot().preference).toBe('nightvision')
+    })
+
+    it('does not ask again when the chrome then says the sailor is a Guest', async () => {
+      // The other half of the above: the chrome adds nothing an identity-less
+      // question did not already have, so there is nothing to ask twice.
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      await settle()
+      syncThemeWithAccount(null)
+      await settle()
+
+      expect(readThemePreference).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not ask a third time once the chrome has named the sailor', async () => {
+      mockSunTimes({ isNight: false })
+
+      startTheme()
+      await settle()
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+
+      expect(readThemePreference).toHaveBeenCalledTimes(2)
+    })
+
+    it('leaves a failed question able to be asked again', async () => {
+      // No signal on the dock. The read rejects, and the tab must not be left unable
+      // to ever ask — the chrome naming the sailor is a fresh occasion to try.
+      mockSunTimes({ isNight: false })
+      readThemePreference.mockRejectedValueOnce(new Error('offline'))
+
+      startTheme()
+      await settle()
+      readThemePreference.mockResolvedValue('nightvision')
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+
+      expect(getThemeSnapshot().preference).toBe('nightvision')
+      expect(consoleError).toHaveBeenCalled()
+    })
+
+    it('runs the theme without asking, where nobody knows who the sailor is yet', async () => {
+      // `/auth/callback`, mid-handshake: the class and the twilight timer still
+      // belong on the screen, but a question now would answer for nobody and put a
+      // request alongside the code exchange.
+      mockSunTimes({ isNight: true })
+
+      startTheme({ askProfile: false })
+      await settle()
+
+      expect(readThemePreference).not.toHaveBeenCalled()
+      expect(isNightVision()).toBe(true)
+    })
+
+    it('asks once the chrome names the sailor, after a screen that did not ask', async () => {
+      mockSunTimes({ isNight: false })
+      readThemePreference.mockResolvedValue('nightvision')
+
+      startTheme({ askProfile: false })
+      await settle()
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+
+      expect(readThemePreference).toHaveBeenCalledTimes(1)
+      expect(getThemeSnapshot().preference).toBe('nightvision')
+    })
+
+    it('asks again when a different sailor signs in on that tab', async () => {
+      mockSunTimes({ isNight: false })
+      startTheme()
+      await settle()
+      syncThemeWithAccount(A_SAILOR)
+
+      readThemePreference.mockResolvedValue('nightvision')
+      syncThemeWithAccount('22222222-2222-2222-2222-222222222222')
+      await settle()
+
+      expect(getThemeSnapshot().preference).toBe('nightvision')
+    })
+
+    it('does not apply an identity-less answer once the sailor has been replaced', async () => {
+      // An identity-less question carries no id, so when a slow one lands there is
+      // nothing to compare it against; the generation is what tells the store the
+      // answer belongs to nobody who is still here.
+      mockSunTimes({ isNight: false })
+      let answerBlind: (preference: string | null) => void = () => {}
+      readThemePreference.mockReturnValueOnce(
+        new Promise((resolve) => { answerBlind = resolve })
+      )
+      readThemePreference.mockResolvedValueOnce('solar')
+
+      startTheme()
+      await settle()
+      // The chrome names the sailor: 'solar' is theirs, and lands.
+      syncThemeWithAccount(A_SAILOR)
+      await settle()
+      // Then somebody else signs in on this tab, and has chosen nothing.
+      syncThemeWithAccount('22222222-2222-2222-2222-222222222222')
+      await settle()
+      answerBlind('nightvision')
+      await settle()
+
+      expect(getThemeSnapshot().preference).toBe('solar')
     })
   })
 
@@ -466,9 +653,12 @@ describe('the theme store', () => {
       expect(localStorageStore[THEME_STORAGE_KEY]).toBe('nightvision')
     })
 
-    it('is what a screen with no chrome to say otherwise is treated as', async () => {
+    it('is who a choice is stored for until the chrome names a sailor', async () => {
       // Nothing has called `syncThemeWithAccount`, so the store has never been told
-      // there is a sailor. localStorage only, which is the honest degradation.
+      // there is a sailor. It can still *read* the **Profile** without being told —
+      // `startTheme` does, and the Server Action resolves the sailor itself — but a
+      // write needs an id, so this is localStorage only. The honest degradation, and
+      // a narrow window: the chrome announces on its first commit.
       mockSunTimes({ isNight: false })
       subscribeToTheme(jest.fn())
 

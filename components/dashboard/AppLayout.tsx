@@ -32,11 +32,11 @@ export default function AppLayout({ children, account }: AppLayoutProps) {
   const [signInDestination, setSignInDestination] = useState<string | null>(null)
   const pathname = usePathname()
 
-  // The chrome keeps the theme running on every screen — the class on the document
-  // and the twilight re-evaluation — without reading it, so a theme change does not
-  // re-render the whole app. The **Account**'s id goes with it so that a preference
-  // chosen on another device arrives, and so that a change made here is stored on
-  // the **Profile** rather than in this browser alone.
+  // The root layout runs the theme on every screen; what only the chrome can do is
+  // say who the sailor is, from the **Account** it was handed. That is what lets a
+  // preference chosen on another device arrive, and what makes a change made here
+  // reach the **Profile** rather than this browser alone. It does not read the theme,
+  // so a change does not re-render the whole app.
   useThemeSync(account?.userId ?? null)
 
   // The client learns *when* the identity changed, never who it is.
