@@ -7,9 +7,14 @@
  * hash asks and then proceeds, and nothing at all is sent to the server before the last press.
  *
  * The two annotation steps are Testimony (ADR 0010), so what is tested about them is what nothing may
- * invent: nothing is pre-selected, both steps are skippable and two empty lists are a legal race, a
- * new entry inherits the previous one, an entry naming no sails is refused, and an entry's time is not
- * bounded by the window.
+ * invent: nothing is pre-selected and no entry inherits the one before it, both steps are skippable and
+ * two empty lists are a legal race, an entry that says nothing at all is refused, and an entry's time is
+ * not bounded by the window.
+ *
+ * A sail is named by naming a Sail Definition of one Crossover Chart Version (ADR 0023), so the Version
+ * is part of what the step is tested for: the default comes from the recording's own start time, it is
+ * changeable, changing it clears what the old Version's numbers said, and with no Version the step is
+ * closed and says which of the three reasons it is.
  *
  * Layout is not tested here. jsdom gives every element a zero-sized bounding box, so a drag would be
  * arithmetic against zeros — a passing test about nothing. The window is driven through the datetime
@@ -23,7 +28,7 @@ import userEvent from '@testing-library/user-event'
 import { raceChartSeries } from '@/services/recordings/chart-series'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import type {
-  SailChoice,
+  CrossoverChartChoice,
   StagedRecording,
   SubmitRaceInput,
   SubmitRaceResult,
@@ -99,17 +104,36 @@ function seriesOf(rows: readonly TranscriptionRow[]) {
 }
 
 /**
- * The boat's locker, in `sort_order`, with one sail already retired.
+ * Both Crossover Chart Versions the boat has, newest first, as `readCrossoverChartChoices` orders them.
  *
- * The retired jib is not decoration: the archive is hand-entered, so most races annotated through this
- * wizard are older than the locker, and a picker that offered only today's sails would make an honest
- * answer unavailable — or offer a sail that had already gone.
+ * Two of them, and the newer one is not the answer: every recording in these fixtures is June 3rd and
+ * v2 comes into force on July 1st. That is the ordinary case for a hand-entered archive, and a picker
+ * that offered only the current chart would make an honest answer unavailable.
+ *
+ * v1's Definition 7 is a sail no cell of the grid recommends — a storm jib the chart would never advise
+ * — and it is offered anyway, because what the boat flew is not limited to what the chart advised.
  */
-const INVENTORY: SailChoice[] = [
-  { id: 'id-main', key: 'main', label: 'Mainsail', retired_on: null },
-  { id: 'id-jib-1', key: 'j1', label: 'Jib 1', retired_on: '2026-01-31' },
-  { id: 'id-jib-2', key: 'j2', label: 'Jib 2', retired_on: null },
-  { id: 'id-a2', key: 'A2', label: 'A2', retired_on: null },
+const CHARTS: CrossoverChartChoice[] = [
+  {
+    version_id: 'chart-v2',
+    version_number: 2,
+    effective_from: '2026-07-01',
+    definitions: [
+      { number: 1, label: 'Main + Jib 1' },
+      { number: 5, label: 'Main + Code 0' },
+    ],
+  },
+  {
+    version_id: 'chart-v1',
+    version_number: 1,
+    effective_from: '2026-01-15',
+    definitions: [
+      { number: 1, label: 'Main + Jib 1' },
+      { number: 2, label: 'Main reefed + Jib 3' },
+      { number: 3, label: 'Main + A2' },
+      { number: 7, label: 'Main + storm jib' },
+    ],
+  },
 ]
 
 function stagedOf(overrides: Partial<StagedRecording> = {}): StagedRecording {
@@ -125,7 +149,10 @@ function stagedOf(overrides: Partial<StagedRecording> = {}): StagedRecording {
 }
 
 /** The wizard with two stubs, and the calls each one saw. */
-function mount(staged: StagedRecording = stagedOf(), inventory: SailChoice[] | null = INVENTORY) {
+function mount(
+  staged: StagedRecording = stagedOf(),
+  charts: CrossoverChartChoice[] | null = CHARTS
+) {
   // Typed by their call signatures rather than by a parameter neither stub reads, so
   // `mock.calls[0][0]` is the input the wizard actually sent and not an element of an empty tuple.
   const stage = jest.fn<Promise<{ ok: true; staged: StagedRecording }>, [FormData]>(async () => ({
@@ -137,9 +164,7 @@ function mount(staged: StagedRecording = stagedOf(), inventory: SailChoice[] | n
     race_id: 'race-1',
   }))
 
-  render(
-    <RaceUploadWizard stageRecording={stage} submitRace={submit} inventory={inventory} />
-  )
+  render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={charts} />)
 
   return { stage, submit }
 }
@@ -227,15 +252,17 @@ describe('the five steps, and what they cost', () => {
     expect(submit.mock.calls[0][0].sea_state).toEqual([])
   })
 
-  it('costs 24 actions for the archive’s worst case, seven sail changes', async () => {
-    // ADR 0014's count, item for item: 1 file + 1 Next + 7 placements + 13 chip taps + 2 Nexts = 24,
-    // ending on Review. (Save is the 25th; the ADR's own two figures count it for the clean race and
-    // not for this one, and this test pins each of them as the ADR states it.)
+  it('costs 18 actions for the archive’s worst case, seven sail changes', async () => {
+    // ADR 0014 counted 24 here, and its own arithmetic was 1 file + 1 Next + 7 placements + 13 chip
+    // taps + 2 Nexts. Thirteen chips was two-to-three per change because a Configuration was a *set*
+    // of sails and a Reef State, and carry-forward is what made the set affordable. One sail
+    // vocabulary makes a Configuration one sail (ADR 0023), so a change is one chip and inheriting
+    // the previous entry would only pre-select the sail being replaced: 7 chips, not 13, and the
+    // whole race costs 18. Amendment (LAY-130) to ADR 0014 records the retirement.
     //
     // The seven placements are the "+ Add one by time instead" button rather than seven taps on the
     // track: both place one entry in one action, and jsdom cannot deliver seven distinguishable tap
-    // coordinates. What the count is really about is the *chips* — 13 of them for seven changes only
-    // holds because each entry inherits the one before it.
+    // coordinates.
     const user = userEvent.setup({ delay: null })
     const { submit } = mount(stagedOf({ series: seriesOf(LONG_ROWS) }))
 
@@ -246,39 +273,37 @@ describe('the five steps, and what they cost', () => {
     await next(user) // to Sails
     actions += 1
 
-    /** One change: place it, then say what is different about it. */
-    const change = async (chips: readonly string[]): Promise<void> => {
+    /** One change: place it, then name the sail that was up from there. */
+    const change = async (chip: string): Promise<void> => {
       await user.click(screen.getByRole('button', { name: '+ Add one by time instead' }))
       actions += 1
-
-      for (const chip of chips) {
-        await user.click(screen.getByRole('button', { name: chip }))
-        actions += 1
-      }
+      await user.click(screen.getByRole('button', { name: chip }))
+      actions += 1
     }
 
-    // The first entry has nothing to inherit, so it states the whole sail plan: two sails and the
-    // main's state. Every change after it is only what changed.
-    await change(['Mainsail', 'Jib 2', 'Full']) // 3 chips
-    await change(['Jib 2', 'A2']) // 2 — headsail down, kite up
-    await change(['A2', 'Jib 2']) // 2 — and back
-    await change(['Jib 2', 'A2']) // 2
-    await change(['A2', 'Jib 2']) // 2
-    await change(['Jib 2']) // 1 — main alone
-    await change(['One reef']) // 1 — and reefed
+    await change('Main + Jib 1')
+    await change('Main + A2') // kite up
+    await change('Main + Jib 1') // and back
+    await change('Main + A2')
+    await change('Main + Jib 1')
+    await change('Main reefed + Jib 3') // it came on to blow
+    await change('Main + storm jib') // and kept coming
 
     await next(user, 2) // Sea state, Review
     actions += 2
 
-    expect(actions).toBe(24)
+    expect(actions).toBe(18)
     expect(screen.getByRole('button', { name: 'Save race' })).toBeEnabled()
     // Seven entries, all of them finished, or the count above bought nothing.
     await user.click(screen.getByRole('button', { name: 'Save race' }))
     expect(submit.mock.calls[0][0].sails).toHaveLength(7)
-    expect(submit.mock.calls[0][0].sails[6]).toMatchObject({
-      reef: 'reef-1',
-      sail_ids: ['id-main'],
+    expect(submit.mock.calls[0][0].sails[6]).toEqual({
+      at: '2026-06-03T19:06:00',
+      definition_number: 7,
+      note: null,
     })
+    // Every one of them names a sail of the Version in force when the recording started.
+    expect(submit.mock.calls[0][0].crossover_chart_version_id).toBe('chart-v1')
   })
 
   it('sends the whole recording as the window when nothing is dragged', async () => {
@@ -519,57 +544,149 @@ describe('the sailor’s Testimony about the sails', () => {
     expect(screen.getByRole('button', { name: /19:04/ })).toBeInTheDocument()
   })
 
-  it('starts a new entry with nothing selected at all', async () => {
+  it('offers the chosen Version’s whole vocabulary, with nothing selected at all', async () => {
     // The mockup pre-selects a configuration by index. That is the same failure as `ndbc.ts`'s
     // `wind_direction ?? 0`: a value nobody stated, indistinguishable from one somebody did.
+    //
+    // The whole vocabulary includes Definition 7, which no cell of v1's grid recommends. The chart
+    // advising against a storm jib is not evidence that the boat did not fly one.
     const user = userEvent.setup({ delay: null })
     mount()
 
     await toSails(user)
     tapChart('first')
 
-    for (const chip of ['Mainsail', 'Jib 2', 'A2', 'Full', 'One reef']) {
+    for (const chip of [
+      'Main + Jib 1',
+      'Main reefed + Jib 3',
+      'Main + A2',
+      'Main + storm jib',
+      'Something else',
+    ]) {
       expect(screen.getByRole('button', { name: chip })).toHaveAttribute('aria-pressed', 'false')
+    }
+    // v2's own sail is not on offer: a Definition number means something inside one Version only.
+    expect(screen.queryByRole('button', { name: 'Main + Code 0' })).not.toBeInTheDocument()
+  })
+
+  it('lays that vocabulary out for a 390px screen', async () => {
+    // The old step was two chip rows of short tokens (`Jib 1`, `Full`); this one is a single row of
+    // the chart's own sentences, and `Main reefed + Jib 3` is three times the width of `Jib 1`. So
+    // the arithmetic is worth pinning rather than eyeballing: jsdom has no layout engine, and the
+    // wizard is behind a session, so no browser has ever drawn this step.
+    //
+    // A chip is `7px 10px` of padding and a 1px border around 12px text (`--text-sm`). At a
+    // conservative 0.62em average advance that is 22 + label × 7.44px, so the widest label the
+    // boat's chart carries — `Main + Reaching Spin`, 20 characters — comes to ~171px. The step's
+    // content is 390px less the section's 16px and the card's 12px on each side: 334px. One of
+    // those chips fits with 160px to spare and two shorter ones share a line.
+    const user = userEvent.setup({ delay: null })
+    mount()
+
+    await toSails(user)
+    tapChart('first')
+
+    const row = screen.getByRole('group', { name: 'Sail up' })
+
+    // It wraps, so a Version with a dozen Definitions grows downward. A row that scrolled sideways
+    // would hide the sail the boat actually flew behind a gesture nobody knows is there.
+    expect(row).toHaveStyle({ display: 'flex', flexWrap: 'wrap' })
+
+    const chips = within(row).getAllByRole('button')
+    expect(chips.length).toBeGreaterThan(1)
+    for (const chip of chips) {
+      // No chip sets a width, a min-width or `nowrap`: a label longer than the screen breaks inside
+      // the chip rather than pushing the step sideways.
+      expect(chip.style.width).toBe('')
+      expect(chip.style.minWidth).toBe('')
+      expect(chip.style.whiteSpace).toBe('')
+      expect(chip.style.padding).toBe('7px 10px')
+
+      const widest = 22 + Math.max(20, (chip.textContent ?? '').length) * 7.44
+      expect(widest).toBeLessThanOrEqual(390 - 2 * (16 + 12))
     }
   })
 
-  it('carries the previous entry forward, so one swap is two chip taps', async () => {
+  it('carries nothing forward, because one Configuration is now one sail', async () => {
+    // ADR 0014's carry-forward is retired here (Amendment, LAY-130). Inheriting the previous entry's
+    // Definition would pre-select the very sail the sailor placed this entry to say came down — a
+    // guess presented as a memory, and one that could record "nothing changed" at a time somebody
+    // said it did.
     const user = userEvent.setup({ delay: null })
     mount()
 
     await toSails(user)
     await user.click(screen.getByRole('button', { name: '+ Add one by time instead' }))
-    await user.click(screen.getByRole('button', { name: 'Mainsail' }))
-    await user.click(screen.getByRole('button', { name: 'Jib 2' }))
-    await user.click(screen.getByRole('button', { name: 'Full' }))
-
+    await user.click(screen.getByRole('button', { name: 'Main + Jib 1' }))
     await user.click(screen.getByRole('button', { name: '+ Add one by time instead' }))
 
-    // The second entry arrives as the boat already was, so the swap is the jib off and the kite on.
-    expect(screen.getByRole('button', { name: 'Mainsail' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Jib 2' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Full' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Main + Jib 1' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
   })
 
-  it('refuses an entry that names no sails, and will not go on', async () => {
-    // `race_sail_entries_non_empty` says the same thing at commit. This is the sentence instead of it.
+  it('refuses an entry that says nothing at all, and will not go on', async () => {
+    // `race_sail_entries_says_something` says the same thing at commit. This is the sentence instead
+    // of it, and it names both ways out.
     const user = userEvent.setup({ delay: null })
     mount()
 
     await toSails(user)
     tapChart('first')
 
-    expect(screen.getAllByText(/a sail plan with nothing in it/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Say which sail was up/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
 
-    // Sails named and the main still unstated is half-finished too: a Sail Configuration is a set of
-    // sails *plus* a Reef State, and defaulting to `full` would be Layline saying it.
-    await user.click(screen.getByRole('button', { name: 'Mainsail' }))
-    expect(screen.getAllByText(/whether the main was full or reefed/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
-
-    await user.click(screen.getByRole('button', { name: 'Full' }))
+    await user.click(screen.getByRole('button', { name: 'Main + A2' }))
     expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+  })
+
+  it('makes “Something else” cost a note, and sends the note as the whole answer', async () => {
+    // The chart names what the chart names, and the boat has flown things it does not. What must not
+    // happen is an entry that claims something and says nothing: "not one of these" alone is not an
+    // answer, so the note is the answer and it is required.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+
+    await toSails(user)
+    tapChart('first')
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+
+    expect(screen.getByRole('button', { name: 'Something else' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    await user.type(screen.getByLabelText('What was up, in your own words'), 'delivery main')
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(submit.mock.calls[0][0].sails).toEqual([
+      { at: '2026-06-03T19:00:00', definition_number: null, note: 'delivery main' },
+    ])
+  })
+
+  it('sends a note alongside a named sail, because both are worth having', async () => {
+    // "jib was blown out" belongs on the entry that says the A2 went up — which is why `note` is a
+    // column beside the Definition and not a fallback for the want of one.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+
+    await toSails(user)
+    tapChart('first')
+    await user.click(screen.getByRole('button', { name: 'Main + A2' }))
+    await user.type(screen.getByLabelText('Note, if there is anything to add'), 'jib was blown out')
+
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(submit.mock.calls[0][0].sails).toEqual([
+      { at: '2026-06-03T19:00:00', definition_number: 3, note: 'jib was blown out' },
+    ])
   })
 
   it('lets an entry sit before the window, because the sails were set before the start', async () => {
@@ -578,8 +695,7 @@ describe('the sailor’s Testimony about the sails', () => {
 
     await toSails(user)
     tapChart('first')
-    await user.click(screen.getByRole('button', { name: 'Mainsail' }))
-    await user.click(screen.getByRole('button', { name: 'Full' }))
+    await user.click(screen.getByRole('button', { name: 'Main + Jib 1' }))
     await user.click(screen.getByRole('button', { name: /Earlier by 5 minutes/ }))
 
     await next(user, 2)
@@ -588,43 +704,116 @@ describe('the sailor’s Testimony about the sails', () => {
     const input = submit.mock.calls[0][0]
     expect(input.window_start).toBe('2026-06-03T19:00:00')
     // Five minutes before the window opens, in the recording's own frame, with no offset applied.
-    expect(input.sails).toEqual([
-      { at: '2026-06-03T18:55:00', reef: 'full', sail_ids: ['id-main'] },
-    ])
+    expect(input.sails).toEqual([{ at: '2026-06-03T18:55:00', definition_number: 1, note: null }])
   })
 
-  it('offers the locker as it was on the race’s own day', async () => {
-    // Jib 1 was retired in January and this race is in June, so it is not something that was up. A
-    // sail retired *after* the race would still be offered, which is why the filter is by date.
+  it('names the sails in the Version in force when the recording started, not the newest', async () => {
+    // The archive is hand-entered, so this is the ordinary case rather than the edge: the race is
+    // June 3rd and v2 does not come into force until July. Resolving to "the current chart" would
+    // rename a sail nobody renamed (ADR 0012).
     const user = userEvent.setup({ delay: null })
-    mount()
+    const { submit } = mount()
+
+    await toSails(user)
+
+    expect(screen.getByRole('button', { name: /^v1/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^v2/ })).toHaveAttribute('aria-pressed', 'false')
+
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+    expect(submit.mock.calls[0][0].crossover_chart_version_id).toBe('chart-v1')
+  })
+
+  it('clears what the old Version’s numbers said when the Version changes, and says how many', async () => {
+    // v1's 3 and v2's 3 are different sails, so carrying an entry across Versions would silently
+    // rename what the sailor said. It is the same bargain `repoint_race_crossover_chart` strikes for a
+    // Race already saved: state the cost, then pay it in one go.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
 
     await toSails(user)
     tapChart('first')
+    await user.click(screen.getByRole('button', { name: 'Main + A2' }))
 
-    expect(screen.getByRole('button', { name: 'Jib 2' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Jib 1' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^v2/ }))
+
+    expect(screen.getByText(/took off 1 sail entry/)).toBeInTheDocument()
+    expect(screen.getByText(/No sail changes recorded/)).toBeInTheDocument()
+    // And the vocabulary on offer is v2's own from here.
+    tapChart('first')
+    expect(screen.getByRole('button', { name: 'Main + Code 0' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Main + A2' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Main + Code 0' }))
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    const input = submit.mock.calls[0][0]
+    expect(input.crossover_chart_version_id).toBe('chart-v2')
+    expect(input.sails).toEqual([{ at: '2026-06-03T19:00:00', definition_number: 5, note: null }])
   })
 
-  it('says so and offers nothing when the inventory could not be read, and still saves', async () => {
-    // Null is not an empty locker, and neither is a sail plan: the race saves with the sails not
-    // recorded rather than with a chip row that claims the boat has none.
+  it('says so and offers nothing when the charts could not be read, and still saves', async () => {
+    // Null is not "the boat has no chart", and neither is a sail plan: the race saves with the sails
+    // not recorded rather than with a chip row that claims the boat can name none.
     const user = userEvent.setup({ delay: null })
     const { submit } = mount(stagedOf(), null)
 
     await toSails(user)
-    expect(screen.getByText(/sail inventory could not be read/)).toBeInTheDocument()
+    expect(screen.getByText(/Crossover Charts could not be read/)).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: '+ Add one by time instead' })
     ).not.toBeInTheDocument()
     // The gesture is off, but this is not the Review step: the strip must not claim the window is
     // being shown as saved when the sailor is standing on Sails.
-    expect(screen.getByText('No sails to name')).toBeInTheDocument()
+    expect(screen.getByText('No chart to name a sail in')).toBeInTheDocument()
     expect(screen.queryByText('The window as saved')).not.toBeInTheDocument()
 
     await next(user, 2)
     await user.click(screen.getByRole('button', { name: 'Save race' }))
     expect(submit.mock.calls[0][0].sails).toEqual([])
+    expect(submit.mock.calls[0][0].crossover_chart_version_id).toBeNull()
+  })
+
+  it('names the fix when the boat has no Crossover Chart at all', async () => {
+    // There is no separate list of sails to fall back on any more (ADR 0023), so the step says where
+    // a vocabulary comes from rather than looking merely empty.
+    const user = userEvent.setup({ delay: null })
+    mount(stagedOf(), [])
+
+    await toSails(user)
+
+    expect(screen.getByText(/Upload a Crossover Chart under Boat/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '+ Add one by time instead' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers every Version when the recording is older than all of them, and opens on a pick', async () => {
+    // Nothing is resolved silently: a recording from before the boat's first chart gets no default,
+    // because there is no Version that was in force then and inventing one would be Layline saying
+    // which words this race's sails were named in.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount(stagedOf(), [CHARTS[0]])
+
+    await toSails(user)
+
+    expect(screen.getByText(/older than every Crossover Chart/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^v2/ })).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      screen.queryByRole('button', { name: '+ Add one by time instead' })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^v2/ }))
+    tapChart('first')
+    await user.click(screen.getByRole('button', { name: 'Main + Code 0' }))
+
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    const input = submit.mock.calls[0][0]
+    expect(input.crossover_chart_version_id).toBe('chart-v2')
+    expect(input.sails).toEqual([{ at: '2026-06-03T19:00:00', definition_number: 5, note: null }])
   })
 })
 
@@ -683,8 +872,7 @@ describe('the sailor’s Testimony about the water', () => {
     await pickFile(user)
     await next(user)
     tapChart('first')
-    await user.click(screen.getByRole('button', { name: 'Mainsail' }))
-    await user.click(screen.getByRole('button', { name: 'Full' }))
+    await user.click(screen.getByRole('button', { name: 'Main + Jib 1' }))
 
     const onItsOwnStep = screen.getByTestId('marker-entry-1')
     expect(onItsOwnStep).toHaveStyle({ opacity: '1', cursor: 'pointer' })
@@ -718,11 +906,12 @@ describe('what Review says the sailor said', () => {
     await pickFile(user)
     await next(user)
     tapChart('first')
-    await user.click(screen.getByRole('button', { name: 'Mainsail' }))
-    await user.click(screen.getByRole('button', { name: 'One reef' }))
+    await user.click(screen.getByRole('button', { name: 'Main reefed + Jib 3' }))
+    await user.type(screen.getByLabelText('Note, if there is anything to add'), 'came on to blow')
     await next(user, 2)
 
-    expect(screen.getByText('Mainsail · One reef')).toBeInTheDocument()
+    // The chosen Crossover Chart Version's own words, and the note beside them (ADR 0023).
+    expect(screen.getByText('Main reefed + Jib 3 · came on to blow')).toBeInTheDocument()
     expect(screen.getByText('Sea state not recorded')).toBeInTheDocument()
   })
 })
@@ -736,9 +925,7 @@ describe('a refusal from the server', () => {
     }))
     const submit = jest.fn(async () => ({ ok: true as const, race_id: 'race-1' }))
 
-    render(
-      <RaceUploadWizard stageRecording={stage} submitRace={submit} inventory={INVENTORY} />
-    )
+    render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={CHARTS} />)
     await pickFile(user)
 
     expect(screen.getByText(/no Date column/)).toBeInTheDocument()
@@ -761,9 +948,7 @@ describe('a failure that took the staged bytes with it', () => {
       start_over,
     }))
 
-    render(
-      <RaceUploadWizard stageRecording={stage} submitRace={submit} inventory={INVENTORY} />
-    )
+    render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={CHARTS} />)
     return { submit }
   }
 

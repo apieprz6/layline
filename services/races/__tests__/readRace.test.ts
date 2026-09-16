@@ -35,6 +35,16 @@ let sailEntries: Record<string, unknown>[] = []
 let seaStateEntries: Record<string, unknown>[] = []
 let annotationError: { message: string } | null = null
 
+/**
+ * The vocabulary the Race's own Crossover Chart Version defines, and which Version was asked for.
+ *
+ * The Version asked for is recorded because that is the claim: the words come from the Version the
+ * Race points at, never from whichever chart is current now (ADR 0012).
+ */
+let definitions: Record<string, unknown>[] = []
+let definitionsError: { message: string } | null = null
+const versionsAsked: unknown[] = []
+
 /** Both annotation reads have the same shape: select, eq, order, and no paging. */
 const annotationTable = (rows: () => Record<string, unknown>[]) => ({
   select: () => ({
@@ -61,6 +71,21 @@ const from = jest.fn((table: string) => {
   }
   if (table === 'race_sea_state_entries') {
     return annotationTable(() => seaStateEntries)
+  }
+  if (table === 'crossover_sail_definitions') {
+    return {
+      select: () => ({
+        eq: (_column: string, value: unknown) => {
+          versionsAsked.push(value)
+          return {
+            returns: async () =>
+              definitionsError !== null
+                ? { data: null, error: definitionsError }
+                : { data: definitions, error: null },
+          }
+        },
+      }),
+    }
   }
   throw new Error(`readRace asked for an unexpected table: ${table}`)
 })
@@ -120,6 +145,8 @@ function raceRow(overrides: Record<string, unknown> = {}) {
     // Row 3 to row 7: the window opens in the middle of the latch.
     window_start: stamp(3 * CADENCE_SECONDS),
     window_finish: stamp(7 * CADENCE_SECONDS),
+    /** The Version the sails are named in, frozen at upload (ADR 0023). */
+    crossover_chart_version_id: 'chart-v1',
     recordings: {
       id: 'recording-1',
       filename: '08-22-26-glr.csv',
@@ -143,6 +170,12 @@ describe('readRace', () => {
     sailEntries = []
     seaStateEntries = []
     annotationError = null
+    definitions = [
+      { number: 1, label: 'Main + Jib 1' },
+      { number: 4, label: 'Main + A2' },
+    ]
+    definitionsError = null
+    versionsAsked.length = 0
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -319,52 +352,81 @@ describe('readRace', () => {
       expect(race?.annotations).toEqual({ sails: [], sea_state: [] })
     })
 
-    it('reads each kind as one ordered list, with the sails as a set in inventory order', async () => {
+    it('reads each kind as one ordered list, naming a sail in its own Version’s words', async () => {
       sailEntries = [
-        {
-          at: '2026-08-22 10:40:00',
-          reef: 'full',
-          // Returned kite-first by the join, deliberately: order comes from `sort_order`, never from
-          // the order rows happen to arrive in.
-          race_sail_entry_sails: [
-            { sails: { key: 'A2', label: 'A2', sort_order: 5 } },
-            { sails: { key: 'main', label: 'Main', sort_order: 1 } },
-          ],
-        },
-        {
-          at: '2026-08-22 11:02:00',
-          reef: 'reef-1',
-          race_sail_entry_sails: [{ sails: { key: 'main', label: 'Main', sort_order: 1 } }],
-        },
+        { at: '2026-08-22 10:40:00', definition_number: 1, note: null },
+        { at: '2026-08-22 11:02:00', definition_number: 4, note: 'jib was blown out' },
       ]
       seaStateEntries = [{ at: '2026-08-22 11:01:30', sea_state: 'moderate' }]
 
       const race = await readRace('race-1')
 
       expect(race?.annotations.sails).toEqual([
+        { at: '2026-08-22 10:40:00', definition_number: 1, label: 'Main + Jib 1', note: null },
         {
-          at: '2026-08-22 10:40:00',
-          reef: 'full',
-          sails: [
-            { key: 'main', label: 'Main' },
-            { key: 'A2', label: 'A2' },
-          ],
+          at: '2026-08-22 11:02:00',
+          definition_number: 4,
+          label: 'Main + A2',
+          note: 'jib was blown out',
         },
-        { at: '2026-08-22 11:02:00', reef: 'reef-1', sails: [{ key: 'main', label: 'Main' }] },
       ])
       expect(race?.annotations.sea_state).toEqual([
         { at: '2026-08-22 11:01:30', sea_state: 'moderate' },
       ])
+      // The Race's own frozen pointer, not the artifact's current one.
+      expect(versionsAsked).toEqual(['chart-v1'])
+    })
+
+    it('states a note-only entry as what was written, with no label nobody chose', async () => {
+      // The chart does not name everything the boat has ever flown (ADR 0023). Putting the nearest
+      // Definition's words on this entry would be Layline deciding what was up.
+      sailEntries = [{ at: '2026-08-22 11:00:00', definition_number: null, note: 'delivery main' }]
+
+      const race = await readRace('race-1')
+
+      expect(race?.annotations.sails).toEqual([
+        { at: '2026-08-22 11:00:00', definition_number: null, label: null, note: 'delivery main' },
+      ])
+      // Nothing named a Definition, so no vocabulary was needed and none was asked for.
+      expect(versionsAsked).toEqual([])
+    })
+
+    it('asks for no vocabulary at all when the Race records no chart Version', async () => {
+      // A Race with a null pointer can hold no Sail Configurations, which
+      // `races_id_crossover_chart_version_key` makes structural.
+      raceMaybeSingle.mockResolvedValue({
+        data: raceRow({ crossover_chart_version_id: null }),
+        error: null,
+      })
+
+      const race = await readRace('race-1')
+
+      expect(race?.annotations.sails).toEqual([])
+      expect(versionsAsked).toEqual([])
+    })
+
+    it('refuses the page when a named Definition has no words in that Version', async () => {
+      // The composite key makes this unreachable, so it means the vocabulary read came back short.
+      // Rendering the bare number would be the page inventing a sail name out of an integer.
+      sailEntries = [{ at: '2026-08-22 11:00:00', definition_number: 9, note: null }]
+
+      await expect(readRace('race-1')).resolves.toBeNull()
+      expect(consoleError).toHaveBeenCalled()
+    })
+
+    it('refuses the page when the vocabulary cannot be read', async () => {
+      sailEntries = [{ at: '2026-08-22 11:00:00', definition_number: 1, note: null }]
+      definitionsError = { message: 'statement timeout' }
+
+      await expect(readRace('race-1')).resolves.toBeNull()
+      expect(consoleError).toHaveBeenCalledWith(
+        'Race: Sail Definition read failed:',
+        'statement timeout'
+      )
     })
 
     it('keeps an entry timestamped before the window, because the sails were set before the start', async () => {
-      sailEntries = [
-        {
-          at: '2026-08-22 10:40:00',
-          reef: 'full',
-          race_sail_entry_sails: [{ sails: { key: 'main', label: 'Main', sort_order: 1 } }],
-        },
-      ]
+      sailEntries = [{ at: '2026-08-22 10:40:00', definition_number: 1, note: null }]
 
       const race = await readRace('race-1')
 

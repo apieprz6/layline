@@ -194,6 +194,47 @@ SELECT
         'window_finish', '2026-06-03T19:02:00'
     ) AS race;
 
+-- Two Crossover Chart Versions, because a Sail Configuration names a Sail Definition of one of
+-- them and of no other (ADR 0023). The fixture race above carries no chart pointer at all, which
+-- is the ordinary state for every section but the ninth: NULL means not recorded (ADR 0012), and
+-- a Race like that can hold no Configurations.
+--
+-- The numbering across the pair is deliberately not shared: v1 numbers 1, 2 and 3, v2 numbers 1
+-- and 4. So "sail 4" is a real sail of the boat and still a thing a Race pointing at v1 must not
+-- be able to record, which is the refusal section 9 goes after.
+--
+-- Inserted directly rather than through mint_boat_setup_version -- that function has its own
+-- suite (scripts/verify-race-archive-schema.sql) and what is under test here is the upload.
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by,
+     filename, content_sha256, payload)
+SELECT '11000000-0000-4000-8000-00000000c001', a.id, 'crossover_chart', 1,
+       DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       'Handsome_Pete_crossover.csv', repeat('1', 64),
+       '{"twa_axis": [40], "tws_axis": [6], "cells": [[1]],
+         "sail_definitions": [{"number": 1, "label": "Main + Jib 1"},
+                              {"number": 2, "label": "Main reefed + Jib 3"},
+                              {"number": 3, "label": "Main + A2"}]}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'crossover_chart';
+
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by,
+     filename, content_sha256, payload)
+SELECT '11000000-0000-4000-8000-00000000c002', a.id, 'crossover_chart', 2,
+       DATE '2026-06-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       'Handsome_Pete_crossover_v2.csv', repeat('2', 64),
+       '{"twa_axis": [40], "tws_axis": [6], "cells": [[1]],
+         "sail_definitions": [{"number": 1, "label": "Main + Jib 1"},
+                              {"number": 4, "label": "Main + A3"}]}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'crossover_chart';
+
+INSERT INTO crossover_sail_definitions (version_id, number, label) VALUES
+    ('11000000-0000-4000-8000-00000000c001', 1, 'Main + Jib 1'),
+    ('11000000-0000-4000-8000-00000000c001', 2, 'Main reefed + Jib 3'),
+    ('11000000-0000-4000-8000-00000000c001', 3, 'Main + A2'),
+    ('11000000-0000-4000-8000-00000000c002', 1, 'Main + Jib 1'),
+    ('11000000-0000-4000-8000-00000000c002', 4, 'Main + A3');
+
 -- ===========================================================================
 -- 1. The door: a guest cannot call it at all
 -- ===========================================================================
@@ -586,40 +627,36 @@ $$;
 -- ===========================================================================
 -- 9. The sailor's Testimony, in the same transaction
 -- ===========================================================================
--- LAY-111's half of the function. An Annotation is Testimony (ADR 0008): the sailor's answer and
--- nobody else's, so what matters here is that all of it is written or none of it is, that the
--- refusals are the database's own, and that an empty list is not a failure.
+-- LAY-111's half of the function, as LAY-130 left it. An Annotation is Testimony (ADR 0008): the
+-- sailor's answer and nobody else's, so what matters here is that all of it is written or none of
+-- it is, that the refusals are the database's own, and that an empty list is not a failure.
 --
--- The sail ids come out of the seeded inventory, because `race_sail_entry_sails.sail_id` is a
--- foreign key and a literal UUID would only ever prove that.
+-- A Sail Configuration now names one Sail Definition of the Crossover Chart Version its Race
+-- points at (ADR 0023), so the chart pointer travels on `p_race` and every entry is written
+-- against it. There is no inventory left to draw an id from, and no Reef State: what the boat was
+-- flying is whatever the Version's own words say it was.
 
 DO $$
 DECLARE
     f          RECORD;
-    v_main     UUID;
-    v_jib      UUID;
-    v_a2       UUID;
     v_race_id  UUID;
     v_err      TEXT;
     v_entries  BIGINT;
-    v_sails    TEXT[];
 BEGIN
     SELECT * INTO f FROM _fixture;
-    SELECT id INTO v_main FROM sails WHERE key = 'main';
-    SELECT id INTO v_jib  FROM sails WHERE key = 'jib-2';
-    SELECT id INTO v_a2   FROM sails WHERE key = 'A2';
 
     SELECT race_id, err INTO v_race_id, v_err
       FROM pg_temp.upload_as(
         'aaaaaaa1-0000-4000-8000-000000000001',
         jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00a"'),
-        f.rows, f.race,
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
         jsonb_build_array(
             -- Before the window's start, deliberately: the sails were set on the way out.
-            jsonb_build_object('at', '2026-06-03 18:40:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array(v_main, v_jib)),
-            jsonb_build_object('at', '2026-06-03 19:01:00', 'reef', 'reef-1',
-                'sail_ids', jsonb_build_array(v_main, v_a2))
+            jsonb_build_object('at', '2026-06-03 18:40:00', 'definition_number', 1),
+            jsonb_build_object('at', '2026-06-03 19:01:00', 'definition_number', 3,
+                'note', 'jib was blown out')
         ),
         jsonb_build_array(
             jsonb_build_object('at', '2026-06-03 19:00:00', 'sea_state', 'moderate')
@@ -629,6 +666,10 @@ BEGIN
     PERFORM pg_temp.chk('an upload carrying Testimony is accepted',
         v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
 
+    PERFORM pg_temp.chk('the Race records the Crossover Chart Version its sails are named in',
+        (SELECT crossover_chart_version_id FROM races WHERE id = v_race_id)
+            = '11000000-0000-4000-8000-00000000c001');
+
     SELECT count(*) INTO v_entries FROM race_sail_entries WHERE race_id = v_race_id;
     PERFORM pg_temp.chk('both Sail Configurations are written -- one ordered list, no initial value apart',
         v_entries = 2, format('%s entries', v_entries));
@@ -637,17 +678,24 @@ BEGIN
         (SELECT count(*) FROM race_sail_entries
           WHERE race_id = v_race_id AND at < '2026-06-03 19:00:00') = 1);
 
-    SELECT array_agg(s.key ORDER BY s.sort_order) INTO v_sails
-      FROM race_sail_entries e
-      JOIN race_sail_entry_sails es ON es.entry_id = e.id
-      JOIN sails s ON s.id = es.sail_id
-     WHERE e.race_id = v_race_id AND e.at = '2026-06-03 19:01:00';
-    PERFORM pg_temp.chk('a Sail Configuration is stored as a set of sails',
-        v_sails = ARRAY['main', 'A2'], array_to_string(v_sails, '+'));
+    PERFORM pg_temp.chk('a Sail Configuration is stored as the Definition number the sailor named',
+        (SELECT definition_number FROM race_sail_entries
+          WHERE race_id = v_race_id AND at = '2026-06-03 19:01:00') = 3);
 
-    PERFORM pg_temp.chk('the Reef State is stored with the entry, not with a sail',
-        (SELECT reef FROM race_sail_entries
-          WHERE race_id = v_race_id AND at = '2026-06-03 19:01:00') = 'reef-1');
+    -- The Version on the entry is the Race's own, put there by the function. No caller states it
+    -- per entry, so there is no shape of call that could name a sail in another vocabulary.
+    PERFORM pg_temp.chk('and in the Version the Race records, which no entry stated',
+        (SELECT count(*) FROM race_sail_entries
+          WHERE race_id = v_race_id
+            AND crossover_chart_version_id = '11000000-0000-4000-8000-00000000c001') = 2);
+
+    PERFORM pg_temp.chk('a note is stored beside the Definition, verbatim and not instead of it',
+        (SELECT note FROM race_sail_entries
+          WHERE race_id = v_race_id AND at = '2026-06-03 19:01:00') = 'jib was blown out');
+
+    PERFORM pg_temp.chk('an entry with nothing to add carries no note rather than an empty one',
+        (SELECT note FROM race_sail_entries
+          WHERE race_id = v_race_id AND at = '2026-06-03 18:40:00') IS NULL);
 
     PERFORM pg_temp.chk('the Sea State reading is written too',
         (SELECT sea_state FROM race_sea_state_entries WHERE race_id = v_race_id) = 'moderate');
@@ -657,33 +705,110 @@ $$;
 DO $$
 DECLARE
     f         RECORD;
-    v_main    UUID;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- Sail 4 is a real sail of this boat and belongs to v2. This Race points at v1, which never
+    -- numbered one, so race_sail_entries_definition_fkey is what refuses it -- and that is the
+    -- whole reason a Definition number is stored beside a Version and never alone.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00f"'),
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 4)
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a Definition of another Version is refused -- sail 4 is v2''s',
+        v_race_id IS NULL, v_err);
+
+    -- And the same number against the Version that does define it is fine, which is what makes the
+    -- refusal above about the pair rather than about the number.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f010"'),
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c002'),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 4)
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('and accepted against the Version that numbered it',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A note and no Definition: the chart does not name everything the boat has ever flown, and
+    -- "delivery main, no headsail" is testimony rather than a gap. Its NULL definition_number is
+    -- what keeps it out of any comparison against the chart, by construction.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f011"'),
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'note', 'delivery main, no headsail')
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a note-only Configuration is accepted', v_race_id IS NOT NULL,
+        COALESCE(v_err, 'accepted'));
+    PERFORM pg_temp.chk('and names no Definition rather than the nearest one',
+        (SELECT definition_number FROM race_sail_entries WHERE race_id = v_race_id) IS NULL);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
     v_race_id UUID;
     v_err     TEXT;
     v_left    BIGINT;
 BEGIN
     SELECT * INTO f FROM _fixture;
-    SELECT id INTO v_main FROM sails WHERE key = 'main';
 
-    -- A Sail Configuration that names no sails. Refused by the deferred
-    -- race_sail_entries_non_empty trigger, which pg_temp.upload_as makes fire at the statement.
+    -- A Sail Configuration that says nothing at all: a timestamp with no testimony on it. This was
+    -- a deferred trigger while the sails lived in a join table; it is sail_entry_says_something
+    -- now, immediate and one row at a time.
     SELECT race_id, err INTO v_race_id, v_err
       FROM pg_temp.upload_as(
         'aaaaaaa1-0000-4000-8000-000000000001',
         jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00b"'),
-        f.rows, f.race,
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
         jsonb_build_array(
-            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array(v_main)),
-            jsonb_build_object('at', '2026-06-03 19:01:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array())
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 1),
+            jsonb_build_object('at', '2026-06-03 19:01:00')
         ),
         '[]'::JSONB
       );
 
-    PERFORM pg_temp.chk('a Sail Configuration naming no sails is refused', v_race_id IS NULL, v_err);
-    PERFORM pg_temp.chk('in the words the trigger uses',
-        v_err = 'a Sail Configuration must name at least one sail', v_err);
+    PERFORM pg_temp.chk('a Sail Configuration that says nothing is refused', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('by the CHECK, named so the message says which rule',
+        v_err LIKE '%sail_entry_says_something%', v_err);
 
     -- The whole point of doing this in one transaction: the good entry, the race, the Recording and
     -- its Transcription all went with it.
@@ -691,20 +816,33 @@ BEGIN
      WHERE id = 'ffffffff-0000-4000-8000-00000000f00b';
     PERFORM pg_temp.chk('and nothing of that upload survived -- not the entry that was fine either',
         v_left = 0, format('%s recordings', v_left));
+
+    -- A note the sailor left blank says nothing in a way that is not NULL, and would slip past the
+    -- CHECK above if it were stored as it arrived. The function's NULLIF is what makes it NULL, and
+    -- sail_entry_says_something is then what refuses the row.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f012"'),
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
+        jsonb_build_array(jsonb_build_object('at', '2026-06-03 19:00:00', 'note', '   ')),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('a Configuration whose only content is a blank note is refused too',
+        v_race_id IS NULL, v_err);
 END;
 $$;
 
 DO $$
 DECLARE
     f         RECORD;
-    v_main    UUID;
-    v_jib     UUID;
     v_race_id UUID;
     v_err     TEXT;
 BEGIN
     SELECT * INTO f FROM _fixture;
-    SELECT id INTO v_main FROM sails WHERE key = 'main';
-    SELECT id INTO v_jib  FROM sails WHERE key = 'jib-1';
 
     -- Two entries at one instant. The wizard steps a taken time forward one row precisely so this
     -- cannot be built by hand (ADR 0014); the constraint is what makes that a rule rather than a
@@ -713,12 +851,12 @@ BEGIN
       FROM pg_temp.upload_as(
         'aaaaaaa1-0000-4000-8000-000000000001',
         jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00c"'),
-        f.rows, f.race,
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
         jsonb_build_array(
-            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array(v_main)),
-            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array(v_jib))
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 1),
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 2)
         ),
         '[]'::JSONB
       );
@@ -736,21 +874,43 @@ DECLARE
 BEGIN
     SELECT * INTO f FROM _fixture;
 
-    -- A sail from nobody's locker. The foreign key is what refuses it, which is why the Server
-    -- Action asks the same question before the bytes move.
+    -- A sail named against a Race that records no Crossover Chart Version. NOT NULL refuses it
+    -- either way, so the function says so first: the constraint's message names a column, and what
+    -- went wrong is naming sails in a vocabulary this Race does not have (ADR 0023). It is also why
+    -- the Server Action reads the Version's Definitions before the bytes move.
     SELECT race_id, err INTO v_race_id, v_err
       FROM pg_temp.upload_as(
         'aaaaaaa1-0000-4000-8000-000000000001',
         jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f00d"'),
         f.rows, f.race,
         jsonb_build_array(
-            jsonb_build_object('at', '2026-06-03 19:00:00', 'reef', 'full',
-                'sail_ids', jsonb_build_array('eeeeeeee-0000-4000-8000-00000000ee01'))
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 1)
         ),
         '[]'::JSONB
       );
 
-    PERFORM pg_temp.chk('a sail that is not in the inventory is refused', v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('a Sail Configuration on a Race that records no chart Version is refused',
+        v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('in words that name the Race rather than a column',
+        v_err LIKE '%this Race records none%', v_err);
+
+    -- A Version that exists but is not the one this Race points at cannot be smuggled in per entry
+    -- either: the function writes the Race's own on every row, so this is refused for the same
+    -- reason as above rather than accepted against the wrong chart.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f013"'),
+        f.rows, f.race,
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 19:00:00', 'definition_number', 1,
+                'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c001')
+        ),
+        '[]'::JSONB
+      );
+
+    PERFORM pg_temp.chk('and an entry cannot bring a Version of its own',
+        v_race_id IS NULL, v_err);
 END;
 $$;
 
@@ -776,6 +936,11 @@ BEGIN
     PERFORM pg_temp.chk('and holds no annotations rather than a stand-in for one',
         (SELECT count(*) FROM race_sail_entries WHERE race_id = v_race_id) = 0
         AND (SELECT count(*) FROM race_sea_state_entries WHERE race_id = v_race_id) = 0);
+    -- And no chart Version either. Nothing resolves one at write time and nothing will at read
+    -- time: NULL means the sailor did not record which chart this race's sails were named in
+    -- (ADR 0012), which is a different fact from every other race's.
+    PERFORM pg_temp.chk('and records no Crossover Chart Version, because nobody named one',
+        (SELECT crossover_chart_version_id FROM races WHERE id = v_race_id) IS NULL);
 END;
 $$;
 

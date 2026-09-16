@@ -110,3 +110,29 @@ because `recording_id` is unique — there is no second Race to orphan.
 - Deleting an admin account is blocked while any Version or Race they authored stands
   (`created_by ... ON DELETE RESTRICT`). Deciding what should happen instead is a real decision,
   and it fails loudly rather than nulling out authorship.
+
+## Amendment (LAY-130, 2026-09-16)
+
+The decision above stands entire. What is retired is a corollary drawn from it — that a Sail
+Definition and a **Sail** in the boat's **Sail Inventory** are two vocabularies which *never resolve
+into each other*, which `CONTEXT.md` had promoted into a relationship line of its own. ADR 0023
+deletes the Inventory, so there is no longer a second vocabulary for the first to fail to resolve
+against.
+
+- **"The numbers are the chart's own identifiers, not Layline's idea of a sail" survives**, and is
+  the reason the collapse goes this way round rather than the other. The Definitions were not
+  promoted out of the chart to become boat-wide records; the Inventory was deleted and the chart's
+  own numbering left as the only names sails have.
+- **A Sail Configuration on a Race now names a Sail Definition of the Crossover Chart Version that
+  Race points at.** This ADR's central move is what makes that safe: a Configuration and the cell
+  it is compared against are minted together, so the cross-version pairing this ADR called
+  unrepresentable stays unrepresentable — and by the same tool, a composite foreign key on
+  `(crossover_chart_version_id, definition_number)`, that the Wind Band already uses.
+- **"This is the one payload interior promoted to rows" becomes two.** `crossover_sail_definitions`
+  joins `rig_tune_bands`, written from the same parse as the payload inside one transaction, for
+  the reason given there: a child row needs a key to name. ADR 0011 carries the argument.
+- **"Frozen" is unchanged.** The Crossover Chart pointer defaults to the Version current at the
+  recording's start time, stays writable as an Amendment under ADR 0010, and null still means *not
+  recorded* rather than a backdated guess. The one thing added is that moving the pointer now
+  clears the Sail Configurations it would strand — `ON UPDATE RESTRICT` refuses to let it move
+  otherwise — so the frozen pairing cannot be broken by editing one half of it.

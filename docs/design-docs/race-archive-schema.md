@@ -7,10 +7,107 @@ This is a sketch to be lifted into a migration, not a migration. It is written i
 order and can be pasted as one file. Vocabulary is `CONTEXT.md`'s; the reasoning behind the
 three decisions with real trade-offs is in ADR 0011, ADR 0012 and ADR 0013.
 
+> **Amended by LAY-130 on 2026-09-16 — read the next section before the body.** ADR 0023 deleted
+> the Sail Inventory, and three tables and one enum described below no longer exist. The body is
+> left as the design it was, because it is the record of what the first migration lifted; the
+> amendment says what stands now.
+
+## Amendment (LAY-130, 2026-09-16): one sail vocabulary
+
+`supabase/migrations/20260916120000_one_sail_vocabulary.sql` is the migration; ADR 0023 is the
+decision. A **Sail Configuration** no longer names a set of **Sails** from a boat-wide inventory —
+it names one **Sail Definition** of the **Crossover Chart Version** its Race points at.
+
+**Gone**: `sails` with its six-row seed, `race_sail_entry_sails`, `race_sail_entries.reef`, the
+`reef_state` enum, the deferred `race_sail_entries_non_empty` trigger with
+`enforce_sail_entry_non_empty()`, and the `race_sail_entry_sails_touch_race` trigger. `retired_on`
+has no successor: a Definition is retired by being absent from the next Version.
+
+**New**, and the second payload interior promoted to rows for the reason ADR 0011 gives for
+`rig_tune_bands` — Postgres cannot reference into a JSONB array:
+
+```sql
+CREATE TABLE IF NOT EXISTS crossover_sail_definitions (
+    version_id  UUID NOT NULL,
+    kind        boat_setup_kind NOT NULL DEFAULT 'crossover_chart',
+    number      INTEGER NOT NULL,
+    label       TEXT NOT NULL,
+
+    PRIMARY KEY (version_id, number),
+
+    FOREIGN KEY (version_id, kind)
+        REFERENCES boat_setup_versions (id, kind) ON DELETE CASCADE,
+
+    CONSTRAINT crossover_sail_definitions_kind_fixed CHECK (kind = 'crossover_chart'),
+    CONSTRAINT definition_number_whole CHECK (number >= 0),
+    CONSTRAINT definition_label_non_empty CHECK (BTRIM(label) <> '')
+);
+```
+
+Keyed `(version_id, number)` because that pair is the identity — sail 7 of v1 and sail 7 of v2 are
+two different sails — and written **from the same parse as the payload, inside
+`mint_boat_setup_version`'s transaction**, so a Version's rows and its payload cannot be written
+apart. The payload keeps `sail_definitions` untouched: it is the file's own testimony and the rows
+are a projection of it.
+
+**Changed**, with the two composite foreign keys doing what a trigger would have guessed at:
+
+```sql
+CREATE TABLE IF NOT EXISTS race_sail_entries (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    race_id                   UUID NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+    crossover_chart_version_id UUID NOT NULL,
+    at                        TIMESTAMP NOT NULL,
+    definition_number         INTEGER,
+    note                      TEXT,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (race_id, at),
+    CONSTRAINT sail_entry_says_something
+        CHECK (definition_number IS NOT NULL OR note IS NOT NULL),
+    CONSTRAINT sail_entry_note_non_empty CHECK (note IS NULL OR BTRIM(note) <> ''),
+    FOREIGN KEY (race_id, crossover_chart_version_id)
+        REFERENCES races(id, crossover_chart_version_id)
+        ON UPDATE RESTRICT ON DELETE CASCADE,
+    FOREIGN KEY (crossover_chart_version_id, definition_number)
+        REFERENCES crossover_sail_definitions(version_id, number)
+        ON UPDATE RESTRICT ON DELETE RESTRICT
+);
+```
+
+Written as a `CREATE TABLE` because that is the shape to read; the migration gets there by `ALTER`,
+and the columns land nullable so its delete can name the old rows before `NOT NULL` arrives.
+
+- The first key means an entry cannot disagree with its own Race, and — because both its columns
+  are `NOT NULL` — that **a Race with a null chart pointer can hold no Configurations at all**. It
+  falls out of the key rather than being checked anywhere. It needs `races` to carry
+  `UNIQUE (id, crossover_chart_version_id)`, which adds no invariant `id` did not already have.
+- The second uses `MATCH SIMPLE` deliberately: a NULL `definition_number` is a note-only
+  Configuration and the key stands aside, which is what makes "the chart has no word for what was
+  up" expressible without a second table.
+- `ON UPDATE RESTRICT` is why repointing a Race's chart must clear its Configurations first. That
+  is `repoint_race_crossover_chart(p_race_id, p_version_id, p_clearing)`, which counts, refuses if
+  the count is not the one the sailor agreed to, then clears and repoints in one transaction.
+- The non-empty trigger is replaced by `sail_entry_says_something`, an ordinary CHECK, because an
+  entry no longer has children that arrive after it — nothing needs deferring.
+
+**`race_sail_entries` rows were all deleted** by that migration, deliberately: they name `sails`
+ids against Races with no chart pointer, so there is nothing to translate against without
+inventing the translation, and the archive is hand-entered by its owner. Definitions **were**
+backfilled from every existing crossover payload. No chart pointer was backdated.
+
+Deleted *once*, and the delete says so: `WHERE crossover_chart_version_id IS NULL` against the
+column added nullable a moment earlier. A row with no Version is an old-vocabulary row by
+construction, so the first run takes all of them and a second run takes none — which matters,
+because a Configuration is Testimony and nothing can reconstruct it.
+
 ## Shape at a glance
 
 Twelve tables. Nine are the archive and Boat Setup; `profiles` and `boats` already exist or are
 trivial.
+
+*Superseded by [the LAY-130 amendment](#amendment-lay-130-2026-09-16-one-sail-vocabulary): one
+table fewer. `sails` and `race_sail_entry_sails` are gone, and `crossover_sail_definitions` has
+arrived beside `rig_tune_bands` — so there are two payload interiors promoted to rows, not one.*
 
 ```
 boats
@@ -30,6 +127,10 @@ boats
 `boat_id` appears on exactly three tables — `boat_setup_artifacts`, `sails` and `races`.
 Everything else reaches the boat through one of those three. (Decision 2 said two tables;
 decision 4 then added the Sail Inventory, which has nowhere else to hang.)
+
+*Superseded: two tables again. With the Sail Inventory gone, `boat_id` is on
+`boat_setup_artifacts` and `races`, and a Sail Definition reaches the boat through its Version's
+artifact.*
 
 ## Conventions
 
@@ -54,7 +155,7 @@ CREATE TYPE boat_setup_kind AS ENUM (
 CREATE TYPE calibration_channel AS ENUM ('AWA', 'AWS', 'STW', 'HDG');
 CREATE TYPE calibration_event_type AS ENUM ('autocompensation', 'other');
 CREATE TYPE sea_state AS ENUM ('calm', 'slight', 'moderate', 'rough');
-CREATE TYPE reef_state AS ENUM ('full', 'reef-1');
+CREATE TYPE reef_state AS ENUM ('full', 'reef-1');   -- dropped: see the LAY-130 amendment
 CREATE TYPE recording_date_order AS ENUM ('MDY', 'DMY');
 ```
 
@@ -63,6 +164,9 @@ cost is equal and the enum buys generated types and a name that appears in the e
 
 - `reef_state` will gain `'reef-2'` if Handsome Pete's main ever grows a second reef point.
   That is `ALTER TYPE ... ADD VALUE`, a non-blocking one-liner.
+  *Superseded by [the LAY-130 amendment](#amendment-lay-130-2026-09-16-one-sail-vocabulary): the
+  enum is dropped, and a second reef point is now a Sail Definition of the next Crossover Chart
+  Version rather than a value here — reefing is part of the chart's own label.*
 - `recording_date_order` has exactly one value in use. All 13 archive files are `MDY`
   (6 of them prove it unambiguously with a day > 12). It exists so a wrong reading of an
   ambiguous file is fixable without re-upload — see `recordings.date_order`.
@@ -90,6 +194,11 @@ hang off something nameable, and because the mockup's placeholder identity
 (`Wayward Wind · J/105`) needs somewhere real to be replaced.
 
 ## `sails` — the Sail Inventory
+
+> **Gone entirely.** ADR 0023 (LAY-130) deleted this table and its seed;
+> `crossover_sail_definitions` is what a Sail Configuration points at now, and the section below is
+> kept only as the record of what decision 4 built. See
+> [the amendment](#amendment-lay-130-2026-09-16-one-sail-vocabulary).
 
 ```sql
 CREATE TABLE IF NOT EXISTS sails (
@@ -125,6 +234,10 @@ than a text rewrite across every entry that mentions it, which is exactly the fa
 
 `retired_on` exists because `race_sail_entry_sails` references sails with `ON DELETE RESTRICT`:
 a sail that has been flown cannot be deleted, only retired out of the picker.
+
+*Superseded, and it has no successor. A Sail Definition is retired by being absent from the next
+Crossover Chart Version — the Versions already carry the history that `retired_on` was invented to
+carry, and the rename this section is about to perform is a new Version rather than an `UPDATE`.*
 
 ## `boat_setup_artifacts`
 
@@ -647,6 +760,12 @@ deliberately unbounded by the window: the sails were set before the start, and t
 rule is "the entry in force is the latest at or before the row's time, falling back to the
 earliest".
 
+*The resolution rule and the unbounded `at` are unchanged by LAY-130. The `race_sail_entries`
+shape below is not: `reef` and the whole of `race_sail_entry_sails` are gone, replaced by
+`crossover_chart_version_id` / `definition_number` / `note` on the entry itself. See
+[the amendment](#amendment-lay-130-2026-09-16-one-sail-vocabulary) for the current DDL;
+`race_sea_state_entries` is untouched.*
+
 ```sql
 CREATE TABLE IF NOT EXISTS race_sail_entries (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -677,6 +796,10 @@ CREATE TABLE IF NOT EXISTS race_sea_state_entries (
 
 An entry with no sails is bare poles and is a bug, so it is refused — deferred, because the
 entry row necessarily exists before its sails do:
+
+*Superseded: the trigger and its function are dropped. With the sail on the entry row there is
+nothing to defer, so this is now the immediate `CHECK` `sail_entry_says_something` — and what it
+refuses is narrower, because a note alone is testimony rather than bare poles.*
 
 ```sql
 CREATE OR REPLACE FUNCTION public.enforce_sail_entry_non_empty()
@@ -747,6 +870,12 @@ CREATE TRIGGER race_sail_entry_sails_touch_race
     AFTER INSERT OR DELETE ON race_sail_entry_sails
     FOR EACH ROW EXECUTE FUNCTION public.touch_race_updated_at_via_entry();
 ```
+
+*Superseded in two places by
+[the LAY-130 amendment](#amendment-lay-130-2026-09-16-one-sail-vocabulary): `sails` is no longer in
+the "likewise" list, and the last trigger with its `touch_race_updated_at_via_entry()` is dropped —
+there is no join row left to reach a Race through. `race_sail_entries_touch_race` stays and still
+does the whole job, because editing a Sail Configuration is now one write to one row.*
 
 ## Deleting a Race
 
@@ -943,6 +1072,9 @@ two implementations of a derivation is the thing "derive, don't store" was avoid
    policies.
 2. `boats`, `sails` and the four `boat_setup_artifacts` rows are seeded by the migration. Nothing
    else is: the 13 races go in through the upload UI, which is the acceptance test.
+   *Superseded in part: `boats` and the four artifact rows still are, but the six-row `sails` seed
+   went with the table (LAY-130). Nothing seeds a Sail Definition — they arrive with a Crossover
+   Chart Version the owner uploads.*
 3. `metadata.yaml` is **not** read by anything. Annotations and the corrected sea-state
    vocabulary are typed by hand at seed time.
 4. The 17-check verification suite from LAY-92 has still only been run against a local stack; the

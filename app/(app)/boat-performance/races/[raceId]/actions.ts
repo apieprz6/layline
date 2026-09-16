@@ -13,9 +13,13 @@ import type { DeleteRaceResult } from '@/types'
  *
  * The delete is expressed against the **Recording** and not against the Race, because the foreign
  * key runs the other way — the Race is the child — so `DELETE FROM recordings WHERE id = $1` takes
- * the Race, both annotation tables, the sail join rows and every Recording Row in one statement.
- * That is correct precisely because `races.recording_id` is `UNIQUE`: there is no second Race left
- * pointing at a Recording that has gone.
+ * the Race, both annotation tables and every Recording Row in one statement. That is correct
+ * precisely because `races.recording_id` is `UNIQUE`: there is no second Race left pointing at a
+ * Recording that has gone.
+ *
+ * It stops there. A Sail Configuration names a Sail Definition of a Crossover Chart Version
+ * (ADR 0023) with `ON DELETE RESTRICT`, so the cascade cannot reach the chart's vocabulary: the words
+ * a deleted race was stated in are still the words every other race is stated in.
  *
  * The transaction commits **first** and the object is removed **second** (ADR 0013). It is the
  * mirror image of the upload, and for the same reason: bytes with no row are invisible, harmless and

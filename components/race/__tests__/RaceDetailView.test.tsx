@@ -96,34 +96,57 @@ describe('a race the sailor annotated', () => {
     sails: [
       {
         at: '2026-06-03T18:55:00',
-        reef: 'full',
-        sails: [
-          { key: 'main', label: 'Mainsail' },
-          { key: 'j2', label: 'Jib 2' },
-        ],
+        definition_number: 1,
+        label: 'Main + Jib 2',
+        note: null,
       },
       {
         at: '2026-06-03T19:42:00',
-        reef: 'reef-1',
-        sails: [{ key: 'main', label: 'Mainsail' }],
+        definition_number: 2,
+        label: 'Main reefed + Jib 3',
+        note: 'kite was blown out',
       },
     ],
     sea_state: [{ at: '2026-06-03T19:05:00', sea_state: 'moderate' }],
   }
 
-  it('states every entry, in the words the sailor chose, at the time they gave', () => {
+  it('states every entry in its own chart Version’s words, at the time the sailor gave', () => {
     renderRace(raceOf(annotated))
 
+    // The words are the Crossover Chart Version's own, resolved against the Version this Race points
+    // at and handed to the page already resolved (ADR 0023). Nothing here composes a sail name.
+    expect(screen.getByText('Main + Jib 2')).toBeInTheDocument()
     // The first entry is not special and is not labelled as an initial value: it is one of two
     // changes, and what was up at any moment is resolved from the list at read (ADR 0010).
-    expect(screen.getByText('Mainsail + Jib 2 · Full')).toBeInTheDocument()
-    expect(screen.getByText('Mainsail · One reef')).toBeInTheDocument()
+    expect(screen.getByText('Main reefed + Jib 3 · kite was blown out')).toBeInTheDocument()
     // Before the window opens, because the sails were set before the start.
     expect(screen.getByText('18:55')).toBeInTheDocument()
     expect(screen.getByText('19:42')).toBeInTheDocument()
 
     expect(screen.getByText('Moderate · 2–3 ft')).toBeInTheDocument()
     expect(screen.queryByText(/not recorded/i)).not.toBeInTheDocument()
+  })
+
+  it('states a note-only entry as what was written, and names no sail for it', () => {
+    // The chart does not name everything the boat has ever flown, so an entry can be a note and
+    // nothing else. Reaching for the nearest Definition's words would be the page deciding what was
+    // up — which is the one thing a page about Testimony must not do.
+    renderRace(
+      raceOf({
+        sails: [
+          {
+            at: '2026-06-03T19:00:00',
+            definition_number: null,
+            label: null,
+            note: 'delivery main, no headsail',
+          },
+        ],
+        sea_state: [],
+      })
+    )
+
+    expect(screen.getByText('delivery main, no headsail')).toBeInTheDocument()
+    expect(screen.queryByText(/nobody wrote down which sails were up/)).not.toBeInTheDocument()
   })
 
   it('never says it matched anything to a wind reading', () => {

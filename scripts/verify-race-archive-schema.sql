@@ -229,9 +229,9 @@ $$;
 DO $$
 DECLARE
     v_tables TEXT[] := ARRAY[
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries'
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries'
     ];
     v_missing TEXT[];
     v_unprotected TEXT[];
@@ -241,7 +241,7 @@ BEGIN
     WHERE to_regclass('public.' || t) IS NULL;
 
     PERFORM pg_temp.chk(
-        'all twelve archive and Boat Setup tables exist',
+        'all eleven archive and Boat Setup tables exist',
         v_missing IS NULL,
         'missing: ' || COALESCE(v_missing::TEXT, '-')
     );
@@ -295,9 +295,9 @@ BEGIN
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND a.attgenerated <> ''
       AND c.relname IN (
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries')
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries')
       AND NOT (c.relname = 'recording_rows' AND a.attname = 'water_referenced');
 
     PERFORM pg_temp.chk(
@@ -317,9 +317,9 @@ BEGIN
       AND data_type = 'numeric'
       AND (numeric_precision IS NOT NULL OR numeric_scale IS NOT NULL)
       AND table_name IN (
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries');
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries');
 
     PERFORM pg_temp.chk(
         'no recorded channel declares a scale: a declared scale is a rounding rule (ADR 0008)',
@@ -366,30 +366,31 @@ $$;
 DO $$
 DECLARE
     v_boats   BIGINT;
-    v_sails   BIGINT;
     v_arts    BIGINT;
     v_pointed BIGINT;
     v_other   BIGINT;
 BEGIN
     SELECT count(*) INTO v_boats FROM boats WHERE name = 'Handsome Pete' AND model = 'Beneteau 10R';
-    SELECT count(*) INTO v_sails FROM sails;
     SELECT count(*) INTO v_arts FROM boat_setup_artifacts;
     SELECT count(*) INTO v_pointed FROM boat_setup_artifacts WHERE current_version_id IS NOT NULL;
+    -- crossover_sail_definitions belongs in this sum now: the boat's sail vocabulary is not
+    -- seeded reference data any more, it arrives with a Crossover Chart Version (ADR 0023).
     SELECT (SELECT count(*) FROM boat_setup_versions) + (SELECT count(*) FROM rig_tune_bands)
+         + (SELECT count(*) FROM crossover_sail_definitions)
          + (SELECT count(*) FROM calibration_events) + (SELECT count(*) FROM recordings)
          + (SELECT count(*) FROM races)
       INTO v_other;
 
     PERFORM pg_temp.chk(
-        'the migration seeds one boat, six sails and four unpointed artifacts',
-        v_boats = 1 AND v_sails = 6 AND v_arts = 4 AND v_pointed = 0,
-        format('boat=%s sails=%s artifacts=%s pointed=%s', v_boats, v_sails, v_arts, v_pointed)
+        'the migration seeds one boat and four unpointed artifacts, and no sails at all',
+        v_boats = 1 AND v_arts = 4 AND v_pointed = 0,
+        format('boat=%s artifacts=%s pointed=%s', v_boats, v_arts, v_pointed)
     );
 
     PERFORM pg_temp.chk(
         'and seeds no race data at all: the archive is entered by hand through the UI',
         v_other = 0,
-        format('rows in versions/bands/events/recordings/races: %s', v_other)
+        format('rows in versions/bands/definitions/events/recordings/races: %s', v_other)
     );
 END;
 $$;
@@ -397,9 +398,9 @@ $$;
 DO $$
 DECLARE
     v_tables TEXT[] := ARRAY[
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries'
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries'
     ];
     v_ungranted TEXT[];
 BEGIN
@@ -505,6 +506,86 @@ SELECT pg_temp.refuses(
     SELECT a.id, 'rig_tune', 99, DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
            'from the tuning guide', '{"bands": []}'::JSONB
     FROM boat_setup_artifacts a WHERE a.kind = 'rig_tune'
+    $sql$
+);
+
+-- Sail Definitions as rows --------------------------------------------------
+-- Two Crossover Chart Versions, each with its own numbering, because that is the state the
+-- whole of ADR 0023 turns on: sail 3 of v1 and sail 4 of v2 are not each other, and sail
+-- identity does not span Versions. The payload keeps its own `sail_definitions` -- it is the
+-- file's testimony -- and the rows beside it are what a Sail Configuration points at.
+--
+-- Inserted directly here rather than through mint_boat_setup_version, which the minting section
+-- exercises separately: these are the fixtures the annotation checks below need, and the table's
+-- own refusals are worth attacking without a function in the way.
+
+SELECT pg_temp.accepts(
+    'a crossover_chart Version and its Sail Definitions are accepted',
+    $sql$
+    WITH v AS (
+        INSERT INTO boat_setup_versions
+            (id, artifact_id, kind, version_number, effective_from, created_by,
+             filename, content_sha256, payload)
+        SELECT '11000000-0000-4000-8000-000000000001', a.id, 'crossover_chart', 1,
+               DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+               'Handsome_Pete_crossover.csv', repeat('1', 64),
+               '{"twa_axis": [40], "tws_axis": [6], "cells": [[1]],
+                 "sail_definitions": [{"number": 1, "label": "Main + Jib 1"},
+                                      {"number": 2, "label": "Main reefed + Jib 3"},
+                                      {"number": 3, "label": "Main + A2"}]}'::JSONB
+        FROM boat_setup_artifacts a WHERE a.kind = 'crossover_chart'
+        RETURNING id
+    )
+    INSERT INTO crossover_sail_definitions (version_id, number, label)
+    SELECT v.id, d.number, d.label
+    FROM v, (VALUES (1, 'Main + Jib 1'), (2, 'Main reefed + Jib 3'), (3, 'Main + A2'))
+        AS d(number, label)
+    $sql$
+);
+
+SELECT pg_temp.accepts(
+    'and so is a second Version that numbers its sails differently',
+    $sql$
+    WITH v AS (
+        INSERT INTO boat_setup_versions
+            (id, artifact_id, kind, version_number, effective_from, created_by,
+             filename, content_sha256, payload)
+        SELECT '11000000-0000-4000-8000-000000000002', a.id, 'crossover_chart', 2,
+               DATE '2026-06-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+               'Handsome_Pete_crossover_v2.csv', repeat('2', 64),
+               '{"twa_axis": [40], "tws_axis": [6], "cells": [[1]],
+                 "sail_definitions": [{"number": 1, "label": "Main + Jib 1"},
+                                      {"number": 4, "label": "Main + A3"}]}'::JSONB
+        FROM boat_setup_artifacts a WHERE a.kind = 'crossover_chart'
+        RETURNING id
+    )
+    INSERT INTO crossover_sail_definitions (version_id, number, label)
+    SELECT v.id, d.number, d.label
+    FROM v, (VALUES (1, 'Main + Jib 1'), (4, 'Main + A3')) AS d(number, label)
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'a Sail Definition on a Version of another kind is refused (the constant tag column)',
+    $sql$
+    INSERT INTO crossover_sail_definitions (version_id, number, label)
+    VALUES ('10000000-0000-4000-8000-000000000001', 1, 'Main + Jib 1')
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'one number cannot mean two sails in one Version',
+    $sql$
+    INSERT INTO crossover_sail_definitions (version_id, number, label)
+    VALUES ('11000000-0000-4000-8000-000000000001', 3, 'Main + A3')
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'a Definition with no label is refused: a bare number names nothing',
+    $sql$
+    INSERT INTO crossover_sail_definitions (version_id, number, label)
+    VALUES ('11000000-0000-4000-8000-000000000001', 9, '   ')
     $sql$
 );
 
@@ -1176,15 +1257,17 @@ SELECT pg_temp.refuses(
 -- ===========================================================================
 
 SELECT pg_temp.accepts(
-    'a Race over a window containing rows is accepted, with its Rig Tune band',
+    'a Race over a window containing rows is accepted, with its Rig Tune band and its chart',
     $sql$
     INSERT INTO races
         (id, boat_id, recording_id, title, window_start, window_finish,
-         polar_version_id, rig_tune_version_id, rig_tune_band_id, created_by)
+         polar_version_id, crossover_chart_version_id, rig_tune_version_id, rig_tune_band_id,
+         created_by)
     SELECT '60000000-0000-4000-8000-000000000001', b.id,
            '50000000-0000-4000-8000-000000000001', 'Beer can',
            TIMESTAMP '2026-07-22 18:00:30', TIMESTAMP '2026-07-22 18:01:30',
            '10000000-0000-4000-8000-000000000001',
+           '11000000-0000-4000-8000-000000000001',
            '30000000-0000-4000-8000-000000000001',
            '40000000-0000-4000-8000-000000000002',
            'aaaaaaa1-0000-4000-8000-000000000001'
@@ -1318,54 +1401,111 @@ SELECT pg_temp.accepts(
 -- Annotations, and the touch triggers that carry an Amendment's provenance
 -- ===========================================================================
 
+-- A Sail Configuration names a Sail Definition of the Crossover Chart Version its own Race
+-- points at (ADR 0023). Race 1 points at crossover v1, which numbers 1, 2 and 3; v2 numbers 1
+-- and 4. Race 2 records no chart Version at all, which is the state that makes "no Configuration
+-- without a Version" worth attacking.
+
 SELECT pg_temp.refuses(
-    'a Sail Configuration naming no sails is refused: bare poles is a bug',
+    'a Sail Configuration that says nothing is refused (sail_entry_says_something)',
     $sql$
-    INSERT INTO race_sail_entries (race_id, at, reef)
-    VALUES ('60000000-0000-4000-8000-000000000001', TIMESTAMP '2026-07-22 17:55:00', 'full')
+    INSERT INTO race_sail_entries (race_id, crossover_chart_version_id, at)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001', TIMESTAMP '2026-07-22 17:55:00')
     $sql$
 );
 
 SELECT pg_temp.accepts(
     'a Sail Configuration set before the start is accepted: `at` is unbounded by the window',
     $sql$
-    WITH e AS (
-        INSERT INTO race_sail_entries (id, race_id, at, reef)
-        VALUES ('70000000-0000-4000-8000-000000000001',
-                '60000000-0000-4000-8000-000000000001',
-                TIMESTAMP '2026-07-22 17:55:00', 'full')
-        RETURNING id
-    )
-    INSERT INTO race_sail_entry_sails (entry_id, sail_id)
-    SELECT e.id, s.id FROM e, sails s WHERE s.key IN ('main', 'jib-1')
+    INSERT INTO race_sail_entries
+        (id, race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('70000000-0000-4000-8000-000000000001',
+            '60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001',
+            TIMESTAMP '2026-07-22 17:55:00', 1)
+    $sql$
+);
+
+SELECT pg_temp.accepts(
+    'and so is one the sailor could only put in words: a note is Testimony, not a gap',
+    $sql$
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number, note)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001',
+            TIMESTAMP '2026-07-22 18:00:45', NULL, 'jib change, nobody wrote down which')
     $sql$
 );
 
 SELECT pg_temp.refuses(
-    'the same sail cannot appear twice in one configuration: it is a set',
+    'a note of nothing but spaces is not a note (sail_entry_note_non_empty)',
     $sql$
-    INSERT INTO race_sail_entry_sails (entry_id, sail_id)
-    SELECT '70000000-0000-4000-8000-000000000001', s.id FROM sails s WHERE s.key = 'main'
-    $sql$
-);
-
-SELECT pg_temp.refuses(
-    'two entries at the same instant are refused',
-    $sql$
-    WITH e AS (
-        INSERT INTO race_sail_entries (race_id, at, reef)
-        VALUES ('60000000-0000-4000-8000-000000000001',
-                TIMESTAMP '2026-07-22 17:55:00', 'reef-1')
-        RETURNING id
-    )
-    INSERT INTO race_sail_entry_sails (entry_id, sail_id)
-    SELECT e.id, s.id FROM e, sails s WHERE s.key = 'main'
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number, note)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001',
+            TIMESTAMP '2026-07-22 18:01:00', NULL, '   ')
     $sql$
 );
 
 SELECT pg_temp.refuses(
-    'a sail that has been flown cannot be deleted, only retired',
-    $sql$DELETE FROM sails WHERE key = 'main'$sql$
+    'a Definition number belonging to another Version is refused: sail 4 is v2''s, not v1''s',
+    $sql$
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001', TIMESTAMP '2026-07-22 18:02:00', 4)
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'and an entry whose Version disagrees with its Race''s own pointer is refused',
+    $sql$
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000002', TIMESTAMP '2026-07-22 18:03:00', 1)
+    $sql$
+);
+
+-- Race 2 records no Crossover Chart Version, so there is no vocabulary to name a sail in. Both
+-- ways of trying are refused: a Version its Race does not record fails the composite key, and
+-- naming no Version at all fails NOT NULL.
+SELECT pg_temp.refuses(
+    'a Race with no chart Version can hold no Sail Configurations',
+    $sql$
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('60000000-0000-4000-8000-000000000002',
+            '11000000-0000-4000-8000-000000000001', TIMESTAMP '2026-08-22 11:00:00', 1)
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'and not by leaving the Version off either',
+    $sql$
+    INSERT INTO race_sail_entries (race_id, at, definition_number)
+    VALUES ('60000000-0000-4000-8000-000000000002', TIMESTAMP '2026-08-22 11:00:00', 1)
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'two Configurations at the same instant are refused',
+    $sql$
+    INSERT INTO race_sail_entries
+        (race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000001', TIMESTAMP '2026-07-22 17:55:00', 2)
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'a Sail Definition that has been flown cannot be deleted out from under it',
+    $sql$
+    DELETE FROM crossover_sail_definitions
+    WHERE version_id = '11000000-0000-4000-8000-000000000001' AND number = 1
+    $sql$
 );
 
 DO $$
@@ -1381,14 +1521,14 @@ BEGIN
     SELECT ctid INTO v_before_1 FROM races WHERE id = '60000000-0000-4000-8000-000000000001';
     SELECT ctid INTO v_before_2 FROM races WHERE id = '60000000-0000-4000-8000-000000000002';
 
-    INSERT INTO race_sail_entry_sails (entry_id, sail_id)
-    SELECT '70000000-0000-4000-8000-000000000001', s.id FROM sails s WHERE s.key = 'A2';
+    UPDATE race_sail_entries SET note = 'kite up late, the halyard was fouled'
+    WHERE id = '70000000-0000-4000-8000-000000000001';
 
     SELECT ctid INTO v_after_1 FROM races WHERE id = '60000000-0000-4000-8000-000000000001';
     SELECT ctid INTO v_after_2 FROM races WHERE id = '60000000-0000-4000-8000-000000000002';
 
     PERFORM pg_temp.chk(
-        'adding a sail through the join table touches the Race it belongs to',
+        'amending a Sail Configuration touches the Race it belongs to',
         v_after_1 <> v_before_1,
         format('%s -> %s', v_before_1, v_after_1)
     );
@@ -1441,15 +1581,141 @@ END;
 $$;
 
 -- ===========================================================================
+-- Repointing a Race at another Crossover Chart Version
+-- ===========================================================================
+-- The pointer stays changeable (ADR 0012), but Definition numbers do not span Versions, so the
+-- Configurations named against the old one cannot come along. ON UPDATE RESTRICT is what makes
+-- that unavoidable rather than remembered, and repoint_race_crossover_chart is the way through:
+-- it refuses unless the caller states the number of Configurations actually standing, so the
+-- sailor is told what will go before it goes.
+
+SELECT pg_temp.refuses(
+    'a Race cannot be repointed at another chart Version while its Configurations stand',
+    $sql$
+    UPDATE races SET crossover_chart_version_id = '11000000-0000-4000-8000-000000000002'
+    WHERE id = '60000000-0000-4000-8000-000000000001'
+    $sql$
+);
+
+SELECT pg_temp.refuses(
+    'and its chart Version cannot simply be cleared either',
+    $sql$
+    UPDATE races SET crossover_chart_version_id = NULL
+    WHERE id = '60000000-0000-4000-8000-000000000001'
+    $sql$
+);
+
+DO $$
+DECLARE
+    v_standing BIGINT;
+    v_err      TEXT;
+    v_cleared  TEXT;
+    v_pointer  UUID;
+    v_left     BIGINT;
+BEGIN
+    SELECT count(*) INTO v_standing FROM race_sail_entries
+     WHERE race_id = '60000000-0000-4000-8000-000000000001';
+
+    -- A count nobody was told is a count nobody agreed to. The Testimony this would delete is
+    -- not recoverable from anything, so a disagreement is a refusal.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.repoint_race_crossover_chart(
+                      '60000000-0000-4000-8000-000000000001'::UUID,
+                      '11000000-0000-4000-8000-000000000002'::UUID, %s)$q$, v_standing + 1)
+    );
+
+    SELECT crossover_chart_version_id INTO v_pointer FROM races
+     WHERE id = '60000000-0000-4000-8000-000000000001';
+    SELECT count(*) INTO v_left FROM race_sail_entries
+     WHERE race_id = '60000000-0000-4000-8000-000000000001';
+
+    PERFORM pg_temp.chk(
+        'a repoint agreed for the wrong number of Configurations is refused, and clears none',
+        COALESCE(
+            v_err IS NOT NULL
+            AND v_pointer = '11000000-0000-4000-8000-000000000001'
+            AND v_left = v_standing,
+            FALSE
+        ),
+        format('err=%s pointer=%s standing=%s left=%s', COALESCE(v_err, '-'),
+               COALESCE(v_pointer::TEXT, '-'), v_standing, v_left)
+    );
+
+    SELECT val, err INTO v_cleared, v_err FROM pg_temp.value_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.repoint_race_crossover_chart(
+                      '60000000-0000-4000-8000-000000000001'::UUID,
+                      '11000000-0000-4000-8000-000000000002'::UUID, %s)$q$, v_standing)
+    );
+
+    SELECT crossover_chart_version_id INTO v_pointer FROM races
+     WHERE id = '60000000-0000-4000-8000-000000000001';
+    SELECT count(*) INTO v_left FROM race_sail_entries
+     WHERE race_id = '60000000-0000-4000-8000-000000000001';
+
+    PERFORM pg_temp.chk(
+        'the agreed repoint clears exactly those Configurations and moves the pointer, in one act',
+        COALESCE(
+            v_err IS NULL AND v_cleared = v_standing::TEXT
+            AND v_pointer = '11000000-0000-4000-8000-000000000002'
+            AND v_left = 0,
+            FALSE
+        ),
+        format('err=%s cleared=%s expected=%s pointer=%s left=%s', COALESCE(v_err, '-'),
+               COALESCE(v_cleared, '-'), v_standing,
+               COALESCE(v_pointer::TEXT, '-'), v_left)
+    );
+END;
+$$;
+
+DO $$
+DECLARE v_err TEXT;
+BEGIN
+    v_err := pg_temp.exec_as(
+        'cccccccc-0000-4000-8000-000000000002',
+        $q$SELECT public.repoint_race_crossover_chart(
+               '60000000-0000-4000-8000-000000000001'::UUID, NULL, 0)$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a signed-in non-admin cannot repoint a Race at all',
+        COALESCE(
+            v_err IS NOT NULL
+            AND (SELECT crossover_chart_version_id FROM races
+                  WHERE id = '60000000-0000-4000-8000-000000000001')
+                = '11000000-0000-4000-8000-000000000002',
+            FALSE
+        ),
+        COALESCE(v_err, 'expected a refusal; the call was accepted')
+    );
+END;
+$$;
+
+-- Named in the new vocabulary, which is the only one this Race now has. It also leaves a
+-- Configuration standing for the cascade check at the end of the suite.
+SELECT pg_temp.accepts(
+    'and a Configuration in the new Version''s numbering is accepted afterwards',
+    $sql$
+    INSERT INTO race_sail_entries
+        (id, race_id, crossover_chart_version_id, at, definition_number)
+    VALUES ('70000000-0000-4000-8000-000000000002',
+            '60000000-0000-4000-8000-000000000001',
+            '11000000-0000-4000-8000-000000000002',
+            TIMESTAMP '2026-07-22 18:00:30', 4)
+    $sql$
+);
+
+-- ===========================================================================
 -- Read tiers
 -- ===========================================================================
 
 DO $$
 DECLARE
     v_tables TEXT[] := ARRAY[
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries'
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries'
     ];
     t          TEXT;
     v_n        BIGINT;
@@ -1586,9 +1852,9 @@ $$;
 DO $$
 DECLARE
     v_tables TEXT[] := ARRAY[
-        'boats', 'sails', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
-        'calibration_events', 'recordings', 'recording_rows', 'races', 'race_sail_entries',
-        'race_sail_entry_sails', 'race_sea_state_entries'
+        'boats', 'boat_setup_artifacts', 'boat_setup_versions', 'rig_tune_bands',
+        'crossover_sail_definitions', 'calibration_events', 'recordings', 'recording_rows',
+        'races', 'race_sail_entries', 'race_sea_state_entries'
     ];
     v_bad TEXT[];
 BEGIN
@@ -1803,30 +2069,36 @@ DECLARE
     v_number TEXT;
     v_err    TEXT;
     v_ptr    UUID;
-    v_had    BIGINT;
+    v_next   INT;
+    v_defs   TEXT;
+    v_kept   JSONB;
 BEGIN
-    -- 1 is written out rather than derived here, because 1 is the whole claim: the first Version
-    -- of an artifact that has none. So the premise is asserted instead.
-    SELECT count(*) INTO v_had
+    -- The crossover_chart artifact reaches here with two fixture Versions on it and its pointer
+    -- still on nothing, which is the case worth having beside the polar one: a pointer moving
+    -- from NULL.
+    SELECT COALESCE(max(v.version_number), 0) + 1 INTO v_next
       FROM boat_setup_versions v
       JOIN boat_setup_artifacts a ON a.id = v.artifact_id
      WHERE a.kind = 'crossover_chart';
 
     PERFORM pg_temp.chk(
-        'the crossover_chart artifact starts this section with no Version on it',
-        v_had = 0,
-        format('versions=%s', v_had)
+        'the crossover_chart artifact starts this section pointing at nothing',
+        (SELECT current_version_id FROM boat_setup_artifacts WHERE kind = 'crossover_chart')
+            IS NULL,
+        NULL
     );
 
     SELECT val, err INTO v_number, v_err FROM pg_temp.value_as(
         'aaaaaaa1-0000-4000-8000-000000000001',
         $q$SELECT public.mint_boat_setup_version(
-               '11000000-0000-4000-8000-000000000001'::UUID,
+               '11000000-0000-4000-8000-000000000003'::UUID,
                'crossover_chart',
                DATE '2026-07-01',
-               '{"twa_axis": [], "tws_axis": [], "cells": [], "sail_definitions": []}'::JSONB,
+               '{"twa_axis": [40], "tws_axis": [6], "cells": [[5]],
+                 "sail_definitions": [{"number": 5, "label": "Main + Code 0"},
+                                      {"number": 6, "label": "Main reefed alone"}]}'::JSONB,
                NULL,
-               'Handsome_Pete_crossover.csv',
+               'Handsome_Pete_crossover_v3.csv',
                repeat('f', 64)
            )$q$
     );
@@ -1835,14 +2107,71 @@ BEGIN
     FROM boat_setup_artifacts WHERE kind = 'crossover_chart';
 
     PERFORM pg_temp.chk(
-        'the same function mints the first Version of another artifact, numbered 1',
+        'the same function mints the next Version of another artifact, and moves its pointer off NULL',
         COALESCE(
-            v_err IS NULL AND v_number = '1'
-            AND v_ptr = '11000000-0000-4000-8000-000000000001',
+            v_err IS NULL AND v_number = v_next::TEXT
+            AND v_ptr = '11000000-0000-4000-8000-000000000003',
             FALSE
         ),
-        format('number=%s pointer=%s err=%s',
-               COALESCE(v_number, '-'), COALESCE(v_ptr::TEXT, '-'), COALESCE(v_err, '-'))
+        format('number=%s expected=%s pointer=%s err=%s', COALESCE(v_number, '-'), v_next,
+               COALESCE(v_ptr::TEXT, '-'), COALESCE(v_err, '-'))
+    );
+
+    -- The projection, out of the same parse and inside the same transaction as the payload: the
+    -- rows a Sail Configuration points at cannot be written apart from the payload they came
+    -- from (ADR 0023).
+    SELECT string_agg(number || '=' || label, ', ' ORDER BY number) INTO v_defs
+      FROM crossover_sail_definitions
+     WHERE version_id = '11000000-0000-4000-8000-000000000003';
+
+    PERFORM pg_temp.chk(
+        'and it projects that Version''s Sail Definitions into rows as it goes',
+        COALESCE(v_defs = '5=Main + Code 0, 6=Main reefed alone', FALSE),
+        format('definitions: %s', COALESCE(v_defs, '-'))
+    );
+
+    SELECT payload->'sail_definitions' INTO v_kept
+      FROM boat_setup_versions WHERE id = '11000000-0000-4000-8000-000000000003';
+
+    PERFORM pg_temp.chk(
+        'while the payload keeps its own copy untouched: the file said this',
+        COALESCE(
+            v_kept = '[{"number": 5, "label": "Main + Code 0"},
+                       {"number": 6, "label": "Main reefed alone"}]'::JSONB,
+            FALSE
+        ),
+        format('payload sail_definitions: %s', COALESCE(v_kept::TEXT, '-'))
+    );
+END;
+$$;
+
+DO $$
+DECLARE v_err TEXT;
+BEGIN
+    -- A chart whose cells resolve against nothing is not a chart. payload_keys_present cannot see
+    -- this -- the key is there -- so the minting function is where it is caught, and it is caught
+    -- before the Version row lands rather than after.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        $q$SELECT public.mint_boat_setup_version(
+               '11000000-0000-4000-8000-000000000009'::UUID,
+               'crossover_chart', DATE '2026-07-02',
+               '{"twa_axis": [40], "tws_axis": [6], "cells": [[5]], "sail_definitions": []}'::JSONB,
+               NULL, 'no_sails.csv', repeat('8', 64)
+           )$q$
+    );
+
+    PERFORM pg_temp.chk(
+        'a Crossover Chart Version defining no sails at all is refused',
+        COALESCE(
+            v_err IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM boat_setup_versions
+                WHERE id = '11000000-0000-4000-8000-000000000009'
+            ),
+            FALSE
+        ),
+        COALESCE(v_err, 'expected a refusal; the call was accepted')
     );
 END;
 $$;
@@ -1874,8 +2203,9 @@ $$;
 
 DO $$
 DECLARE
-    v_err TEXT;
-    v_ptr UUID;
+    v_err   TEXT;
+    v_ptr   UUID;
+    v_guest INTEGER;   -- never read: see the guest check at the end of this block
 BEGIN
     v_err := pg_temp.exec_as(
         'cccccccc-0000-4000-8000-000000000002',
@@ -1905,15 +2235,30 @@ BEGIN
 
     -- A guest has no EXECUTE at all, so the refusal comes from the grant rather than from the
     -- policies: the function is not a way around `TO authenticated`.
-    v_err := pg_temp.exec_as(
-        NULL,
-        $q$SELECT public.mint_boat_setup_version(
-               '10000000-0000-4000-8000-00000000000b'::UUID,
-               'polar', DATE '2026-09-01',
-               '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[9.9]]}'::JSONB,
-               NULL, 'guest.pol', repeat('2', 64)
-           )$q$
-    );
+    --
+    -- Written out here rather than through `pg_temp.exec_as`, and it has to be. That helper runs
+    -- its statement with `EXECUTE`, and PostgreSQL 17.6 **terminates the backend** on a dynamic
+    -- call to a function the caller may not execute -- so routing this check through the helper
+    -- kills the database instead of failing it, and the check can never pass. Assigning the
+    -- return value raises a catchable `permission denied for function` instead. `PERFORM` is not
+    -- a substitute: it crashes exactly as `EXECUTE` does, so the result has to be assigned
+    -- somewhere even though nothing reads it.
+    -- docs/testing/race-upload-transaction.md records the reduction to an empty function body;
+    -- scripts/verify-race-upload-rpc.sql's section 1 is the same check written the same way.
+    PERFORM pg_temp.act_as(NULL);
+    v_err := NULL;
+    BEGIN
+        v_guest := public.mint_boat_setup_version(
+            '10000000-0000-4000-8000-00000000000b'::UUID,
+            'polar', DATE '2026-09-01',
+            '{"twa_axis": [30], "tws_axis": [4], "boat_speed": [[9.9]]}'::JSONB,
+            NULL, 'guest.pol', repeat('2', 64)
+        );
+    EXCEPTION WHEN OTHERS THEN
+        v_err := SQLERRM;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
 
     PERFORM pg_temp.chk(
         'a guest cannot execute it at all',
@@ -1934,7 +2279,6 @@ DECLARE
     v_rows  BIGINT;
     v_races BIGINT;
     v_ann   BIGINT;
-    v_join  BIGINT;
 BEGIN
     v_err := pg_temp.exec_as('cccccccc-0000-4000-8000-000000000002',
         $q$DELETE FROM recordings WHERE id = '50000000-0000-4000-8000-000000000001'$q$);
@@ -1953,14 +2297,11 @@ BEGIN
     WHERE recording_id = '50000000-0000-4000-8000-000000000001';
     SELECT count(*) INTO v_ann FROM race_sail_entries
     WHERE race_id = '60000000-0000-4000-8000-000000000001';
-    SELECT count(*) INTO v_join FROM race_sail_entry_sails
-    WHERE entry_id = '70000000-0000-4000-8000-000000000001';
-
     PERFORM pg_temp.chk(
         'an admin deleting the Recording takes its Race, its annotations and its Transcription',
-        v_err IS NULL AND v_rows = 0 AND v_races = 0 AND v_ann = 0 AND v_join = 0,
-        format('err=%s rows=%s races=%s entries=%s join=%s',
-               COALESCE(v_err, '-'), v_rows, v_races, v_ann, v_join)
+        v_err IS NULL AND v_rows = 0 AND v_races = 0 AND v_ann = 0,
+        format('err=%s rows=%s races=%s entries=%s',
+               COALESCE(v_err, '-'), v_rows, v_races, v_ann)
     );
 
     PERFORM pg_temp.chk(

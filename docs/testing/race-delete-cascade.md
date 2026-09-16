@@ -6,8 +6,14 @@ LAY-112 makes two claims Jest cannot reach. The third acceptance criterion: "the
 expressed as a delete of the Recording and takes the Race, both annotation tables, the sail join rows
 and every Recording Row in one statement". The eighth: a signed-in non-admin "is refused by RLS if
 they try". A mocked Supabase client can show that the Server Action sends
-`DELETE FROM recordings WHERE id = $1` and nothing else; whether that one statement empties five other
-tables, and whether a viewer's identical statement empties none, are questions for a live database.
+`DELETE FROM recordings WHERE id = $1` and nothing else; whether that one statement empties the tables
+below it, and whether a viewer's identical statement empties none, are questions for a live database.
+
+**The criterion is quoted as written, and one clause of it has since stopped being true.** LAY-130
+collapsed the Sail Inventory into the Crossover Chart (ADR 0023), so there are no sail join rows to
+take: a Sail Configuration names a Sail Definition on the entry itself. The tree under `recordings` is
+one level shallower — four tables rather than five — and what a delete must **not** touch changed with
+it, from the inventory to the chart's vocabulary.
 
 The other half of the delete — commit first, remove the object second, and a failure at the second
 step leaves bytes and no row — is `app/(app)/boat-performance/races/[raceId]/__tests__/actions.test.ts`,
@@ -19,7 +25,8 @@ A third claim is about Storage rather than the database, and it is the sweeper's
 `created_at` survives a `move`. It has its own script and its own run, at the end of this file.
 
 **Run on 2026-09-15 against the local stack** (PostgreSQL 17.6, DB on `127.0.0.1:54322`): **22 of 22
-checks passed**.
+checks passed**. **Re-run on 2026-09-16** with LAY-130's two migrations applied ahead of it, after the
+suite was rewritten for the one sail vocabulary: **22 of 22 again**.
 
 ## Re-running it
 
@@ -44,18 +51,24 @@ commits.
 The fixture goes in through `public.create_race_from_upload` rather than hand-written `INSERT`s, for
 the same reason the delete goes out as one statement: a race assembled by a different route than the
 real one can be whole in ways a real race never is, and the cascade would then be checked against a
-shape that does not occur.
+shape that does not occur. It calls the five-argument form, so the Sail Configurations and the Sea
+State entry are arguments to the same call the Recording is.
+
+Two things about re-running it since LAY-130: the suite needs
+`20260916120000_one_sail_vocabulary.sql` and `20260916121000_…` applied, and the fixture needs a
+Crossover Chart Version to name its sails in, which it inserts directly rather than minting — that
+function has its own suite.
 
 ## Observed, section by section
 
 | Section | What it establishes |
 | --- | --- |
-| 1. The cascade is in the schema | All five foreign keys read `confdeltype = 'c'`: `recording_rows.recording_id`, `races.recording_id`, `race_sail_entries.race_id`, `race_sail_entry_sails.entry_id`, `race_sea_state_entries.race_id`. And `race_sail_entry_sails.sail_id` is still `'r'` — the cascade goes down, never sideways into the inventory |
-| 2. An admin's one statement | The fixture is a whole race (`recordings=1 rows=3 races=1 sail_entries=2 entry_sails=3 sea_state=1`); one `DELETE FROM recordings` reports `1 row` and leaves `0` everywhere; the race is off the archive list |
-| 3. What it must not touch | Six sails still in the inventory, the boat still there, both `auth.users` still there — `ON DELETE RESTRICT` in the directions that matter |
+| 1. The cascade is in the schema | All four foreign keys read `confdeltype = 'c'`: `recording_rows.recording_id`, `races.recording_id`, `race_sail_entries.race_id` (composite since ADR 0023, matched on its first column), `race_sea_state_entries.race_id`. And `race_sail_entries → crossover_sail_definitions` is `'r'` — the cascade goes down, never sideways into the chart's vocabulary |
+| 2. An admin's one statement | The fixture is a whole race (`recordings=1 rows=3 races=1 sail_entries=2 sea_state=1`); one `DELETE FROM recordings` reports `1 row` and leaves `0` everywhere; the race is off the archive list |
+| 3. What it must not touch | Both Sail Definitions still there, the Crossover Chart Version they belong to still there, the boat still there, both `auth.users` still there — `ON DELETE RESTRICT` in the directions that matter |
 | 4. A viewer | `0 rows` and **no error**; the whole race still standing afterwards; a viewer's direct `DELETE FROM races` is equally silent and equally ineffective |
 | 5. A guest | `anon` deletes nothing and the race is untouched |
-| 6. Deleting the Race is not deleting the race | An admin's `DELETE FROM races` leaves `recordings=1 rows=3` behind — a Transcription nothing points at; and deleting one annotation takes its own sail rows and nothing else |
+| 6. Deleting the Race is not deleting the race | An admin's `DELETE FROM races` leaves `recordings=1 rows=3` behind — a Transcription nothing points at; and deleting one annotation takes itself and nothing else |
 | 7. The sweeper's side | After the delete, the id is absent from the set `services/storage/runSweep.ts` anti-joins against, read through RLS as a signed-in caller |
 
 ## Three things this run established
@@ -74,12 +87,14 @@ tree, so naming it is the only way to take the whole thing. It is also what keep
 safe, which LAY-112 required: cascades only run downhill, so editing sail entries can never reach a
 Transcription.
 
-**The fixture needed the constraints deferred and then un-deferred, twice.** A Sail Configuration is
-refused for naming no sails, which can only be true once the `race_sail_entry_sails` rows are in — one
-statement after the entry. So `pg_temp.make_race` fires `SET CONSTRAINTS ALL IMMEDIATE` for the window
-trigger, goes back to `DEFERRED` for the annotations, and fires it again once the join rows exist. A
-suite that left everything immediate cannot build a legal race; one that left everything deferred
-never proves it built one.
+**The fixture needed the constraints deferred and then un-deferred, twice — and no longer does.** A
+Sail Configuration used to be refused for naming no sails, which could only become true once the
+`race_sail_entry_sails` rows were in, one statement after the entry. So the original
+`pg_temp.make_race` fired `SET CONSTRAINTS ALL IMMEDIATE` for the window trigger, went back to
+`DEFERRED` for the annotations, and fired it again once the join rows existed. Since ADR 0023 the sail
+is a column on the entry, `sail_entry_says_something` is an ordinary `CHECK`, and the whole race —
+annotations included — goes in as one call with one `IMMEDIATE` after it. The dance was a cost of the
+join table, not of the fixture.
 
 ## Running the sweeper
 

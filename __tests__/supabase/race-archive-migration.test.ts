@@ -86,6 +86,11 @@ describe('the race archive migration', () => {
     it('are all there is: twelve tables, a read policy and a write policy each, less two', () => {
       // 12 SELECT policies + 12 write policies, minus the two tables that get less than
       // FOR ALL: recording_rows (INSERT only) and boat_setup_versions (INSERT + UPDATE).
+      //
+      // Twelve as this migration created them. The schema has moved since — LAY-130 dropped
+      // `sails` and `race_sail_entry_sails` and added `crossover_sail_definitions` (ADR 0023) —
+      // and a migration is never edited once pushed, so these counts are about this file's own
+      // text. The live schema is what scripts/verify-race-archive-schema.sql counts.
       expect(policies).toHaveLength(25)
     })
 
