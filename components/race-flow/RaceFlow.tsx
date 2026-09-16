@@ -1,13 +1,35 @@
 'use client'
 
 /**
- * File → Window → Sails → Sea state → Review, over a chart stack that never leaves the screen.
+ * One flow, two modes: File → Window → Sails → Sea state → Review for a new race, and the same
+ * sections in no order at all for a race being amended — over a chart stack that never leaves the
+ * screen.
  *
- * The wizard is the steps and the state; the charts are one component mounted once and handed a
- * `mode` (ADR 0014). Nothing about the stack is conditional on the step, which is what makes the
- * channel choice survive a step change and the track stay put instead of blinking away and coming
- * back re-projected. Every annotation placed on an earlier step stays drawn for the rest of the flow,
- * dimmed and with nothing to tap, so the sailor answers each question against the same picture.
+ * The two modes are one component and not two, and that is ADR 0010 Amendment 1 rather than a saving
+ * of effort: the gestures a sailor uses to say when the race started and what was up are the gestures
+ * they need to *correct* those answers, and a parallel amend form would be a second set of them, free
+ * to drift. So amending is this flow with the File step absent — literally absent, because the rows
+ * come from a stored Transcription rather than from a parse, which puts the parse boundary outside the
+ * flow. Everything about the chart stack, every annotation gesture, and both window refusals are the
+ * same code in both modes.
+ *
+ * What differs is the shape of the walk, and only because the sections stop depending on each other.
+ * Uploading, nothing can be answered before the file is read, so the steps are a sequence with a
+ * Review at the end. Amending, everything is already answered: each section is reachable from every
+ * other and from the race's own page, there is no Review gate, and one Save commits the lot (AC 2, AC
+ * 3). Which mode it is in is stated on screen at all times, because a flow that looked the same in
+ * both would let a sailor think they were making a second race out of one they were correcting.
+ *
+ * The flow never edits a recording. There is no field here for a recorded value, in either mode, and
+ * amending writes the title, the window, the five Boat Setup pointers and the two annotation lists —
+ * nothing else. Row Quality, Coverage and Gap Seconds are derived at read (ADR 0009), so moving the
+ * window re-derives them and there is nothing here to recompute.
+ *
+ * The flow is the sections and the state; the charts are one component mounted once and handed a
+ * `mode` (ADR 0014). Nothing about the stack is conditional on the section, which is what makes the
+ * channel choice survive a move between them and the track stay put instead of blinking away and
+ * coming back re-projected. Every annotation placed in another section stays drawn, dimmed and with
+ * nothing to tap, so the sailor answers each question against the same picture.
  *
  * The two annotation steps are **Testimony** (ADR 0010), and everything about how they behave follows
  * from that. Nothing is pre-selected — a default would be a guess presented as a memory, so a new sail
@@ -22,9 +44,11 @@
  * With no Version there is nothing to name a sail in, so the step is closed and says which of the two
  * reasons it is.
  *
- * **Nothing is written to the database until Save race.** Picking a file parks its bytes under
+ * **Nothing is written to the database until the save.** Picking a file parks its bytes under
  * `tmp/{user_id}/{upload_id}/` and returns a projection to draw; every step after that is state in
  * this component. Closing the tab at any point leaves one `tmp/` object and no row (ADR 0013).
+ * Amending writes nothing at all until Save amendment, and leaves the race exactly as it stood if the
+ * tab is closed — there is nothing staged to leave behind.
  *
  * Every time is absolute seconds in the recording's own naive frame, converted only at the edges —
  * `wallClockStamp` on the way to the server, `wallClockInputValue` on the way to a `datetime-local`.
@@ -33,7 +57,8 @@
  *
  * A clean race costs five actions: pick the file, three Nexts, Save race. The archive's worst case —
  * seven sail changes — costs 24 by ADR 0014's own count, and both figures are pinned by test, so a
- * change that costs the sailor more taps fails rather than passing quietly.
+ * change that costs the sailor more taps fails rather than passing quietly. An amendment costs two:
+ * the chip on the race's page lands on the section, and Save amendment commits it.
  */
 
 import { useRouter } from 'next/navigation'
@@ -71,6 +96,7 @@ import { raceCoverage, windowFindings, type CoverageRow } from '@/services/recor
 import {
   insideRaceWindow,
   RACE_WINDOW_NUDGE_MINUTES,
+  raceWindowSeconds,
   raceWindowStamps,
   refuseRaceWindow,
   snapToRow,
@@ -78,17 +104,23 @@ import {
 } from '@/services/recordings/race-window'
 import { LOW_SPEED_SOG_KNOTS } from '@/services/recordings/row-quality'
 import {
+  wallClockDay,
   wallClockInputValue,
+  wallClockSeconds,
   wallClockSecondsFromInput,
   wallClockStamp,
   wallClockTime,
 } from '@/services/recordings/wall-clock'
 import type {
+  AmendRaceInput,
+  AmendRaceResult,
   BoatSetupVersionRef,
   CrossoverChartChoice,
   CrossoverSailDefinition,
+  RaceAmendment,
   RaceBoatSetupChoices,
   RaceChannelKey,
+  RaceChartSeries,
   RaceFinding,
   RigTuneChoice,
   SailEntryDraft,
@@ -101,15 +133,9 @@ import type {
 
 import ChartStack, { type StackMode } from './ChartStack'
 import type { StackMarker } from './chart-geometry'
+import { AMEND_SECTIONS, SECTION_LABELS, UPLOAD_STEPS, type Section } from './sections'
 import RaceFindings from '../race/RaceFindings'
 import CoverageReadout from '../race/CoverageReadout'
-
-/** ADR 0014's five. */
-const STEPS = ['File', 'Window', 'Sails', 'Sea state', 'Review'] as const
-
-type Step = 0 | 1 | 2 | 3 | 4
-
-const REVIEW: Step = 4
 
 /**
  * What the sailor is told when every row already carries an entry of this kind.
@@ -117,21 +143,61 @@ const REVIEW: Step = 4
  * Reachable only on a very short recording, and refused rather than fudged: an entry at a time the
  * file does not have would be a time nobody tapped.
  */
+/**
+ * What the sailor is told when the Boat Setup section has nothing to offer.
+ *
+ * A failed read, and refused rather than drawn: `readRaceBoatSetupChoices` answers null for a read that
+ * *failed*, not for a boat with no Versions, so offering the pickers with empty lists would show "None
+ * to name" against every one and present a broken read as a boat that owns no Polar. The save is
+ * unaffected either way — the five pointers travel exactly as the race records them — and saying so is
+ * what makes it safe to leave the section closed.
+ */
+const SETUP_UNREADABLE =
+  'The boat’s Boat Setup Versions could not be read just now, so this section cannot offer them — and ' +
+  'an empty list here would look like a boat with no Versions rather than a read that failed. What this ' +
+  'race records is unchanged, and saving leaves all five answers exactly as they stand. Try again in a ' +
+  'moment.'
+
 const NO_ROW_LEFT =
   'Every row in this recording already has an entry on it, so there is no time left to place another. ' +
   'Move or take off one of the entries below.'
 
 /**
- * The two Server Actions, as props.
+ * Which of the two flows this is, and how each one saves.
  *
- * Passed in from the page rather than imported, which is what lets a jsdom test drive the whole
- * wizard against stubs and keeps the `'use server'` module out of the client import graph. Both
- * signatures are the shared ones from `@/types`, so a change to either action's contract is a type
+ * A discriminated union rather than a pair of optional props, so the two modes cannot be half-mixed:
+ * there is no way to hand this an amendment *and* a `stageRecording`, and no way to reach the amend
+ * save without a race to amend. Every branch below that behaves differently reads this one field, so
+ * the list of differences between filing a race and correcting one is a list of `mode.kind` tests and
+ * can be read off the file.
+ *
+ * The actions are passed in from the page rather than imported, which is what lets a jsdom test drive
+ * the whole flow against stubs and keeps the `'use server'` modules out of the client import graph.
+ * Every signature is the shared one from `@/types`, so a change to an action's contract is a type
  * error here rather than a structural copy that drifts.
  */
-interface RaceUploadWizardProps {
-  stageRecording: (formData: FormData) => Promise<StageRecordingResult>
-  submitRace: (input: SubmitRaceInput) => Promise<SubmitRaceResult>
+export type RaceFlowMode =
+  | {
+      kind: 'upload'
+      stageRecording: (formData: FormData) => Promise<StageRecordingResult>
+      submitRace: (input: SubmitRaceInput) => Promise<SubmitRaceResult>
+    }
+  | {
+      kind: 'amend'
+      /** The race as stored: its window, its Testimony, its Boat Setup, and its rows to draw. */
+      race: RaceAmendment
+      amendRace: (input: AmendRaceInput) => Promise<AmendRaceResult>
+      /**
+       * Which section to open on, from the chip that was tapped.
+       *
+       * The starting point and nothing more: every section stays reachable from every other once the
+       * flow is open, because an amendment has no order (ADR 0010 Amendment 1).
+       */
+      section: Section
+    }
+
+interface RaceFlowProps {
+  mode: RaceFlowMode
   /**
    * Every Crossover Chart Version the boat has, newest first, each with the sails it names — or null
    * where they could not be read.
@@ -140,9 +206,11 @@ interface RaceUploadWizardProps {
    * here was probably sailed under a chart the boat has since replaced, and it has to be able to name
    * that chart's sails in that chart's own words (ADR 0012).
    *
-   * Null is not "the boat has no chart" and is not treated as one. Either way the Sails step says
+   * Null is not "the boat has no chart" and is not treated as one. Either way the Sails section says
    * which it is and offers nothing, rather than presenting an empty chip row as an answer, and the
-   * rest of the upload still saves — a race with no sail plan recorded is a legal race (ADR 0010).
+   * save still goes through — a race with no sail plan recorded is a legal race (ADR 0010). That
+   * matters more when amending than when uploading: a failed read drawn as "None to name" would tell
+   * a sailor their race's sails had been forgotten, and one save would then make it true.
    */
   charts: CrossoverChartChoice[] | null
   /**
@@ -150,8 +218,8 @@ interface RaceUploadWizardProps {
    * Rig Tune Version's own Wind Bands — or null where they could not be read.
    *
    * The chart is not among them: it is `charts` above, read with its sail vocabulary because the Sails
-   * step needs that too, and reading it twice would give the Review step a second list that could
-   * disagree with the one the sails were named in.
+   * section needs that too, and reading it twice would give the Boat Setup section a second list that
+   * could disagree with the one the sails were named in.
    *
    * Same reading of null as `charts`, for the same reason. Every list may also be legitimately empty —
    * a boat with no Polar yet — and a Race with all five answers unrecorded is a legal Race (ADR 0008):
@@ -160,30 +228,59 @@ interface RaceUploadWizardProps {
   boatSetup: RaceBoatSetupChoices | null
 }
 
-export default function RaceUploadWizard({
-  stageRecording,
-  submitRace,
-  charts,
-  boatSetup,
-}: RaceUploadWizardProps): ReactElement {
+export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): ReactElement {
   const router = useRouter()
 
+  const amendment = mode.kind === 'amend' ? mode.race : null
+
   const [staged, setStaged] = useState<StagedRecording | null>(null)
-  const [step, setStep] = useState<Step>(0)
-  // Held here rather than in the stack, which is the whole reason it survives a step change.
+  /**
+   * Which question is on screen.
+   *
+   * A section rather than a step index, because amending has no indices: five sections in no order, any
+   * of which the race's page can link straight into (ADR 0010 Amendment 1). Uploading walks the same
+   * values in `UPLOAD_STEPS` order, and "step 3 of 5" is that array's `indexOf` rather than a second
+   * piece of state that could disagree with this one.
+   */
+  const [section, setSection] = useState<Section>(mode.kind === 'amend' ? mode.section : 'file')
+  // Held here rather than in the stack, which is the whole reason it survives a move between sections.
   const [channel, setChannel] = useState<RaceChannelKey>('sog')
   // Named for what it is, and not `window`: this is a client component, and a state variable that
   // shadows the DOM global would make the next line that reached for the real one read as if it had.
-  const [raceWindow, setRaceWindow] = useState<RaceWindowSeconds | null>(null)
-  const [title, setTitle] = useState('')
+  const [raceWindow, setRaceWindow] = useState<RaceWindowSeconds | null>(() =>
+    // Amending starts from the window as stored, which is the answer being corrected. Uploading has
+    // no window until there is a file to have one over.
+    amendment ? raceWindowSeconds(amendment) : null
+  )
+  const [title, setTitle] = useState(amendment?.title ?? '')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [duplicateAccepted, setDuplicateAccepted] = useState(false)
 
-  // Two lists of Testimony, and which entry is open. Both start empty and stay empty unless the
-  // sailor says something: there is no initial value beside a list of changes (ADR 0010).
-  const [sailEntries, setSailEntries] = useState<SailEntryDraft[]>([])
-  const [seaEntries, setSeaEntries] = useState<SeaStateEntryDraft[]>([])
+  /**
+   * Two lists of Testimony, and which entry is open.
+   *
+   * Uploading, both start empty and stay empty unless the sailor says something: there is no initial
+   * value beside a list of changes (ADR 0010). Amending, both start as what the sailor already said —
+   * which is not a default but a reading, and the reason the whole Testimony travels with every save:
+   * a section left untouched sends back exactly what it was given.
+   */
+  const [sailEntries, setSailEntries] = useState<SailEntryDraft[]>(() =>
+    (amendment?.sails ?? []).map((entry, index) => ({
+      key: `stored-sail-${index}`,
+      at: wallClockSeconds(entry.at),
+      definition_number: entry.definition_number,
+      // A stored note is null where there is none, and this is a text field, which holds ''.
+      note: entry.note ?? '',
+    }))
+  )
+  const [seaEntries, setSeaEntries] = useState<SeaStateEntryDraft[]>(() =>
+    (amendment?.sea_state ?? []).map((entry, index) => ({
+      key: `stored-sea-${index}`,
+      at: wallClockSeconds(entry.at),
+      sea_state: entry.sea_state,
+    }))
+  )
   const [selected, setSelected] = useState<string | null>(null)
 
   /**
@@ -192,9 +289,12 @@ export default function RaceUploadWizard({
    * Defaulted from the recording's own start time when the file is picked, and null until then — and
    * still null afterwards if the boat had no chart yet when this was sailed, which is an ordinary state
    * for an archive being entered backwards. Whatever it ends as is written on the Race and never
-   * resolved again (ADR 0012).
+   * resolved again (ADR 0012). Amending starts from the Version the Race already records, which is
+   * neither a default nor a resolution: it is what the sails standing on this race are named in.
    */
-  const [chartVersionId, setChartVersionId] = useState<string | null>(null)
+  const [chartVersionId, setChartVersionId] = useState<string | null>(
+    amendment?.setup.crossover_chart_version_id ?? null
+  )
   const [chartNote, setChartNote] = useState<string | null>(null)
 
   /**
@@ -210,10 +310,16 @@ export default function RaceUploadWizard({
    * composite key `races (rig_tune_version_id, rig_tune_band_id)` is what enforces that; this only
    * keeps the form from offering a pair the database would refuse.
    */
-  const [polarVersionId, setPolarVersionId] = useState<string | null>(null)
-  const [rigTuneVersionId, setRigTuneVersionId] = useState<string | null>(null)
-  const [calibrationVersionId, setCalibrationVersionId] = useState<string | null>(null)
-  const [bandId, setBandId] = useState<string | null>(null)
+  const [polarVersionId, setPolarVersionId] = useState<string | null>(
+    amendment?.setup.polar_version_id ?? null
+  )
+  const [rigTuneVersionId, setRigTuneVersionId] = useState<string | null>(
+    amendment?.setup.rig_tune_version_id ?? null
+  )
+  const [calibrationVersionId, setCalibrationVersionId] = useState<string | null>(
+    amendment?.setup.instrument_calibration_version_id ?? null
+  )
+  const [bandId, setBandId] = useState<string | null>(amendment?.setup.rig_tune_band_id ?? null)
 
   // A counter rather than a uuid: these keys exist so React and the charts can tell two drafts apart,
   // they are never sent, and the database's own key is `(race_id, at)`.
@@ -223,50 +329,73 @@ export default function RaceUploadWizard({
     return `entry-${minted.current}`
   }, [])
 
+  /**
+   * The rows the charts draw, from whichever side of the parse boundary this flow was entered.
+   *
+   * One projection, two provenances: a file just parsed, or a Transcription read back out of the
+   * database. Neither is more real than the other and nothing downstream of here can tell them apart,
+   * which is the whole of what makes amending the same flow (ADR 0010 Amendment 1). What *is* different
+   * is that an amendment's rows never go anywhere: they are drawn, and no save carries one back.
+   */
+  const series: RaceChartSeries | null = amendment ? amendment.series : staged?.series ?? null
+
   const axis: RaceChartAxis | null = useMemo(
-    () => (staged ? raceChartAxis(staged.series) : null),
-    [staged]
+    () => (series ? raceChartAxis(series) : null),
+    [series]
   )
 
   const coverageRows: CoverageRow[] = useMemo(
     () =>
-      staged
-        ? staged.series.row_seconds.map((seconds, at) => ({
+      series
+        ? series.row_seconds.map((seconds, at) => ({
             seconds,
-            frozen: staged.series.frozen[at],
+            frozen: series.frozen[at],
           }))
         : [],
-    [staged]
+    [series]
   )
 
   const coverage = useMemo(
-    () => (staged && raceWindow ? raceCoverage(coverageRows, raceWindow) : null),
-    [staged, raceWindow, coverageRows]
+    () => (raceWindow ? raceCoverage(coverageRows, raceWindow) : null),
+    [raceWindow, coverageRows]
   )
 
   /**
    * The window's own notes, from the arrays the browser already has.
    *
-   * The same `windowFindings` the race page calls, over the same two Row Quality flags — so Review
+   * The same `windowFindings` the race page calls, over the same two Row Quality flags — so the flow
    * states what the page will state rather than a shorter list that would read as a cleaner race.
+   *
+   * Amending, this is also the answer to "what does moving the window cost?", live, before the save:
+   * the page derives Coverage, Row Quality and Gap Seconds at read (ADR 0009), so these are the very
+   * figures it will re-derive, with nothing to recompute afterwards.
    */
   const windowNotes: RaceFinding[] = useMemo(() => {
-    if (!staged || !raceWindow || !coverage) return []
+    if (!series || !raceWindow || !coverage) return []
 
-    const rows = staged.series.row_seconds
+    const rows = series.row_seconds
       .map((seconds, at) => ({ seconds, at }))
       .filter(({ seconds }) => insideRaceWindow(seconds, raceWindow))
       .map(({ at }) => ({
-        not_water_referenced: staged.series.not_water_referenced[at],
-        low_speed: staged.series.low_speed[at],
+        not_water_referenced: series.not_water_referenced[at],
+        low_speed: series.low_speed[at],
       }))
 
     return windowFindings(coverage, { low_speed_sog_knots: LOW_SPEED_SOG_KNOTS, rows })
-  }, [staged, raceWindow, coverage])
+  }, [series, raceWindow, coverage])
 
+  /**
+   * The window's two refusals, in both modes, from the same function (ADR 0009).
+   *
+   * The same two and no others, asked the same way whether the rows came from a file or from storage:
+   * a finish that is not after its start, and a window holding no recorded row. `refuseRaceWindow` is
+   * where both sentences live, the amend Server Action asks it again over the same rows, and the
+   * database asks a third time — so there is no door into Layline where a third window rule appears or
+   * one of these two goes missing.
+   */
   const refusal = useMemo(
-    () => (staged && raceWindow ? refuseRaceWindow(raceWindow, staged.series.row_seconds) : null),
-    [staged, raceWindow]
+    () => (series && raceWindow ? refuseRaceWindow(raceWindow, series.row_seconds) : null),
+    [series, raceWindow]
   )
 
   const needsDuplicateConfirmation = useMemo(
@@ -299,15 +428,15 @@ export default function RaceUploadWizard({
    * Transcription, so what the sailor is shown here is what the page will say (ADR 0008).
    */
   const loggedWind = useMemo(() => {
-    if (!staged || !raceWindow) return null
+    if (!series || !raceWindow) return null
     return loggedTwsMean(
-      staged.series.row_seconds.map((at, index) => ({
+      series.row_seconds.map((at, index) => ({
         at,
-        tws: staged.series.channels.tws[index],
+        tws: series.channels.tws[index],
       })),
       raceWindow
     )
-  }, [staged, raceWindow])
+  }, [series, raceWindow])
 
   /**
    * The band disagreeing with the logged wind, as a note.
@@ -326,19 +455,25 @@ export default function RaceUploadWizard({
    *
    * A boat with no Crossover Chart, a read that failed, and a recording older than the boat's first
    * chart are three different sentences, and all three mean the same thing for the chart stack: no tap
-   * on this step could produce an entry that is ever finishable, so the step does not offer one.
+   * on this section could produce an entry that is ever finishable, so it does not offer one.
    */
   const canNameSails = chosenChart !== null
 
-  /** The step, as the one thing that changes about the stack. */
-  const mode: StackMode =
-    step === 1
+  /**
+   * The section, as the one thing that changes about the stack.
+   *
+   * Read off the section and not off a step number, which is what lets the same stack serve a flow with
+   * no step numbers at all. The mapping is the same in both modes, so a tap on the track means the same
+   * thing whether the race is being filed or corrected (ADR 0014).
+   */
+  const stackMode: StackMode =
+    section === 'window'
       ? 'window'
-      : step === 2
+      : section === 'sails'
         ? canNameSails
           ? 'sail'
           : 'readonly'
-        : step === 3
+        : section === 'sea'
           ? 'sea'
           : 'readonly'
 
@@ -369,7 +504,7 @@ export default function RaceUploadWizard({
         label: markerLabel(entry),
         selected: selected === entry.key,
         incomplete: refuseSailEntry(entry) !== null,
-        locked: mode !== 'sail',
+        locked: stackMode !== 'sail',
       })),
       ...seaEntries.map((entry) => ({
         key: entry.key,
@@ -378,10 +513,10 @@ export default function RaceUploadWizard({
         label: entry.sea_state ? seaStateLabel(entry.sea_state) : '?',
         selected: selected === entry.key,
         incomplete: refuseSeaStateEntry(entry) !== null,
-        locked: mode !== 'sea',
+        locked: stackMode !== 'sea',
       })),
     ],
-    [sailEntries, seaEntries, selected, mode]
+    [sailEntries, seaEntries, selected, stackMode]
   )
 
   /**
@@ -416,11 +551,11 @@ export default function RaceUploadWizard({
    */
   const placeAnnotation = useCallback(
     (seconds: number): void => {
-      if (!staged) return
+      if (!series) return
 
-      const rows = staged.series.row_seconds
+      const rows = series.row_seconds
 
-      if (mode === 'sail') {
+      if (stackMode === 'sail') {
         const at = placeAnnotationTime(rows, seconds, sailEntries.map((entry) => entry.at))
         if (at === null) {
           setMessage(NO_ROW_LEFT)
@@ -434,7 +569,7 @@ export default function RaceUploadWizard({
         return
       }
 
-      if (mode === 'sea') {
+      if (stackMode === 'sea') {
         const at = placeAnnotationTime(rows, seconds, seaEntries.map((entry) => entry.at))
         if (at === null) {
           setMessage(NO_ROW_LEFT)
@@ -447,7 +582,7 @@ export default function RaceUploadWizard({
         setMessage(null)
       }
     },
-    [staged, mode, sailEntries, seaEntries, mintKey]
+    [series, stackMode, sailEntries, seaEntries, mintKey]
   )
 
   /**
@@ -514,14 +649,14 @@ export default function RaceUploadWizard({
    */
   const onPickFile = useCallback(
     async (file: File | null): Promise<void> => {
-      if (!file) return
+      if (mode.kind !== 'upload' || !file) return
 
       setBusy(true)
       setMessage(null)
 
       const formData = new FormData()
       formData.set('file', file)
-      const result = await stageRecording(formData)
+      const result = await mode.stageRecording(formData)
 
       setBusy(false)
 
@@ -554,9 +689,9 @@ export default function RaceUploadWizard({
       // No default band. Which band the rig was set to is something only the sailor knows — the logged
       // wind is evidence about the day, not testimony about the turnbuckles (ADR 0010).
       setBandId(null)
-      setStep(1)
+      setSection('window')
     },
-    [stageRecording, charts, boatSetup]
+    [mode, charts, boatSetup]
   )
 
   /**
@@ -569,9 +704,9 @@ export default function RaceUploadWizard({
    */
   const moveNearerBound = useCallback(
     (seconds: number): void => {
-      if (!staged || !raceWindow) return
+      if (!series || !raceWindow) return
 
-      const snapped = snapToRow(staged.series.row_seconds, seconds)
+      const snapped = snapToRow(series.row_seconds, seconds)
       const toStart = Math.abs(seconds - raceWindow.start)
       const toFinish = Math.abs(seconds - raceWindow.finish)
 
@@ -581,26 +716,26 @@ export default function RaceUploadWizard({
           : { start: raceWindow.start, finish: Math.max(snapped, raceWindow.start) }
       )
     },
-    [staged, raceWindow]
+    [series, raceWindow]
   )
 
   /**
-   * A tap on either chart, dispatched by the step: it moves a window bound, or it places an entry.
+   * A tap on either chart, dispatched by the section: it moves a window bound, or it places an entry.
    *
-   * One gesture with one meaning per step is the whole of ADR 0014's "only the permissions change".
-   * The sailor points at the same place on the same track and the wizard knows which question is
-   * being answered, because the step already said.
+   * One gesture with one meaning per section is the whole of ADR 0014's "only the permissions change".
+   * The sailor points at the same place on the same track and the flow knows which question is being
+   * answered, because the section already said.
    */
   const onTapTime = useCallback(
     (seconds: number): void => {
-      if (mode === 'window') {
+      if (stackMode === 'window') {
         moveNearerBound(seconds)
         return
       }
 
       placeAnnotation(seconds)
     },
-    [mode, moveNearerBound, placeAnnotation]
+    [stackMode, moveNearerBound, placeAnnotation]
   )
 
   /**
@@ -622,25 +757,88 @@ export default function RaceUploadWizard({
   )
 
   /**
-   * A step change, with nothing open.
+   * A move to another section, with nothing open.
    *
-   * The selection is which entry's editor is expanded, and an editor belonging to the step just left
+   * The selection is which entry's editor is expanded, and an editor belonging to the section just left
    * would be an open form the sailor can no longer see the markers for.
+   *
+   * Nothing here is a commit and nothing here validates. Amending, a sailor may leave a section with a
+   * refusal standing on it and come back to it — the refusals gate the *save*, which is the only thing
+   * that writes (ADR 0010 Amendment 1: there is no step ordering to enforce).
    */
-  const goToStep = useCallback((next: Step): void => {
+  const goToSection = useCallback((next: Section): void => {
     setSelected(null)
     setMessage(null)
-    setStep(next)
+    setSection(next)
   }, [])
 
-  const onSubmit = useCallback(async (): Promise<void> => {
-    if (!staged || !raceWindow) return
+  /** Where the amendment goes when it is done, or given up on: back to the race it belongs to. */
+  const raceHref = amendment ? `/boat-performance/races/${amendment.race_id}` : null
+
+  /**
+   * The amendment, as one save.
+   *
+   * Every section's answer goes at once, including the sections the sailor never opened — those send
+   * back exactly what they were read as. There is no Review gate in front of this and no order the
+   * sections had to be visited in; what stands between it and the write is the same three refusals the
+   * upload flow gates its own Save on.
+   */
+  const onAmend = useCallback(async (): Promise<void> => {
+    if (mode.kind !== 'amend' || !raceWindow) return
 
     setBusy(true)
     setMessage(null)
 
     const stamps = raceWindowStamps(raceWindow)
-    const result = await submitRace({
+    const result = await mode.amendRace({
+      race_id: mode.race.race_id,
+      window_start: stamps.window_start,
+      window_finish: stamps.window_finish,
+      title,
+      crossover_chart_version_id: chartVersionId,
+      polar_version_id: polarVersionId,
+      rig_tune_version_id: rigTuneVersionId,
+      instrument_calibration_version_id: calibrationVersionId,
+      rig_tune_band_id: bandId,
+      // Both lists whole, always. They replace what is stored, so sending a subset would delete
+      // Testimony — which is why they are read into this flow's state on mount rather than lazily.
+      sails: sailEntriesToSubmit(sailEntries),
+      sea_state: seaStateEntriesToSubmit(seaEntries),
+    })
+
+    if (!result.ok) {
+      // Nothing was staged and nothing moved, so the race stands exactly as it did and the sailor can
+      // fix the thing named and press save again. There is no `start_over` to honour here.
+      setBusy(false)
+      setMessage(result.message)
+      return
+    }
+
+    // Back to the race, not to a new-race confirmation: what the sailor came to do was correct this
+    // race, and this is where they see whether they did. `busy` stays true through the navigation.
+    router.push(`/boat-performance/races/${mode.race.race_id}`)
+  }, [
+    mode,
+    raceWindow,
+    title,
+    chartVersionId,
+    polarVersionId,
+    rigTuneVersionId,
+    calibrationVersionId,
+    bandId,
+    sailEntries,
+    seaEntries,
+    router,
+  ])
+
+  const onSubmit = useCallback(async (): Promise<void> => {
+    if (mode.kind !== 'upload' || !staged || !raceWindow) return
+
+    setBusy(true)
+    setMessage(null)
+
+    const stamps = raceWindowStamps(raceWindow)
+    const result = await mode.submitRace({
       upload_id: staged.upload_id,
       recording_id: staged.recording_id,
       filename: staged.filename,
@@ -693,7 +891,7 @@ export default function RaceUploadWizard({
         setRigTuneVersionId(null)
         setCalibrationVersionId(null)
         setBandId(null)
-        setStep(0)
+        setSection('file')
       }
       return
     }
@@ -713,29 +911,48 @@ export default function RaceUploadWizard({
     sailEntries,
     seaEntries,
     duplicateAccepted,
-    submitRace,
+    mode,
     router,
   ])
 
   /**
-   * Why the step will not go forward, or null.
+   * Why this section will not go forward, or null.
    *
-   * The annotation steps are skippable — an empty list has nothing to refuse — so what blocks them is
-   * only ever an entry the sailor started and did not finish. Save asks all three at once, because
-   * Review's button is reachable by the Back arrow from anywhere.
+   * The annotation sections are skippable — an empty list has nothing to refuse — so what blocks one is
+   * only ever an entry the sailor started and did not finish.
    */
-  const stepRefusal: string | null =
-    step === 1 ? (refusal?.message ?? null) : step === 2 ? sailStepRefusal : step === 3 ? seaStepRefusal : null
+  const sectionRefusal: string | null =
+    section === 'window'
+      ? (refusal?.message ?? null)
+      : section === 'sails'
+        ? sailStepRefusal
+        : section === 'sea'
+          ? seaStepRefusal
+          : null
 
-  const canAdvance = step === 0 ? staged !== null : stepRefusal === null
+  const canAdvance = section === 'file' ? staged !== null : sectionRefusal === null
 
+  /**
+   * Nothing anywhere is unfinished — which is what a save asks, in either mode and from any section.
+   *
+   * All three at once rather than the current section's own, because neither save is reached by walking
+   * every section: uploading, Review is reachable by the Back arrow from anywhere, and amending there is
+   * no order at all and the Save is always there (ADR 0010 Amendment 1).
+   */
+  const nothingUnfinished = refusal === null && sailStepRefusal === null && seaStepRefusal === null
+
+  /**
+   * Whether the save may be pressed.
+   *
+   * Amending, the three refusals and `busy` are the whole gate: there is no Review to have reached and
+   * no duplicate question, because no bytes arrived to be a duplicate of. Uploading, Review is also a
+   * gate — it is where the title, the Boat Setup and the duplicate acknowledgement live.
+   */
   const canSave =
-    step === REVIEW &&
-    refusal === null &&
-    sailStepRefusal === null &&
-    seaStepRefusal === null &&
-    (!needsDuplicateConfirmation || duplicateAccepted) &&
-    !busy
+    nothingUnfinished &&
+    !busy &&
+    (mode.kind === 'amend' ||
+      (section === 'review' && (!needsDuplicateConfirmation || duplicateAccepted)))
 
   return (
     <div
@@ -758,34 +975,65 @@ export default function RaceUploadWizard({
             color: 'var(--text-primary)',
           }}
         >
-          Upload a race
+          {amendment ? 'Amend a race' : 'Upload a race'}
         </h1>
         <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          A qtVlm CSV export, and which stretch of it was the race.
+          {amendment
+            ? 'The same questions as filing one, asked again over the recording already stored. The recording itself is not editable, here or anywhere.'
+            : 'A qtVlm CSV export, and which stretch of it was the race.'}
         </p>
       </header>
 
-      <Stepper step={step} />
+      {/*
+        Which flow this is, said out loud in both of them.
 
-      {step === 0 && (
-        <FilePicker busy={busy} onPick={onPickFile} />
+        Not decoration: the two modes are one component, so a sailor correcting a race is looking at the
+        screen they last saw while making one, and the difference between those two acts is the whole
+        difference between a fixed record and a duplicate. Amending names the race being changed rather
+        than the mode, because the race is what the sailor needs confirmed.
+      */}
+      <p
+        data-testid="flow-mode"
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-xs)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          color: 'var(--text-accent)',
+          fontWeight: 600,
+        }}
+      >
+        {amendment
+          ? `Editing ${amendment.title ?? wallClockDay(amendment.window_start)} · ${SECTION_LABELS[section]}`
+          : `New race · step ${UPLOAD_STEPS.indexOf(section) + 1} of ${UPLOAD_STEPS.length}`}
+      </p>
+
+      {amendment ? (
+        <SectionTabs section={section} onGo={goToSection} />
+      ) : (
+        <Stepper section={section} />
       )}
 
-      {/* Mounted once, from the moment there is a file, and never remounted between steps. */}
-      {staged && axis && raceWindow && (
+      {mode.kind === 'upload' && section === 'file' && <FilePicker busy={busy} onPick={onPickFile} />}
+
+      {/*
+        Mounted once, from the moment there are rows, and never remounted between sections — whether the
+        rows came from a parse a moment ago or from a Transcription stored last winter.
+      */}
+      {series && axis && raceWindow && (
         <ChartStack
-          series={staged.series}
+          series={series}
           axis={axis}
           window={raceWindow}
           channel={channel}
           onChannelChange={setChannel}
-          mode={mode}
-          hint={step === 2 && !canNameSails ? 'No chart to name a sail in' : undefined}
+          mode={stackMode}
+          hint={section === 'sails' && !canNameSails ? 'No chart to name a sail in' : undefined}
           onWindowChange={setRaceWindow}
           onTapTime={onTapTime}
           markers={markers}
           onSelectMarker={setSelected}
-          compact={step === REVIEW}
+          compact={section === 'review' || section === 'setup' || section === 'title'}
         />
       )}
 
@@ -793,37 +1041,35 @@ export default function RaceUploadWizard({
         <RaceFindings findings={[{ severity: 'refusal', message }]} />
       )}
 
-      {step === 1 && staged && raceWindow && (
+      {section === 'window' && series && raceWindow && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+          {amendment && (
+            <StepIntro
+              heading="Which stretch of it was the race?"
+              prose="Moving these moves nothing else. Every entry below keeps the time it was placed at, an entry that ends up outside the window is kept rather than dropped, and Row Quality, Coverage and Gap Seconds are worked out again from the rows themselves the next time the race is opened."
+            />
+          )}
           <BoundField
             label="Start"
             seconds={raceWindow.start}
-            rowSeconds={staged.series.row_seconds}
+            rowSeconds={series.row_seconds}
             onChange={(seconds) => moveBound('start', seconds)}
           />
           <BoundField
             label="Finish"
             seconds={raceWindow.finish}
-            rowSeconds={staged.series.row_seconds}
+            rowSeconds={series.row_seconds}
             onChange={(seconds) => moveBound('finish', seconds)}
           />
           {refusal && <RaceFindings findings={[{ severity: 'refusal', message: refusal.message }]} />}
         </section>
       )}
 
-      {step === 2 && staged && (
+      {section === 'sails' && series && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <StepIntro
             heading="What was up, and when?"
-            prose={
-              canNameSails
-                ? 'Tap the track where it happened — the time comes from the recording, not from a keypad. Every sail is one the chart names; anything else goes under “Something else” with a note. Leave it empty if nobody wrote it down.'
-                : charts === null
-                  ? 'The boat’s Crossover Charts could not be read just now, and a sail is named in a chart Version’s own words — so there is nothing here to name one with. The race still saves; its page will say the sail plan was not recorded.'
-                  : charts.length === 0
-                    ? 'The boat has no Crossover Chart yet, and a sail is named in a chart Version’s own words — there is no separate list of sails. Upload a Crossover Chart under Boat, or save the race without a sail plan; its page will say it was not recorded.'
-                    : 'This recording is older than every Crossover Chart the boat has, so no Version was in force when it was sailed. Pick the Version whose words these sails should be named in, or save the race without a sail plan.'
-            }
+            prose={sailsProse(canNameSails, charts, amendment !== null)}
           />
 
           {charts !== null && charts.length > 0 && (
@@ -875,7 +1121,7 @@ export default function RaceUploadWizard({
         </section>
       )}
 
-      {step === 3 && staged && (
+      {section === 'sea' && series && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <StepIntro
             heading="What was the water doing?"
@@ -920,7 +1166,7 @@ export default function RaceUploadWizard({
         </section>
       )}
 
-      {step === REVIEW && staged && coverage && (
+      {section === 'review' && staged && coverage && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <TitleField value={title} onChange={setTitle} />
 
@@ -979,30 +1225,179 @@ export default function RaceUploadWizard({
         </section>
       )}
 
-      <FooterNav
-        canBack={step > 0 && !busy}
-        onBack={() => goToStep(step === 0 ? 0 : ((step - 1) as Step))}
-        primary={
-          step === REVIEW
-            ? { label: busy ? 'Saving' : 'Save race', enabled: canSave, onPress: onSubmit }
-            : {
-                label: 'Next',
-                enabled: canAdvance && !busy,
-                onPress: () => goToStep((step + 1) as Step),
-              }
-        }
-      />
+      {/*
+        The Boat Setup, on a section of its own — which it only needs when there is no Review to sit on.
+        Every pointer is the one the Race records, not the one in force now (ADR 0012): a Version
+        superseded last winter is exactly what an archived race from the summer before was sailed under.
+      */}
+      {section === 'setup' && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+          <StepIntro
+            heading="What was the boat set up as?"
+            prose="The five answers this race records. The Crossover Chart is chosen on the Sails section, because the sails are named in its words."
+          />
+
+          {boatSetup === null ? (
+            <RaceFindings findings={[{ severity: 'refusal', message: SETUP_UNREADABLE }]} />
+          ) : (
+            <BoatSetupReview
+              choices={boatSetup}
+              chart={chosenChart}
+              polarVersionId={polarVersionId}
+              rigTuneVersionId={rigTuneVersionId}
+              calibrationVersionId={calibrationVersionId}
+              bandId={bandId}
+              rigTune={chosenRigTune}
+              loggedWind={loggedWind}
+              bandNote={bandNote}
+              onChoosePolar={setPolarVersionId}
+              onChooseRigTune={chooseRigTune}
+              onChooseCalibration={setCalibrationVersionId}
+              onChooseBand={setBandId}
+            />
+          )}
+        </section>
+      )}
+
+      {/*
+        The title, and what the race says it is. The findings are here rather than on their own section
+        because they are the answer to "did I get the window right" — read, not answered (ADR 0009).
+      */}
+      {section === 'title' && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+          <TitleField value={title} onChange={setTitle} />
+
+          <AnnotationSummary
+            sails={byTime(sailEntries).map((entry) => ({
+              at: entry.at,
+              text: sailEntryText(entry, sailLabels),
+            }))}
+            seaState={byTime(seaEntries).map((entry) => ({
+              at: entry.at,
+              text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
+            }))}
+          />
+
+          {coverage && <CoverageReadout coverage={coverage} />}
+
+          {windowNotes.length > 0 && (
+            <RaceFindings findings={windowNotes} heading="What this recording says about itself" />
+          )}
+        </section>
+      )}
+
+      {/*
+        One footer, two shapes.
+
+        Uploading it walks: Back one step, Next one step, Save race at the end. Amending there is no
+        "next" to press — the sections are a set and not a sequence — so the primary action is the save
+        itself, available from every section, and the secondary way out is the race the amendment belongs
+        to. Neither shape has a Delete: deleting a race is not a way of correcting one, and it stays on
+        the race's own page where what is being destroyed is in front of the sailor (AC 12).
+      */}
+      {mode.kind === 'amend' ? (
+        <FooterNav
+          canBack={!busy}
+          backLabel="Back to the race"
+          onBack={() => {
+            if (raceHref) router.push(raceHref)
+          }}
+          primary={{
+            label: busy ? 'Saving' : 'Save amendment',
+            enabled: canSave,
+            onPress: onAmend,
+          }}
+        />
+      ) : (
+        <FooterNav
+          canBack={section !== 'file' && !busy}
+          onBack={() => goToSection(previousUploadStep(section))}
+          primary={
+            section === 'review'
+              ? { label: busy ? 'Saving' : 'Save race', enabled: canSave, onPress: onSubmit }
+              : {
+                  label: 'Next',
+                  enabled: canAdvance && !busy,
+                  onPress: () => goToSection(nextUploadStep(section)),
+                }
+          }
+        />
+      )}
     </div>
   )
 }
 
 /**
- * The step bars.
+ * What the Sails section can say for itself, which depends on what there is to name a sail *in*.
  *
- * Bars rather than numbered circles: the wizard is five steps of one job, not a form in chapters,
- * and what a sailor needs from it is how much is left.
+ * Four sentences under two modes, and the mode matters for exactly one thing: what a save does to the
+ * sail plan the race already has. Uploading, no chart means the race is filed without one and its page
+ * will say so. Amending, no chart means the sailor cannot *see* the entries — the entries themselves
+ * were read from the race and go back to it untouched — and saying "its page will say it was not
+ * recorded" would be telling a sailor their sail plan is about to be lost when it is not.
  */
-function Stepper({ step }: { step: Step }): ReactElement {
+function sailsProse(
+  canName: boolean,
+  charts: CrossoverChartChoice[] | null,
+  amending: boolean
+): string {
+  if (canName) {
+    return (
+      'Tap the track where it happened — the time comes from the recording, not from a keypad. Every ' +
+      'sail is one the chart names; anything else goes under “Something else” with a note. Leave it ' +
+      'empty if nobody wrote it down.'
+    )
+  }
+
+  const kept = amending
+    ? 'The sail plan this race already records is untouched, and saving leaves it exactly as it stands.'
+    : 'The race still saves; its page will say the sail plan was not recorded.'
+
+  if (charts === null) {
+    return (
+      'The boat’s Crossover Charts could not be read just now, and a sail is named in a chart Version’s ' +
+      `own words — so there is nothing here to name one with. ${kept}`
+    )
+  }
+
+  if (charts.length === 0) {
+    return (
+      'The boat has no Crossover Chart yet, and a sail is named in a chart Version’s own words — there ' +
+      `is no separate list of sails. Upload a Crossover Chart under Boat. ${kept}`
+    )
+  }
+
+  return (
+    'This recording is older than every Crossover Chart the boat has, so no Version was in force when ' +
+    `it was sailed. Pick the Version whose words these sails should be named in. ${kept}`
+  )
+}
+
+/** The step before this one, or the first: `Back` never leaves the flow while uploading. */
+function previousUploadStep(section: Section): Section {
+  const at = UPLOAD_STEPS.indexOf(section)
+  return UPLOAD_STEPS[at <= 0 ? 0 : at - 1]
+}
+
+/** The step after this one, or the last: `Next` is hidden on Review rather than clamped, but both hold. */
+function nextUploadStep(section: Section): Section {
+  const at = UPLOAD_STEPS.indexOf(section)
+  return UPLOAD_STEPS[at < 0 || at >= UPLOAD_STEPS.length - 1 ? UPLOAD_STEPS.length - 1 : at + 1]
+}
+
+/**
+ * The step bars, for the mode that has steps.
+ *
+ * Bars rather than numbered circles: uploading is five steps of one job, not a form in chapters, and
+ * what a sailor needs from it is how much is left. Filled behind as well as at the current step, because
+ * that "how much is left" is the only thing the bars are for.
+ *
+ * Amending gets `SectionTabs` instead, and the difference is not cosmetic: a progress bar over sections
+ * that are all already answered would be measuring a walk nobody is taking.
+ */
+function Stepper({ section }: { section: Section }): ReactElement {
+  const step = UPLOAD_STEPS.indexOf(section)
+
   return (
     <ol
       style={{
@@ -1013,10 +1408,11 @@ function Stepper({ step }: { step: Step }): ReactElement {
         gap: spacing(2),
       }}
     >
-      {STEPS.map((label, index) => {
+      {UPLOAD_STEPS.map((each, index) => {
+        const label = SECTION_LABELS[each]
         const active = index === step
         return (
-          <li key={label} style={{ flex: 1 }} aria-current={active ? 'step' : undefined}>
+          <li key={each} style={{ flex: 1 }} aria-current={active ? 'step' : undefined}>
             <div
               style={{
                 height: 3,
@@ -1039,6 +1435,37 @@ function Stepper({ step }: { step: Step }): ReactElement {
         )
       })}
     </ol>
+  )
+}
+
+/**
+ * Every section, always, in any order (AC 2).
+ *
+ * Chips and not a stepper, because there is nothing to step through: each of these is already answered
+ * and the sailor came to change one of them. Which one they arrived at came from the chip they pressed
+ * on the race's own page, and from here every other is one tap away — including back to the one they
+ * came for, which a Back-arrow-only flow would have made unreachable without leaving.
+ *
+ * No section is disabled and none has a prerequisite. Leaving a section with a refusal standing on it is
+ * allowed; the refusals gate the save, which is the only thing that writes.
+ */
+function SectionTabs({
+  section,
+  onGo,
+}: {
+  section: Section
+  onGo: (next: Section) => void
+}): ReactElement {
+  return (
+    <nav aria-label="Sections" data-testid="amend-sections">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {AMEND_SECTIONS.map((each) => (
+          <Chip key={each} on={each === section} onPress={() => onGo(each)}>
+            {SECTION_LABELS[each]}
+          </Chip>
+        ))}
+      </div>
+    </nav>
   )
 }
 
@@ -2068,10 +2495,16 @@ function SummaryList({
 function FooterNav({
   canBack,
   onBack,
+  backLabel = 'Back',
   primary,
 }: {
   canBack: boolean
   onBack: () => void
+  /**
+   * What the secondary way out is called. "Back" is a step in the upload flow; amending there is no
+   * step behind you, so the same slot says where it actually goes — the race being amended.
+   */
+  backLabel?: string
   primary: { label: string; enabled: boolean; onPress: () => void }
 }): ReactElement {
   return (
@@ -2092,7 +2525,7 @@ function FooterNav({
       }}
     >
       <ActionButton kind="ghost" enabled={canBack} onPress={onBack}>
-        Back
+        {backLabel}
       </ActionButton>
       <ActionButton kind="primary" enabled={primary.enabled} onPress={primary.onPress} grow>
         {primary.label}

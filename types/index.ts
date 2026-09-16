@@ -1653,7 +1653,7 @@ export interface RigTuneChoice extends BoatSetupVersionRef {
  * Which one a recording defaults to is `versionInForceOn`'s answer, from the recording's own start.
  *
  * A null *in place of the whole object* is "could not be read", the same distinction
- * `RaceUploadWizardProps.charts` makes and for the same reason: a Review step showing empty pickers
+ * `RaceFlowProps.charts` makes and for the same reason: a Review step showing empty pickers
  * would present a failed read as "the boat has none". Within it the three lists are plain, and an
  * empty one is the honest answer for a boat that has no Version of that kind yet — which is why every
  * pointer on `races` is nullable in the first place.
@@ -1938,6 +1938,83 @@ export type UpdateRaceBoatSetupResult =
 export type DeleteRaceResult =
   | { ok: true; bytes_removed: boolean }
   | { ok: false; message: string }
+
+/**
+ * A stored race, as the flow needs it in order to be amended.
+ *
+ * This is the upload flow's `StagedRecording` with the upload taken out of it, and the difference is
+ * the point: there is no `upload_id`, no `content_sha256`, no `filename`, and no `findings` about a
+ * parse, because nothing here was parsed. `series` is drawn from `recording_rows` — the Transcription
+ * as stored — so the amend path never reads a file, never hashes bytes and cannot ask the
+ * duplicate-content question (ADR 0010 Amendment 1: the parse boundary is outside the flow).
+ *
+ * The Transcription is not reachable through this either, in the only sense that matters: `series`
+ * carries the recorded values the charts draw, and there is no field here, and no action anywhere in
+ * the app, that writes one back. What an amendment may change is what the sailor said about the
+ * recording, never the recording.
+ */
+export interface RaceAmendment {
+  race_id: string
+  /** Null where the race has none, and shown as its day instead. Editable, and may be blanked again. */
+  title: string | null
+  /** The window as stored, in the recording's own naive frame. */
+  window_start: string
+  window_finish: string
+  /**
+   * The whole Transcription as charted series, not the part inside the window.
+   *
+   * The whole of it, because the window is the thing being amended: a sailor moving the start earlier
+   * has to be able to see the rows they are moving it onto, and rows clipped to the old window would
+   * make the new one undrawable.
+   */
+  series: RaceChartSeries
+  /** The five answers the Race already records, as the pickers' starting state. */
+  setup: RaceBoatSetupPointers
+  /**
+   * The Testimony as stored, in the recording's own frame, earliest first.
+   *
+   * Sail entries carry the Definition *number* and not its label: the words come from the chart
+   * Versions the flow is already handed, so resolving them here would give the flow a second
+   * vocabulary that could disagree with the one the pickers offer (ADR 0023).
+   */
+  sails: SubmitSailEntry[]
+  sea_state: SubmitSeaStateEntry[]
+}
+
+/**
+ * One amendment, as one save.
+ *
+ * Everything the flow can change travels together, and it is applied in one transaction — there is no
+ * per-section save, because a sailor correcting the window and the sails they flew inside it is
+ * correcting one thing, and a half-applied amendment would be a race that never happened (ADR 0010
+ * Amendment 1).
+ *
+ * Both annotation lists are sent whole, always, and always replace what is stored. That is what makes
+ * a section the sailor never opened safe: it sends back exactly what it was given.
+ *
+ * There is no change reason and no per-field history. `races.updated_at` is the whole record of an
+ * amendment, and it is moved by the triggers on both annotation tables as well as by the row itself,
+ * so a correction that touched only the sea state still advances it.
+ */
+export interface AmendRaceInput extends RaceBoatSetupPointers {
+  race_id: string
+  /** The recording's own naive frame. Refused if the window holds no recorded row, or ends first. */
+  window_start: string
+  window_finish: string
+  /** Blank is stored as null: a titled race can be untitled again (ADR 0010). */
+  title: string
+  sails: SubmitSailEntry[]
+  sea_state: SubmitSeaStateEntry[]
+}
+
+/**
+ * What amending a race answers with.
+ *
+ * No `start_over` twin of `SubmitRaceResult`'s: nothing was staged, no bytes moved, and a refusal
+ * leaves the race exactly as it stood — so every failure here is one the sailor can fix from where
+ * they are standing and try again.
+ */
+export type AmendRaceResult = { ok: true } | { ok: false; message: string }
 
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {

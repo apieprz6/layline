@@ -36,7 +36,7 @@ import type {
   TranscriptionChannels,
   TranscriptionRow,
 } from '@/types'
-import RaceUploadWizard from '../RaceUploadWizard'
+import RaceFlow from '../RaceFlow'
 import { CHART_WIDTH } from '../chart-geometry'
 
 jest.mock('next/navigation', () => ({
@@ -214,9 +214,8 @@ function mount(
   }))
 
   render(
-    <RaceUploadWizard
-      stageRecording={stage}
-      submitRace={submit}
+    <RaceFlow
+      mode={{ kind: 'upload', stageRecording: stage, submitRace: submit }}
       charts={charts}
       boatSetup={boatSetup}
     />
@@ -1165,9 +1164,8 @@ describe('a refusal from the server', () => {
     const submit = jest.fn(async () => ({ ok: true as const, race_id: 'race-1' }))
 
     render(
-      <RaceUploadWizard
-        stageRecording={stage}
-        submitRace={submit}
+      <RaceFlow
+        mode={{ kind: 'upload', stageRecording: stage, submitRace: submit }}
         charts={CHARTS}
         boatSetup={BOAT_SETUP}
       />
@@ -1195,9 +1193,8 @@ describe('a failure that took the staged bytes with it', () => {
     }))
 
     render(
-      <RaceUploadWizard
-        stageRecording={stage}
-        submitRace={submit}
+      <RaceFlow
+        mode={{ kind: 'upload', stageRecording: stage, submitRace: submit }}
         charts={CHARTS}
         boatSetup={BOAT_SETUP}
       />

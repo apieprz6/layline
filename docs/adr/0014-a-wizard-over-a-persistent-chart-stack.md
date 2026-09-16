@@ -137,5 +137,5 @@ are unchanged. **Carry-forward is retired**, and the measurement moves with it.
 - **The pinned assertion belongs to the prototype**, which is not merged and is not being amended:
   `app/prototype-race-upload/smoke.test.tsx` on `prototype/lay-94-race-upload` still describes the
   flow it prototyped, carry-forward and Reef State included. The figures above are re-derived from
-  that same fixture's seven entries, and it is `components/race-upload/__tests__/RaceUploadWizard.test.tsx`
+  that same fixture's seven entries, and it is `components/race-flow/__tests__/RaceFlow.test.tsx`
   that holds main honest to the flow as it now stands.
