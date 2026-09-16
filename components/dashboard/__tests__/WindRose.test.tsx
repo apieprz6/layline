@@ -255,8 +255,27 @@ describe('WindRose', () => {
     })
   })
 
-  describe('Line segments', () => {
-    it('connects adjacent data points with line segments', () => {
+  describe('Swept connectors', () => {
+    /** The connectors between observations: paths with a wind-condition stroke. */
+    function connectors(container: HTMLElement): Element[] {
+      return Array.from(container.querySelectorAll('path[stroke]')).filter(path => {
+        const stroke = path.getAttribute('stroke')
+        return Boolean(stroke && stroke.match(/^#[0-9A-F]{6}$/i))
+      })
+    }
+
+    /** The "x,y" vertices of a connector, so a test can check where it went. */
+    function vertices(path: Element): Array<[number, number]> {
+      return (path.getAttribute('d') || '')
+        .replace(/^M/, '')
+        .split(' L')
+        .map(pair => {
+          const [x, y] = pair.split(',').map(Number)
+          return [x, y] as [number, number]
+        })
+    }
+
+    it('connects adjacent data points', () => {
       const data: WindDataPoint[] = [
         { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
         { timestamp: '2026-05-19T17:50:00.000Z', spd: 14, dir: 185 },
@@ -265,27 +284,43 @@ describe('WindRose', () => {
 
       const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={60} />)
 
-      // Should have line elements connecting points
-      const lines = container.querySelectorAll('line[stroke]')
-      expect(lines.length).toBeGreaterThan(0)
+      expect(connectors(container)).toHaveLength(2)
     })
 
-    it('skips line segments when angular gap exceeds 90 degrees', () => {
+    it('renders a connector for a 180 degree shift instead of dropping the pair', () => {
       const data: WindDataPoint[] = [
         { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 0 },   // North
-        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 180 }, // South (180° jump - should skip)
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 180 }, // South — a full reversal
         { timestamp: '2026-05-19T17:40:00.000Z', spd: 12, dir: 185 }, // Near south
       ]
 
       const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={60} />)
 
-      // Should have 1 line segment (20→10), not 2 (0→10 should be skipped)
-      const lines = container.querySelectorAll('line[stroke]')
-      const dataLines = Array.from(lines).filter(line => {
-        const stroke = line.getAttribute('stroke')
-        return stroke && stroke.match(/^#[0-9A-F]{6}$/i)
-      })
-      expect(dataLines.length).toBe(1)
+      // Both pairs are drawn. The old code silently discarded the reversal.
+      expect(connectors(container)).toHaveLength(2)
+    })
+
+    it('sweeps through the intervening bearings rather than cutting across the diagram', () => {
+      // Two observations 90° apart near the outer ring. A straight chord between them passes about
+      // 30% of the radius closer to the centre than either endpoint — i.e. through times the wind
+      // was never at. The swept connector cannot.
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 90 },
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 0 },
+      ]
+
+      const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={60} />)
+
+      const drawn = connectors(container)
+      expect(drawn).toHaveLength(1)
+
+      // r01 for 0 and 10 mins ago in a 60-minute window, times the chart radius of 138.
+      const innerRadius = (1 - 10 / 60) * 138
+      for (const [x, y] of vertices(drawn[0])) {
+        const distance = Math.sqrt((x - 180) ** 2 + (y - 180) ** 2)
+        expect(distance).toBeGreaterThanOrEqual(innerRadius - 0.5)
+        expect(distance).toBeLessThanOrEqual(138 + 0.5)
+      }
     })
   })
 
