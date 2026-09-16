@@ -109,6 +109,51 @@ BEGIN
 END;
 $$;
 
+-- Amend a Race's five Boat Setup answers as somebody. Returns the number of Sail Configurations
+-- cleared, or NULL with the message in `err`.
+--
+-- Same subtransaction shape as `upload_as`, and for the same reason: an amendment that is refused
+-- has to leave the Race exactly as it stood, and this suite watches both outcomes in one run.
+CREATE FUNCTION pg_temp.amend_as(
+    p_uid      UUID,
+    p_race_id  UUID,
+    p_setup    JSONB,
+    p_clearing INTEGER DEFAULT 0,
+    OUT cleared INTEGER,
+    OUT err     TEXT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_temp.act_as(p_uid);
+    BEGIN
+        cleared := public.amend_race_boat_setup(p_race_id, p_setup, p_clearing);
+        SET CONSTRAINTS ALL IMMEDIATE;
+    EXCEPTION WHEN OTHERS THEN
+        err := SQLERRM;
+        cleared := NULL;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+    IF err IS NULL THEN
+        SET CONSTRAINTS ALL DEFERRED;
+    END IF;
+END;
+$$;
+
+-- The five keys, as a payload with every pointer unrecorded. Amendments below build on this with
+-- `||`, which is also how the function's own "all five keys or nothing" rule is easiest to respect:
+-- an absent key reads as NULL and would clear a pointer nobody meant to clear.
+CREATE FUNCTION pg_temp.nothing_recorded()
+RETURNS JSONB LANGUAGE SQL IMMUTABLE AS $$
+    SELECT jsonb_build_object(
+        'polar_version_id', NULL,
+        'crossover_chart_version_id', NULL,
+        'rig_tune_version_id', NULL,
+        'instrument_calibration_version_id', NULL,
+        'rig_tune_band_id', NULL
+    )
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Fixtures
 -- ---------------------------------------------------------------------------
@@ -234,6 +279,55 @@ INSERT INTO crossover_sail_definitions (version_id, number, label) VALUES
     ('11000000-0000-4000-8000-00000000c001', 3, 'Main + A2'),
     ('11000000-0000-4000-8000-00000000c002', 1, 'Main + Jib 1'),
     ('11000000-0000-4000-8000-00000000c002', 4, 'Main + A3');
+
+-- The other three kinds, for the three pointers LAY-113 taught the function to write. One Polar
+-- and one Instrument Calibration are enough -- what matters about them is that the pointer lands
+-- and that the wrong kind is refused -- but there are *two* Rig Tunes, because everything
+-- interesting about the Wind Band is about a band belonging to one Version and not the other.
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by,
+     filename, content_sha256, payload)
+SELECT '12000000-0000-4000-8000-0000000000a1', a.id, 'polar', 1,
+       DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       'Handsome_Pete.pol', repeat('3', 64),
+       '{"twa_axis": [40], "tws_axis": [6], "boat_speed": [[5.1]]}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'polar';
+
+-- No filename on either of the next two: file_backed_kinds_only says exactly the two file-backed
+-- kinds carry one, and a Rig Tune has never been a file for this boat (ADR 0007).
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by, note, payload)
+SELECT '13000000-0000-4000-8000-0000000000d1', a.id, 'rig_tune', 1,
+       DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       'base tune off the North guide, headstay is not adjustable', '{}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'rig_tune';
+
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by, note, payload)
+SELECT '13000000-0000-4000-8000-0000000000d2', a.id, 'rig_tune', 2,
+       DATE '2026-06-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       'retuned after the shrouds were reset', '{}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'rig_tune';
+
+INSERT INTO boat_setup_versions
+    (id, artifact_id, kind, version_number, effective_from, created_by, payload)
+SELECT '14000000-0000-4000-8000-0000000000c1', a.id, 'instrument_calibration', 1,
+       DATE '2026-05-01', 'aaaaaaa1-0000-4000-8000-000000000001',
+       '{"AWA": 0, "AWS": 1.0, "STW": 1.0, "HDG": 0}'::JSONB
+FROM boat_setup_artifacts a WHERE a.kind = 'instrument_calibration';
+
+-- Three bands on Rig Tune v1 and one on v2. `...b2` is the 8-15 kt band the sections below record,
+-- and `...e1` is v2's -- a real band of this boat, and still one a Race pointing at v1 must not be
+-- able to record. That pair is what `(rig_tune_version_id, rig_tune_band_id)` exists for.
+INSERT INTO rig_tune_bands (id, version_id, low_kt, high_kt, is_base, label, shrouds) VALUES
+    ('15000000-0000-4000-8000-0000000000b1', '13000000-0000-4000-8000-0000000000d1',
+     0, 8, FALSE, 'light', '{"V1": {}, "D1": {}, "D2": {}}'::JSONB),
+    ('15000000-0000-4000-8000-0000000000b2', '13000000-0000-4000-8000-0000000000d1',
+     8, 15, TRUE, 'medium', '{"V1": {}, "D1": {}, "D2": {}}'::JSONB),
+    ('15000000-0000-4000-8000-0000000000b3', '13000000-0000-4000-8000-0000000000d1',
+     15, NULL, FALSE, 'heavy', '{"V1": {}, "D1": {}, "D2": {}}'::JSONB),
+    ('15000000-0000-4000-8000-0000000000e1', '13000000-0000-4000-8000-0000000000d2',
+     0, NULL, TRUE, 'one band, retuned', '{"V1": {}, "D1": {}, "D2": {}}'::JSONB);
 
 -- ===========================================================================
 -- 1. The door: a guest cannot call it at all
@@ -941,6 +1035,495 @@ BEGIN
     -- (ADR 0012), which is a different fact from every other race's.
     PERFORM pg_temp.chk('and records no Crossover Chart Version, because nobody named one',
         (SELECT crossover_chart_version_id FROM races WHERE id = v_race_id) IS NULL);
+END;
+$$;
+
+-- ===========================================================================
+-- 10. All five Boat Setup answers, written at upload
+-- ===========================================================================
+-- LAY-113. The Race carries four Version pointers and the Wind Band the rig was set to, chosen on
+-- the wizard's Review step and frozen here (ADR 0012). Pointers, not copies: what is asserted is
+-- that each one lands where the sailor put it, that NULL survives as NULL, and that every refusal
+-- belongs to a constraint rather than to this function.
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    r         RECORD;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f020"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'polar_version_id', '12000000-0000-4000-8000-0000000000a1',
+            'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c001',
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d1',
+            'instrument_calibration_version_id', '14000000-0000-4000-8000-0000000000c1',
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000b2')
+      );
+
+    PERFORM pg_temp.chk('an upload naming all five Boat Setup answers is accepted',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+
+    PERFORM pg_temp.chk('the Polar pointer is the one the sailor named',
+        r.polar_version_id = '12000000-0000-4000-8000-0000000000a1');
+    PERFORM pg_temp.chk('the Rig Tune pointer likewise',
+        r.rig_tune_version_id = '13000000-0000-4000-8000-0000000000d1');
+    PERFORM pg_temp.chk('the Instrument Calibration pointer likewise',
+        r.instrument_calibration_version_id = '14000000-0000-4000-8000-0000000000c1');
+    PERFORM pg_temp.chk('and the Wind Band the rig was set to',
+        r.rig_tune_band_id = '15000000-0000-4000-8000-0000000000b2');
+
+    -- The four constant tag columns, which are half of each composite key. They are what make a
+    -- pointer of the wrong kind impossible rather than merely unlikely (ADR 0011).
+    PERFORM pg_temp.chk('each pointer carries the constant kind tag its key checks against',
+        r.polar_kind = 'polar' AND r.crossover_kind = 'crossover_chart'
+        AND r.rig_tune_kind = 'rig_tune' AND r.calibration_kind = 'instrument_calibration');
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- The failing insert LAY-113 asks the suite for. Band `...e1` is Rig Tune v2's, and this Race
+    -- names v1 -- so the composite key `(rig_tune_version_id, rig_tune_band_id)` is what refuses it,
+    -- at the insert, and no form or Server Action had to be trusted to notice. Bands never migrate
+    -- across Versions: a re-tune means new rows (ADR 0007).
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f021"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d1',
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000e1')
+      );
+
+    PERFORM pg_temp.chk('a Wind Band of another Rig Tune Version is refused at the insert',
+        v_race_id IS NULL, v_err);
+    PERFORM pg_temp.chk('by the composite key over (rig_tune_version_id, rig_tune_band_id)',
+        v_err LIKE '%rig_tune_band%' OR v_err LIKE '%rig_tune_bands%', v_err);
+
+    -- And the same band against the Version it belongs to is fine, which is what makes the refusal
+    -- above about the pair rather than about the band.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f022"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d2',
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000e1')
+      );
+
+    PERFORM pg_temp.chk('and accepted against the Version whose band it is',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A band with no Rig Tune Version beside it is a range nobody can look up.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f023"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000b2')
+      );
+
+    PERFORM pg_temp.chk('a Wind Band recorded without its Rig Tune Version is refused',
+        v_race_id IS NULL, v_err);
+
+    -- A Rig Tune Version in the Polar's pointer. The tag column is what catches it: `polar_kind` is
+    -- a constant 'polar', and the key is over (polar_version_id, polar_kind).
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f024"'),
+        f.rows,
+        f.race || jsonb_build_object(
+            'polar_version_id', '13000000-0000-4000-8000-0000000000d1')
+      );
+
+    PERFORM pg_temp.chk('a Version of the wrong kind in a pointer is refused',
+        v_race_id IS NULL, v_err);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    r         RECORD;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- The nine archive races that predate every Boat Setup artifact. All five NULL, which is the
+    -- state `f.race` has carried through every section above, and it saves cleanly.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f025"'),
+        f.rows, f.race
+      );
+
+    PERFORM pg_temp.chk('a race with no Boat Setup recorded at all is saved',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+
+    -- Not backdated to v1, and not resolved to the newest. Nothing in this function looks a Version
+    -- up by date at all (ADR 0008, ADR 0012).
+    PERFORM pg_temp.chk('and every one of the five stays NULL, which reads as not recorded',
+        r.polar_version_id IS NULL AND r.crossover_chart_version_id IS NULL
+        AND r.rig_tune_version_id IS NULL AND r.instrument_calibration_version_id IS NULL
+        AND r.rig_tune_band_id IS NULL);
+END;
+$$;
+
+-- ===========================================================================
+-- 11. Amending the five afterwards
+-- ===========================================================================
+-- Every pointer stays changeable, in place, with no change reason (ADR 0012, ADR 0010). The archive
+-- is hand-entered backwards, so most of these will be filled in long after the race was filed.
+--
+-- `amend_race_boat_setup` is one call because three of the five are coupled to other rows: the chart
+-- pointer drags the Sail Configurations, and the Rig Tune pointer and the Wind Band are one answer
+-- in two columns.
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_cleared INTEGER;
+    r         RECORD;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A race filed with nothing recorded, as an archive race is.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f030"'),
+        f.rows, f.race
+      );
+    PERFORM pg_temp.chk('a race to amend is filed with nothing recorded',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object(
+            'polar_version_id', '12000000-0000-4000-8000-0000000000a1',
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d1',
+            'instrument_calibration_version_id', '14000000-0000-4000-8000-0000000000c1',
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000b2')
+      );
+
+    PERFORM pg_temp.chk('an amendment fills in three pointers and a band after the fact',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('and all four landed',
+        r.polar_version_id = '12000000-0000-4000-8000-0000000000a1'
+        AND r.rig_tune_version_id = '13000000-0000-4000-8000-0000000000d1'
+        AND r.instrument_calibration_version_id = '14000000-0000-4000-8000-0000000000c1'
+        AND r.rig_tune_band_id = '15000000-0000-4000-8000-0000000000b2');
+
+    PERFORM pg_temp.chk('with nothing cleared, because the chart pointer did not move',
+        v_cleared = 0, format('%s cleared', v_cleared));
+
+    -- Moving the Rig Tune Version and letting go of the band, in one statement. Set apart, whichever
+    -- went first would leave a pair the composite key refuses -- which is why there is one function.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object(
+            'polar_version_id', '12000000-0000-4000-8000-0000000000a1',
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d2',
+            'instrument_calibration_version_id', '14000000-0000-4000-8000-0000000000c1',
+            'rig_tune_band_id', NULL)
+      );
+
+    PERFORM pg_temp.chk('the Rig Tune pointer moves and the band goes with it, in one call',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('the new Version is recorded and no band is',
+        r.rig_tune_version_id = '13000000-0000-4000-8000-0000000000d2'
+        AND r.rig_tune_band_id IS NULL);
+
+    -- The band the old Version had, against the new one. Refused, and this is the refusal a form
+    -- must never be able to reach: it is why the panel drops a band the new Version does not define.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object(
+            'rig_tune_version_id', '13000000-0000-4000-8000-0000000000d2',
+            'rig_tune_band_id', '15000000-0000-4000-8000-0000000000b2')
+      );
+
+    PERFORM pg_temp.chk('an amendment keeping a band of the Version it replaced is refused',
+        v_err IS NOT NULL, v_err);
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('and the refused amendment left the Race exactly as it stood',
+        r.rig_tune_version_id = '13000000-0000-4000-8000-0000000000d2'
+        AND r.rig_tune_band_id IS NULL
+        AND r.polar_version_id = '12000000-0000-4000-8000-0000000000a1');
+
+    -- Back to nothing recorded, which has to be as reachable as filling one in: a pointer entered by
+    -- mistake is corrected by clearing it, and NULL is a legitimate answer (ADR 0012).
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id, pg_temp.nothing_recorded());
+
+    PERFORM pg_temp.chk('every pointer can be cleared back to not recorded',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+
+    SELECT * INTO r FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.chk('and the Race records no Boat Setup again',
+        r.polar_version_id IS NULL AND r.rig_tune_version_id IS NULL
+        AND r.instrument_calibration_version_id IS NULL AND r.rig_tune_band_id IS NULL);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_cleared INTEGER;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f031"'),
+        f.rows,
+        f.race || jsonb_build_object('polar_version_id',
+            '12000000-0000-4000-8000-0000000000a1')
+      );
+
+    -- A payload short of a key. `->>` on an absent key answers NULL, so read rather than refused
+    -- this would erase the Polar pointer -- and an erased pointer looks exactly like a race that
+    -- predates the Polar (ADR 0012). Refused with the key named.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object(
+            'crossover_chart_version_id', NULL,
+            'rig_tune_version_id', NULL,
+            'instrument_calibration_version_id', NULL,
+            'rig_tune_band_id', NULL)
+      );
+
+    PERFORM pg_temp.chk('an amendment short of one of the five keys is refused',
+        v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('and says which key was missing, rather than clearing it',
+        v_err LIKE '%polar_version_id%', v_err);
+    PERFORM pg_temp.chk('the Polar pointer it would have erased still stands',
+        (SELECT polar_version_id FROM races WHERE id = v_race_id)
+            = '12000000-0000-4000-8000-0000000000a1');
+
+    -- A key present and explicitly null is the sailor clearing it, and is a different act.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id, pg_temp.nothing_recorded());
+
+    PERFORM pg_temp.chk('a key stated as null is a clearance, and is accepted',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+    PERFORM pg_temp.chk('and the pointer is gone',
+        (SELECT polar_version_id FROM races WHERE id = v_race_id) IS NULL);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_cleared INTEGER;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A race with two Sail Configurations named in v1's vocabulary.
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f032"'),
+        f.rows,
+        f.race || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c001'),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03 18:40:00', 'definition_number', 1),
+            jsonb_build_object('at', '2026-06-03 19:01:00', 'definition_number', 3)
+        )
+      );
+    PERFORM pg_temp.chk('a race with two Sail Configurations is filed',
+        v_race_id IS NOT NULL, COALESCE(v_err, 'accepted'));
+
+    -- p_clearing disagreeing with what stands is refused. Deleted Testimony is not recoverable from
+    -- anything, so the sailor is told what will go before it goes or nothing goes.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c002'),
+        1
+      );
+
+    PERFORM pg_temp.chk('a chart repoint agreed for the wrong number of Configurations is refused',
+        v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('and both Configurations are still there',
+        (SELECT count(*) FROM race_sail_entries WHERE race_id = v_race_id) = 2);
+
+    -- Agreed for two, which is what stands. The pointer moves and the Configurations go with it, in
+    -- one transaction, because sail 3 of v1 is not sail 3 of v2 (ADR 0023).
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c002'),
+        2
+      );
+
+    PERFORM pg_temp.chk('a chart repoint agreed for what stands is accepted',
+        v_err IS NULL, COALESCE(v_err, 'accepted'));
+    PERFORM pg_temp.chk('it says how many Configurations it cleared',
+        v_cleared = 2, format('%s cleared', v_cleared));
+    PERFORM pg_temp.chk('the pointer moved',
+        (SELECT crossover_chart_version_id FROM races WHERE id = v_race_id)
+            = '11000000-0000-4000-8000-00000000c002');
+    PERFORM pg_temp.chk('and the Configurations named in the old vocabulary are gone',
+        (SELECT count(*) FROM race_sail_entries WHERE race_id = v_race_id) = 0);
+
+    -- An amendment that leaves the chart pointer alone and claims to be clearing something means the
+    -- panel and the database disagree about what this amendment is.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object('crossover_chart_version_id',
+            '11000000-0000-4000-8000-00000000c002'),
+        3
+      );
+
+    PERFORM pg_temp.chk('an amendment that moves no chart pointer cannot claim to clear anything',
+        v_err IS NOT NULL, v_err);
+END;
+$$;
+
+DO $$
+DECLARE
+    f         RECORD;
+    v_race_id UUID;
+    v_err     TEXT;
+    v_cleared INTEGER;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f033"'),
+        f.rows, f.race
+      );
+
+    -- Role governs writes, and an amendment is a write (ADR 0019). SECURITY INVOKER means the Race's
+    -- own admin-only policy is what refuses this, applied by the SELECT ... FOR UPDATE before
+    -- anything is written -- so a viewer reaching the function directly finds no row.
+    SELECT cleared, err INTO v_cleared, v_err
+      FROM pg_temp.amend_as(
+        'cccccccc-0000-4000-8000-000000000002', v_race_id,
+        pg_temp.nothing_recorded() || jsonb_build_object('polar_version_id',
+            '12000000-0000-4000-8000-0000000000a1')
+      );
+
+    PERFORM pg_temp.chk('a signed-in non-admin cannot amend a Race''s Boat Setup',
+        v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('turned away as "no such Race", which is what RLS makes it',
+        v_err LIKE '%no such Race%', v_err);
+    PERFORM pg_temp.chk('and nothing was written',
+        (SELECT polar_version_id FROM races WHERE id = v_race_id) IS NULL);
+
+END;
+$$;
+
+-- And a guest cannot reach the body at all: a REVOKE names a signature, so this new function got its
+-- own rather than inheriting the one `create_race_from_upload` was given.
+--
+-- Same shape as section 1, including the reason the call is written plainly and inside a DO block
+-- rather than through a helper: EXECUTE is checked when a statement is planned, and a plpgsql wrapper
+-- that has already planned this call as somebody who may make it waves a guest straight past the
+-- door. The two catalog checks say the same thing without calling anything.
+--
+-- And the return value is assigned even though nothing reads it, which is the third departure and
+-- the one that looks like a mistake. `PERFORM public.amend_race_boat_setup(...)` here terminates the
+-- backend: on PostgreSQL 17.6 a call whose result is discarded, by a role holding no EXECUTE on the
+-- function, is on the same crashing side of the line as `EXECUTE 'SELECT f(...)'`, while assigning
+-- the result raises the catchable `permission denied for function`. It reduces to a function with an
+-- empty body, so it is the server's and not this schema's, and it is written up in
+-- docs/testing/race-upload-transaction.md.
+DO $$
+DECLARE
+    v_err     TEXT;
+    v_race_id UUID;
+    v_cleared INTEGER;
+BEGIN
+    PERFORM pg_temp.chk(
+        'a guest holds no EXECUTE on amend_race_boat_setup',
+        NOT has_function_privilege('anon',
+            'public.amend_race_boat_setup(uuid,jsonb,integer)', 'EXECUTE'));
+    PERFORM pg_temp.chk(
+        'and any signed-in user does, RLS being what decides the rest',
+        has_function_privilege('authenticated',
+            'public.amend_race_boat_setup(uuid,jsonb,integer)', 'EXECUTE'));
+
+    SELECT id INTO v_race_id FROM races ORDER BY created_at LIMIT 1;
+
+    PERFORM pg_temp.act_as(NULL);
+    BEGIN
+        v_cleared := public.amend_race_boat_setup(
+            v_race_id,
+            '{"polar_version_id": null, "crossover_chart_version_id": null,
+              "rig_tune_version_id": null, "instrument_calibration_version_id": null,
+              "rig_tune_band_id": null}'::JSONB,
+            0
+        );
+    EXCEPTION WHEN OTHERS THEN
+        v_err := SQLERRM;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+
+    PERFORM pg_temp.chk('a guest cannot even call it',
+        v_cleared IS NULL AND v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('and is refused at the door rather than inside the body',
+        v_err ILIKE '%permission denied%', v_err);
 END;
 $$;
 

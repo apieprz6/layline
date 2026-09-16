@@ -17,6 +17,14 @@
  * A missing title is a missing title. An untitled race shows its day, and nothing here writes it a
  * name the sailor did not give it.
  *
+ * The Boat Setup the race was sailed under sits between the Testimony and the coverage, because it is
+ * neither: it is what the boat *was*, stated as the pointers the Race holds and never resolved afresh
+ * (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, for the same reason.
+ *
+ * Nothing on this page edits what the race says. Amending a race — the window, the annotations, the
+ * Boat Setup pointers, the title — is one flow entered from here, reusing the upload flow without its
+ * File step rather than growing a second form per section (ADR 0014), and it is not this component's.
+ *
  * Delete is the one thing on the page that is a write, so it is the one thing the Role gates: it is
  * absent for a viewer rather than present and refused (ADR 0019). It sits last, under everything the
  * race says about itself, because a destructive action above the record it destroys is one that gets
@@ -25,10 +33,18 @@
 
 import type { ReactElement } from 'react'
 import Link from 'next/link'
+import { formatBandRange } from '@/lib/boat/rigTune'
 import { spacing } from '@/lib/utils/design'
 import { noteText, sailWithNote, seaStateLabel, SEA_STATES } from '@/services/races/annotations'
 import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordings/wall-clock'
-import type { DeleteRaceResult, RaceDetail, RaceSailAnnotation } from '@/types'
+import type {
+  BoatSetupVersionRef,
+  DeleteRaceResult,
+  RaceBoatSetup,
+  RaceDetail,
+  RaceSailAnnotation,
+  WindBandRef,
+} from '@/types'
 
 import CoverageReadout from './CoverageReadout'
 import RaceDeletePanel from './RaceDeletePanel'
@@ -130,6 +146,11 @@ export default function RaceDetailView({
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
+          <h2 style={SECTION_HEADING}>Boat Setup</h2>
+          <BoatSetupFacts setup={race.boat_setup} />
+        </section>
+
+        <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Coverage</h2>
           <CoverageReadout coverage={race.coverage} />
         </section>
@@ -168,6 +189,136 @@ export default function RaceDetailView({
       </div>
     </div>
   )
+}
+
+/**
+ * What the boat was, for the whole of this race: four Version pointers and the Wind Band.
+ *
+ * Every one of them is what the Race *holds*, resolved by id. Nothing here reads "the Polar in force
+ * now", which is the point of storing pointers at all — a race sailed under Polar v2 says v2 forever,
+ * including after v5 lands (ADR 0012).
+ *
+ * Each named Version links to the Version it names, so "Polar v2" is followed rather than trusted. The
+ * Rig Tune page takes a Version *number* and the Instrument Calibration page has no per-Version route,
+ * so those two links land where the reader can see the same Version stated.
+ *
+ * An unrecorded pointer reads as **not recorded**, in the same treatment the annotations use, because it
+ * is the same fact: nobody wrote it down. It is the ordinary state of this archive's oldest races, which
+ * predate every Boat Setup artifact the boat has, and nothing backdates v1 onto them (ADR 0008).
+ */
+function BoatSetupFacts({ setup }: { setup: RaceBoatSetup }): ReactElement {
+  const nothingRecorded =
+    setup.polar === null &&
+    setup.crossover_chart === null &&
+    setup.rig_tune === null &&
+    setup.instrument_calibration === null &&
+    setup.band === null
+
+  if (nothingRecorded) {
+    return (
+      <NotRecorded>
+        Not recorded — this race names no Polar, Crossover Chart, Rig Tune or Instrument Calibration
+        Version, and no Wind Band.
+      </NotRecorded>
+    )
+  }
+
+  return (
+    <dl
+      data-testid="boat-setup-facts"
+      style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: spacing(1) }}
+    >
+      <VersionFact
+        label="Polar"
+        version={setup.polar}
+        href={(id) => `/boat-management/polar/${id}`}
+      />
+      <VersionFact
+        label="Crossover Chart"
+        version={setup.crossover_chart}
+        href={(id) => `/boat-management/crossover-chart/${id}`}
+      />
+      <VersionFact
+        label="Rig Tune"
+        version={setup.rig_tune}
+        // The Rig Tune page selects by Version number, not by id (`?version=2`).
+        href={(_id, number) => `/boat-management/rig-tune?version=${number}`}
+      />
+      <BandFact band={setup.band} />
+      <VersionFact
+        label="Instrument Calibration"
+        version={setup.instrument_calibration}
+        // One page for the artifact, with the Version it is showing stated on it.
+        href={() => '/boat-management/instrument-calibration'}
+      />
+    </dl>
+  )
+}
+
+/** One Version pointer, as a link to the Version, or the words for a pointer nobody set. */
+function VersionFact({
+  label,
+  version,
+  href,
+}: {
+  label: string
+  version: BoatSetupVersionRef | null
+  href: (versionId: string, versionNumber: number) => string
+}): ReactElement {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing(2) }}>
+      <dt style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', flex: 1 }}>{label}</dt>
+      <dd style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+        {version === null ? (
+          <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Not recorded</span>
+        ) : (
+          <Link
+            href={href(version.version_id, version.version_number)}
+            style={{ color: 'var(--text-accent)' }}
+          >
+            {`v${version.version_number}`}
+          </Link>
+        )}
+      </dd>
+    </div>
+  )
+}
+
+/**
+ * The Wind Band the rig was set to, in the band's own words.
+ *
+ * Indented under the Rig Tune, because it is not a fifth pointer — it is one row of *that* Version's band
+ * table, and it cannot be read without it (ADR 0007). There is no link of its own: a band has no page,
+ * and the Rig Tune link above lands on the table this row is in.
+ */
+function BandFact({ band }: { band: WindBandRef | null }): ReactElement {
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'baseline', gap: spacing(2), paddingLeft: spacing(3) }}
+    >
+      <dt style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', flex: 1 }}>Wind Band</dt>
+      <dd
+        style={{
+          margin: 0,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        {band === null ? (
+          <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Not recorded</span>
+        ) : (
+          bandText(band)
+        )}
+      </dd>
+    </div>
+  )
+}
+
+/** `8–12 kt` on its own, or `Medium · 8–12 kt` where the tuning guide gave the band a name. */
+function bandText(band: WindBandRef): string {
+  const range = formatBandRange(band.low_kt, band.high_kt)
+  return band.label === null ? range : `${band.label} · ${range}`
 }
 
 /**

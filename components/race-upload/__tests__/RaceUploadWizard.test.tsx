@@ -29,6 +29,7 @@ import { raceChartSeries } from '@/services/recordings/chart-series'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import type {
   CrossoverChartChoice,
+  RaceBoatSetupChoices,
   StagedRecording,
   SubmitRaceInput,
   SubmitRaceResult,
@@ -136,6 +137,53 @@ const CHARTS: CrossoverChartChoice[] = [
   },
 ]
 
+/**
+ * The other three Version lists, shaped the way `readRaceBoatSetupChoices` returns them.
+ *
+ * Newest first, and again the newest is not the answer: every recording here is June 3rd, and each kind
+ * has a Version that came into force after it. The Polar and the Rig Tune both have one in force on the
+ * day and one that is not, so a default that resolved "the newest" rather than "the one in force then"
+ * shows up as a wrong chip rather than as no chip at all.
+ *
+ * The Instrument Calibration has exactly one Version and it postdates the race, which is the case a
+ * hand-entered archive is full of: the honest answer is *not recorded*, and there has to be no default.
+ *
+ * Rig Tune v3's bands are the ones the picker may offer while v3 is chosen, and v1's are not — bands do
+ * not travel between Versions (ADR 0007), and each Version's ids are its own.
+ */
+const BOAT_SETUP: RaceBoatSetupChoices = {
+  polar: [
+    { version_id: 'polar-v2', version_number: 2, effective_from: '2026-07-01' },
+    { version_id: 'polar-v1', version_number: 1, effective_from: '2026-02-10' },
+  ],
+  rig_tune: [
+    {
+      version_id: 'tune-v4',
+      version_number: 4,
+      effective_from: '2026-08-01',
+      bands: [
+        { band_id: 'v4-light', low_kt: 0, high_kt: 9, is_base: true, label: 'Light' },
+        { band_id: 'v4-heavy', low_kt: 9, high_kt: null, is_base: false, label: null },
+      ],
+    },
+    {
+      version_id: 'tune-v3',
+      version_number: 3,
+      effective_from: '2026-04-20',
+      // Ascending by `low_kt`, which is the order a band table is read in and the order the reader
+      // hands them over in.
+      bands: [
+        { band_id: 'v3-light', low_kt: 0, high_kt: 8, is_base: false, label: 'Light' },
+        { band_id: 'v3-base', low_kt: 8, high_kt: 12, is_base: true, label: 'Base' },
+        { band_id: 'v3-heavy', low_kt: 12, high_kt: null, is_base: false, label: null },
+      ],
+    },
+  ],
+  instrument_calibration: [
+    { version_id: 'cal-v1', version_number: 1, effective_from: '2026-09-01' },
+  ],
+}
+
 function stagedOf(overrides: Partial<StagedRecording> = {}): StagedRecording {
   return {
     upload_id: 'upload-1',
@@ -151,7 +199,8 @@ function stagedOf(overrides: Partial<StagedRecording> = {}): StagedRecording {
 /** The wizard with two stubs, and the calls each one saw. */
 function mount(
   staged: StagedRecording = stagedOf(),
-  charts: CrossoverChartChoice[] | null = CHARTS
+  charts: CrossoverChartChoice[] | null = CHARTS,
+  boatSetup: RaceBoatSetupChoices | null = BOAT_SETUP
 ) {
   // Typed by their call signatures rather than by a parameter neither stub reads, so
   // `mock.calls[0][0]` is the input the wizard actually sent and not an element of an empty tuple.
@@ -164,7 +213,14 @@ function mount(
     race_id: 'race-1',
   }))
 
-  render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={charts} />)
+  render(
+    <RaceUploadWizard
+      stageRecording={stage}
+      submitRace={submit}
+      charts={charts}
+      boatSetup={boatSetup}
+    />
+  )
 
   return { stage, submit }
 }
@@ -916,6 +972,189 @@ describe('what Review says the sailor said', () => {
   })
 })
 
+/**
+ * The four Boat Setup answers Review asks for, beside the chart Version the Sails step already chose.
+ *
+ * They are pointers and nothing here is a copy (ADR 0012), so what is tested is which Version each one
+ * *defaults* to and that every one can be moved off it. The default is the Version in force when the
+ * recording started — not the newest, which is the trap a hand-entered archive walks into: three of these
+ * fixtures have a Version postdating June 3rd, and a picker resolving "current" would name it.
+ *
+ * The Wind Band is not defaulted at all, and is the only one of the five that isn't. Which band the
+ * turnbuckles were on is testimony only the sailor holds; the logged wind is evidence about the day, and
+ * inferring the band from it would be Layline answering for them (ADR 0010).
+ */
+describe('the Boat Setup Review asks for', () => {
+  /** The chips of one picker, by the label above them. */
+  function picker(label: string) {
+    return within(screen.getByRole('group', { name: label }))
+  }
+
+  async function toReviewFrom(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    await pickFile(user)
+    await toReview(user)
+  }
+
+  it('defaults each pointer to the Version in force when the recording started', async () => {
+    const user = userEvent.setup({ delay: null })
+    mount()
+    await toReviewFrom(user)
+
+    // Polar v1 from Feb 10th, not v2 from July 1st: the recording is June 3rd.
+    expect(picker('Polar').getByRole('button', { name: /^v1/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(picker('Polar').getByRole('button', { name: /^v2/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+
+    expect(picker('Rig Tune').getByRole('button', { name: /^v3/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+
+    // One Instrument Calibration Version and it postdates the race, so the honest default is none of
+    // them. Nothing is backdated onto a race that predates the artifact (ADR 0008).
+    expect(picker('Instrument Calibration').getByRole('button', { name: 'Not recorded' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('leaves the Wind Band unanswered even with a Rig Tune defaulted', async () => {
+    const user = userEvent.setup({ delay: null })
+    mount()
+    await toReviewFrom(user)
+
+    expect(picker('Wind Band').getByRole('button', { name: 'Not recorded' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    // And the wind that actually blew is stated beside it, as evidence rather than as an answer. Every
+    // fixture row logs 11.4 kt.
+    expect(screen.getByText('Logged wind averaged 11.4 kt over this window.')).toBeInTheDocument()
+  })
+
+  it('offers only that Rig Tune Version’s own bands, and closes the picker without one', async () => {
+    const user = userEvent.setup({ delay: null })
+    mount()
+    await toReviewFrom(user)
+
+    // v3 is defaulted, so these are v3's three bands and the fourth chip is "Not recorded".
+    expect(picker('Wind Band').getAllByRole('button')).toHaveLength(4)
+    expect(picker('Wind Band').getByRole('button', { name: /8–12 kt/ })).toBeInTheDocument()
+    // v4's bands are not on offer while v3 is named. A band does not travel between Versions (ADR 0007)
+    // and the composite key on `races` would refuse the pair anyway.
+    expect(picker('Wind Band').queryByRole('button', { name: /9 kt and up/ })).not.toBeInTheDocument()
+
+    await user.click(picker('Rig Tune').getByRole('button', { name: 'Not recorded' }))
+
+    // Disabled and still there rather than gone: a row that vanished would not say why (ADR 0014).
+    const gate = picker('Wind Band').getByRole('button', { name: 'Pick a Rig Tune Version first' })
+    expect(gate).toBeDisabled()
+  })
+
+  it('drops a band the Rig Tune Version being moved to does not have', async () => {
+    // AC 6, and the reason the two are one answer: v3's Base band is not a band of v4, so naming v4
+    // has to let it go. Sent as a pair, the composite key would refuse the write outright.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+    await toReviewFrom(user)
+
+    await user.click(picker('Wind Band').getByRole('button', { name: /8–12 kt/ }))
+    expect(picker('Wind Band').getByRole('button', { name: /8–12 kt/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+
+    await user.click(picker('Rig Tune').getByRole('button', { name: /^v4/ }))
+
+    expect(picker('Wind Band').getByRole('button', { name: 'Not recorded' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    // v4's own bands are what is on offer now.
+    expect(picker('Wind Band').getByRole('button', { name: /0–9 kt/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    const sent = submit.mock.calls[0][0]
+    expect(sent.rig_tune_version_id).toBe('tune-v4')
+    expect(sent.rig_tune_band_id).toBeNull()
+  })
+
+  it('sends all five, as the sailor left them', async () => {
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+    await toReviewFrom(user)
+
+    await user.click(picker('Polar').getByRole('button', { name: /^v2/ }))
+    await user.click(picker('Wind Band').getByRole('button', { name: /12 kt and up/ }))
+    await user.click(
+      picker('Instrument Calibration').getByRole('button', { name: /^v1/ })
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(submit.mock.calls[0][0]).toMatchObject({
+      polar_version_id: 'polar-v2',
+      // Chosen on the Sails step, and stated here rather than offered a second time.
+      crossover_chart_version_id: 'chart-v1',
+      rig_tune_version_id: 'tune-v3',
+      instrument_calibration_version_id: 'cal-v1',
+      rig_tune_band_id: 'v3-heavy',
+    })
+  })
+
+  it('says a race with none of them set is still a race, and sends five nulls', async () => {
+    // AC 2. Nine races in this archive predate every Boat Setup artifact the boat has, so "not
+    // recorded" is not a degraded save — it is the ordinary one.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount(stagedOf(), null, null)
+    await toReviewFrom(user)
+
+    const section = within(screen.getByTestId('boat-setup-review'))
+    // Which of the two it is, said out loud: a failed read is not "the boat has no Versions".
+    expect(section.getByText(/could not be read just now/)).toBeInTheDocument()
+    expect(section.getAllByText('None to name')).toHaveLength(3)
+
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    expect(submit.mock.calls[0][0]).toMatchObject({
+      polar_version_id: null,
+      crossover_chart_version_id: null,
+      rig_tune_version_id: null,
+      instrument_calibration_version_id: null,
+      rig_tune_band_id: null,
+    })
+  })
+
+  it('states a band that disagrees with the logged wind, and saves anyway', async () => {
+    // AC 7 at the wizard end: the sailor may well have tuned for the forecast rather than the breeze
+    // that arrived, so this is a sentence and never a block (ADR 0009 keeps refusals to two).
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+    await toReviewFrom(user)
+
+    // 11.4 kt logged, and the band tops out at 8.
+    await user.click(picker('Wind Band').getByRole('button', { name: /0–8 kt/ }))
+
+    // The sailor's own word for it first, because that is what they pressed, with the numbers behind it.
+    expect(
+      screen.getByText('Recorded in the Light band (0–8 kt); logged wind averaged 11.4 kt.')
+    ).toBeInTheDocument()
+
+    const save = screen.getByRole('button', { name: 'Save race' })
+    expect(save).toBeEnabled()
+    await user.click(save)
+
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(submit.mock.calls[0][0].rig_tune_band_id).toBe('v3-light')
+  })
+})
+
 describe('a refusal from the server', () => {
   it('shows the reason and stays on the File step', async () => {
     const user = userEvent.setup({ delay: null })
@@ -925,7 +1164,14 @@ describe('a refusal from the server', () => {
     }))
     const submit = jest.fn(async () => ({ ok: true as const, race_id: 'race-1' }))
 
-    render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={CHARTS} />)
+    render(
+      <RaceUploadWizard
+        stageRecording={stage}
+        submitRace={submit}
+        charts={CHARTS}
+        boatSetup={BOAT_SETUP}
+      />
+    )
     await pickFile(user)
 
     expect(screen.getByText(/no Date column/)).toBeInTheDocument()
@@ -948,7 +1194,14 @@ describe('a failure that took the staged bytes with it', () => {
       start_over,
     }))
 
-    render(<RaceUploadWizard stageRecording={stage} submitRace={submit} charts={CHARTS} />)
+    render(
+      <RaceUploadWizard
+        stageRecording={stage}
+        submitRace={submit}
+        charts={CHARTS}
+        boatSetup={BOAT_SETUP}
+      />
+    )
     return { submit }
   }
 

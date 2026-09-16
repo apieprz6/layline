@@ -1,9 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
+import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
 import { coverageRowsFrom, raceCoverage, windowFindings } from '@/services/recordings/coverage'
 import { raceWindowSeconds } from '@/services/recordings/race-window'
 import { assessRowQuality, withinRaceWindow } from '@/services/recordings/row-quality'
 import type { QualityAssessableRow } from '@/services/recordings/row-quality'
-import type { RaceAnnotations, RaceDetail, SeaState } from '@/types'
+import { wallClockSeconds } from '@/services/recordings/wall-clock'
+import type {
+  BoatSetupVersionRef,
+  RaceAnnotations,
+  RaceBoatSetup,
+  RaceDetail,
+  SeaState,
+  WindBandRef,
+} from '@/types'
 
 /**
  * One race, with everything its page states about itself.
@@ -30,13 +39,18 @@ import type { RaceAnnotations, RaceDetail, SeaState } from '@/types'
  * to the one above it verbatim.
  */
 const ROWS_SELECT =
-  'row_index, row_time, latitude::text, longitude::text, cog::text, sog::text, stw::text, ctw::text'
+  'row_index, row_time, latitude::text, longitude::text, cog::text, sog::text, stw::text, ctw::text, ' +
+  // The ninth, and not one Row Quality reads: it is here for the mean wind the Wind Band is compared
+  // against, which is derived at read and stored nowhere (ADR 0009).
+  'tws::text'
 
 /** PostgREST's own default ceiling on a response, which is what makes paging necessary at all. */
 const PAGE_ROWS = 1000
 
 const RACE_SELECT =
-  'id, title, window_start, window_finish, crossover_chart_version_id, ' +
+  'id, title, window_start, window_finish, ' +
+  'polar_version_id, crossover_chart_version_id, rig_tune_version_id, ' +
+  'instrument_calibration_version_id, rig_tune_band_id, ' +
   'recordings!inner(id, filename, first_row_time, last_row_time, source_columns, row_count)'
 
 interface RaceRow {
@@ -44,8 +58,19 @@ interface RaceRow {
   title: string | null
   window_start: string
   window_finish: string
+  /**
+   * The four Version pointers and the Wind Band, each null where that answer was not recorded.
+   *
+   * Read as the ids the Race holds and resolved below by id — never by date and never through an
+   * artifact's current pointer, which is what would rename an archived race's setup the next time the
+   * page was opened (ADR 0012).
+   */
+  polar_version_id: string | null
   /** Null means the Race records no Crossover Chart Version, and so holds no Sail Configurations. */
   crossover_chart_version_id: string | null
+  rig_tune_version_id: string | null
+  instrument_calibration_version_id: string | null
+  rig_tune_band_id: string | null
   recordings: {
     id: string
     filename: string
@@ -54,6 +79,25 @@ interface RaceRow {
     source_columns: string[]
     row_count: number
   }
+}
+
+/** One row of the Transcription as this module reads it: Row Quality's eight, and TWS beside them. */
+type RaceRowWithWind = QualityAssessableRow & { tws: string | null }
+
+/** A Boat Setup Version as `boat_setup_versions` holds it, for the four pointers to resolve against. */
+interface BoatSetupVersionRow {
+  id: string
+  kind: string
+  version_number: number
+  effective_from: string
+}
+
+interface WindBandRow {
+  id: string
+  low_kt: number
+  high_kt: number | null
+  is_base: boolean
+  label: string | null
 }
 
 /** One Sail Configuration: the Definition number it names, the note beside it, or only the note. */
@@ -101,8 +145,8 @@ async function readTranscription(
   supabase: Awaited<ReturnType<typeof createClient>>,
   recordingId: string,
   rowCount: number
-): Promise<QualityAssessableRow[] | null> {
-  const rows: QualityAssessableRow[] = []
+): Promise<RaceRowWithWind[] | null> {
+  const rows: RaceRowWithWind[] = []
 
   // `row_count` is a fact about the file written once and immutable, so this bound is the file's
   // own and cannot loop away on a moving target.
@@ -134,6 +178,7 @@ async function readTranscription(
           sog: recordedText(row.sog, 'sog', rowIndex),
           stw: recordedText(row.stw, 'stw', rowIndex),
           ctw: recordedText(row.ctw, 'ctw', rowIndex),
+          tws: recordedText(row.tws, 'tws', rowIndex),
         })
       }
     } catch (thrown: unknown) {
@@ -250,6 +295,113 @@ async function readAnnotations(
 }
 
 /**
+ * The Boat Setup the race was sailed under: four Version pointers and the Wind Band, resolved by id.
+ *
+ * By id, and only by id. Resolving any of these by date, or through the artifact's `current_version_id`,
+ * would make an archived race's Boat Setup change under it whenever the boat gets a new Polar — which is
+ * the whole of what ADR 0012 forbids and the reason these are columns on `races` rather than a lookup.
+ *
+ * Null per pointer means *not recorded* and reads as those words on the page. It is an ordinary answer:
+ * the oldest races in this archive predate every Boat Setup artifact the boat has, and nothing backdates
+ * v1 onto them (ADR 0008).
+ *
+ * Two reads rather than an embed, for the same reason `readAnnotations` does two: every one of these
+ * pointers is half of a composite key with a constant `kind` tag column, and PostgREST will not follow a
+ * two-column key.
+ *
+ * Null *in place of the whole thing* is a failed read, and takes the page with it — the same
+ * all-or-nothing the Transcription and the annotations get. A page that quietly said "Polar not
+ * recorded" because a read failed would be Layline making a claim about the boat.
+ */
+async function readBoatSetup(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  race: RaceRow,
+  loggedTws: number | null
+): Promise<RaceBoatSetup | null> {
+  const pointers = [
+    race.polar_version_id,
+    race.crossover_chart_version_id,
+    race.rig_tune_version_id,
+    race.instrument_calibration_version_id,
+  ]
+  const wanted = [...new Set(pointers.filter((id): id is string => id !== null))]
+
+  const versions = new Map<string, BoatSetupVersionRow>()
+
+  if (wanted.length > 0) {
+    const { data, error } = await supabase
+      .from('boat_setup_versions')
+      .select('id, kind, version_number, effective_from')
+      .in('id', wanted)
+      .returns<BoatSetupVersionRow[]>()
+
+    if (error) {
+      console.error('Race: Boat Setup Version read failed:', error.message)
+      return null
+    }
+
+    for (const version of data ?? []) versions.set(version.id, version)
+
+    // Every one of these pointers is a foreign key with `ON DELETE RESTRICT`, so a Version a Race names
+    // cannot have gone. One missing means this read saw less than the whole of it, and a page that then
+    // said "not recorded" would be stating the opposite of what the Race holds. Named rather than
+    // counted, because what matters is that *these* ids came back.
+    const missing = wanted.filter((id) => !versions.has(id))
+
+    if (missing.length > 0) {
+      console.error(`Race: Boat Setup Version(s) this Race names did not come back: ${missing}`)
+      return null
+    }
+  }
+
+  let band: WindBandRef | null = null
+
+  if (race.rig_tune_band_id !== null) {
+    const { data, error } = await supabase
+      .from('rig_tune_bands')
+      .select('id, low_kt, high_kt, is_base, label')
+      .eq('id', race.rig_tune_band_id)
+      .maybeSingle<WindBandRow>()
+
+    if (error || !data) {
+      console.error(
+        'Race: Wind Band read failed:',
+        error?.message ?? 'the band this Race names did not come back'
+      )
+      return null
+    }
+
+    band = {
+      band_id: data.id,
+      low_kt: data.low_kt,
+      high_kt: data.high_kt,
+      is_base: data.is_base,
+      label: data.label,
+    }
+  }
+
+  const ref = (id: string | null): BoatSetupVersionRef | null => {
+    if (id === null) return null
+    const version = versions.get(id)
+    if (version === undefined) return null
+    return {
+      version_id: version.id,
+      version_number: version.version_number,
+      effective_from: version.effective_from,
+    }
+  }
+
+  return {
+    polar: ref(race.polar_version_id),
+    crossover_chart: ref(race.crossover_chart_version_id),
+    rig_tune: ref(race.rig_tune_version_id),
+    instrument_calibration: ref(race.instrument_calibration_version_id),
+    band,
+    logged_tws_mean: loggedTws,
+  }
+}
+
+/**
  * One race, or null when it cannot be read whole.
  *
  * All-or-nothing for the same reason `readBoatSetup` is: half this page would have to state a
@@ -300,6 +452,26 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
     const coverage = raceCoverage(coverageRowsFrom(whole), window)
     const inWindow = withinRaceWindow(whole, race)
 
+    // The mean wind the recording logged over the window, derived here and stored nowhere. The wizard's
+    // Review step derives the same figure the same way from the same rows, so the sentence a sailor read
+    // while choosing the band is the sentence its page now states.
+    const loggedTws = loggedTwsMean(
+      rows.map((row) => ({
+        at: wallClockSeconds(row.row_time),
+        tws: row.tws === null ? null : Number(row.tws),
+      })),
+      window
+    )
+
+    // All-or-nothing like the other two: the pointers are what the page's Boat Setup section is.
+    const boatSetup = await readBoatSetup(supabase, race, loggedTws)
+    if (!boatSetup) return null
+
+    // A band that disagrees with the logged wind is a note beside the other findings and never a
+    // refusal. The band is what the rig was actually set to, and a race sailed on the wrong band for the
+    // day is a thing that happened — ADR 0009 keeps refusals to two, and this is neither of them.
+    const bandNote = windBandFinding(boatSetup.band, boatSetup.logged_tws_mean)
+
     return {
       id: race.id,
       title: race.title,
@@ -314,8 +486,12 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
       },
       coverage,
       quality: inWindow,
-      findings: windowFindings(coverage, inWindow),
+      findings: [
+        ...windowFindings(coverage, inWindow),
+        ...(bandNote === null ? [] : [bandNote]),
+      ],
       annotations,
+      boat_setup: boatSetup,
     }
   } catch (thrown: unknown) {
     // A stamp the wall clock refuses: a fractional second, or an offset, in a column Layline only

@@ -332,9 +332,22 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
       title: input.title,
       window_start: input.window_start,
       window_finish: input.window_finish,
-      // Written here and never resolved again (ADR 0012, ADR 0023). Null is a real answer — the race
-      // records no chart Version — and the function refuses any Sail Configuration alongside it.
+      // The five Boat Setup answers, written here and never resolved again (ADR 0012, ADR 0023).
+      //
+      // Pointers, and pointers to what the wizard resolved from *the recording's* start time — not from
+      // now. Null is a real answer for every one of them, and stays null: the race records that Version
+      // as not recorded rather than acquiring whichever is current the next time its page is read
+      // (ADR 0008). For the chart, null additionally means the function refuses any Sail Configuration
+      // alongside it, since there would be no vocabulary to name one in.
+      //
+      // Passed through rather than checked. A band that does not belong to the Rig Tune Version is
+      // refused by the composite key on `races`, and a Version of the wrong kind by that pointer's own
+      // kind tag — restating either here would be a second place for the same rule to drift from.
       crossover_chart_version_id: input.crossover_chart_version_id,
+      polar_version_id: input.polar_version_id,
+      rig_tune_version_id: input.rig_tune_version_id,
+      instrument_calibration_version_id: input.instrument_calibration_version_id,
+      rig_tune_band_id: input.rig_tune_band_id,
     },
     // Testimony, as given. Both may be empty, and an empty list means that kind was not recorded
     // (ADR 0010) — which is why nothing here substitutes a configuration or a Sea State.

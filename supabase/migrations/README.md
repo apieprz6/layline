@@ -117,6 +117,80 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260916150000_race_boat_setup_pointers.sql
+
+**Purpose**: LAY-113. A Race records all five Boat Setup answers — the Polar, Crossover Chart, Rig
+Tune and Instrument Calibration Version pointers plus the Wind Band the rig was set to — and every
+one of them stays changeable afterwards.
+
+**No new columns.** `races` has carried all five since `20260910183000`, together with the four
+constant `kind` tag columns that make each pointer's composite key check the artifact's kind, the
+`(rig_tune_version_id, rig_tune_band_id)` key into `rig_tune_bands`, and `band_requires_rig_tune`.
+What was missing was any way to *write* four of them: `20260916121000` taught
+`create_race_from_upload` the Crossover Chart pointer and nothing else, so a race filed through the
+wizard recorded no Polar, no Rig Tune, no Instrument Calibration and no Wind Band, and there was no
+path at all to amend one after the fact.
+
+**Two functions, and between them every write a pointer needs**:
+
+- `create_race_from_upload` gains the other four off `p_race`. Same five JSONB arguments, so this
+  replaces rather than overloads and no shape of call can still reach the LAY-130 body. **Values,
+  not lookups**: the wizard resolves the Version in force at the recording's start on the client,
+  where the sailor can see the default and change it, and this function resolves nothing (ADR 0012).
+  NULL stays NULL — nine archive races predate every Boat Setup artifact, and backdating v1 onto
+  them would assert a Polar the boat did not have yet (ADR 0008).
+- `public.amend_race_boat_setup(p_race_id UUID, p_setup JSONB, p_clearing INTEGER) RETURNS INTEGER`
+  is new, and is how all five change afterwards. One function rather than five `UPDATE`s because two
+  of the five are coupled to other rows: moving the Crossover Chart pointer clears the Sail
+  Configurations named in the old vocabulary (ADR 0023, delegated to
+  `repoint_race_crossover_chart`), and moving the Rig Tune pointer must let go of a Wind Band that
+  belonged to the Version being replaced. Both have to happen in the same transaction as the pointer
+  move, and supabase-js cannot open one. It returns how many Configurations went.
+
+**All five keys must be present in `p_setup`**, and a `FOREACH` guard raises `22023` if one is not.
+`->>` on an absent key answers NULL, which is indistinguishable from the sailor setting a pointer
+back to *not recorded*, so a payload short of one key would silently erase that pointer.
+
+**The clearing is agreed by number, not by a boolean.** The function refuses unless `p_clearing` is
+the count actually standing, so a Configuration added between the reading of the page and the press
+of Save cannot be swept away by an agreement made before it existed. A non-zero `p_clearing` on an
+amendment that leaves the chart pointer alone is refused outright.
+
+**Authorization is the `SELECT ... FOR UPDATE` itself.** SECURITY INVOKER plus the admin-only write
+policy means a viewer reaching the endpoint finds no row to lock, and the function raises `42501`
+(ADR 0019). The lock also serialises two amendments of one race.
+
+**Nothing here restates a constraint.** The band/Version pair is the composite key's business, a
+band with no Version is `band_requires_rig_tune`'s, and a pointer of the wrong kind is caught by the
+tag column in each key. No change reason anywhere: ADR 0010 reserves a reason for a new Version of
+an artifact, not for correcting which one a race names.
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-upload-rpc.sh "$DB_URL"       # 98 checks, safe against real data
+scripts/verify-race-archive-schema.sh "$DB_URL"   # 142 checks
+```
+
+The upload suite went from 55 checks to 98; the schema suite gained one, 141 to 142. Between them:
+all five answers written by the wizard's own call, each one left NULL, a band accepted against its
+own Version and refused against a different one — through the RPC *and* by a direct
+`INSERT INTO races`, which is the form LAY-113 asks to see — a band with no Version refused by name,
+a pointer of the wrong kind refused by its tag column, the five-key guard, a stale clearing count,
+the `42501` a viewer gets, and a Rig Tune move that drops the band in the same statement.
+**All 240 were run against the local stack and passed.**
+
+⚠️ **PostgreSQL 17.6 trap, re-encountered here**: calling a function the current role lacks EXECUTE
+on terminates the backend (signal 11) when the result is *discarded* — both `EXECUTE 'SELECT f(…)'`
+and `PERFORM f(…)`. Assigning it (`v := f(…)`) raises the catchable `permission denied for function`.
+The rule is **assign the return value, even where nothing reads it**; see
+`docs/testing/race-upload-transaction.md`.
+
+**Rollback**: re-run `20260916121000_create_race_from_upload_with_sail_definitions.sql` to restore
+the previous `create_race_from_upload` body, then
+`DROP FUNCTION IF EXISTS public.amend_race_boat_setup(UUID, JSONB, INTEGER);`. No column is dropped,
+because none was added — the pointers a race has already recorded survive the rollback and simply
+stop being writable.
+
 ## Migration: 20260916121000_create_race_from_upload_with_sail_definitions.sql
 
 **Purpose**: the same five-argument `public.create_race_from_upload`, with `p_sails` now
