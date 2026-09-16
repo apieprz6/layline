@@ -8,6 +8,7 @@ import type {
   PurdueBuoyRow,
 } from '@/types'
 import { getServiceClient } from '@/lib/supabase/service'
+import { isPurdueSeason } from './season'
 
 /**
  * Buoy freshness window, in seconds.
@@ -161,19 +162,6 @@ export async function fetchCHII2(): Promise<BuoyDataResult> {
 }
 
 // Removed scrapeIISEAGrant - TODO: implement if needed in future
-
-/**
- * Check if Purdue Buoy is in operational season (May-October)
- *
- * Exported for the loading skeletons, which draw one row per station a row can arrive
- * for. Out of season the buoy's row is not late, it is not coming until May, and a
- * placeholder for it would promise a reading nobody is about to take.
- */
-export function isPurdueSeason(): boolean {
-  const now = new Date()
-  const month = now.getMonth() // 0-indexed: 0=Jan, 4=May, 9=Oct
-  return month >= 4 && month <= 9 // May (4) through October (9)
-}
 
 /**
  * Fetch Purdue Buoy (45198) data with primary/fallback strategy

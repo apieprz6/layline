@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import type { Account, UserRole } from '@/types'
 
@@ -36,6 +37,17 @@ export async function resolveAccount(): Promise<Account | null> {
       'Account resolution: Supabase client unavailable:',
       thrown instanceof Error ? thrown.message : thrown
     )
+
+    // Read the cookies anyway. `createClient` throws on the missing keys *before*
+    // it gets to its own `cookies()` call, so without this the degraded path is
+    // the one path that never touches them — and Next reads that as a route it
+    // can prerender, silently turning every screen in the `(app)` group static in
+    // a keyless build while production renders them per request. That difference
+    // is worse than the missing keys: it is a build that behaves unlike the one
+    // it is testing. Whether a request carries a session is a fact about the
+    // request whether or not we are equipped to answer it.
+    await cookies()
+
     return null
   }
 
