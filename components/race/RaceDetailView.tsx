@@ -16,6 +16,11 @@
  *
  * A missing title is a missing title. An untitled race shows its day, and nothing here writes it a
  * name the sailor did not give it.
+ *
+ * Delete is the one thing on the page that is a write, so it is the one thing the Role gates: it is
+ * absent for a viewer rather than present and refused (ADR 0019). It sits last, under everything the
+ * race says about itself, because a destructive action above the record it destroys is one that gets
+ * pressed before the record is read.
  */
 
 import type { ReactElement } from 'react'
@@ -23,16 +28,24 @@ import Link from 'next/link'
 import { spacing } from '@/lib/utils/design'
 import { reefLabel, seaStateLabel, SEA_STATES } from '@/services/races/annotations'
 import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordings/wall-clock'
-import type { RaceDetail } from '@/types'
+import type { DeleteRaceResult, RaceDetail } from '@/types'
 
 import CoverageReadout from './CoverageReadout'
+import RaceDeletePanel from './RaceDeletePanel'
 import RaceFindings from './RaceFindings'
 
 interface RaceDetailViewProps {
   race: RaceDetail
+  /** Whether this account may delete. False for a viewer, and then nothing about delete is drawn. */
+  canDelete: boolean
+  deleteRace: (raceId: string) => Promise<DeleteRaceResult>
 }
 
-export default function RaceDetailView({ race }: RaceDetailViewProps): ReactElement {
+export default function RaceDetailView({
+  race,
+  canDelete,
+  deleteRace,
+}: RaceDetailViewProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       <div
@@ -146,6 +159,14 @@ export default function RaceDetailView({ race }: RaceDetailViewProps): ReactElem
             <Fact label="Columns">{String(race.recording.source_columns.length)}</Fact>
           </dl>
         </section>
+
+        {canDelete && (
+          <RaceDeletePanel
+            raceId={race.id}
+            filename={race.recording.filename}
+            deleteRace={deleteRace}
+          />
+        )}
       </div>
     </div>
   )
