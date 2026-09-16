@@ -87,12 +87,14 @@ Fetch failed with no cached data available. Data source unavailable.
 ### Data Fetching
 
 **Cached Fetch**:
-The only way Buoy data is read. Served from Next's Data Cache while the entry is inside the five-minute freshness window, and from the source otherwise. The Data Cache is shared across serverless instances, so a visit that lands on a cold one is still a hit. A failed read is never stored — the next request retries live.
+The only way Buoy data is read. Served from Next's Data Cache, which is shared across serverless instances, so a visit that lands on a cold one is still a hit. A failed read is never stored — the next request retries live.
 _Avoid_: Standard fetch, normal fetch
 
 **Freshness Window**:
-How long a Cached Fetch may serve a stored reading before going back to the source: five minutes for Buoy data, half NDBC's ten-minute publishing cadence. A screen that wants fresher data shortens the window rather than going around it; there is no bypass.
+How long a stored reading is served before a Cached Fetch asks the source again: five minutes for Buoy data, half NDBC's ten-minute publishing cadence. It bounds when a refresh is *triggered*, not how old a reading may be — past the window the reader is still handed the stored one and the refresh runs behind the request, so the fresh reading reaches the next reader. Nothing refreshes a cache nobody reads, so after a quiet spell the first reader can get a reading of any age. A screen that wants fresher data shortens the window rather than going around it; there is no bypass.
 _Avoid_: TTL, cache expiry, live fetch (there is no uncached path)
+
+Which is why **Data Source Status** is derived from a reading's own newest sample every time it is read, never stored beside it: a status is only true of the moment it was computed, and a cached reading outlives that moment.
 
 **Cache Adapter**:
 Abstraction layer for weather model caching strategies. Implementations include InMemoryWeatherCache (default), with support for future Redis/Vercel KV backends. Allows cache strategy swapping without changing fetch logic.
@@ -417,7 +419,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - Each **Weather Model Result** has one **Data Source Status** at any given time
 - **CHII2** is always operational (never seasonally offline)
 - **Purdue Buoy** is seasonal (May-October only)
-- **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
+- Every **Cached Fetch** respects the **Freshness Window**; there is no uncached path to a **Buoy**
+- A **Data Source Status** is derived at read time from the newest sample, never stored in a cache entry
 - **Staleness** determines **Data Source Status** (online → recent → stale → offline)
 - **Station Card** has collapsed (dashboard) and expanded (Wind Data page) states
 - **Wind History** provides 10-minute interval data that UI components filter by time range
@@ -441,8 +444,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "Should we treat **Purdue Buoy** being **Offline** in November as an error?"
 > **Domain expert:** "No — that's expected. Mark it **Offline** with a note that it's seasonal. **Error** is for unexpected failures."
 
-> **Dev:** "What's the difference between **Live Fetch** and **Cached Fetch**?"
-> **Domain expert:** "**Cached Fetch** is for the dashboard where 10-minute-old data is fine (NDBC updates every 10 minutes anyway). **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
+> **Dev:** "The station page is for someone actively monitoring conditions before heading out. Can it skip the cache and get the absolute latest?"
+> **Domain expert:** "There's nothing to skip to. NDBC publishes every ten minutes, so asking more often than the **Freshness Window** returns the same numbers — and a page that bypassed the cache would be the one page that fetched on every load. What that sailor needs is to *know* how old the reading is, which is what the **Data Source Status** and the fetch age in the header are for."
 
 > **Dev:** "The wind direction changed from 230° to 250°. Is that **veering** or **backing**?"
 > **Domain expert:** "That's **veering** — clockwise rotation. If it went from 250° to 230°, that would be **backing**."

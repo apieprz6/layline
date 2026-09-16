@@ -1,5 +1,5 @@
 import { fetchCHII2History, fetchPurdueBuoyHistory } from '../ndbc'
-import { clearDataCache } from './data-cache'
+import { clearDataCache, flushRefreshes } from './data-cache'
 
 jest.mock('next/cache', () => jest.requireActual('./data-cache'))
 
@@ -97,21 +97,48 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       expect(result1.fetchedAt).toBe(result2.fetchedAt)
     })
 
-    it('refetches once the 5-minute freshness window has passed', async () => {
+    it('leaves NDBC alone inside the 5-minute window and refreshes behind the read past it', async () => {
       jest.useFakeTimers()
       try {
         const fetchMock = mockNDBC()
 
-        await fetchCHII2History()
+        const first = await fetchCHII2History()
         expect(fetchMock).toHaveBeenCalledTimes(1)
 
         jest.advanceTimersByTime(4 * 60 * 1000)
         await fetchCHII2History()
         expect(fetchMock).toHaveBeenCalledTimes(1)
 
+        // Past the window the caller is still handed the stored reading — the
+        // refresh runs behind it, so the fresh data reaches the *next* reader.
         jest.advanceTimersByTime(2 * 60 * 1000)
-        await fetchCHII2History()
+        const stale = await fetchCHII2History()
         expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(stale.fetchedAt).toBe(first.fetchedAt)
+
+        await flushRefreshes()
+        const refreshed = await fetchCHII2History()
+        expect(refreshed.fetchedAt).not.toBe(first.fetchedAt)
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('labels a reading with the status it has now, not the one it was cached with', async () => {
+      jest.useFakeTimers()
+      try {
+        mockNDBC()
+
+        const fresh = await fetchCHII2History()
+        expect(fresh.status).toBe('online')
+
+        // Same entry, three hours on: the samples in it are now well past every
+        // staleness threshold, and the status has to say so.
+        jest.advanceTimersByTime(3 * 60 * 60 * 1000)
+        const later = await fetchCHII2History()
+        expect(later.fetchedAt).toBe(fresh.fetchedAt)
+        expect(later.status).toBe('offline')
       } finally {
         jest.useRealTimers()
       }
