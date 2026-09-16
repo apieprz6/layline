@@ -138,6 +138,29 @@ test.describe('the locked boat sections', () => {
     }
   })
 
+  test('serves a guest no part of the Crossover Chart, at either depth', async ({ page }) => {
+    // The Crossover Chart is the second file-backed artifact and the fourth to get screens of
+    // its own, and it carries two files rather than one — so a guest must be served neither the
+    // chart nor either filename. Both depths asked for directly, for the same reason as the
+    // Polar: the guard is per page, so a child does not inherit its parent's.
+    for (const route of [
+      '/boat-management/crossover-chart',
+      '/boat-management/crossover-chart/3f1b2c4d-0000-4000-8000-000000000001',
+    ]) {
+      // Bare `page.goto()`, deliberately: the redirect is the assertion and only `goto` returns
+      // a response. Nothing is clicked on this navigation, so the hydration trap
+      // `gotoHydrated` exists for cannot bite.
+      const response = await page.goto(route)
+
+      expect(response?.status()).toBe(200)
+      expect(response?.url()).toContain('signin=%2Fboat-management%2Fcrossover-chart')
+      await expect(page.getByTestId('crossover-chart-grid')).toHaveCount(0)
+      await expect(page.getByTestId('crossover-chart-version-list')).toHaveCount(0)
+      await expect(page.getByTestId('crossover-chart-upload-panel')).toHaveCount(0)
+      await expect(page.locator('body')).not.toContainText('Handsome Pete')
+    }
+  })
+
   test('serves a guest no part of the Rig Tune either, deep link or not', async ({ page }) => {
     // The Rig Tune is a screen *under* Boat management (LAY-107), and a nested route is
     // exactly where a guard is forgotten. A guest asking for it lands on the dashboard with

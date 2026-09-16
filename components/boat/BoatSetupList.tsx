@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import Link from 'next/link'
 import NotRecorded from '@/components/common/NotRecorded'
-import { BOAT_SETUP_LABEL, boatSetupHref, hasDetailScreen } from '@/lib/boat/artifacts'
+import { BOAT_SETUP_LABEL, boatSetupHref } from '@/lib/boat/artifacts'
 import { formatCalendarDate } from '@/lib/utils/calendarDate'
 import { spacing } from '@/lib/utils/design'
 import type { BoatSetupRow } from '@/types'
@@ -53,23 +53,22 @@ const CURRENT_STYLE = {
  * mockup's `Wayward_Wind.rig` and its "Upload a new version any time you refit"
  * subtitle are the shapes being refused.
  *
- * A row is a link only when there is a screen at the other end of it — the Polar's
- * (LAY-106), the Rig Tune's (LAY-107) and the Instrument Calibration's (LAY-108) are
- * up, and the Crossover Chart's row stays inert until its own lands, because a row
- * dressed as a control that leads to a 404 is the trap LAY-102 fixed on the locked
- * drawer row.
+ * Every row is a link. All four detail screens exist now — the Polar's (LAY-106), the
+ * Rig Tune's (LAY-107), the Instrument Calibration's (LAY-108) and the Crossover
+ * Chart's (LAY-109) — so the gate that kept an unbuilt row inert, which was there to
+ * avoid LAY-102's trap of a control that leads to a 404, has nothing left to hold back
+ * and is gone.
  *
- * A row links to its detail once that screen exists — including when nothing is
- * recorded yet, because recording the first Version is what that screen is for, and
- * a link gated on a pointer would leave the empty archive this app ships in with no
- * way to fill itself. Nor is the gate the *role*: a viewer opening an unrecorded
- * artifact reads why there is nothing to read (ADR 0019 governs writes only).
+ * A row links to its detail including when nothing is recorded yet, because recording
+ * the first Version is what that screen is for, and a link gated on a pointer would
+ * leave the empty archive this app ships in with no way to fill itself. Nor is the gate
+ * the *role*: a viewer opening an unrecorded artifact reads why there is nothing to read
+ * (ADR 0019 governs writes only).
  *
  * Four rows, not five. A Crossover Chart carries its own Sail Definitions, so there
  * are four Version pointers on the boat (ADR 0012).
  *
- * A Server Component: a row either links somewhere or is inert, and neither needs
- * the client.
+ * A Server Component: a row is a link, and a link does not need the client.
  */
 export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactElement {
   return (
@@ -100,17 +99,6 @@ export default function BoatSetupList({ artifacts }: BoatSetupListProps): ReactE
               <NotRecorded />
             </span>
           ) : null
-
-        // Nothing to open, and nothing to dress as a control: this kind's screen has
-        // not landed, so that row genuinely leads nowhere.
-        if (!hasDetailScreen(kind)) {
-          return (
-            <div key={kind} style={ROW_STYLE}>
-              {label}
-              {absence}
-            </div>
-          )
-        }
 
         return (
           <Link key={kind} href={boatSetupHref(kind)} style={ROW_STYLE}>
