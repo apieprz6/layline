@@ -1363,6 +1363,25 @@ SELECT pg_temp.refuses(
     $sql$
 );
 
+-- The same refusal at the insert, which is the form LAY-113 asks to see: a Race is filed naming
+-- Rig Tune Version 1 and Version 2's only band, and never lands. It is not the amendment path that
+-- has to be watertight, it is the pair itself -- the composite key is what makes a band unable to
+-- migrate across Versions, and nothing in the wizard is trusted to have checked.
+SELECT pg_temp.refuses(
+    'and a Race cannot be filed with a foreign band in the first place',
+    $sql$
+    INSERT INTO races
+        (boat_id, recording_id, window_start, window_finish,
+         rig_tune_version_id, rig_tune_band_id, created_by)
+    SELECT b.id, '50000000-0000-4000-8000-000000000002',
+           TIMESTAMP '2026-08-22 10:59:00', TIMESTAMP '2026-08-22 11:01:00',
+           '30000000-0000-4000-8000-000000000001',
+           '40000000-0000-4000-8000-000000000009',
+           'aaaaaaa1-0000-4000-8000-000000000001'
+    FROM boats b
+    $sql$
+);
+
 SELECT pg_temp.refuses(
     'a Version pointer of the wrong kind is refused (the constant tag columns)',
     $sql$

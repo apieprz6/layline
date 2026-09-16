@@ -45,8 +45,11 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { formatBandRange } from '@/lib/boat/rigTune'
 import { spacing } from '@/lib/utils/design'
 import { chartInForceOn } from '@/services/boat/crossoverCharts'
+import { versionInForceOn } from '@/services/boat/versionInForce'
+import { bandKeptFor, loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
 import {
   SEA_STATES,
   byTime,
@@ -81,10 +84,13 @@ import {
   wallClockTime,
 } from '@/services/recordings/wall-clock'
 import type {
+  BoatSetupVersionRef,
   CrossoverChartChoice,
   CrossoverSailDefinition,
+  RaceBoatSetupChoices,
   RaceChannelKey,
   RaceFinding,
+  RigTuneChoice,
   SailEntryDraft,
   SeaStateEntryDraft,
   StagedRecording,
@@ -139,12 +145,26 @@ interface RaceUploadWizardProps {
    * rest of the upload still saves — a race with no sail plan recorded is a legal race (ADR 0010).
    */
   charts: CrossoverChartChoice[] | null
+  /**
+   * The Polar, Rig Tune and Instrument Calibration Versions the boat has, each newest first, and each
+   * Rig Tune Version's own Wind Bands — or null where they could not be read.
+   *
+   * The chart is not among them: it is `charts` above, read with its sail vocabulary because the Sails
+   * step needs that too, and reading it twice would give the Review step a second list that could
+   * disagree with the one the sails were named in.
+   *
+   * Same reading of null as `charts`, for the same reason. Every list may also be legitimately empty —
+   * a boat with no Polar yet — and a Race with all five answers unrecorded is a legal Race (ADR 0008):
+   * nine races in this archive predate every Boat Setup artifact.
+   */
+  boatSetup: RaceBoatSetupChoices | null
 }
 
 export default function RaceUploadWizard({
   stageRecording,
   submitRace,
   charts,
+  boatSetup,
 }: RaceUploadWizardProps): ReactElement {
   const router = useRouter()
 
@@ -176,6 +196,24 @@ export default function RaceUploadWizard({
    */
   const [chartVersionId, setChartVersionId] = useState<string | null>(null)
   const [chartNote, setChartNote] = useState<string | null>(null)
+
+  /**
+   * The other three Version pointers and the Wind Band the rig was set to.
+   *
+   * Defaulted the same way as the chart — the Version in force at the recording's own start — and null
+   * until a file is picked, or afterwards where nothing was in force yet. Each is written onto the Race
+   * as a pointer and never resolved again (ADR 0012), and each stays changeable here and on the race
+   * page afterwards.
+   *
+   * The band is the Rig Tune Version's answer in a second column, so it is only ever one of *that*
+   * Version's bands and moving the Version lets go of a band that no longer belongs to it. The
+   * composite key `races (rig_tune_version_id, rig_tune_band_id)` is what enforces that; this only
+   * keeps the form from offering a pair the database would refuse.
+   */
+  const [polarVersionId, setPolarVersionId] = useState<string | null>(null)
+  const [rigTuneVersionId, setRigTuneVersionId] = useState<string | null>(null)
+  const [calibrationVersionId, setCalibrationVersionId] = useState<string | null>(null)
+  const [bandId, setBandId] = useState<string | null>(null)
 
   // A counter rather than a uuid: these keys exist so React and the charts can tell two drafts apart,
   // they are never sent, and the database's own key is `(race_id, at)`.
@@ -240,6 +278,47 @@ export default function RaceUploadWizard({
   const chosenChart = useMemo(
     () => (charts ?? []).find((chart) => chart.version_id === chartVersionId) ?? null,
     [charts, chartVersionId]
+  )
+
+  /** The chosen Rig Tune Version, which is also the only source of bands the picker may offer. */
+  const chosenRigTune = useMemo(
+    () => (boatSetup?.rig_tune ?? []).find((tune) => tune.version_id === rigTuneVersionId) ?? null,
+    [boatSetup, rigTuneVersionId]
+  )
+
+  /** The chosen band, as an object, for the sentence that compares it against the logged wind. */
+  const chosenBand = useMemo(
+    () => (chosenRigTune?.bands ?? []).find((band) => band.band_id === bandId) ?? null,
+    [chosenRigTune, bandId]
+  )
+
+  /**
+   * Mean TWS over the Race Window, in knots, or null where the file logged none.
+   *
+   * Derived and never stored — the race page derives the same figure the same way from the same
+   * Transcription, so what the sailor is shown here is what the page will say (ADR 0008).
+   */
+  const loggedWind = useMemo(() => {
+    if (!staged || !raceWindow) return null
+    return loggedTwsMean(
+      staged.series.row_seconds.map((at, index) => ({
+        at,
+        tws: staged.series.channels.tws[index],
+      })),
+      raceWindow
+    )
+  }, [staged, raceWindow])
+
+  /**
+   * The band disagreeing with the logged wind, as a note.
+   *
+   * A finding and never a refusal: the band is what the rig was actually set to, and a race sailed on a
+   * band that turned out to be wrong for the day is a thing that happens and is worth recording exactly
+   * as it happened (ADR 0009 keeps refusals to two, and this is neither of them).
+   */
+  const bandNote = useMemo(
+    () => windBandFinding(chosenBand, loggedWind),
+    [chosenBand, loggedWind]
   )
 
   /**
@@ -398,6 +477,23 @@ export default function RaceUploadWizard({
     [chartVersionId, sailEntries]
   )
 
+  /**
+   * Choosing a Rig Tune Version, which the Wind Band answer hangs off.
+   *
+   * A band belongs to one Version and never travels to another — a re-tune means new bands (ADR 0007) —
+   * so moving the Version lets go of a band that the new one does not have. `bandKeptFor` keeps it when
+   * the new Version happens to have the same band row and drops it otherwise; the pair is checked by the
+   * composite key either way, and this is only about not offering the form a state it would refuse.
+   */
+  const chooseRigTune = useCallback(
+    (versionId: string | null): void => {
+      const next = (boatSetup?.rig_tune ?? []).find((tune) => tune.version_id === versionId) ?? null
+      setRigTuneVersionId(versionId)
+      setBandId((current) => bandKeptFor(next, current))
+    },
+    [boatSetup]
+  )
+
   const patchSail = useCallback((key: string, change: Partial<SailEntryDraft>): void => {
     setSailEntries((current) =>
       current.map((entry) => (entry.key === key ? { ...entry, ...change } : entry))
@@ -445,9 +541,22 @@ export default function RaceUploadWizard({
       // Version, and offered rather than guessed at from there.
       setChartVersionId(chartInForceOn(charts ?? [], wallClockStamp(start))?.version_id ?? null)
       setChartNote(null)
+      // The other four, defaulted by the same rule off the same stamp: what the boat's Boat Setup was
+      // *then*. Null where nothing was in force yet, which is the honest answer for the nine races that
+      // predate every artifact, and offered rather than backdated from there (ADR 0008).
+      const then = wallClockStamp(start)
+      const rigTune = versionInForceOn(boatSetup?.rig_tune ?? [], then)
+      setPolarVersionId(versionInForceOn(boatSetup?.polar ?? [], then)?.version_id ?? null)
+      setCalibrationVersionId(
+        versionInForceOn(boatSetup?.instrument_calibration ?? [], then)?.version_id ?? null
+      )
+      setRigTuneVersionId(rigTune?.version_id ?? null)
+      // No default band. Which band the rig was set to is something only the sailor knows — the logged
+      // wind is evidence about the day, not testimony about the turnbuckles (ADR 0010).
+      setBandId(null)
       setStep(1)
     },
-    [stageRecording, charts]
+    [stageRecording, charts, boatSetup]
   )
 
   /**
@@ -539,9 +648,14 @@ export default function RaceUploadWizard({
       window_start: stamps.window_start,
       window_finish: stamps.window_finish,
       title,
-      // The Version the sail entries name their sails in, frozen onto the Race here and never
-      // resolved again. Null is a real answer and the Race then holds no Sail Configuration at all.
+      // The five Boat Setup answers, frozen onto the Race here as pointers and never resolved again
+      // (ADR 0012). Null is a real answer for every one of them: a race with no Polar recorded reads
+      // "not recorded" forever rather than acquiring one the next time the page is opened.
       crossover_chart_version_id: chartVersionId,
+      polar_version_id: polarVersionId,
+      rig_tune_version_id: rigTuneVersionId,
+      instrument_calibration_version_id: calibrationVersionId,
+      rig_tune_band_id: bandId,
       // Two lists, either of which may be empty — a race whose sails and water were not recorded is
       // an ordinary race, and an empty list is how it says so (ADR 0010).
       sails: sailEntriesToSubmit(sailEntries),
@@ -572,9 +686,13 @@ export default function RaceUploadWizard({
         setSailEntries([])
         setSeaEntries([])
         setSelected(null)
-        // The default was read off *that* recording's start time, so it goes with the recording.
+        // The defaults were read off *that* recording's start time, so they go with the recording.
         setChartVersionId(null)
         setChartNote(null)
+        setPolarVersionId(null)
+        setRigTuneVersionId(null)
+        setCalibrationVersionId(null)
+        setBandId(null)
         setStep(0)
       }
       return
@@ -588,6 +706,10 @@ export default function RaceUploadWizard({
     raceWindow,
     title,
     chartVersionId,
+    polarVersionId,
+    rigTuneVersionId,
+    calibrationVersionId,
+    bandId,
     sailEntries,
     seaEntries,
     duplicateAccepted,
@@ -811,6 +933,22 @@ export default function RaceUploadWizard({
               at: entry.at,
               text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
             }))}
+          />
+
+          <BoatSetupReview
+            choices={boatSetup}
+            chart={chosenChart}
+            polarVersionId={polarVersionId}
+            rigTuneVersionId={rigTuneVersionId}
+            calibrationVersionId={calibrationVersionId}
+            bandId={bandId}
+            rigTune={chosenRigTune}
+            loggedWind={loggedWind}
+            bandNote={bandNote}
+            onChoosePolar={setPolarVersionId}
+            onChooseRigTune={chooseRigTune}
+            onChooseCalibration={setCalibrationVersionId}
+            onChooseBand={setBandId}
           />
 
           <CoverageReadout coverage={coverage} />
@@ -1365,6 +1503,224 @@ function ChartVersionPicker({
 }
 
 /**
+ * The Boat Setup the race was sailed under: four Version pointers and the Wind Band the rig was set to.
+ *
+ * On Review rather than on a step of its own, because none of it is testimony about a moment — it is
+ * what the boat *was* for the whole race, and the sailor is best placed to confirm it once they can see
+ * which race they have made (ADR 0014).
+ *
+ * Every one of the five is a pointer, defaulted to the Version in force at the recording's start and
+ * changeable here and forever afterwards on the race page. Null is a real answer everywhere: this
+ * archive's oldest races predate every Boat Setup artifact the boat has, and a Polar backdated onto one
+ * of them would assert a document that did not exist (ADR 0008).
+ *
+ * The Crossover Chart is shown here but chosen on the Sails step, because the sails were named in its
+ * words and changing it there is what clears them. It is stated rather than repeated as a picker so
+ * Review shows the whole answer in one place without offering two ways to change one thing.
+ */
+function BoatSetupReview({
+  choices,
+  chart,
+  polarVersionId,
+  rigTuneVersionId,
+  calibrationVersionId,
+  bandId,
+  rigTune,
+  loggedWind,
+  bandNote,
+  onChoosePolar,
+  onChooseRigTune,
+  onChooseCalibration,
+  onChooseBand,
+}: {
+  choices: RaceBoatSetupChoices | null
+  chart: CrossoverChartChoice | null
+  polarVersionId: string | null
+  rigTuneVersionId: string | null
+  calibrationVersionId: string | null
+  bandId: string | null
+  rigTune: RigTuneChoice | null
+  loggedWind: number | null
+  bandNote: RaceFinding | null
+  onChoosePolar: (versionId: string | null) => void
+  onChooseRigTune: (versionId: string | null) => void
+  onChooseCalibration: (versionId: string | null) => void
+  onChooseBand: (bandId: string | null) => void
+}): ReactElement {
+  return (
+    <section
+      style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}
+      data-testid="boat-setup-review"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+        <span
+          style={{
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--text-muted)',
+          }}
+        >
+          Boat Setup
+        </span>
+        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+          {choices === null
+            ? 'The boat’s Boat Setup Versions could not be read just now, so none of them can be named here. ' +
+              'The race still saves, and every one of these can be filled in on its page afterwards.'
+            : 'Which Versions the boat was on. Defaulted to whatever was in force when the recording started — ' +
+              'change any of them, and leave one unset if nobody knows.'}
+        </p>
+      </div>
+
+      <ChipRow label="Named in Crossover Chart">
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+          {chart === null ? (
+            <em style={{ color: 'var(--text-muted)' }}>Not recorded</em>
+          ) : (
+            `v${chart.version_number} — chosen on the Sails step, where the sails are named in it`
+          )}
+        </span>
+      </ChipRow>
+
+      <VersionPicker
+        label="Polar"
+        versions={choices?.polar ?? []}
+        chosen={polarVersionId}
+        onChoose={onChoosePolar}
+      />
+
+      <VersionPicker
+        label="Rig Tune"
+        versions={choices?.rig_tune ?? []}
+        chosen={rigTuneVersionId}
+        onChoose={onChooseRigTune}
+      />
+
+      <WindBandPicker rigTune={rigTune} chosen={bandId} onChoose={onChooseBand} />
+
+      <VersionPicker
+        label="Instrument Calibration"
+        versions={choices?.instrument_calibration ?? []}
+        chosen={calibrationVersionId}
+        onChoose={onChooseCalibration}
+      />
+
+      {loggedWind !== null && (
+        <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+          {`Logged wind averaged ${loggedWind} kt over this window.`}
+        </p>
+      )}
+
+      {bandNote !== null && <RaceFindings findings={[bandNote]} />}
+    </section>
+  )
+}
+
+/**
+ * One Version pointer, with every Version offered and "Not recorded" beside them.
+ *
+ * Newest first, each stating the day it came into force, because the one the sailor wants is chosen by
+ * *when the race was* and for an archive entered backwards that is usually not the newest — the same
+ * reasoning as `ChartVersionPicker`, which this deliberately reads like.
+ *
+ * "Not recorded" is a chip rather than an absence, because it is a real and common answer and the
+ * sailor has to be able to get back to it after pressing a Version by mistake.
+ */
+function VersionPicker({
+  label,
+  versions,
+  chosen,
+  onChoose,
+}: {
+  label: string
+  versions: readonly BoatSetupVersionRef[]
+  chosen: string | null
+  onChoose: (versionId: string | null) => void
+}): ReactElement {
+  if (versions.length === 0) {
+    return (
+      <ChipRow label={label}>
+        <span style={{ fontSize: 'var(--text-sm)', fontStyle: 'italic', color: 'var(--text-muted)' }}>
+          None to name
+        </span>
+      </ChipRow>
+    )
+  }
+
+  return (
+    <ChipRow label={label}>
+      {versions.map((version) => (
+        <Chip
+          key={version.version_id}
+          on={version.version_id === chosen}
+          onPress={() => onChoose(version.version_id)}
+        >
+          {`v${version.version_number}`}
+          <span style={{ fontSize: 9, opacity: 0.75, marginLeft: 4 }}>
+            {`from ${version.effective_from}`}
+          </span>
+        </Chip>
+      ))}
+      <Chip on={chosen === null} onPress={() => onChoose(null)}>
+        Not recorded
+      </Chip>
+    </ChipRow>
+  )
+}
+
+/**
+ * Which Wind Band the rig was set to, offering that Rig Tune Version's bands and nothing else.
+ *
+ * Gated behind the Version, and disabled rather than hidden while there is none: a band is one row of
+ * one Version's band table, and bands do not travel between Versions (ADR 0007). The composite key
+ * `races (rig_tune_version_id, rig_tune_band_id)` is what actually refuses a foreign band — this only
+ * keeps the form from offering one.
+ *
+ * Nothing is pre-selected. Which band the turnbuckles were on is testimony only the sailor holds; the
+ * logged wind is evidence about the day, and guessing the band from it would be Layline putting words
+ * in their mouth (ADR 0010).
+ */
+function WindBandPicker({
+  rigTune,
+  chosen,
+  onChoose,
+}: {
+  rigTune: RigTuneChoice | null
+  chosen: string | null
+  onChoose: (bandId: string | null) => void
+}): ReactElement {
+  if (rigTune === null) {
+    return (
+      <ChipRow label="Wind Band">
+        <Chip on={false} disabled onPress={() => undefined}>
+          Pick a Rig Tune Version first
+        </Chip>
+      </ChipRow>
+    )
+  }
+
+  return (
+    <ChipRow label="Wind Band">
+      {rigTune.bands.map((band) => (
+        <Chip
+          key={band.band_id}
+          on={band.band_id === chosen}
+          onPress={() => onChoose(band.band_id)}
+        >
+          {formatBandRange(band.low_kt, band.high_kt)}
+          {band.label !== null && (
+            <span style={{ fontSize: 9, opacity: 0.75, marginLeft: 4 }}>{band.label}</span>
+          )}
+        </Chip>
+      ))}
+      <Chip on={chosen === null} onPress={() => onChoose(null)}>
+        Not recorded
+      </Chip>
+    </ChipRow>
+  )
+}
+
+/**
  * What one entry says, in the chosen Version's own words.
  *
  * A note-only entry reads as what was written and nothing else: the nearest Definition's words would
@@ -1552,16 +1908,24 @@ function ChipRow({ label, children }: { label: string; children: ReactNode }): R
 function Chip({
   on,
   onPress,
+  disabled = false,
   children,
 }: {
   on: boolean
   onPress: () => void
+  /**
+   * The choice exists but cannot be made yet, which the Wind Band picker needs: a band is one of a
+   * *Version's* bands, so with no Rig Tune Version chosen there is nothing it could name. Disabled and
+   * still there, because a row that vanished would not say why (ADR 0014).
+   */
+  disabled?: boolean
   children: ReactNode
 }): ReactElement {
   return (
     <button
       type="button"
       onClick={onPress}
+      disabled={disabled}
       aria-pressed={on}
       style={{
         padding: '7px 10px',
@@ -1571,7 +1935,8 @@ function Chip({
         color: on ? '#fff' : 'var(--text-secondary)',
         fontSize: 'var(--text-sm)',
         fontWeight: on ? 600 : 500,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {children}

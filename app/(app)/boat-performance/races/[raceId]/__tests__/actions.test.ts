@@ -13,8 +13,9 @@
  * statement that triggers it, in the right order, and says so honestly when the bytes stay behind.
  */
 
-import { deleteRace } from '../actions'
+import { amendRaceBoatSetup, deleteRace } from '../actions'
 import { CREW } from '@/__tests__/fixtures/accounts'
+import type { RaceBoatSetupPointers } from '@/types'
 
 const RACE_ID = '9a1b2c3d-0000-4000-8000-00000000aaaa'
 const RECORDING_ID = '9a1b2c3d-0000-4000-8000-00000000bbbb'
@@ -50,7 +51,9 @@ const from = jest.fn((table: string) => {
 
 const storageFrom = jest.fn(() => ({ remove }))
 
-const createClient = jest.fn(async () => ({ from, storage: { from: storageFrom } }))
+const rpc = jest.fn()
+
+const createClient = jest.fn(async () => ({ from, rpc, storage: { from: storageFrom } }))
 
 jest.mock('@/lib/supabase/server', () => ({ createClient: () => createClient() }))
 jest.mock('@/lib/account/resolveAccount', () => ({ resolveAccount: jest.fn() }))
@@ -186,5 +189,158 @@ describe('deleteRace', () => {
     remove.mockResolvedValue({ data: [], error: null })
 
     expect(await deleteRace(RACE_ID)).toEqual({ ok: true, bytes_removed: false })
+  })
+})
+
+/**
+ * Amending which Boat Setup Versions a race was sailed under, at the seam the panel calls.
+ *
+ * One statement, one transaction, and all five answers in it. The rules the database holds are the
+ * database's and a mock cannot prove them — the composite key that refuses a foreign band, the kind tag
+ * that refuses a Version of the wrong sort, the admin-only write policy the function's own lock runs
+ * under: those are `scripts/verify-race-upload-rpc.sql` and `verify-race-archive-schema.sql`.
+ *
+ * What this proves is what Layline *sends*. Chiefly that it sends all five keys every time: `->>` on an
+ * absent key answers NULL, which is indistinguishable from the sailor setting a pointer back to not
+ * recorded, so a payload short of one would silently erase it. And that the clearing count the sailor
+ * agreed to travels with the call, because repointing the Crossover Chart deletes Testimony nothing can
+ * recover (ADR 0023).
+ */
+describe('amendRaceBoatSetup', () => {
+  const POLAR = '9a1b2c3d-0000-4000-8000-00000000c001'
+  const CHART = '9a1b2c3d-0000-4000-8000-00000000c002'
+  const TUNE = '9a1b2c3d-0000-4000-8000-00000000c003'
+  const CAL = '9a1b2c3d-0000-4000-8000-00000000c004'
+  const BAND = '9a1b2c3d-0000-4000-8000-00000000c005'
+
+  function setupOf(overrides: Partial<RaceBoatSetupPointers> = {}): RaceBoatSetupPointers {
+    return {
+      polar_version_id: POLAR,
+      crossover_chart_version_id: CHART,
+      rig_tune_version_id: TUNE,
+      instrument_calibration_version_id: CAL,
+      rig_tune_band_id: BAND,
+      ...overrides,
+    }
+  }
+
+  let consoleError: jest.SpyInstance
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
+    resolveAccount.mockResolvedValue(ADMIN)
+    rpc.mockResolvedValue({ data: 0, error: null })
+  })
+
+  afterEach(() => {
+    consoleError.mockRestore()
+  })
+
+  it('sends all five answers and the clearing count in one call', async () => {
+    const result = await amendRaceBoatSetup(RACE_ID, setupOf(), 0)
+
+    expect(result).toEqual({ ok: true, cleared_sail_entries: 0 })
+    expect(rpc).toHaveBeenCalledWith('amend_race_boat_setup', {
+      p_race_id: RACE_ID,
+      p_setup: {
+        polar_version_id: POLAR,
+        crossover_chart_version_id: CHART,
+        rig_tune_version_id: TUNE,
+        instrument_calibration_version_id: CAL,
+        rig_tune_band_id: BAND,
+      },
+      p_clearing: 0,
+    })
+  })
+
+  it('sends a cleared pointer as an explicit null rather than leaving the key out', async () => {
+    // The failure this exists for: an absent key reads as NULL inside the function and would clear a
+    // pointer nobody meant to clear, so the five keys are always present and "not recorded" is a null.
+    await amendRaceBoatSetup(RACE_ID, setupOf({ polar_version_id: null, rig_tune_band_id: null }), 0)
+
+    const sent = rpc.mock.calls[0][1].p_setup
+    expect(Object.keys(sent).sort()).toEqual([
+      'crossover_chart_version_id',
+      'instrument_calibration_version_id',
+      'polar_version_id',
+      'rig_tune_band_id',
+      'rig_tune_version_id',
+    ])
+    expect(sent.polar_version_id).toBeNull()
+    expect(sent.rig_tune_band_id).toBeNull()
+  })
+
+  it('reports how many Sail Configurations the chart move took with it', async () => {
+    rpc.mockResolvedValue({ data: 3, error: null })
+
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), 3)).toEqual({
+      ok: true,
+      cleared_sail_entries: 3,
+    })
+    expect(rpc.mock.calls[0][1].p_clearing).toBe(3)
+  })
+
+  it('refuses a viewer before it asks the database anything', async () => {
+    resolveAccount.mockResolvedValue(CREW)
+
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), 0)).toEqual({
+      ok: false,
+      message: 'Only an admin can change which Versions a race was sailed under.',
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('turns the function’s own refusal of a viewer into that same sentence', async () => {
+    // The authority, not this check: SECURITY INVOKER means the admin-only write policy applies to the
+    // function's `SELECT ... FOR UPDATE`, and a viewer reaching the endpoint directly finds no row.
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'no such Race' } })
+
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), 0)).toEqual({
+      ok: false,
+      message: 'Only an admin can change which Versions a race was sailed under.',
+    })
+  })
+
+  it('answers a malformed race id without asking the database about it', async () => {
+    expect(await amendRaceBoatSetup('not-a-uuid', setupOf(), 0)).toEqual({
+      ok: false,
+      message: 'That race is not in the archive.',
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('answers a malformed pointer without asking the database about it', async () => {
+    // A bad uuid is a 22P02 out of the cast inside the function, which would surface as "the archive is
+    // broken" for what is a bad request.
+    expect(
+      await amendRaceBoatSetup(RACE_ID, setupOf({ rig_tune_band_id: 'not-a-uuid' }), 0)
+    ).toEqual({
+      ok: false,
+      message: 'The Boat Setup could not be saved, and nothing about this race was changed. Try again.',
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('refuses a clearing count that is not a number of rows', async () => {
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), -1)).toMatchObject({ ok: false })
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), 1.5)).toMatchObject({ ok: false })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('says nothing was changed when the transaction failed, and logs why', async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: '23503', message: 'violates foreign key constraint races_rig_tune_band_fkey' },
+    })
+
+    expect(await amendRaceBoatSetup(RACE_ID, setupOf(), 0)).toEqual({
+      ok: false,
+      message: 'The Boat Setup could not be saved, and nothing about this race was changed. Try again.',
+    })
+    expect(consoleError).toHaveBeenCalledWith(
+      'Race Boat Setup: the amendment failed:',
+      'violates foreign key constraint races_rig_tune_band_fkey'
+    )
   })
 })

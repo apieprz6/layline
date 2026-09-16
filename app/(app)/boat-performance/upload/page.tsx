@@ -5,6 +5,7 @@ import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { spacing } from '@/lib/utils/design'
 import { readCrossoverChartChoices } from '@/services/boat/readCrossoverChartChoices'
+import { readRaceBoatSetupChoices } from '@/services/boat/readRaceBoatSetupChoices'
 
 import { stageRecording, submitRace } from './actions'
 
@@ -30,6 +31,11 @@ export const dynamic = 'force-dynamic'
  * boat has since replaced, and `chartInForceOn` is what picks the default from the recording's own
  * start time. A null list is passed as null, because "could not be read" is not "the boat has no
  * chart", and the step says which of the two it is.
+ *
+ * The Polar, Rig Tune and Instrument Calibration Versions are read here for the same reasons and handed
+ * down the same way, for the Review step's other three pointers and the Wind Band (ADR 0012). Two reads
+ * rather than one because the chart's list carries the sail vocabulary the Sails step needs, and reading
+ * the chart twice would give the wizard two lists that could disagree.
  *
  * Both actions re-check the Role anyway. This page decides what to render; a Server Action is a public
  * endpoint and decides for itself.
@@ -60,11 +66,19 @@ export default async function RaceUploadPage(): Promise<ReactElement> {
     )
   }
 
-  const charts = await readCrossoverChartChoices()
+  const [charts, boatSetup] = await Promise.all([
+    readCrossoverChartChoices(),
+    readRaceBoatSetupChoices(),
+  ])
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
-      <RaceUploadWizard stageRecording={stageRecording} submitRace={submitRace} charts={charts} />
+      <RaceUploadWizard
+        stageRecording={stageRecording}
+        submitRace={submitRace}
+        charts={charts}
+        boatSetup={boatSetup}
+      />
     </div>
   )
 }

@@ -1592,6 +1592,70 @@ export interface CrossoverChartChoice {
   definitions: CrossoverSailDefinition[]
 }
 
+/**
+ * One Boat Setup Version as a pointer names it: which Version, and the day it took effect.
+ *
+ * The same three fields whether it is being offered on the Review step or read back off a saved
+ * Race, because both are the same act — naming one Version out of the boat's history. A Race
+ * freezes the id (ADR 0012); the number and the date are what let a screen say *which* one without
+ * a second read, and neither is ever resolved to "the newest".
+ */
+export interface BoatSetupVersionRef {
+  version_id: string
+  version_number: number
+  /** Calendar date the sailor says this Version took effect. */
+  effective_from: string
+}
+
+/**
+ * One Wind Band of a Rig Tune Version, as a picker offers it and as a race page reads it back.
+ *
+ * Bands do not travel between Versions — a re-tune means new bands — so a band is only ever named
+ * beside the Version it belongs to. `high_kt` is null on the open-ended top band, of which there is
+ * at most one per Version.
+ */
+export interface WindBandRef {
+  band_id: string
+  low_kt: number
+  high_kt: number | null
+  /** The Base Tune, which every Turns figure of the other bands is counted from (ADR 0007). */
+  is_base: boolean
+  /** Free text from the tuning guide. Never indexed against the dashboard's wind bins. */
+  label: string | null
+}
+
+/**
+ * A Rig Tune Version and its own bands, which are the only bands a Race pointing at it may record.
+ *
+ * Carried together because the band picker is gated behind the Version choice: with no Version there
+ * are no bands, and with one there are exactly these. The composite key
+ * `races (rig_tune_version_id, rig_tune_band_id)` refuses anything else, so a picker built from this
+ * cannot offer a band the database would then reject.
+ */
+export interface RigTuneChoice extends BoatSetupVersionRef {
+  /** Ascending by `low_kt`, which is the order a band table is read in. */
+  bands: WindBandRef[]
+}
+
+/**
+ * The three Version lists the Review step offers, beside the Crossover Charts the Sails step reads.
+ *
+ * Every Version of each kind, not only the one in force: the archive is hand-entered backwards, so a
+ * race being recorded here was usually sailed under a Version the boat has since replaced (ADR 0012).
+ * Which one a recording defaults to is `versionInForceOn`'s answer, from the recording's own start.
+ *
+ * A null *in place of the whole object* is "could not be read", the same distinction
+ * `RaceUploadWizardProps.charts` makes and for the same reason: a Review step showing empty pickers
+ * would present a failed read as "the boat has none". Within it the three lists are plain, and an
+ * empty one is the honest answer for a boat that has no Version of that kind yet — which is why every
+ * pointer on `races` is nullable in the first place.
+ */
+export interface RaceBoatSetupChoices {
+  polar: BoatSetupVersionRef[]
+  rig_tune: RigTuneChoice[]
+  instrument_calibration: BoatSetupVersionRef[]
+}
+
 /** One Sail Configuration as the wizard holds it, before anything has been written. */
 export interface SailEntryDraft {
   /**
@@ -1645,6 +1709,48 @@ export interface SubmitSeaStateEntry {
 }
 
 /**
+ * The five Boat Setup answers a Race records: four Version pointers, and the Wind Band the rig was
+ * set to.
+ *
+ * Pointers, not copies (ADR 0012). Each is frozen onto the Race when it is filed and each stays
+ * changeable afterwards, so nothing here is ever resolved at read — a Polar minted next winter
+ * cannot become the Polar this race was sailed under. Null throughout means *not recorded*, which is
+ * the honest answer for a race sailed before the boat had that artifact at all, and it stays null:
+ * no backdated guesses (ADR 0008).
+ *
+ * `rig_tune_band_id` names a band of `rig_tune_version_id` and of no other Version. Bands do not
+ * migrate — a re-tune means new rows — and the composite key
+ * `races (rig_tune_version_id, rig_tune_band_id)` is what enforces that, with
+ * `band_requires_rig_tune` refusing a band recorded against no Version at all. The forms are built
+ * so those two never fire; the database is the reason they cannot be talked around.
+ */
+export interface RaceBoatSetupPointers {
+  /** The Polar the boat's targets came from that day. */
+  polar_version_id: string | null
+  /**
+   * The Crossover Chart Version the sails are named in, frozen onto the Race at upload (ADR 0023).
+   *
+   * Null means the Race records no chart Version, which is a legitimate answer (ADR 0012) and one
+   * in which `sails` must be empty: with no vocabulary there is nothing to say a sail in. It is
+   * written here rather than resolved at read, so a chart minted next winter cannot silently
+   * re-word what this race flew.
+   */
+  crossover_chart_version_id: string | null
+  /** The Rig Tune the mast was set up to, and the only Version `rig_tune_band_id` may belong to. */
+  rig_tune_version_id: string | null
+  /** The Instrument Calibration in force, which is what the recording's own figures were read through. */
+  instrument_calibration_version_id: string | null
+  /**
+   * The Wind Band of that Rig Tune the rig was actually set to, as the sailor recorded it.
+   *
+   * Recorded, not derived. A band that disagrees with the wind the file logged is a finding stated on
+   * the race page, never an error and never a correction — the sailor may well have been tuned for
+   * the forecast rather than the breeze that arrived (ADR 0008).
+   */
+  rig_tune_band_id: string | null
+}
+
+/**
  * What submit sends back about a staged upload: which attempt it was, and the sailor's Testimony.
  *
  * Nothing derived travels — no rows, no series, no coverage. The server re-reads the bytes it parked
@@ -1652,7 +1758,7 @@ export interface SubmitSeaStateEntry {
  * browser could have edited on the way back. `tmp_path` is absent for the same reason: it is derived
  * from the signed-in user and `upload_id`, never taken from the request.
  */
-export interface SubmitRaceInput {
+export interface SubmitRaceInput extends RaceBoatSetupPointers {
   upload_id: string
   recording_id: string
   filename: string
@@ -1663,15 +1769,6 @@ export interface SubmitRaceInput {
   window_finish: string
   /** Blank is stored as null — an untitled race is normal (ADR 0010). */
   title: string
-  /**
-   * The Crossover Chart Version the sails are named in, frozen onto the Race at upload (ADR 0023).
-   *
-   * Null means the Race records no chart Version, which is a legitimate answer (ADR 0012) and one
-   * in which `sails` must be empty: with no vocabulary there is nothing to say a sail in. It is
-   * written here rather than resolved at read, so a chart minted next winter cannot silently
-   * re-word what this race flew.
-   */
-  crossover_chart_version_id: string | null
   /**
    * The sailor's Testimony about the sails, in time order. Empty is legal and means the sail plan
    * was not recorded — never a stand-in configuration.
@@ -1754,6 +1851,35 @@ export interface RaceAnnotations {
   sea_state: RaceSeaStateAnnotation[]
 }
 
+/**
+ * The Boat Setup a race was sailed under, as its page states it.
+ *
+ * Every field is resolved from the pointers the Race froze, and each is null exactly when the pointer
+ * is: *not recorded*, which the page says in those words rather than filling in the boat's current
+ * artifact. Nine races in the archive predate any Boat Setup at all, and every one of them should read
+ * that way (ADR 0012).
+ *
+ * A pointer that names a Version the read could not find is not represented — that is a broken
+ * `ON DELETE RESTRICT`, not a state a screen should describe — so `readRace` refuses the page instead,
+ * the same all-or-nothing it applies to the Transcription.
+ */
+export interface RaceBoatSetup {
+  polar: BoatSetupVersionRef | null
+  crossover_chart: BoatSetupVersionRef | null
+  rig_tune: BoatSetupVersionRef | null
+  instrument_calibration: BoatSetupVersionRef | null
+  /** The band the sailor recorded, which always belongs to `rig_tune`. */
+  band: WindBandRef | null
+  /**
+   * The mean TWS the file logged across the Race Window, in knots, or null where it logged none.
+   *
+   * Derived at read and stored nowhere, like coverage (ADR 0009). It exists so the page can put the
+   * recorded band beside the wind that actually blew; it is never compared in order to correct the
+   * band, and a disagreement between the two is a note.
+   */
+  logged_tws_mean: number | null
+}
+
 /** A race as its own page states it: its window, its coverage in time, and its Row Quality. */
 export interface RaceDetail {
   id: string
@@ -1774,7 +1900,23 @@ export interface RaceDetail {
   findings: RaceFinding[]
   /** Testimony, as given. Either list may be empty, and the page says so in words. */
   annotations: RaceAnnotations
+  /** Which Boat Setup Versions the race was sailed under, and the Wind Band the rig was set to. */
+  boat_setup: RaceBoatSetup
 }
+
+/**
+ * What amending a Race's Boat Setup answers with.
+ *
+ * `cleared_sail_entries` is only ever non-zero when the Crossover Chart pointer moved: the sails were
+ * named in the old Version's vocabulary and cannot be re-read in the new one, so they are dropped and
+ * the count is stated (ADR 0023). Every other field on the panel leaves Testimony alone.
+ *
+ * There is no change reason. A pointer is the sailor's own answer about their own boat, and asking
+ * them to justify correcting it would make the archive harder to get right rather than more trustworthy.
+ */
+export type UpdateRaceBoatSetupResult =
+  | { ok: true; cleared_sail_entries: number }
+  | { ok: false; message: string }
 
 /**
  * What deleting a race answers with.

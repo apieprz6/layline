@@ -45,6 +45,22 @@ let definitions: Record<string, unknown>[] = []
 let definitionsError: { message: string } | null = null
 const versionsAsked: unknown[] = []
 
+/**
+ * The Boat Setup Versions the archive holds, and the ids this read asked for.
+ *
+ * The ids asked for are the claim, exactly as `versionsAsked` is for the vocabulary: a pointer is
+ * resolved **by id** and never by date or through an artifact's current Version, so what is checked is
+ * that these are the ids the Race holds and that nothing else was consulted to arrive at them (ADR 0012).
+ */
+let setupVersions: Record<string, unknown>[] = []
+let setupVersionsError: { message: string } | null = null
+let setupIdsAsked: unknown = null
+
+/** The Wind Band row, and whether the band this Race names came back at all. */
+let bandRow: Record<string, unknown> | null = null
+let bandError: { message: string } | null = null
+let bandIdAsked: unknown = null
+
 /** Both annotation reads have the same shape: select, eq, order, and no paging. */
 const annotationTable = (rows: () => Record<string, unknown>[]) => ({
   select: () => ({
@@ -87,6 +103,36 @@ const from = jest.fn((table: string) => {
       }),
     }
   }
+  if (table === 'boat_setup_versions') {
+    return {
+      select: () => ({
+        in: (_column: string, values: unknown) => {
+          setupIdsAsked = values
+          return {
+            returns: async () =>
+              setupVersionsError !== null
+                ? { data: null, error: setupVersionsError }
+                : { data: setupVersions, error: null },
+          }
+        },
+      }),
+    }
+  }
+  if (table === 'rig_tune_bands') {
+    return {
+      select: () => ({
+        eq: (_column: string, value: unknown) => {
+          bandIdAsked = value
+          return {
+            maybeSingle: async () =>
+              bandError !== null
+                ? { data: null, error: bandError }
+                : { data: bandRow, error: null },
+          }
+        },
+      }),
+    }
+  }
   throw new Error(`readRace asked for an unexpected table: ${table}`)
 })
 
@@ -119,6 +165,9 @@ function dbRow(index: number, values: Record<string, unknown> = {}): Record<stri
     sog: '6.2',
     stw: '6.0',
     ctw: '12',
+    // The ninth column, which nothing in Row Quality reads. It is here for the mean wind the recorded
+    // Wind Band is stated beside, derived at read and stored nowhere (ADR 0009).
+    tws: '11.0',
     ...values,
   }
 }
@@ -147,6 +196,17 @@ function raceRow(overrides: Record<string, unknown> = {}) {
     window_finish: stamp(7 * CADENCE_SECONDS),
     /** The Version the sails are named in, frozen at upload (ADR 0023). */
     crossover_chart_version_id: 'chart-v1',
+    /**
+     * The other three pointers and the Wind Band, as the Race holds them.
+     *
+     * Every one is nullable and null means *not recorded* — nine races in this archive predate every
+     * Boat Setup artifact the boat has. These are set on the default fixture because a race that names
+     * its Versions is the case with something to get wrong.
+     */
+    polar_version_id: 'polar-v2',
+    rig_tune_version_id: 'tune-v3',
+    instrument_calibration_version_id: 'cal-v1',
+    rig_tune_band_id: 'tune-v3-base',
     recordings: {
       id: 'recording-1',
       filename: '08-22-26-glr.csv',
@@ -176,6 +236,30 @@ describe('readRace', () => {
     ]
     definitionsError = null
     versionsAsked.length = 0
+    // Newer Versions of every kind exist beside the ones this Race names, which is what makes "resolved
+    // to the newest" a failure here rather than a shape nothing can tell apart.
+    setupVersions = [
+      { id: 'polar-v2', kind: 'polar', version_number: 2, effective_from: '2026-02-10' },
+      { id: 'chart-v1', kind: 'crossover_chart', version_number: 1, effective_from: '2026-01-15' },
+      { id: 'tune-v3', kind: 'rig_tune', version_number: 3, effective_from: '2026-04-20' },
+      {
+        id: 'cal-v1',
+        kind: 'instrument_calibration',
+        version_number: 1,
+        effective_from: '2026-03-02',
+      },
+    ]
+    setupVersionsError = null
+    setupIdsAsked = null
+    bandRow = {
+      id: 'tune-v3-base',
+      low_kt: 8,
+      high_kt: 12,
+      is_base: true,
+      label: 'Base',
+    }
+    bandError = null
+    bandIdAsked = null
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -442,6 +526,137 @@ describe('readRace', () => {
       expect(consoleError).toHaveBeenCalledWith(
         'Race: annotation read failed:',
         'statement timeout'
+      )
+    })
+  })
+
+  /**
+   * The Boat Setup the race was sailed under: four Version pointers and the Wind Band.
+   *
+   * One claim runs through all of it. These are resolved **by id**, and by nothing else — not by the
+   * race's date, and not through an artifact's `current_version_id` — because a race sailed under Polar
+   * v2 has to still say v2 after v5 lands (ADR 0012). That is the whole reason they are columns on
+   * `races` rather than a lookup, and it is what these tests are for.
+   *
+   * Null per pointer is *not recorded* and stays null. It is the ordinary answer for this archive's
+   * oldest races, which predate every Boat Setup artifact the boat has, and nothing here backdates v1
+   * onto them (ADR 0008).
+   */
+  describe('the Boat Setup the race names', () => {
+    it('resolves each pointer to the Version the Race holds, by id', async () => {
+      const race = await readRace('race-1')
+
+      expect(race?.boat_setup.polar).toEqual({
+        version_id: 'polar-v2',
+        version_number: 2,
+        effective_from: '2026-02-10',
+      })
+      expect(race?.boat_setup.crossover_chart?.version_id).toBe('chart-v1')
+      expect(race?.boat_setup.rig_tune?.version_number).toBe(3)
+      expect(race?.boat_setup.instrument_calibration?.version_id).toBe('cal-v1')
+
+      // AC 3, stated as what was asked for: the four ids off the Race and nothing else. A read that
+      // resolved anything by date or through a current pointer would have asked a different question.
+      expect(setupIdsAsked).toEqual(['polar-v2', 'chart-v1', 'tune-v3', 'cal-v1'])
+      expect(bandIdAsked).toBe('tune-v3-base')
+    })
+
+    it('states the Wind Band as the band’s own row of that Version’s table', async () => {
+      const race = await readRace('race-1')
+
+      expect(race?.boat_setup.band).toEqual({
+        band_id: 'tune-v3-base',
+        low_kt: 8,
+        high_kt: 12,
+        is_base: true,
+        label: 'Base',
+      })
+    })
+
+    it('reads a race that names none of them as five nulls, and asks for nothing', async () => {
+      // AC 2 at the read end. Nine races in the archive look exactly like this, and the page says so in
+      // words rather than filling any of it in.
+      raceMaybeSingle.mockResolvedValue({
+        data: raceRow({
+          polar_version_id: null,
+          crossover_chart_version_id: null,
+          rig_tune_version_id: null,
+          instrument_calibration_version_id: null,
+          rig_tune_band_id: null,
+        }),
+        error: null,
+      })
+
+      const race = await readRace('race-1')
+
+      expect(race?.boat_setup).toEqual({
+        polar: null,
+        crossover_chart: null,
+        rig_tune: null,
+        instrument_calibration: null,
+        band: null,
+        // Derived from the rows regardless: it is evidence about the day, not an answer about the boat.
+        logged_tws_mean: 11,
+      })
+      // Nothing to resolve, so neither table was consulted at all.
+      expect(setupIdsAsked).toBeNull()
+      expect(bandIdAsked).toBeNull()
+    })
+
+    it('derives the logged mean wind over the window and stores it nowhere', async () => {
+      // The window is rows 3 to 7, and only those rows count: the figure the recorded band is stated
+      // beside is the wind of the race, not of the whole file.
+      stored = LATCHED_FEED.map((row, index) =>
+        index >= 3 ? { ...row, tws: String(10 + index) } : { ...row, tws: '99' }
+      )
+
+      const race = await readRace('race-1')
+
+      // 13, 14, 15, 16, 17 — the five rows inside the window.
+      expect(race?.boat_setup.logged_tws_mean).toBe(15)
+    })
+
+    it('states a band that disagrees with the logged wind as a note, and refuses nothing', async () => {
+      // AC 7. The band is what the rig *was* set to, and a race sailed on the wrong band for the day is
+      // a thing that happened. ADR 0009 keeps refusals to two and this is neither of them.
+      bandRow = { id: 'tune-v3-base', low_kt: 0, high_kt: 8, is_base: false, label: null }
+
+      const race = await readRace('race-1')
+
+      expect(race).not.toBeNull()
+      expect(race?.findings).toContainEqual({
+        severity: 'note',
+        message: 'Recorded in the 0–8 kt band; logged wind averaged 11 kt.',
+      })
+    })
+
+    it('says nothing about the band when it agrees with the logged wind', async () => {
+      // 11 kt logged, 8–12 kt recorded. There is no finding to make, and a page that congratulated the
+      // sailor on agreeing with their instruments would be noise.
+      const race = await readRace('race-1')
+
+      expect(race?.findings.map((finding) => finding.message).join(' ')).not.toMatch(/Recorded in/)
+    })
+
+    it('refuses the page when a Version the Race names does not come back', async () => {
+      // Every one of these pointers is ON DELETE RESTRICT, so this cannot be a Version that went away —
+      // it is a read that saw less than the whole of it. Saying "not recorded" here would be Layline
+      // stating the opposite of what the Race holds.
+      setupVersions = setupVersions.filter((version) => version.id !== 'tune-v3')
+
+      await expect(readRace('race-1')).resolves.toBeNull()
+      expect(consoleError).toHaveBeenCalledWith(
+        'Race: Boat Setup Version(s) this Race names did not come back: tune-v3'
+      )
+    })
+
+    it('refuses the page when the Wind Band it names does not come back', async () => {
+      bandRow = null
+
+      await expect(readRace('race-1')).resolves.toBeNull()
+      expect(consoleError).toHaveBeenCalledWith(
+        'Race: Wind Band read failed:',
+        'the band this Race names did not come back'
       )
     })
   })

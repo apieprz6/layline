@@ -9,23 +9,57 @@
  * That second half is the load-bearing one. A silent section reads as a race with no sail changes, and
  * "nobody wrote it down" is a different fact from "nothing changed".
  *
- * Then the one thing on the page that is a write. The page itself is a read and is open to every
- * signed-in sailor (ADR 0019); delete is not, so the affordance has to be absent for a viewer rather
- * than merely refused when pressed — a button that always answers "only an admin can" is a worse
- * screen than no button, and `deleteRace` refuses a viewer regardless.
+ * Then what the boat *was*, which is the other half of a race and not part of its Testimony: the four
+ * Version pointers and the Wind Band, each stated as the Version the Race holds and never resolved
+ * afresh (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, because it is
+ * the same fact — and the archive's oldest races have all five of them unset.
+ *
+ * Then the two things on the page that are writes. The page itself is a read and is open to every
+ * signed-in sailor (ADR 0019); amending the Boat Setup and deleting are not, so both affordances have to
+ * be absent for a viewer rather than merely refused when pressed — a button that always answers "only an
+ * admin can" is a worse screen than no button, and both actions refuse a viewer regardless.
  */
 
-import { render, screen } from '@testing-library/react'
-import type { RaceAnnotations, RaceDetail } from '@/types'
+import { render, screen, within } from '@testing-library/react'
+import type {
+  CrossoverChartChoice,
+  RaceAnnotations,
+  RaceBoatSetup,
+  RaceBoatSetupChoices,
+  RaceDetail,
+} from '@/types'
 import RaceDetailView from '../RaceDetailView'
 
 jest.mock('next/navigation', () => ({
-  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  useRouter: jest.fn(() => ({ push: jest.fn(), refresh: jest.fn() })),
 }))
 
 const EMPTY: RaceAnnotations = { sails: [], sea_state: [] }
 
-function raceOf(annotations: RaceAnnotations = EMPTY): RaceDetail {
+/**
+ * All five Boat Setup answers recorded, which is what a race entered by a boat that has the artifacts
+ * looks like. Nine archive races have none of them, and that case is a describe of its own below.
+ */
+const SETUP: RaceBoatSetup = {
+  polar: { version_id: 'polar-2', version_number: 2, effective_from: '2026-02-10' },
+  crossover_chart: { version_id: 'chart-1', version_number: 1, effective_from: '2026-01-15' },
+  rig_tune: { version_id: 'tune-3', version_number: 3, effective_from: '2026-04-20' },
+  instrument_calibration: { version_id: 'cal-1', version_number: 1, effective_from: '2026-03-02' },
+  band: { band_id: 'tune-3-base', low_kt: 8, high_kt: 12, is_base: true, label: 'Base' },
+  logged_tws_mean: 11.4,
+}
+
+/** Nothing recorded: every pointer null, which is the ordinary state of the archive's oldest races. */
+const NOTHING: RaceBoatSetup = {
+  polar: null,
+  crossover_chart: null,
+  rig_tune: null,
+  instrument_calibration: null,
+  band: null,
+  logged_tws_mean: null,
+}
+
+function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup = SETUP): RaceDetail {
   return {
     id: 'race-1',
     title: 'Wednesday night',
@@ -57,17 +91,48 @@ function raceOf(annotations: RaceAnnotations = EMPTY): RaceDetail {
     },
     findings: [],
     annotations,
+    boat_setup: boatSetup,
   }
 }
 
 const deleteRace = jest.fn(async () => ({ ok: true as const, bytes_removed: true }))
 
+const amendBoatSetup = jest.fn(async () => ({ ok: true as const, cleared_sail_entries: 0 }))
+
+const CHOICES: RaceBoatSetupChoices = {
+  polar: [{ version_id: 'polar-2', version_number: 2, effective_from: '2026-02-10' }],
+  rig_tune: [
+    {
+      version_id: 'tune-3',
+      version_number: 3,
+      effective_from: '2026-04-20',
+      bands: [{ band_id: 'tune-3-base', low_kt: 8, high_kt: 12, is_base: true, label: 'Base' }],
+    },
+  ],
+  instrument_calibration: [
+    { version_id: 'cal-1', version_number: 1, effective_from: '2026-03-02' },
+  ],
+}
+
+const CHARTS: CrossoverChartChoice[] = [
+  { version_id: 'chart-1', version_number: 1, effective_from: '2026-01-15', definitions: [] },
+]
+
 /**
- * Every render carries the two delete props, because the page cannot be drawn without answering who
- * is looking at it. Only the last two tests care what the answer is.
+ * Every render answers who is looking at it, because the page cannot be drawn without that: both writes
+ * are drawn or neither is. Only the last describe cares what the answer is.
  */
-function renderRace(race: RaceDetail, canDelete = false): void {
-  render(<RaceDetailView race={race} canDelete={canDelete} deleteRace={deleteRace} />)
+function renderRace(race: RaceDetail, mayWrite = false): void {
+  render(
+    <RaceDetailView
+      race={race}
+      canWrite={mayWrite}
+      boatSetupChoices={CHOICES}
+      charts={CHARTS}
+      amendBoatSetup={amendBoatSetup}
+      deleteRace={deleteRace}
+    />
+  )
 }
 
 describe('a race nobody annotated', () => {
@@ -169,20 +234,122 @@ describe('a race the sailor annotated', () => {
   })
 })
 
-describe('who the page offers the delete to', () => {
-  it('offers it to an admin', () => {
+describe('the Boat Setup the race was sailed under', () => {
+  /** The Boat Setup facts, as the `<dl>` between the Sea state and the Coverage. */
+  function facts() {
+    return within(screen.getByTestId('boat-setup-facts'))
+  }
+
+  it('names each Version and links to the Version it names', () => {
+    // AC 10. "Polar v2" has to be followable rather than taken on trust, so the reader can see the same
+    // Version stated at the other end.
+    renderRace(raceOf())
+
+    expect(facts().getByRole('link', { name: 'v2' })).toHaveAttribute(
+      'href',
+      '/boat-management/polar/polar-2'
+    )
+    expect(facts().getAllByRole('link', { name: 'v1' })[0]).toHaveAttribute(
+      'href',
+      '/boat-management/crossover-chart/chart-1'
+    )
+    // The Rig Tune page selects by Version *number*, and the Instrument Calibration has one page for
+    // the artifact with the Version it is showing stated on it.
+    expect(facts().getByRole('link', { name: 'v3' })).toHaveAttribute(
+      'href',
+      '/boat-management/rig-tune?version=3'
+    )
+    expect(facts().getAllByRole('link', { name: 'v1' })[1]).toHaveAttribute(
+      'href',
+      '/boat-management/instrument-calibration'
+    )
+  })
+
+  it('states the band in the band’s own words, under the Version it belongs to', () => {
+    renderRace(raceOf())
+
+    expect(facts().getByText('Base · 8–12 kt')).toBeInTheDocument()
+    // No link of its own: a band has no page, and the Rig Tune link above lands on the table it is a
+    // row of (ADR 0007).
+    expect(facts().queryByRole('link', { name: /8–12/ })).not.toBeInTheDocument()
+  })
+
+  it('never resolves a pointer to the newest Version', () => {
+    // AC 3, and the whole reason these are columns on `races`. The fixture names Polar v2 and Rig Tune
+    // v3; the choices the page also holds name exactly those, and nothing on the page reads a
+    // `current_version_id`. What would fail here is a page that showed a Version the Race does not hold.
+    renderRace(raceOf())
+
+    expect(facts().queryByText('v4')).not.toBeInTheDocument()
+    expect(facts().queryByText('v5')).not.toBeInTheDocument()
+  })
+
+  it('reads “not recorded” for a race that names none of them', () => {
+    // AC 2. Nine races in this archive predate every Boat Setup artifact the boat has, and nothing
+    // backdates v1 onto them (ADR 0008).
+    renderRace(raceOf(EMPTY, NOTHING))
+
+    const missing = screen.getByText(/names no Polar, Crossover Chart, Rig Tune/)
+    expect(missing).toBeInTheDocument()
+    // The same treatment missing Testimony gets, because it is the same fact.
+    expect(missing).toHaveStyle({ fontStyle: 'italic' })
+    expect(missing.style.background).toContain('repeating-linear-gradient')
+  })
+
+  it('reads “not recorded” for the pointers that are unset and states the ones that are not', () => {
+    renderRace(
+      raceOf(EMPTY, {
+        ...NOTHING,
+        rig_tune: { version_id: 'tune-3', version_number: 3, effective_from: '2026-04-20' },
+      })
+    )
+
+    expect(facts().getByRole('link', { name: 'v3' })).toBeInTheDocument()
+    // Polar, Crossover Chart, Instrument Calibration and the Wind Band.
+    expect(facts().getAllByText('Not recorded')).toHaveLength(4)
+  })
+
+  it('states a band that disagrees with the logged wind, among the findings and as a note', () => {
+    // AC 7 at the read end. The comparison itself is `readRace`'s, derived over the window and stored
+    // nowhere (ADR 0009) — what is this page's job is where the sentence lands: among the findings, at
+    // note severity, with nothing about it that could refuse a save or an amendment.
+    const race = raceOf(EMPTY, {
+      ...SETUP,
+      band: { band_id: 'tune-3-light', low_kt: 0, high_kt: 8, is_base: false, label: null },
+    })
+
+    renderRace({
+      ...race,
+      findings: [
+        { severity: 'note', message: 'Recorded in the 0–8 kt band; logged wind averaged 11.4 kt.' },
+      ],
+    })
+
+    expect(
+      screen.getByText('Recorded in the 0–8 kt band; logged wind averaged 11.4 kt.')
+    ).toBeInTheDocument()
+    // Not one of the two refusals, and drawn as nothing that reads like one.
+    expect(document.body.textContent ?? '').not.toMatch(/cannot be saved|refused/i)
+  })
+})
+
+describe('who the page offers its two writes to', () => {
+  it('offers both to an admin', () => {
     renderRace(raceOf(), true)
 
     expect(screen.getByTestId('race-delete-open')).toBeInTheDocument()
+    expect(screen.getByTestId('race-boat-setup-panel')).toBeInTheDocument()
   })
 
-  it('shows a viewer no delete affordance at all', () => {
+  it('shows a viewer neither affordance at all', () => {
     renderRace(raceOf())
 
     expect(screen.queryByTestId('race-delete-open')).not.toBeInTheDocument()
     expect(screen.queryByText(/delete/i)).not.toBeInTheDocument()
-    // The race itself reads exactly the same for them, annotations and all.
+    expect(screen.queryByTestId('race-boat-setup-panel')).not.toBeInTheDocument()
+    // The race itself reads exactly the same for them, annotations, Boat Setup and all.
     expect(screen.getByText('Wednesday night')).toBeInTheDocument()
     expect(screen.getByText('06-03-26-wed.csv')).toBeInTheDocument()
+    expect(screen.getByTestId('boat-setup-facts')).toBeInTheDocument()
   })
 })
