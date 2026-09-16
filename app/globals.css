@@ -232,6 +232,9 @@
   --card-shadow:   var(--shadow-md);
   --card-padding:  var(--space-4);
 
+  /* Skeleton — the fill of a placeholder standing in for content in flight */
+  --skeleton-bg:   var(--surface-divider);
+
   /* Button — primary */
   --btn-primary-bg:      var(--blue-500);
   --btn-primary-fg:      #FFFFFF;
@@ -309,6 +312,10 @@
   --surface-border-hover: rgba(200,0,0,0.40);
   --surface-divider: rgba(180,0,0,0.12);
   --surface-dock-bg: rgba(10, 0, 0, 0.94);
+
+  /* A divider that reads as a hairline on black is too faint to read as a bar,
+     so the placeholder fill steps up to the border. */
+  --skeleton-bg: var(--surface-border);
 
   --text-primary: #FF4444;
   --text-secondary: #AA2222;
@@ -589,6 +596,13 @@
   100% { box-shadow: 0 0 0 0 rgba(0,122,47,0); }
 }
 
+/* The breathing of a placeholder: opacity only, so one keyframe serves both
+   themes and neither has to name a second colour. */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
 .body-sm {
   font-family: var(--font-body);
   font-size: var(--text-sm);
@@ -629,6 +643,28 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-accent);
+}
+
+/* The shape of something not here yet. A bar carrying a single `&nbsp;` takes its
+   height from its own font-size and the inherited line-height, which is how a
+   placeholder ends up exactly as tall as the text it stands in for. */
+.skeleton {
+  display: block;
+  background: var(--skeleton-bg);
+  border-radius: var(--radius-xs);
+  animation: skeletonPulse 1.6s ease-in-out infinite;
+  color: transparent;
+  /* The prefix is for iOS before 17, where the unprefixed property is ignored — a
+     long-press on a bar would otherwise select its invisible `&nbsp;` and raise the
+     selection callout, on the 390px screen this is mostly read on. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 .layline-card {

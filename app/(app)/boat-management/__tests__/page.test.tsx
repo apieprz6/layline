@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CREW } from '@/__tests__/fixtures/accounts'
+import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
 import type { BoatSetup } from '@/types'
 
@@ -58,8 +59,15 @@ describe('/boat-management', () => {
 
   // An async Server Component is a function returning a promise of an element;
   // awaiting it is how the server does it, and how a test has to.
+  // The read sits behind a `<Suspense>` (LAY-132), so awaiting the page hands back a
+  // tree with the boat still unresolved inside it. `resolveServerTree` calls it the way
+  // the server does, which is what puts the settled screen in front of these assertions
+  // rather than its skeleton.
   async function renderPage(): Promise<HTMLElement> {
-    const { container } = render(await BoatManagementPage())
+    const { container } = render(await resolveServerTree(await BoatManagementPage()))
+    // And prove it did: several assertions below are about what is *absent*, and every
+    // one of them would pass against a skeleton if the tree came back unresolved.
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
     return container
   }
 
