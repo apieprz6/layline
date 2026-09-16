@@ -47,6 +47,9 @@ export default function StationHeader({
 
   return (
     <div
+      // Shared with the header in `app/station/[buoyId]/loading.tsx`, so a browser can
+      // measure both and prove the swap moves nothing.
+      data-testid="station-header"
       style={{
         position: 'sticky',
         top: 0,

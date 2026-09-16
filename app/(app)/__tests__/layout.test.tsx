@@ -126,7 +126,9 @@ describe('(app) route group layout', () => {
 
 describe('pages in the (app) group', () => {
   it.each([
-    ['page.tsx', '../page.tsx'],
+    // The dashboard sits in a `(dashboard)` group so its `loading.tsx` covers `/` and
+    // not its siblings; the URL is still `/`.
+    ['(dashboard)/page.tsx', '../(dashboard)/page.tsx'],
     ['wind-data/page.tsx', '../wind-data/page.tsx'],
     ['settings/page.tsx', '../settings/page.tsx'],
     ['boat-management/page.tsx', '../boat-management/page.tsx'],
