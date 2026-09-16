@@ -39,6 +39,31 @@ export const TIME_SCALES: Record<TimeScale, TimeScaleConfig> = {
 } as const
 
 /**
+ * How far apart two observations can be before a chart stops drawing through the space between them.
+ *
+ * A buoy that went down for three hours and came back leaves two samples the charts would otherwise
+ * join with one connector, which asserts a continuity nobody measured. Beyond this many minutes they
+ * are separate stretches of a trace, not two ends of one.
+ *
+ * Fixed rather than derived from the observed cadence: this feed reports every 10 minutes, so a
+ * median-times-four rule would be an indirect way of writing a constant. It lives beside TIME_SCALES
+ * because the scales are what decide when it can fire at all — the 30m and 1h windows are narrower
+ * than the threshold, so it is in practice a 6h/24h/72h rule and short dropouts stay bridged
+ * everywhere. Accepted for now; worth revisiting against real outages.
+ */
+export const GAP_THRESHOLD_MINUTES = 60
+
+/**
+ * Whether two observations are too far apart in time for a chart to connect them.
+ *
+ * Takes ages rather than timestamps because that is what both charts already hold, and order-free
+ * because neither chart agrees with the other about which end of its array is the newest.
+ */
+export function exceedsGapThreshold(minsAgoA: number, minsAgoB: number): boolean {
+  return Math.abs(minsAgoA - minsAgoB) > GAP_THRESHOLD_MINUTES
+}
+
+/**
  * Filter wind history data to a specific time window
  * @param fullHistory - All available wind data points with absolute timestamps
  * @param scale - Time scale to filter to ('30m', '1h', '6h', '24h', '72h')

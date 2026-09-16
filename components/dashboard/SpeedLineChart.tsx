@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react'
 import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from '@/lib/utils/time'
+import { exceedsGapThreshold } from '@/lib/utils/windowing'
 
 interface SpeedLineChartProps {
   data: WindDataPoint[]
@@ -48,7 +49,8 @@ export default function SpeedLineChart({
       .filter(
         (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd
       )
-      .sort((a, b) => b.minsAgo - a.minsAgo) // Sort newest to oldest
+      // Descending minsAgo, so the array runs oldest to newest, left to right along the axis.
+      .sort((a, b) => b.minsAgo - a.minsAgo)
   }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes])
 
   // Calculate dynamic Y-axis max
@@ -73,21 +75,57 @@ export default function SpeedLineChart({
   const innerW = WIDTH - PAD_L - PAD_R
   const innerH = HEIGHT - PAD_T - PAD_B
 
-  // Generate path for line chart
-  const linePath = useMemo(() => {
-    if (visibleData.length < 2) return ''
-
+  /**
+   * The trace's fill, as one closed shape per unbroken run of observations — plus the readings a
+   * break leaves on their own.
+   *
+   * One shape per run rather than one for the whole series: an outage the stroke breaks would
+   * otherwise still be filled underneath, which bridges it in a softer way. Each run closes to the
+   * baseline at its own first and last observation, so the fill covers the time the buoy reported and
+   * no more.
+   *
+   * A run of one has no area and no segment either, so it gets a dot. Dropping it would draw a
+   * reading the buoy did take as nothing at all, which reads as "no data" rather than "one
+   * observation between two outages" — the same reason the Wind Rose forces dots at a gap's ends.
+   */
+  const { areaPaths, isolatedPoints } = useMemo(() => {
     const windowStart = nowOffsetMinutes
     const windowEnd = nowOffsetMinutes + timeWindowMinutes
+    const baseline = PAD_T + innerH
 
-    const points = visibleData.map((p) => {
+    const shapes: string[] = []
+    const isolated: Array<{ x: number; y: number; spd: number }> = []
+    let run: Array<{ x: number; y: number; spd: number }> = []
+
+    const flush = (): void => {
+      if (run.length > 1) {
+        const first = run[0]
+        const last = run[run.length - 1]
+        const trace = run.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L')
+        shapes.push(
+          `M${trace} L${last.x.toFixed(1)},${baseline} L${first.x.toFixed(1)},${baseline} Z`
+        )
+      } else if (run.length === 1) {
+        isolated.push(run[0])
+      }
+      run = []
+    }
+
+    visibleData.forEach((p, i) => {
+      const previous = visibleData[i - 1]
+      if (previous && exceedsGapThreshold(previous.minsAgo, p.minsAgo)) flush()
+
       const t = 1 - (p.minsAgo - windowStart) / (windowEnd - windowStart)
-      const x = PAD_L + t * innerW
-      const y = PAD_T + (1 - p.spd / maxSpeed) * innerH
-      return [x, y]
+      run.push({
+        x: PAD_L + t * innerW,
+        y: PAD_T + (1 - p.spd / maxSpeed) * innerH,
+        spd: p.spd,
+      })
     })
-    return 'M' + points.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' L')
-  }, [visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed, innerW, innerH])
+
+    flush()
+    return { areaPaths: shapes, isolatedPoints: isolated }
+  }, [visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed, innerW, innerH, PAD_T, PAD_L])
 
   // Helper for Y coordinate
   const yFor = (speed: number) => {
@@ -254,25 +292,38 @@ export default function SpeedLineChart({
         KTS
       </text>
 
-      {/* Gradient definition for area fill */}
+      {/* Gradient definition for area fill.
+
+          Anchored to the plot rather than to each shape's own box: the default objectBoundingBox
+          units would restart the ramp inside every run, so a light-air stretch after an outage —
+          a short shape — would render darker than the heavy-air stretch before it. The fade has to
+          mean height on the axis, which is one scale for the whole chart. */}
       <defs>
-        <linearGradient id="spdGradient" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient
+          id="spdGradient"
+          gradientUnits="userSpaceOnUse"
+          x1={0}
+          y1={PAD_T}
+          x2={0}
+          y2={PAD_T + innerH}
+        >
           <stop offset="0%" stopColor="#0044CC" stopOpacity="0.30" />
           <stop offset="100%" stopColor="#0044CC" stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
-      {/* Area fill */}
-      {linePath && (
-        <path
-          d={`${linePath} L${PAD_L + innerW},${PAD_T + innerH} L${PAD_L},${PAD_T + innerH} Z`}
-          fill="url(#spdGradient)"
-        />
-      )}
+      {/* Area fill — one shape per unbroken run */}
+      {areaPaths.map((d, i) => (
+        <path key={`area${i}`} d={d} fill="url(#spdGradient)" />
+      ))}
 
       {/* Colored line segments */}
       {visibleData.length > 1 && visibleData.slice(0, -1).map((p, i) => {
         const b = visibleData[i + 1]
+
+        // Two observations an outage apart are not two ends of one line.
+        if (exceedsGapThreshold(p.minsAgo, b.minsAgo)) return null
+
         const windowStart = nowOffsetMinutes
         const windowEnd = nowOffsetMinutes + timeWindowMinutes
 
@@ -301,6 +352,17 @@ export default function SpeedLineChart({
           />
         )
       })}
+
+      {/* One observation with no neighbour to join — drawn, because it was measured */}
+      {isolatedPoints.map((point, i) => (
+        <circle
+          key={`lone${i}`}
+          cx={point.x}
+          cy={point.y}
+          r={1.75}
+          fill={windColor(point.spd)}
+        />
+      ))}
 
       {/* Hover visualization */}
       {hoverPoint && visibleData.find((p) => p.minsAgo === hoverPoint.minsAgo) && (() => {

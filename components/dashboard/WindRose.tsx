@@ -7,9 +7,10 @@ import {
   getWindCondition,
   getCompassDirection,
 } from "@/lib/utils/wind";
-import { TIME_SCALES } from "@/lib/utils/windowing";
+import { TIME_SCALES, exceedsGapThreshold } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
+import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
 
 interface WindRoseProps {
   data: WindDataPoint[];
@@ -40,19 +41,6 @@ const COMPASS_LABELS = [
   { label: "W", angle: 270 },
   { label: "NW", angle: 315 },
 ];
-
-function radialToXY(
-  angleDeg: number,
-  r0to1: number,
-  cx: number,
-  cy: number,
-  radius: number,
-): [number, number] {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  const x = Math.round((cx + r0to1 * radius * Math.cos(rad)) * 1e6) / 1e6;
-  const y = Math.round((cy + r0to1 * radius * Math.sin(rad)) * 1e6) / 1e6;
-  return [x, y];
-}
 
 // Note: Replaced by findPointByRadius from radialSelection module
 // Old cartesian-distance based selection removed in favor of time-prioritized radial selection
@@ -163,7 +151,8 @@ export default function WindRose({
 
         return { ...point, x, y, r01, color, opacity };
       })
-      .sort((a, b) => a.minsAgo - b.minsAgo); // Sort oldest to newest
+      // Ascending minsAgo, so index 0 is the newest observation and the last is the oldest.
+      .sort((a, b) => a.minsAgo - b.minsAgo);
   }, [dataWithOffset, timeWindowMinutes, nowOffsetMinutes]);
 
   // Outer ring color matches the displayed reference point's wind strength
@@ -173,42 +162,34 @@ export default function WindRose({
     return dataPoints[dataPoints.length - 1].color;
   }, [displayPoint, dataPoints]);
 
-  // Generate line segments, skipping gaps > 90°
-  const lineSegments = useMemo(() => {
+  // One swept connector per consecutive pair of observations. No pair is dropped for being a large
+  // shift — a 100° veer in ten minutes is ordinary in light air, and it is the reading the sailor
+  // most needs to see. Colour and opacity stay flat along a segment, from its average speed and its
+  // mid radius, exactly as they were when these were straight lines.
+  const arcSegments = useMemo(() => {
     const segments: Array<{
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
+      d: string;
       color: string;
       opacity: number;
     }> = [];
 
     for (let i = 0; i < dataPoints.length - 1; i++) {
-      const a = dataPoints[i];
-      const b = dataPoints[i + 1];
+      const newer = dataPoints[i];
+      const older = dataPoints[i + 1];
 
-      // Calculate angular difference (shortest path)
-      const angDiff = Math.abs(((a.dir - b.dir + 540) % 360) - 180);
+      // An outage is not a slow veer. Nothing is drawn across it.
+      if (exceedsGapThreshold(newer.minsAgo, older.minsAgo)) continue;
 
-      // Skip if angular gap > 90° (wraparound artifact)
-      if (angDiff > 90) continue;
-
-      // Calculate midpoint radius for opacity
-      const midR = (a.r01 + b.r01) / 2;
+      const midR = (newer.r01 + older.r01) / 2;
       const opacity =
         Math.round((0.08 + 0.92 * Math.pow(midR, 1.5)) * 1e6) / 1e6;
 
-      // Use average speed for color
-      const avgSpeed = (a.spd + b.spd) / 2;
-      const color = getWindColorHex(avgSpeed);
+      const avgSpeed = (newer.spd + older.spd) / 2;
 
       segments.push({
-        x1: a.x,
-        y1: a.y,
-        x2: b.x,
-        y2: b.y,
-        color,
+        // Oldest end first: the sweep of an exact reversal is resolved against chronology.
+        d: arcPath(older, newer, CENTER_X, CENTER_Y, R),
+        color: getWindColorHex(avgSpeed),
         opacity,
       });
     }
@@ -216,7 +197,23 @@ export default function WindRose({
     return segments;
   }, [dataPoints]);
 
-  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+  // The observations on either side of an outage, which must be drawn whatever the subsample says.
+  // Without this the two ends of a gap can both be sampled away on exactly the wide scales where the
+  // break fires, and an outage renders as the trace quietly fading out instead of stopping.
+  const gapEndpoints = useMemo(() => {
+    const forced = new Set<number>();
+
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      if (exceedsGapThreshold(dataPoints[i].minsAgo, dataPoints[i + 1].minsAgo)) {
+        forced.add(i);
+        forced.add(i + 1);
+      }
+    }
+
+    return forced;
+  }, [dataPoints]);
+
+  const handlePointerDown =(e: React.PointerEvent<SVGSVGElement>) => {
     if (!onHoverChange || !svgRef.current) return;
 
     e.preventDefault(); // Prevent page scrolling on touch
@@ -625,19 +622,18 @@ export default function WindRose({
             );
           })}
 
-          {/* Line segments connecting data points */}
-          {lineSegments.map((segment, i) => (
-            <line
+          {/* Swept connectors between data points */}
+          {arcSegments.map((segment, i) => (
+            <path
               className="chart-data-stroke"
               key={`seg-${i}`}
-              x1={segment.x1}
-              y1={segment.y1}
-              x2={segment.x2}
-              y2={segment.y2}
+              d={segment.d}
+              fill="none"
               stroke={segment.color}
               strokeWidth={2.5}
               strokeOpacity={segment.opacity}
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
           ))}
 
@@ -645,7 +641,7 @@ export default function WindRose({
           {dataPoints.map((point, i) => {
             // Subsample for performance (show ~28 points max)
             const step = Math.max(1, Math.floor(dataPoints.length / 28));
-            if (i % step !== 0 && i !== 0) return null;
+            if (i % step !== 0 && i !== 0 && !gapEndpoints.has(i)) return null;
 
             return (
               <circle
