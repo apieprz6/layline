@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import type {
   BuoyData,
   BuoyDataResult,
@@ -7,6 +8,15 @@ import type {
   PurdueBuoyRow,
 } from '@/types'
 import { getServiceClient } from '@/lib/supabase/service'
+
+/**
+ * Buoy freshness window, in seconds.
+ *
+ * Every buoy read goes through Next's Data Cache, which is shared across
+ * serverless instances — a process-local Map only ever helped the instance that
+ * did the fetching, and on Vercel the next navigation lands somewhere else.
+ */
+const BUOY_CACHE_SECONDS = 5 * 60
 
 // Status thresholds (how to label data freshness)
 const STATUS_THRESHOLDS = {
@@ -129,8 +139,8 @@ function extractLatestFromHistory(historyData: BuoyHistoryData): BuoyDataResult 
  * Fetch CHII2 buoy data from NDBC
  * Now uses history endpoint as single source of truth
  */
-export async function fetchCHII2(options?: { bypassCache?: boolean }): Promise<BuoyDataResult> {
-  const historyData = await fetchCHII2History(options)
+export async function fetchCHII2(): Promise<BuoyDataResult> {
+  const historyData = await fetchCHII2History()
   return extractLatestFromHistory(historyData)
 }
 
@@ -154,8 +164,8 @@ function isPurdueSeason(): boolean {
  * 2. Fall back to NDBC station 45198 history
  * 3. Handle seasonal offline gracefully (May-October operational)
  */
-export async function fetchPurdueBuoy(options?: { bypassCache?: boolean }): Promise<BuoyDataResult> {
-  const historyData = await fetchPurdueBuoyHistory(options)
+export async function fetchPurdueBuoy(): Promise<BuoyDataResult> {
+  const historyData = await fetchPurdueBuoyHistory()
 
   // Check if in operational season
   const isOperationalSeason = isPurdueSeason()
@@ -171,13 +181,6 @@ export async function fetchPurdueBuoy(options?: { bypassCache?: boolean }): Prom
   }
 
   return extractLatestFromHistory(historyData)
-}
-
-/**
- * Clear history cache for testing
- */
-export function clearCache(): void {
-  clearHistoryCache()
 }
 
 /**
@@ -256,121 +259,126 @@ function parseNDBCHistoricalRows(
 // NDBC already provides 10-minute interval data - no bucketing needed
 // Store absolute timestamps to prevent drift
 
-// History cache
-const historyCache: Map<
-  string,
-  { data: BuoyHistoryData; fetchedAt: number }
-> = new Map()
-
-const HISTORY_CACHE_TTL = 5 * 60 * 1000 // 5 minutes (same as live data cache)
-
 /**
  * Fetch buoy historical data from NDBC
  * Returns wind data with absolute timestamps (no bucketing - NDBC already provides 10-min intervals)
+ *
+ * Throws when NDBC is unreachable or has nothing to give. Cached callers rely on
+ * that: a rejection writes nothing to the Data Cache, so the next request
+ * retries live instead of serving a stored failure for five minutes.
  */
-async function fetchBuoyHistory(
-  stationId: keyof typeof BUOY_CONFIGS,
-  options?: { bypassCache?: boolean }
+async function loadNDBCHistory(
+  stationId: keyof typeof BUOY_CONFIGS
 ): Promise<BuoyHistoryData> {
-  const cacheKey = `${stationId}-history`
   const now = Date.now()
+  const config = BUOY_CONFIGS[stationId]
+  const url = `https://www.ndbc.noaa.gov/data/realtime2/${config.stationId}.txt`
 
-  // Check cache first (unless bypass is requested)
-  const cached = historyCache.get(cacheKey)
-  if (!options?.bypassCache && cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
-    return cached.data
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`NDBC API error: ${response.status} ${response.statusText}`)
   }
 
-  // Fetch historical data
-  try {
-    const config = BUOY_CONFIGS[stationId]
-    const url = `https://www.ndbc.noaa.gov/data/realtime2/${config.stationId}.txt`
+  const text = await response.text()
+  const parsedData = parseNDBCHistoricalRows(text)
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Layline Sailing Dashboard (contact: layline@sailing.app)',
-      },
-    })
+  if (parsedData.length === 0) {
+    throw new Error('No historical data available')
+  }
 
-    if (!response.ok) {
-      throw new Error(`NDBC API error: ${response.status} ${response.statusText}`)
-    }
+  // Filter to 72-hour window
+  const cutoffTime = new Date(now - 72 * 60 * 60 * 1000)
+  const recentData = parsedData.filter((p) => p.timestamp >= cutoffTime)
 
-    const text = await response.text()
-    const parsedData = parseNDBCHistoricalRows(text)
+  // Convert to WindDataPoint[] with ISO timestamps
+  const history: WindDataPoint[] = recentData.map((p) => ({
+    timestamp: p.timestamp.toISOString(),
+    spd: Math.round(p.windSpeed * 10) / 10,
+    dir: Math.round(p.windDirection),
+  }))
 
-    if (parsedData.length === 0) {
-      throw new Error('No historical data available')
-    }
+  // Calculate status based on most recent data point timestamp
+  const latestTimestamp = history.length > 0 ? history[0].timestamp : undefined
 
-    // Filter to 72-hour window
-    const cutoffTime = new Date(now - 72 * 60 * 60 * 1000)
-    const recentData = parsedData.filter((p) => p.timestamp >= cutoffTime)
-
-    // Convert to WindDataPoint[] with ISO timestamps
-    const history: WindDataPoint[] = recentData.map((p) => ({
-      timestamp: p.timestamp.toISOString(),
-      spd: Math.round(p.windSpeed * 10) / 10,
-      dir: Math.round(p.windDirection),
-    }))
-
-    // Calculate status based on most recent data point timestamp
-    const latestTimestamp = history.length > 0 ? history[0].timestamp : undefined
-    const status = calculateStatus(latestTimestamp, false)
-
-    const historyData: BuoyHistoryData = {
-      buoyId: config.stationId,
-      name: config.name,
-      history,
-      status,
-      fetchedAt: new Date(now).toISOString(),
-    }
-
-    // Cache the result
-    historyCache.set(cacheKey, { data: historyData, fetchedAt: now })
-
-    return historyData
-  } catch (error) {
-    // Return null history on error
-    const historyData: BuoyHistoryData = {
-      buoyId: BUOY_CONFIGS[stationId].stationId,
-      name: BUOY_CONFIGS[stationId].name,
-      history: null,
-      status: 'error',
-      fetchedAt: new Date(now).toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }
-
-    return historyData
+  return {
+    buoyId: config.stationId,
+    name: config.name,
+    history,
+    status: calculateStatus(latestTimestamp, false),
+    fetchedAt: new Date(now).toISOString(),
   }
 }
 
 /**
+ * Load Purdue Buoy history from Supabase (primary) with NDBC fallback
+ *
+ * Throws if both sources come up empty, for the same reason as
+ * {@link loadNDBCHistory}: nothing failed should reach the Data Cache.
+ */
+async function loadPurdueHistory(): Promise<BuoyHistoryData> {
+  const fromSupabase = await fetchPurdueFromSupabase(Date.now())
+  if (fromSupabase) {
+    return fromSupabase
+  }
+
+  return loadNDBCHistory('45198')
+}
+
+/**
+ * Shape a failed read the way callers expect: null history, an error status and
+ * the message, with the moment we tried recorded as `fetchedAt`.
+ */
+function historyReadFailure(
+  stationId: keyof typeof BUOY_CONFIGS,
+  error: unknown
+): BuoyHistoryData {
+  return {
+    buoyId: BUOY_CONFIGS[stationId].stationId,
+    name: BUOY_CONFIGS[stationId].name,
+    history: null,
+    status: 'error',
+    fetchedAt: new Date().toISOString(),
+    error: error instanceof Error ? error.message : 'Unknown error',
+  }
+}
+
+// Wrapped once, at module scope: the station id travels in the call arguments,
+// which is part of the cache key, so the two buoys never share an entry. No
+// cache tags — nothing in the app purges a buoy read, and the window is the only
+// promise made about freshness.
+const cachedNDBCHistory = unstable_cache(loadNDBCHistory, ['buoy-history-ndbc'], {
+  revalidate: BUOY_CACHE_SECONDS,
+})
+
+const cachedPurdueHistory = unstable_cache(loadPurdueHistory, ['buoy-history-purdue'], {
+  revalidate: BUOY_CACHE_SECONDS,
+})
+
+/**
  * Fetch CHII2 historical data
  */
-export async function fetchCHII2History(options?: { bypassCache?: boolean }): Promise<BuoyHistoryData> {
-  return fetchBuoyHistory('CHII2', options)
+export async function fetchCHII2History(): Promise<BuoyHistoryData> {
+  try {
+    return await cachedNDBCHistory('CHII2')
+  } catch (error) {
+    return historyReadFailure('CHII2', error)
+  }
 }
 
 /**
  * Fetch Purdue Buoy historical data from Supabase (primary) with NDBC fallback
  */
-export async function fetchPurdueBuoyHistory(options?: { bypassCache?: boolean }): Promise<BuoyHistoryData> {
-  const cacheKey = '45198-history'
-  const now = Date.now()
-
-  const cached = historyCache.get(cacheKey)
-  if (!options?.bypassCache && cached && now - cached.fetchedAt < HISTORY_CACHE_TTL) {
-    return cached.data
+export async function fetchPurdueBuoyHistory(): Promise<BuoyHistoryData> {
+  try {
+    return await cachedPurdueHistory()
+  } catch (error) {
+    return historyReadFailure('45198', error)
   }
-
-  const supabaseResult = await fetchPurdueFromSupabase(now)
-  if (supabaseResult) {
-    historyCache.set(cacheKey, { data: supabaseResult, fetchedAt: now })
-    return supabaseResult
-  }
-
-  return fetchBuoyHistory('45198', options)
 }
 
 async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | null> {
@@ -408,11 +416,4 @@ async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | n
   } catch {
     return null
   }
-}
-
-/**
- * Clear history cache for testing
- */
-export function clearHistoryCache(): void {
-  historyCache.clear()
 }

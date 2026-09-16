@@ -16,7 +16,6 @@ interface StationPageClientProps {
   stationName: string;
   data: WindDataPoint[];
   fetchedAt: string;
-  serverTime: number;
 }
 
 const TOTAL_HOURS = 72;
@@ -27,14 +26,17 @@ export default function StationPageClient({
   stationName,
   data,
   fetchedAt,
-  serverTime,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>("1h");
   const [hoverPoint, setHoverPoint] = useState<WindDataPointWithOffset | null>(null);
   const [nowOffset, setNowOffset] = useState<number>(0); // Minutes ago from current time (0 = live)
 
-  // Use server-provided time to avoid hydration mismatches
-  const now = useMemo(() => new Date(serverTime), [serverTime]);
+  // Every window and offset on this screen is measured from the moment the data
+  // was read, not from a client clock — that keeps hydration deterministic, and
+  // it is the only "now" the samples were ever positioned against. The header
+  // runs its own ticking clock, so the age of this reading still shows there.
+  const now = useMemo(() => new Date(fetchedAt), [fetchedAt]);
+  const nowMs = now.getTime();
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
   const dataWithOffset: WindDataPointWithOffset[] = useMemo(
@@ -62,12 +64,12 @@ export default function StationPageClient({
 
   // Calculate reference time and window start for display
   const referenceTime = useMemo(
-    () => new Date(serverTime - nowOffset * 60 * 1000),
-    [serverTime, nowOffset],
+    () => new Date(nowMs - nowOffset * 60 * 1000),
+    [nowMs, nowOffset],
   );
   const windowStart = useMemo(
-    () => new Date(serverTime - (nowOffset + timeWindowMinutes) * 60 * 1000),
-    [serverTime, nowOffset, timeWindowMinutes],
+    () => new Date(nowMs - (nowOffset + timeWindowMinutes) * 60 * 1000),
+    [nowMs, nowOffset, timeWindowMinutes],
   );
 
   // Calculate display point: use hoverPoint if set, otherwise most recent data point
@@ -100,16 +102,12 @@ export default function StationPageClient({
 
   // Calculate latest data time (most recent sample)
   const latestDataTime = useMemo(() => {
-    if (!dataWithOffset || dataWithOffset.length === 0) return new Date();
+    // No samples: the read time is the only instant we can honestly name. A
+    // client clock here would also disagree with the prerendered markup.
+    if (!dataWithOffset || dataWithOffset.length === 0) return now;
     const latestPoint = dataWithOffset.find((p) => p.minsAgo === 0) || dataWithOffset[0];
-    return new Date(serverTime - latestPoint.minsAgo * 60 * 1000);
-  }, [dataWithOffset, serverTime]);
-
-  // Use the actual fetch time from the API response
-  const lastFetchTime = useMemo(
-    () => new Date(fetchedAt),
-    [fetchedAt],
-  );
+    return new Date(nowMs - latestPoint.minsAgo * 60 * 1000);
+  }, [dataWithOffset, now, nowMs]);
 
   const hasData = data && data.length > 0;
 
@@ -120,7 +118,7 @@ export default function StationPageClient({
           stationName={stationName}
           buoyId={buoyId}
           latestDataTime={latestDataTime}
-          lastFetchTime={lastFetchTime}
+          lastFetchTime={now}
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
         />

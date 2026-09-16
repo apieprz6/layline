@@ -1,10 +1,12 @@
-import { fetchCHII2History, fetchPurdueBuoyHistory, clearHistoryCache } from '../ndbc'
+import { fetchCHII2History, fetchPurdueBuoyHistory } from '../ndbc'
+import { clearDataCache } from './data-cache'
+
+jest.mock('next/cache', () => jest.requireActual('./data-cache'))
 
 describe('NDBC Buoy History - Extended 72-hour Support', () => {
   beforeEach(() => {
-    // Clear any module-level caches
     jest.clearAllMocks()
-    clearHistoryCache()
+    clearDataCache()
   })
 
   describe('fetchCHII2History', () => {
@@ -71,27 +73,59 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
   })
 
   describe('Cache behavior', () => {
-    it('respects 10-minute cache TTL for history', async () => {
-      const mockNDBCResponse = generateMockNDBCResponse(72)
+    function mockNDBC() {
       const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => mockNDBCResponse,
+        text: async () => generateMockNDBCResponse(72),
       } as Response)
-
       global.fetch = fetchMock
+      return fetchMock
+    }
 
-      // First call - should fetch from NDBC
+    it('serves a second read from the cache without touching NDBC', async () => {
+      const fetchMock = mockNDBC()
+
       const result1 = await fetchCHII2History()
       expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(result1.history).toHaveLength(432)
 
-      // Second call immediately after - should use cache
       const result2 = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(1) // Still only 1 call
+      expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(result2.history).toHaveLength(432)
 
-      // Verify both results have the same data
+      // Same entry, not a coincidentally identical refetch
       expect(result1.fetchedAt).toBe(result2.fetchedAt)
+    })
+
+    it('refetches once the 5-minute freshness window has passed', async () => {
+      jest.useFakeTimers()
+      try {
+        const fetchMock = mockNDBC()
+
+        await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+
+        jest.advanceTimersByTime(4 * 60 * 1000)
+        await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+
+        jest.advanceTimersByTime(2 * 60 * 1000)
+        await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('keeps each station in its own cache entry', async () => {
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      await fetchPurdueBuoyHistory()
+
+      const requestedUrls = fetchMock.mock.calls.map((call) => String(call[0]))
+      expect(requestedUrls.some((url) => url.includes('CHII2'))).toBe(true)
+      expect(requestedUrls.some((url) => url.includes('45198'))).toBe(true)
     })
   })
 
@@ -104,6 +138,21 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       expect(result.status).toBe('error')
       expect(result.history).toBeNull()
       expect(result.error).toBe('Network error')
+    })
+
+    it('never caches a failed fetch — the next read retries live', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('Network error'))
+      const failed = await fetchCHII2History()
+      expect(failed.history).toBeNull()
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => generateMockNDBCResponse(72),
+      } as Response)
+
+      const retried = await fetchCHII2History()
+      expect(retried.status).not.toBe('error')
+      expect(retried.history).toHaveLength(432)
     })
   })
 })

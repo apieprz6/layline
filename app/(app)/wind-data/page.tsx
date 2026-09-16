@@ -1,7 +1,11 @@
 import WindDataContent from '@/components/dashboard/WindDataContent'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
-export const dynamic = 'force-dynamic'
+// Buoy freshness window, matching the buoy service's own. Wherever Supabase is
+// configured the parent layout reads cookies and this route renders per request
+// anyway, so the Data Cache — not this export — is what keeps a repeated visit
+// off NDBC. It states the same window for the prerender a keyless checkout gets.
+export const revalidate = 300
 
 export default async function WindDataPage() {
   const [chii2Result, purdueResult] = await Promise.all([

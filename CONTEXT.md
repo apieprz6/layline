@@ -65,7 +65,7 @@ _Avoid_: Race time (implies a fixed recurring schedule), forecast time (that's a
 
 **Current Conditions**:
 The present state of the wind as reported by Buoys, with no Target Time applied. The default view. Distinct from a forecast, which is always a prediction for some other moment.
-_Avoid_: Live conditions (reserved for the Live Fetch concept), real-time
+_Avoid_: Live conditions (every reading reaches a screen through a Cached Fetch, so nothing here is live), real-time
 
 ### Data Status
 
@@ -86,13 +86,13 @@ Fetch failed with no cached data available. Data source unavailable.
 
 ### Data Fetching
 
-**Live Fetch**:
-Fresh API call bypassing cache. Used on dedicated live data pages with auto-refresh.
-_Avoid_: Real-time, uncached
-
 **Cached Fetch**:
-Returns cached data if within TTL (10 minutes for history data, aligned with NDBC's update frequency). Used on dashboard for performance.
+The only way Buoy data is read. Served from Next's Data Cache while the entry is inside the five-minute freshness window, and from the source otherwise. The Data Cache is shared across serverless instances, so a visit that lands on a cold one is still a hit. A failed read is never stored — the next request retries live.
 _Avoid_: Standard fetch, normal fetch
+
+**Freshness Window**:
+How long a Cached Fetch may serve a stored reading before going back to the source: five minutes for Buoy data, half NDBC's ten-minute publishing cadence. A screen that wants fresher data shortens the window rather than going around it; there is no bypass.
+_Avoid_: TTL, cache expiry, live fetch (there is no uncached path)
 
 **Cache Adapter**:
 Abstraction layer for weather model caching strategies. Implementations include InMemoryWeatherCache (default), with support for future Redis/Vercel KV backends. Allows cache strategy swapping without changing fetch logic.

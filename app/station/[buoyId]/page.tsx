@@ -4,14 +4,19 @@ import { getStationInfo } from '@/lib/config/stations'
 import StationPageClient from './StationPageClient'
 import type { BuoyHistoryData } from '@/types'
 
-// Force dynamic rendering for fresh data on every request
-export const dynamic = 'force-dynamic'
+// Both stations are known ahead of time, so this page prerenders and refreshes
+// on the same five-minute window the buoy data itself is cached on.
+export const revalidate = 300
 
 interface StationPageProps {
   params: Promise<{ buoyId: string }>
 }
 
 const VALID_BUOY_IDS = ['CHII2', '45198']
+
+export function generateStaticParams(): Array<{ buoyId: string }> {
+  return VALID_BUOY_IDS.map((buoyId) => ({ buoyId }))
+}
 
 export default async function StationPage({ params }: StationPageProps) {
   const { buoyId } = await params
@@ -40,8 +45,6 @@ export default async function StationPage({ params }: StationPageProps) {
       stationName={stationInfo.name}
       data={historyData.history ?? []}
       fetchedAt={historyData.fetchedAt}
-      // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
-      serverTime={Date.now()}
     />
   )
 }
