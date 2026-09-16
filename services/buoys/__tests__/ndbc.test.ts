@@ -82,6 +82,20 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       return fetchMock
     }
 
+    /**
+     * How many times NDBC was asked for one station.
+     *
+     * Not the same as how many times `fetch` was called: the Purdue read tries
+     * Supabase first, and where the service keys are set that attempt goes
+     * through this same mock before falling back to NDBC. Counting every call
+     * would make the same assertion mean one thing locally and another in CI,
+     * which is how the first version of these tests passed here and failed there.
+     */
+    function ndbcCalls(fetchMock: jest.Mock, stationId: string): number {
+      return fetchMock.mock.calls.filter((call) => String(call[0]).includes(stationId))
+        .length
+    }
+
     it('serves a second read from the cache without touching NDBC', async () => {
       const fetchMock = mockNDBC()
 
@@ -162,13 +176,13 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       const fetchMock = mockNDBC()
 
       const before = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
 
       await new Promise((resolve) => setTimeout(resolve, 2))
       purgeBuoyHistory('CHII2')
 
       const after = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
       expect(after.fetchedAt).not.toBe(before.fetchedAt)
     })
 
@@ -177,15 +191,18 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
 
       await fetchCHII2History()
       await fetchPurdueBuoyHistory()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
+      expect(ndbcCalls(fetchMock, '45198')).toBe(1)
 
       purgeBuoyHistory('45198')
 
+      // CHII2's reading is untouched — a tap on one station's screen must not
+      // spend the other station's stored reading.
       await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
 
       await fetchPurdueBuoyHistory()
-      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(ndbcCalls(fetchMock, '45198')).toBe(2)
     })
 
     it('stores what a purged read fetches, so it is not a private answer', async () => {
@@ -197,10 +214,10 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       purgeBuoyHistory('CHII2')
 
       const asked = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
 
       const next = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
       expect(next.fetchedAt).toBe(asked.fetchedAt)
     })
   })
