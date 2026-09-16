@@ -1,7 +1,12 @@
 'use client'
 
 import type { KeyboardEvent, ReactElement } from 'react'
-import { spacing } from '@/lib/utils/design'
+import {
+  SECTION_TABS_HEADER_STYLE,
+  SECTION_TABS_LIST_STYLE,
+  SECTION_TABS_TITLE_STYLE,
+  sectionTabStyle,
+} from './sectionTabsStyle'
 
 interface SectionTab<T extends string> {
   id: T
@@ -60,31 +65,12 @@ export default function SectionTabs<T extends string>({
   }
 
   return (
-    <div
-      style={{
-        background: 'var(--surface-raised)',
-        borderBottom: '1px solid var(--surface-border)',
-        padding: `${spacing(4)} ${spacing(4)} 0`,
-      }}
-    >
-      <h1
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: '16px',
-          fontWeight: 'var(--weight-bold)',
-          color: 'var(--text-primary)',
-          marginBottom: spacing(3),
-        }}
-      >
-        {title}
-      </h1>
+    // Shared with `SectionTabsChrome`, so a browser can measure the two headers and
+    // prove a section's content does not shift when the real tabs arrive.
+    <div data-testid="section-header" style={SECTION_TABS_HEADER_STYLE}>
+      <h1 style={SECTION_TABS_TITLE_STYLE}>{title}</h1>
 
-      <div
-        role="tablist"
-        aria-label={title}
-        onKeyDown={onKeyDown}
-        style={{ display: 'flex', gap: 0 }}
-      >
+      <div role="tablist" aria-label={title} onKeyDown={onKeyDown} style={SECTION_TABS_LIST_STYLE}>
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab
           return (
@@ -98,20 +84,7 @@ export default function SectionTabs<T extends string>({
               // arrows move between them.
               tabIndex={isActive ? 0 : -1}
               onClick={() => onSelect(tab.id)}
-              style={{
-                flex: 1,
-                background: 'none',
-                border: 'none',
-                borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                padding: '7px 0',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-body)',
-                fontSize: '11px',
-                fontWeight: isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)',
-                color: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                transition: 'all 150ms',
-                letterSpacing: '0.01em',
-              }}
+              style={{ ...sectionTabStyle(isActive), cursor: 'pointer', transition: 'all 150ms' }}
             >
               {tab.label}
             </button>

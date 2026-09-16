@@ -1,17 +1,27 @@
 /**
- * What a race's page says the sailor said, including when they said nothing.
+ * What a race's page says the sailor said, what it offers to do about it, and to whom.
  *
- * Two properties, and both are ADR 0010's: Testimony is stated as given — every entry, earliest
- * first, with no initial value beside the list and nothing resolved onto a row — and an annotation
- * that was never given is stated as **not recorded**, in a treatment nothing else on the page uses.
+ * Two properties of the Testimony, and both are ADR 0010's: it is stated as given — every entry,
+ * earliest first, with no initial value beside the list and nothing resolved onto a row — and an
+ * annotation that was never given is stated as **not recorded**, in a treatment nothing else on the
+ * page uses.
  *
- * The second half is the load-bearing one. A silent section reads as a race with no sail changes, and
+ * That second half is the load-bearing one. A silent section reads as a race with no sail changes, and
  * "nobody wrote it down" is a different fact from "nothing changed".
+ *
+ * Then the one thing on the page that is a write. The page itself is a read and is open to every
+ * signed-in sailor (ADR 0019); delete is not, so the affordance has to be absent for a viewer rather
+ * than merely refused when pressed — a button that always answers "only an admin can" is a worse
+ * screen than no button, and `deleteRace` refuses a viewer regardless.
  */
 
 import { render, screen } from '@testing-library/react'
 import type { RaceAnnotations, RaceDetail } from '@/types'
 import RaceDetailView from '../RaceDetailView'
+
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(() => ({ push: jest.fn() })),
+}))
 
 const EMPTY: RaceAnnotations = { sails: [], sea_state: [] }
 
@@ -50,9 +60,19 @@ function raceOf(annotations: RaceAnnotations = EMPTY): RaceDetail {
   }
 }
 
+const deleteRace = jest.fn(async () => ({ ok: true as const, bytes_removed: true }))
+
+/**
+ * Every render carries the two delete props, because the page cannot be drawn without answering who
+ * is looking at it. Only the last two tests care what the answer is.
+ */
+function renderRace(race: RaceDetail, canDelete = false): void {
+  render(<RaceDetailView race={race} canDelete={canDelete} deleteRace={deleteRace} />)
+}
+
 describe('a race nobody annotated', () => {
   it('says the sail plan and the sea state were not recorded', () => {
-    render(<RaceDetailView race={raceOf()} />)
+    renderRace(raceOf())
 
     expect(screen.getByText(/nobody wrote down which sails were up/)).toBeInTheDocument()
     expect(screen.getByText(/nobody wrote down what the water was doing/)).toBeInTheDocument()
@@ -61,7 +81,7 @@ describe('a race nobody annotated', () => {
   it('draws “not recorded” as unlike a stated value as it can', () => {
     // Italic, dashed and hatched: the one thing missing Testimony must never be mistaken for is an
     // answer somebody gave (ADR 0008).
-    render(<RaceDetailView race={raceOf()} />)
+    renderRace(raceOf())
 
     const missing = screen.getByText(/nobody wrote down which sails were up/)
 
@@ -91,7 +111,7 @@ describe('a race the sailor annotated', () => {
   }
 
   it('states every entry in its own chart Version’s words, at the time the sailor gave', () => {
-    render(<RaceDetailView race={raceOf(annotated)} />)
+    renderRace(raceOf(annotated))
 
     // The words are the Crossover Chart Version's own, resolved against the Version this Race points
     // at and handed to the page already resolved (ADR 0023). Nothing here composes a sail name.
@@ -111,20 +131,18 @@ describe('a race the sailor annotated', () => {
     // The chart does not name everything the boat has ever flown, so an entry can be a note and
     // nothing else. Reaching for the nearest Definition's words would be the page deciding what was
     // up — which is the one thing a page about Testimony must not do.
-    render(
-      <RaceDetailView
-        race={raceOf({
-          sails: [
-            {
-              at: '2026-06-03T19:00:00',
-              definition_number: null,
-              label: null,
-              note: 'delivery main, no headsail',
-            },
-          ],
-          sea_state: [],
-        })}
-      />
+    renderRace(
+      raceOf({
+        sails: [
+          {
+            at: '2026-06-03T19:00:00',
+            definition_number: null,
+            label: null,
+            note: 'delivery main, no headsail',
+          },
+        ],
+        sea_state: [],
+      })
     )
 
     expect(screen.getByText('delivery main, no headsail')).toBeInTheDocument()
@@ -134,21 +152,37 @@ describe('a race the sailor annotated', () => {
   it('never says it matched anything to a wind reading', () => {
     // The mockup's "Auto-matched to wind readings" is fiction, and there is no `source` on an
     // annotation to distinguish an automatic one from a stated one — every one of them is stated.
-    render(<RaceDetailView race={raceOf(annotated)} />)
+    renderRace(raceOf(annotated))
 
     expect(document.body.textContent ?? '').not.toMatch(/auto-matched|automatic/i)
   })
 
   it('carries the day on an entry from another one, so a distance race reads right', () => {
-    render(
-      <RaceDetailView
-        race={raceOf({
-          sails: [],
-          sea_state: [{ at: '2026-06-04T01:12:00', sea_state: 'rough' }],
-        })}
-      />
+    renderRace(
+      raceOf({
+        sails: [],
+        sea_state: [{ at: '2026-06-04T01:12:00', sea_state: 'rough' }],
+      })
     )
 
     expect(screen.getByText('Jun 4 · 01:12')).toBeInTheDocument()
+  })
+})
+
+describe('who the page offers the delete to', () => {
+  it('offers it to an admin', () => {
+    renderRace(raceOf(), true)
+
+    expect(screen.getByTestId('race-delete-open')).toBeInTheDocument()
+  })
+
+  it('shows a viewer no delete affordance at all', () => {
+    renderRace(raceOf())
+
+    expect(screen.queryByTestId('race-delete-open')).not.toBeInTheDocument()
+    expect(screen.queryByText(/delete/i)).not.toBeInTheDocument()
+    // The race itself reads exactly the same for them, annotations and all.
+    expect(screen.getByText('Wednesday night')).toBeInTheDocument()
+    expect(screen.getByText('06-03-26-wed.csv')).toBeInTheDocument()
   })
 })

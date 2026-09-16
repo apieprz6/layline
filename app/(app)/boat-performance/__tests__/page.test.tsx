@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { CREW } from '@/__tests__/fixtures/accounts'
+import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 
 const redirect = jest.fn((to: string) => {
   throw Object.assign(new Error(`NEXT_REDIRECT:${to}`), { digest: 'NEXT_REDIRECT' })
@@ -23,8 +24,15 @@ describe('/boat-performance', () => {
     resolveAccount.mockResolvedValue(null)
   })
 
+  // The read sits behind a `<Suspense>` (LAY-132), so awaiting the page hands back a
+  // tree with the archive still unresolved inside it. `resolveServerTree` calls it the
+  // way the server does, which is what puts the settled screen in front of these
+  // assertions rather than its skeleton.
   async function renderPage(): Promise<HTMLElement> {
-    const { container } = render(await BoatPerformancePage())
+    const { container } = render(await resolveServerTree(await BoatPerformancePage()))
+    // And prove it did: an unresolved tree renders the skeleton, which the negative
+    // assertions below would sail straight through.
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
     return container
   }
 

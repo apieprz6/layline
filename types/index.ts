@@ -1776,6 +1776,19 @@ export interface RaceDetail {
   annotations: RaceAnnotations
 }
 
+/**
+ * What deleting a race answers with.
+ *
+ * `bytes_removed` is false when the transaction committed and the object did not go with it — the
+ * failure ADR 0013 chooses deliberately, since bytes nothing points at are invisible and sweepable
+ * while a row pointing at bytes nobody kept is a race that lists, opens and then fails. The race is
+ * gone either way, which is why this is not a failure; it is stated so the screen can say it and the
+ * sweeper has something to find.
+ */
+export type DeleteRaceResult =
+  | { ok: true; bytes_removed: boolean }
+  | { ok: false; message: string }
+
 // Purdue Buoy (IISEAGrant) reading row
 export interface PurdueBuoyReading {
   timestamp: Date

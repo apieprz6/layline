@@ -249,6 +249,14 @@ export async function generateBriefing(input: any) {
 import type { WindForecast, BuoyData, RaceBriefing } from '@/types'
 ```
 
+Every type that crosses a boundary, that is: a component's props, a Server Action's
+result, an API response, anything two features both name. A type a single module
+defines for its own use — the port it asks callers to implement, an intermediate
+shape on the way to its result — stays with the module, because moving it to
+`/types` would publish a detail and put its definition a file away from the code
+that gives it meaning. `services/races/coverage.ts`,
+`services/instruments/row-quality.ts` and `services/storage/sweep.ts` all do this.
+
 ### Error Handling
 
 **API Routes** - Always wrap in try/catch:

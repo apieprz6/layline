@@ -23,6 +23,15 @@ import type { FileBackedBoatSetupKind } from '@/types'
 export const BOAT_BUCKET = 'boat'
 
 /**
+ * The three top-level prefixes of the convention above, named because the sweeper walks two of
+ * them and must never walk the third (`services/storage/sweep.ts`). Written without a trailing
+ * slash: every join below adds its own.
+ */
+export const RECORDINGS_PREFIX = 'recordings'
+export const TMP_PREFIX = 'tmp'
+export const BOAT_SETUP_PREFIX = 'boat-setup'
+
+/**
  * storage-api's own object-key charset. Everything outside it is replaced rather than
  * rejected, because the sailor's filename is data and a rejected upload would be a
  * refusal Layline has no reason to make.
@@ -68,7 +77,7 @@ export function storageSafeFilename(filename: string): string {
 /** `recordings/{recording_id}/{filename}` — keyed on the Recording, never on the Race. */
 export function recordingObjectPath(recordingId: string, filename: string): string {
   assertPathSegment(recordingId, 'recording id')
-  return `recordings/${recordingId}/${storageSafeFilename(filename)}`
+  return `${RECORDINGS_PREFIX}/${recordingId}/${storageSafeFilename(filename)}`
 }
 
 /**
@@ -88,7 +97,7 @@ export function boatSetupObjectPath(
     throw new TypeError(`a ${kind} Version is entered by hand and has no Storage path`)
   }
   assertPathSegment(versionId, 'version id')
-  return `boat-setup/${kind}/${versionId}/${storageSafeFilename(filename)}`
+  return `${BOAT_SETUP_PREFIX}/${kind}/${versionId}/${storageSafeFilename(filename)}`
 }
 
 /**
@@ -105,5 +114,5 @@ export function tmpUploadObjectPath(
 ): string {
   assertPathSegment(userId, 'user id')
   assertPathSegment(uploadId, 'upload id')
-  return `tmp/${userId}/${uploadId}/${storageSafeFilename(filename)}`
+  return `${TMP_PREFIX}/${userId}/${uploadId}/${storageSafeFilename(filename)}`
 }

@@ -279,6 +279,10 @@ _Avoid_: Tag, note, event, manual data (all Annotations are manual — the word 
 An **admin** changing a **Race**'s **Testimony** after upload — its **Race Window**, its **Annotations**, its **Wind Band**, its **Version** pointers, its title. Made in the same window-and-annotation flow that logs a race, entered from the race without its file step: the same charts, the same tap-to-place times, no file read and no new **Transcription**. Carries no change reason and no history: nothing points at a Race, so an Amendment changes only its own reading, and that reading is recomputed on every view. Distinct from a new **Version**, which is how a **Boat Setup** artifact changes, and from a re-upload, which makes a second Race.
 _Avoid_: Edit, revision, correction (that word belongs to an **Instrument Calibration** Version), update
 
+**Sweeper**:
+The admin-run collector for stored bytes nothing points at — an abandoned upload, a **Race** whose commit failed after its file moved, a deletion that failed after the row went. It compares what is in the bucket against the **Recordings** that exist and removes only what no row claims, leaving anything too recent to be sure about, so it is safe to run while an upload is in flight. Run on demand and answers with what it removed, what it left and why (ADR 0013, ADR 0022).
+_Avoid_: Garbage collection, cleanup job, cron, reaper (nothing is scheduled, and "cleaning" is already a different act — see **Transcription**)
+
 **Sea State**:
 The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind. An **Annotation**.
 _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0-9 and is not what these bands are)
@@ -352,6 +356,8 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - An **Amendment** is made in the flow that logs a race, minus its file step; logging a second race from one export is the same flow *with* it
 - A **Race Window** may reach past the end of its **Recording** — that means the recording dropped out, and it is stated on the race page, never refused
 - Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it; a failed deletion leaves stored bytes behind rather than a **Race** whose bytes are gone
+- Deleting a **Race** is expressed as deleting its **Recording**, which is what makes it one statement; deleting the Race alone would leave the **Transcription** standing, and no **Annotation** can ever destroy one
+- The **Sweeper** removes only stored bytes no **Recording** claims, so a **Race** can never lose its file to one
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
 - A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
 - A **Race** carries **Sail Configurations** and **Sea State** as **Annotations**, resolved onto **Recording Rows** by time on read
