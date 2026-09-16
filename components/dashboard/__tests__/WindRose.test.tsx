@@ -322,6 +322,64 @@ describe('WindRose', () => {
         expect(distance).toBeLessThanOrEqual(138 + 0.5)
       }
     })
+
+    it('draws nothing across a gap longer than an hour', () => {
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 185 },
+        // The buoy was down for three hours.
+        { timestamp: '2026-05-19T14:50:00.000Z', spd: 12, dir: 200 },
+        { timestamp: '2026-05-19T14:40:00.000Z', spd: 12, dir: 205 },
+      ]
+
+      const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={360} />)
+
+      // Two runs of two, so two connectors — not three.
+      expect(connectors(container)).toHaveLength(2)
+    })
+
+    it('still connects observations spaced within the threshold', () => {
+      const data: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:00:00.000Z', spd: 12, dir: 185 }, // exactly 60 minutes
+      ]
+
+      const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={360} />)
+
+      expect(connectors(container)).toHaveLength(1)
+    })
+
+    it('keeps both ends of a gap as dots even when the subsample would drop them', () => {
+      // 60 observations at the feed's 10-minute cadence, with a three-hour outage after the 30th.
+      // That is enough points for the ~28-dot subsample to take every second one, and the newer end
+      // of the gap lands on an odd index, so without the exemption it would be dropped and the
+      // outage would render as the trace fading out.
+      const data: WindDataPoint[] = []
+      for (let sample = 0; sample < 60; sample += 1) {
+        const minsAgo = sample * 10 + (sample >= 30 ? 180 : 0)
+        data.push({
+          timestamp: new Date(now.getTime() - minsAgo * 60_000).toISOString(),
+          spd: 12,
+          dir: 180,
+        })
+      }
+
+      const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={1440} />)
+
+      // A dot's radius is its age, so that is how the test names the observation it wants.
+      const dotAges = Array.from(container.querySelectorAll('circle[r="2.2"]')).map((circle) => {
+        const cx = parseFloat(circle.getAttribute('cx') || '0')
+        const cy = parseFloat(circle.getAttribute('cy') || '0')
+        const r01 = Math.sqrt((cx - 180) ** 2 + (cy - 180) ** 2) / 138
+        return (1 - r01) * 1440
+      })
+
+      const hasDotAt = (minsAgo: number) =>
+        dotAges.some((age) => Math.abs(age - minsAgo) < 1)
+
+      expect(hasDotAt(290)).toBe(true) // odd index — only drawn because it ends a run
+      expect(hasDotAt(480)).toBe(true)
+    })
   })
 
   describe('CHII2 elevation reminder (REMOVED in LAY-34)', () => {

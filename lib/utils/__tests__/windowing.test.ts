@@ -1,4 +1,9 @@
-import { windowData, TIME_SCALES } from '../windowing'
+import {
+  windowData,
+  TIME_SCALES,
+  GAP_THRESHOLD_MINUTES,
+  exceedsGapThreshold,
+} from '../windowing'
 import type { WindDataPoint } from '@/types'
 
 describe('TIME_SCALES configuration', () => {
@@ -184,5 +189,28 @@ describe('windowData - Time Scale Filtering', () => {
       const result = windowData(null, '1h', now)
       expect(result).toEqual([])
     })
+  })
+})
+
+describe('exceedsGapThreshold', () => {
+  it('does not fire just under the threshold', () => {
+    expect(exceedsGapThreshold(0, 59)).toBe(false)
+  })
+
+  it('does not fire exactly at the threshold', () => {
+    expect(exceedsGapThreshold(0, GAP_THRESHOLD_MINUTES)).toBe(false)
+  })
+
+  it('fires just over the threshold', () => {
+    expect(exceedsGapThreshold(0, 61)).toBe(true)
+  })
+
+  it('does not care which observation is the newer', () => {
+    expect(exceedsGapThreshold(200, 10)).toBe(true)
+    expect(exceedsGapThreshold(10, 200)).toBe(true)
+  })
+
+  it('does not fire on the ten-minute cadence the feed actually reports at', () => {
+    expect(exceedsGapThreshold(120, 130)).toBe(false)
   })
 })

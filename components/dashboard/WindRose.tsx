@@ -7,7 +7,7 @@ import {
   getWindCondition,
   getCompassDirection,
 } from "@/lib/utils/wind";
-import { TIME_SCALES } from "@/lib/utils/windowing";
+import { TIME_SCALES, exceedsGapThreshold } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
@@ -177,6 +177,9 @@ export default function WindRose({
       const newer = dataPoints[i];
       const older = dataPoints[i + 1];
 
+      // An outage is not a slow veer. Nothing is drawn across it.
+      if (exceedsGapThreshold(newer.minsAgo, older.minsAgo)) continue;
+
       const midR = (newer.r01 + older.r01) / 2;
       const opacity =
         Math.round((0.08 + 0.92 * Math.pow(midR, 1.5)) * 1e6) / 1e6;
@@ -194,7 +197,23 @@ export default function WindRose({
     return segments;
   }, [dataPoints]);
 
-  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+  // The observations on either side of an outage, which must be drawn whatever the subsample says.
+  // Without this the two ends of a gap can both be sampled away on exactly the wide scales where the
+  // break fires, and an outage renders as the trace quietly fading out instead of stopping.
+  const gapEndpoints = useMemo(() => {
+    const forced = new Set<number>();
+
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      if (exceedsGapThreshold(dataPoints[i].minsAgo, dataPoints[i + 1].minsAgo)) {
+        forced.add(i);
+        forced.add(i + 1);
+      }
+    }
+
+    return forced;
+  }, [dataPoints]);
+
+  const handlePointerDown =(e: React.PointerEvent<SVGSVGElement>) => {
     if (!onHoverChange || !svgRef.current) return;
 
     e.preventDefault(); // Prevent page scrolling on touch
@@ -622,7 +641,7 @@ export default function WindRose({
           {dataPoints.map((point, i) => {
             // Subsample for performance (show ~28 points max)
             const step = Math.max(1, Math.floor(dataPoints.length / 28));
-            if (i % step !== 0 && i !== 0) return null;
+            if (i % step !== 0 && i !== 0 && !gapEndpoints.has(i)) return null;
 
             return (
               <circle

@@ -373,6 +373,124 @@ describe('SpeedLineChart', () => {
     })
   })
 
+  describe('Gaps in the data', () => {
+    // Three observations at the feed's cadence, a three-hour outage, then two more.
+    const dataWithOutage: WindDataPoint[] = [
+      { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 }, // now
+      { timestamp: '2026-05-19T17:50:00Z', spd: 13, dir: 182 }, // 10 mins ago
+      { timestamp: '2026-05-19T17:40:00Z', spd: 11, dir: 184 }, // 20 mins ago
+      { timestamp: '2026-05-19T14:40:00Z', spd: 9, dir: 200 },  // 200 mins ago
+      { timestamp: '2026-05-19T14:30:00Z', spd: 10, dir: 205 }, // 210 mins ago
+    ]
+
+    it('draws no line segment across an outage', () => {
+      const { container } = render(
+        <SpeedLineChart
+          data={dataWithOutage}
+          timeWindowMinutes={360}
+          nowOffsetMinutes={0}
+          referenceTime={referenceTime}
+          hoverPoint={null}
+          onHoverChange={() => {}}
+        />
+      )
+
+      // Five points would be four segments; the one spanning the outage is not drawn.
+      const lines = container.querySelectorAll('line[stroke-linecap="round"]')
+      expect(lines.length).toBe(3)
+    })
+
+    it('splits the area fill so it does not bridge what the stroke broke', () => {
+      const { container } = render(
+        <SpeedLineChart
+          data={dataWithOutage}
+          timeWindowMinutes={360}
+          nowOffsetMinutes={0}
+          referenceTime={referenceTime}
+          hoverPoint={null}
+          onHoverChange={() => {}}
+        />
+      )
+
+      const fills = container.querySelectorAll('path[fill="url(#spdGradient)"]')
+      expect(fills.length).toBe(2)
+      // Each shape closes on itself rather than the two sharing one outline.
+      fills.forEach((fill) => {
+        expect(fill.getAttribute('d')).toMatch(/Z$/)
+      })
+    })
+
+    it('draws an observation stranded between two outages', () => {
+      const stranded: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 }, // now
+        { timestamp: '2026-05-19T17:50:00Z', spd: 13, dir: 182 }, // 10 mins ago
+        { timestamp: '2026-05-19T14:40:00Z', spd: 5, dir: 200 },  // 200 mins ago, alone
+        { timestamp: '2026-05-19T12:10:00Z', spd: 9, dir: 210 },  // 350 mins ago
+        { timestamp: '2026-05-19T12:00:00Z', spd: 10, dir: 212 }, // 360 mins ago
+      ]
+
+      const { container } = render(
+        <SpeedLineChart
+          data={stranded}
+          timeWindowMinutes={360}
+          nowOffsetMinutes={0}
+          referenceTime={referenceTime}
+          hoverPoint={null}
+          onHoverChange={() => {}}
+        />
+      )
+
+      // Two runs of two draw one segment each; the lone 200-minute reading draws neither a segment
+      // nor an area, so it has to be a dot or it vanishes from a chart that then reads as empty
+      // there rather than intermittent.
+      expect(container.querySelectorAll('line[stroke-linecap="round"]').length).toBe(2)
+      expect(container.querySelectorAll('path[fill="url(#spdGradient)"]').length).toBe(2)
+
+      const lone = container.querySelector('circle[r="1.75"]')
+      expect(lone).toBeTruthy()
+      expect(lone).toHaveAttribute('fill', '#007A52') // 5 kts is light air
+    })
+
+    it('anchors the fill gradient to the plot so every run fades on one scale', () => {
+      const { container } = render(
+        <SpeedLineChart
+          data={dataWithOutage}
+          timeWindowMinutes={360}
+          nowOffsetMinutes={0}
+          referenceTime={referenceTime}
+          hoverPoint={null}
+          onHoverChange={() => {}}
+        />
+      )
+
+      // With the SVG default (objectBoundingBox) each run would restart the ramp inside its own box,
+      // so a short light-air shape after an outage would read darker than a tall heavy-air one.
+      const gradient = container.querySelector('#spdGradient')
+      expect(gradient).toHaveAttribute('gradientUnits', 'userSpaceOnUse')
+    })
+
+    it('keeps drawing through a spacing the threshold allows', () => {
+      const closeEnough: WindDataPoint[] = [
+        { timestamp: '2026-05-19T18:00:00Z', spd: 12, dir: 180 },
+        { timestamp: '2026-05-19T17:00:00Z', spd: 10, dir: 190 }, // exactly 60 minutes
+      ]
+
+      const { container } = render(
+        <SpeedLineChart
+          data={closeEnough}
+          timeWindowMinutes={360}
+          nowOffsetMinutes={0}
+          referenceTime={referenceTime}
+          hoverPoint={null}
+          onHoverChange={() => {}}
+        />
+      )
+
+      expect(container.querySelectorAll('line[stroke-linecap="round"]').length).toBe(1)
+      expect(container.querySelectorAll('path[fill="url(#spdGradient)"]').length).toBe(1)
+    })
+  })
+
   describe('Area fill gradient', () => {
     it('renders area fill path with gradient', () => {
       const data: WindDataPoint[] = [
