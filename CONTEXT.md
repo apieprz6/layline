@@ -419,7 +419,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - Each **Weather Model Result** has one **Data Source Status** at any given time
 - **CHII2** is always operational (never seasonally offline)
 - **Purdue Buoy** is seasonal (May-October only)
-- Every **Cached Fetch** respects the **Freshness Window**; there is no uncached path to a **Buoy**
+- Every **Cached Fetch** respects the **Freshness Window**; there is no uncached path to a **Buoy**, including the refresh control on a station's screen, which asks the cache again rather than the source
 - A **Data Source Status** is derived at read time from the newest sample, never stored in a cache entry
 - **Staleness** determines **Data Source Status** (online → recent → stale → offline)
 - **Station Card** has collapsed (dashboard) and expanded (Wind Data page) states
@@ -446,6 +446,9 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 > **Dev:** "The station page is for someone actively monitoring conditions before heading out. Can it skip the cache and get the absolute latest?"
 > **Domain expert:** "There's nothing to skip to. NDBC publishes every ten minutes, so asking more often than the **Freshness Window** returns the same numbers — and a page that bypassed the cache would be the one page that fetched on every load. What that sailor needs is to *know* how old the reading is, which is what the **Data Source Status** and the fetch age in the header are for."
+
+> **Dev:** "Then what does the refresh control on a **Station Card**'s screen do, if there's nothing to skip to?"
+> **Domain expert:** "It asks the cache again, which is a different thing from asking the buoy. A sailor watching a screen for ten minutes should not be looking at the reading that happened to be stored when the page was built — and past the **Freshness Window** the stored reading is handed over while the refresh runs behind it, so asking again shortly is how you become the reader who gets the fresh one. Tapping it can honestly change what's on screen. It can never make us fetch more often than the window."
 
 > **Dev:** "The wind direction changed from 230° to 250°. Is that **veering** or **backing**?"
 > **Domain expert:** "That's **veering** — clockwise rotation. If it went from 250° to 230°, that would be **backing**."

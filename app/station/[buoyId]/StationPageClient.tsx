@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import type { WindDataPoint, WindDataPointWithOffset } from "@/types";
 import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
+import { useStationHistory } from "./useStationHistory";
 import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
 import WindRose from "@/components/dashboard/WindRose";
@@ -14,6 +15,7 @@ import TabbedInfoPanel from "@/components/dashboard/TabbedInfoPanel";
 interface StationPageClientProps {
   buoyId: string;
   stationName: string;
+  /** The server render's reading. The seed, not the last word — see `useStationHistory`. */
   data: WindDataPoint[];
   fetchedAt: string;
 }
@@ -24,17 +26,25 @@ const TOTAL_MINUTES = TOTAL_HOURS * 60;
 export default function StationPageClient({
   buoyId,
   stationName,
-  data,
-  fetchedAt,
+  data: seedData,
+  fetchedAt: seedFetchedAt,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>("1h");
   const [hoverPoint, setHoverPoint] = useState<WindDataPointWithOffset | null>(null);
   const [nowOffset, setNowOffset] = useState<number>(0); // Minutes ago from current time (0 = live)
 
+  // The server render seeds this and the browser keeps it current: on the window,
+  // when the tab comes back, and when the sailor asks.
+  const { data, fetchedAt, refresh, isRefreshing } = useStationHistory(buoyId, {
+    data: seedData,
+    fetchedAt: seedFetchedAt,
+  });
+
   // Every window and offset on this screen is measured from the moment the data
-  // was read, not from a client clock — that keeps hydration deterministic, and
-  // it is the only "now" the samples were ever positioned against. The header
-  // runs its own ticking clock, so the age of this reading still shows there.
+  // was read, not from a client clock — it is the only "now" the samples were ever
+  // positioned against, and on the first paint it is also what the server used, so
+  // hydration matches. The header runs its own ticking clock, so the age of this
+  // reading still shows there.
   const now = useMemo(() => new Date(fetchedAt), [fetchedAt]);
   const nowMs = now.getTime();
 
@@ -121,6 +131,8 @@ export default function StationPageClient({
           lastFetchTime={now}
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
+          onRefresh={refresh}
+          isRefreshing={isRefreshing}
         />
       }
       windRose={

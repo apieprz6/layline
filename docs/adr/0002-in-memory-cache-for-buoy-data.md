@@ -63,5 +63,30 @@ Note that the Decision above promised more than the `Map` delivered: it never re
 ### Consequences
 
 - The five-minute window is now enforced by Next, so tests assert against a stateful stand-in for the Data Cache (`services/buoys/__tests__/data-cache.ts`) rather than reaching into a `Map`.
-- `/station/[buoyId]` prerenders both known stations and revalidates on the same window, which means its chart anchors "now" to the reading's `fetchedAt` rather than a render clock — there is no request clock on a prerender, and the header's own ticking clock is where cache age shows.
+- `/station/[buoyId]` anchors its chart's "now" to the reading's `fetchedAt` rather than a render clock, and the header's own ticking clock is where cache age shows.
+
+  > **Amended by Amendment 2 (2026-09-16):** this bullet also said the route "prerenders both known stations and revalidates on the same window". It does neither now; see below.
 - A deploy still empties the cache; the first request after one pays the fetch.
+
+## Amendment 2 (2026-09-16): One window, not two in series
+
+Amendment 1 left a station screen able to show a reading twice the Freshness Window old. The render cache and the Data Cache are separate caches with separate five-minute windows, and they compose additively: the HTML a reader gets can be five minutes old, and the reading baked into it can already have been five minutes old when that HTML was generated. Measured on a preview deployment at `x-vercel-cache: STALE`, `age: 364` — the sailor sees "Fetched 9 min ago" and refreshing changes nothing, because refreshing asks the render cache, not the buoy.
+
+**`/station/[buoyId]` is server-rendered on demand.** `generateStaticParams` is gone. It was worth having when the render was the whole answer; it is not worth a second window in series. Two smaller reasons agree: a build without buoy access prerenders the screen *empty* and then serves that empty screen for five minutes, and the station list is not fixed — a third buoy would have needed a build to appear. The reading itself is still cached, so dropping the prerender costs a cache read per visit, not a fetch.
+
+The segment's `export const revalidate = 300` went with it. With nothing prerendered there is no render to revalidate, and the buoy service passes its own window to `unstable_cache`, so the segment value governed nothing — verified against `next start`, which sends `Cache-Control: private, no-cache, no-store` for the route either way. Keeping it would have been a second, quieter copy of the number that no longer meant anything.
+
+> This reverses an acceptance criterion of LAY-131, which asked for both stations prerendered. Recorded as the owner's call after seeing the two windows on the deployed preview.
+
+**A station screen keeps itself current from the browser.** `useStationHistory` polls `/api/weather/buoys/history` — a dynamic route handler, so it reads the Data Cache directly and skips the render cache entirely. It asks on the window, when the tab regains focus, and when the sailor taps the refresh control beside the fetch age. It also asks twice more, five seconds apart, when the reading it got back is already past the window: that is exactly the case where the cache has just served what it had and started a refresh behind the request, so the fresh reading exists a moment later and goes to whoever asks next. Capped, because a refresh that keeps failing leaves `fetchedAt` where it was and an uncapped retry would poll forever.
+
+This is not a bypass, and the "there is no live path" ruling above stands unchanged. Every one of those requests goes through the same Cached Fetch at the same window; what changed is how often the *screen* asks the cache, not how often the cache asks NDBC. The server render is now a seed rather than the last word, and a poll that fails or comes back without samples leaves the screen on what it already had — a chart on screen is worth more than the newest possible answer.
+
+**Both buoy route handlers send `max-age=0, s-maxage=300, must-revalidate`**, replacing Amendment 1's `max-age=300`. A browser-held response is the one cache a refresh control cannot reach: `max-age=300` would have made a tap do nothing for five minutes, and would have doubled `RaceHeader`'s effective poll interval. `s-maxage` keeps the edge shield, and the Data Cache — not the browser — is what actually protects NDBC.
+
+### Consequences
+
+- Every route in the app is now `ƒ`; nothing is prerendered but `/_not-found`.
+- A station screen makes one cache read on arrival and one every five minutes it stays open, up from one per five minutes across all readers of that station. Still no additional NDBC traffic.
+- The refresh control's tap target is padding pulled back out with a negative margin, so the metadata row's height is unchanged and the skeleton header in `loading.tsx` still measures the same — held to a pixel by `e2e/loading-skeletons.spec.ts`.
+- Server-side invalidation from the Purdue poller (`revalidateTag`) would shorten the window further and is not done here; it is the natural next step for a reading the app itself writes.

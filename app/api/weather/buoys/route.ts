@@ -27,11 +27,13 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          // The buoy freshness window, so a browser holding this response never
-          // outlasts the cache behind it. RaceHeader polls on the same five
-          // minutes and drops any reading older than 25, so a longer HTTP cache
-          // would hand it a response stale enough to blank the header out.
-          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          // `max-age=0` so the browser always asks, and `s-maxage` shields the
+          // origin at the edge instead. `RaceHeader` polls this every five minutes
+          // and hides any reading older than 25, so a response sitting in the
+          // browser's cache could silently double its poll interval and blank the
+          // header out on data that was there for the asking. The Data Cache behind
+          // this handler is what actually keeps NDBC from being touched.
+          'Cache-Control': 'public, max-age=0, s-maxage=300, must-revalidate',
         },
       }
     )

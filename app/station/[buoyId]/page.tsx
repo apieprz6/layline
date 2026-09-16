@@ -4,19 +4,25 @@ import { getStationInfo } from '@/lib/config/stations'
 import StationPageClient from './StationPageClient'
 import type { BuoyHistoryData } from '@/types'
 
-// Both stations are known ahead of time, so this page prerenders and refreshes
-// on the same five-minute window the buoy data itself is cached on.
-export const revalidate = 300
-
+// No `generateStaticParams` and no `revalidate`, deliberately, though both stations
+// are known ahead of time and the render is cheap.
+//
+// Prerendering put a second staleness window in series with the Data Cache's: the
+// HTML was served stale for up to five minutes, and the reading inside it was
+// already up to five minutes old when that HTML was generated, so the screen could
+// honestly report a reading ten minutes old and a reload could do nothing about it.
+// It also meant the first visitor after a deploy got build-time HTML, which for a
+// station NDBC had nothing for at build time was an empty screen until a second
+// load. Rendering on demand leaves one window, and it is the one the buoy service
+// owns — `unstable_cache` still means one NDBC fetch per five minutes across all
+// readers, so what this costs per visit is a cache read.
+//
+// `useStationHistory` takes it from here in the browser.
 interface StationPageProps {
   params: Promise<{ buoyId: string }>
 }
 
 const VALID_BUOY_IDS = ['CHII2', '45198']
-
-export function generateStaticParams(): Array<{ buoyId: string }> {
-  return VALID_BUOY_IDS.map((buoyId) => ({ buoyId }))
-}
 
 export default async function StationPage({ params }: StationPageProps) {
   const { buoyId } = await params

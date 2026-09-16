@@ -25,9 +25,14 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          // The buoy freshness window, so a browser holding this response never
-          // outlasts the cache behind it.
-          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          // `max-age=0` so the browser always asks. A station screen polls this on
+          // the freshness window and offers a refresh control, and a response held
+          // in the browser's own cache would answer both without the server ever
+          // hearing about it — a refresh button that does nothing for five minutes.
+          // Nothing is lost by asking: the Data Cache behind this handler is what
+          // keeps NDBC from being touched, and `s-maxage` still shields it at the
+          // edge. The browser cache was only ever saving a round trip.
+          'Cache-Control': 'public, max-age=0, s-maxage=300, must-revalidate',
         },
       }
     )
