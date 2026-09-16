@@ -27,13 +27,13 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          // `max-age=0` so the browser always asks, and `s-maxage` shields the
-          // origin at the edge instead. `RaceHeader` polls this every five minutes
-          // and hides any reading older than 25, so a response sitting in the
-          // browser's cache could silently double its poll interval and blank the
-          // header out on data that was there for the asking. The Data Cache behind
-          // this handler is what actually keeps NDBC from being touched.
-          'Cache-Control': 'public, max-age=0, s-maxage=300, must-revalidate',
+          // Not cached anywhere in front of this handler, browser or CDN — see the
+          // history route for the measurement. Any window here composes with the
+          // Data Cache's rather than replacing it, and `RaceHeader` hides a reading
+          // it judges older than 25 minutes, so an edge copy that outlives the
+          // entry behind it blanks the header out on data that was there for the
+          // asking. The Data Cache is what keeps NDBC from being touched.
+          'Cache-Control': 'no-store',
         },
       }
     )

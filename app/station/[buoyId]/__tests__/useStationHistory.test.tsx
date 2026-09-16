@@ -194,15 +194,87 @@ describe('useStationHistory', () => {
     )
   })
 
-  it('refresh() asks straight away', () => {
-    const mutate = jest.fn()
-    pending(mutate)
+  describe('refresh()', () => {
+    let fetchMock: jest.Mock
 
-    const { result } = renderHook(() => useStationHistory('CHII2', seed))
-    act(() => {
-      result.current.refresh()
+    beforeEach(() => {
+      // The hook never reads the purge response, only waits for it. jsdom has no
+      // `Response`, and inventing one here would be modelling something unused.
+      fetchMock = jest.fn(async () => ({ ok: true }))
+      global.fetch = fetchMock as unknown as typeof fetch
     })
 
-    expect(mutate).toHaveBeenCalledTimes(1)
+    it('expires the stored reading before reading again', async () => {
+      // Reading alone is answered from inside the window with the same `fetchedAt`,
+      // so a tap that only read would leave the screen and its fetch age untouched.
+      const mutate = jest.fn()
+      pending(mutate)
+
+      const { result } = renderHook(() => useStationHistory('45198', seed))
+      await act(async () => {
+        result.current.refresh()
+      })
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/weather/buoys/refresh?buoyId=45198', {
+        method: 'POST',
+      })
+      expect(mutate).toHaveBeenCalledTimes(1)
+    })
+
+    it('purges the station being looked at', async () => {
+      pending()
+
+      const { result } = renderHook(() => useStationHistory('CHII2', seed))
+      await act(async () => {
+        result.current.refresh()
+      })
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/weather/buoys/refresh?buoyId=CHII2',
+        expect.anything()
+      )
+    })
+
+    it('reads again even when the purge fails', async () => {
+      // Nothing is gained by reporting it — reading is still the right next move,
+      // and inside the window the answer was never going to change anyway.
+      fetchMock.mockRejectedValue(new Error('offline'))
+      const mutate = jest.fn()
+      pending(mutate)
+
+      const { result } = renderHook(() => useStationHistory('CHII2', seed))
+      await act(async () => {
+        result.current.refresh()
+      })
+
+      expect(mutate).toHaveBeenCalledTimes(1)
+    })
+
+    it('says it is refreshing while the purge is in flight, not just the read', async () => {
+      // `isValidating` covers the read; the purge is a round trip of its own in
+      // front of it, and a control that only spins for the second half of its own
+      // work reads as a control that ignored the tap.
+      let release: () => void = () => {}
+      fetchMock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve({ ok: true })
+          })
+      )
+      pending()
+
+      const { result } = renderHook(() => useStationHistory('CHII2', seed))
+      expect(result.current.isRefreshing).toBe(false)
+
+      act(() => {
+        result.current.refresh()
+      })
+      expect(result.current.isRefreshing).toBe(true)
+
+      await act(async () => {
+        release()
+      })
+      expect(result.current.isRefreshing).toBe(false)
+    })
   })
 })

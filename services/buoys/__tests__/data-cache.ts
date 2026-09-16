@@ -17,13 +17,17 @@
  *   `.catch` does.
  * - A callback that throws with nothing stored writes nothing, so a failed read is
  *   retried on the next call.
+ * - `revalidateTag(tag, { expire: 0 })` expires the entries carrying that tag, so
+ *   the next read fetches rather than being served the stored value. Modelled as a
+ *   delete, which is what `expire: 0` amounts to — the profile is how long a
+ *   marked-stale entry may still be served, and zero is none.
  *
  * One simplification: entries live in this process only. That is what the real
  * cache is *not*, and the point of the change under test — but a single Jest
  * process can't observe cross-instance sharing either way.
  */
 
-type CacheEntry = { value: unknown; storedAt: number }
+type CacheEntry = { value: unknown; storedAt: number; tags: string[] }
 
 const entries = new Map<string, CacheEntry>()
 const refreshing = new Map<string, Promise<unknown>>()
@@ -31,8 +35,9 @@ const refreshing = new Map<string, Promise<unknown>>()
 export function unstable_cache<Args extends unknown[], Result>(
   callback: (...args: Args) => Promise<Result>,
   keyParts: string[] = [],
-  options: { revalidate?: number | false } = {}
+  options: { revalidate?: number | false; tags?: string[] } = {}
 ): (...args: Args) => Promise<Result> {
+  const tags = options.tags ?? []
   const ttlMs =
     typeof options.revalidate === 'number' ? options.revalidate * 1000 : Infinity
 
@@ -45,7 +50,7 @@ export function unstable_cache<Args extends unknown[], Result>(
         refreshing.set(
           key,
           callback(...args)
-            .then((fresh) => entries.set(key, { value: fresh, storedAt: Date.now() }))
+            .then((fresh) => entries.set(key, { value: fresh, storedAt: Date.now(), tags }))
             .catch(() => {
               // Stale entry stands; the next read triggers another attempt.
             })
@@ -57,8 +62,25 @@ export function unstable_cache<Args extends unknown[], Result>(
     }
 
     const value = await callback(...args)
-    entries.set(key, { value, storedAt: Date.now() })
+    entries.set(key, { value, storedAt: Date.now(), tags })
     return value
+  }
+}
+
+/**
+ * Expire everything carrying a tag. What `purgeBuoyHistory` reaches for, so a
+ * sailor asking for a fresh reading gets one instead of the stored answer.
+ */
+export function revalidateTag(tag: string, profile: string | { expire?: number }): void {
+  if (typeof profile !== 'string' && profile.expire !== 0) {
+    throw new Error(
+      `revalidateTag called with expire ${String(profile.expire)}; the double only ` +
+        'models an immediate purge, which is all the app asks for.'
+    )
+  }
+
+  for (const [key, entry] of entries) {
+    if (entry.tags.includes(tag)) entries.delete(key)
   }
 }
 

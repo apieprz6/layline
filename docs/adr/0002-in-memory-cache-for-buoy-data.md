@@ -82,7 +82,9 @@ The segment's `export const revalidate = 300` went with it. With nothing prerend
 
 This is not a bypass, and the "there is no live path" ruling above stands unchanged. Every one of those requests goes through the same Cached Fetch at the same window; what changed is how often the *screen* asks the cache, not how often the cache asks NDBC. The server render is now a seed rather than the last word, and a poll that fails or comes back without samples leaves the screen on what it already had — a chart on screen is worth more than the newest possible answer.
 
-**Both buoy route handlers send `max-age=0, s-maxage=300, must-revalidate`**, replacing Amendment 1's `max-age=300`. A browser-held response is the one cache a refresh control cannot reach: `max-age=300` would have made a tap do nothing for five minutes, and would have doubled `RaceHeader`'s effective poll interval. `s-maxage` keeps the edge shield, and the Data Cache — not the browser — is what actually protects NDBC.
+**Both buoy route handlers drop `max-age`**, replacing Amendment 1's `max-age=300`. A browser-held response is the one cache a refresh control cannot reach: `max-age=300` would have made a tap do nothing for five minutes, and would have doubled `RaceHeader`'s effective poll interval.
+
+> **Amended by Amendment 3 (2026-09-16):** this shipped as `max-age=0, s-maxage=300, must-revalidate`, on the reasoning that `s-maxage` "keeps the edge shield" while the browser always asks. That was wrong in exactly the way the rest of this amendment is about — see below.
 
 ### Consequences
 
@@ -90,3 +92,25 @@ This is not a bypass, and the "there is no live path" ruling above stands unchan
 - A station screen makes one cache read on arrival and one every five minutes it stays open, up from one per five minutes across all readers of that station. Still no additional NDBC traffic.
 - The refresh control's tap target is padding pulled back out with a negative margin, so the metadata row's height is unchanged and the skeleton header in `loading.tsx` still measures the same — held to a pixel by `e2e/loading-skeletons.spec.ts`.
 - Server-side invalidation from the Purdue poller (`revalidateTag`) would shorten the window further and is not done here; it is the natural next step for a reading the app itself writes.
+
+## Amendment 3 (2026-09-16): A cache in front of the handler is another window, and asking is not refreshing
+
+Amendment 2 moved the second window rather than removing it. `s-maxage=300` on the buoy route handlers put it at the CDN: a poll, a stale-retry and a tap on refresh were all answered from Vercel's edge with a byte-identical response and the function never ran. Measured on a preview at `x-vercel-cache: HIT`, `age: 34`, same `fetchedAt` — the refresh control did nothing whatsoever, and neither did the retries that were supposed to catch a stale serve. The reasoning that produced it ("`s-maxage` is a free shield") is the trap: any window in front of the Data Cache **composes with** it instead of replacing it.
+
+**Both buoy route handlers send `Cache-Control: no-store`.** Nothing caches in front of them, browser or CDN. The Data Cache is the shield and it is the only one; these handlers run per request and read it, which costs a cache read, not an NDBC fetch. That is the whole distinction the "no live path" ruling turns on, and it is cheap enough to spend on every request.
+
+**A tap on refresh expires the stored reading before reading again.** This is the other half of why the control looked broken, and it would have survived the CDN fix: inside the window every read is handed the same stored reading with the same `fetchedAt`, so a tap that only read could not change the screen and could not stop the fetch age climbing. Reading harder was never going to help. `POST /api/weather/buoys/refresh?buoyId=…` calls `revalidateTag(tag, { expire: 0 })` through `purgeBuoyHistory`, then the client reads again and gets a fetch.
+
+The two history entries are tagged per station (`buoy-history-ndbc`, `buoy-history-purdue`) so a tap on one screen does not spend the other station's reading.
+
+**This is still not a live path.** `bypassCache` read *around* the cache and stored nothing, so its caller got a private answer nobody else benefited from and every subsequent reader paid again. A purge leaves the next read going through the same Cached Fetch, which stores what it gets and shares it — `services/buoys/__tests__/ndbc.test.ts` asserts exactly that, that the read after a purged read is a hit. Everything that does not ask is still governed by the window.
+
+**A floor of thirty seconds** guards the purge: if the stored reading is newer than that, the route answers `{ purged: false }` and nothing is expired. NDBC publishes every ten minutes, so this is not about missing samples — it is a bound on how often a human holding the button can make us reach a public service. Short enough that a deliberate tap nearly always does refetch, which is what makes the control feel like it works.
+
+### Consequences
+
+- Every buoy API request now runs the function. At this app's traffic that is negligible, and it is the price of there being one window rather than two.
+- A tap can reach NDBC, which no automatic path can. Bounded by the thirty-second floor per station, and only while someone is actively asking.
+- `services/buoys/__tests__/data-cache.ts` models `revalidateTag` too, and rejects any profile but `{ expire: 0 }` — the second argument is Next 16's, and it says how long a marked-stale entry may still be served, so getting it wrong purges on paper only.
+- `e2e/station-refresh.spec.ts` exists because this class of bug is invisible to jsdom: the control passed every unit test while a cache in front of the handler meant the tap never reached the code under test. What had to be asserted was a sequence of real requests from a real click.
+- The Purdue poller calling `purgeBuoyHistory` is now a two-line change rather than a design question. Still not done, and still wants a row-count check so a duplicate upsert does not purge for nothing.

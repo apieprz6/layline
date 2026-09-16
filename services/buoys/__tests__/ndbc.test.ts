@@ -1,4 +1,4 @@
-import { fetchCHII2History, fetchPurdueBuoyHistory } from '../ndbc'
+import { fetchCHII2History, fetchPurdueBuoyHistory, purgeBuoyHistory } from '../ndbc'
 import { clearDataCache, flushRefreshes } from './data-cache'
 
 jest.mock('next/cache', () => jest.requireActual('./data-cache'))
@@ -153,6 +153,55 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       const requestedUrls = fetchMock.mock.calls.map((call) => String(call[0]))
       expect(requestedUrls.some((url) => url.includes('CHII2'))).toBe(true)
       expect(requestedUrls.some((url) => url.includes('45198'))).toBe(true)
+    })
+
+    it('fetches on the read after a purge, well inside the window', async () => {
+      // What the refresh control on a station screen is worth. Reading again on its
+      // own returns the stored reading with the stored `fetchedAt`, which is why a
+      // tap that only read left the fetch age climbing and the screen unchanged.
+      const fetchMock = mockNDBC()
+
+      const before = await fetchCHII2History()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+
+      await new Promise((resolve) => setTimeout(resolve, 2))
+      purgeBuoyHistory('CHII2')
+
+      const after = await fetchCHII2History()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(after.fetchedAt).not.toBe(before.fetchedAt)
+    })
+
+    it('purges the station asked for and leaves the other one stored', async () => {
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      await fetchPurdueBuoyHistory()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+
+      purgeBuoyHistory('45198')
+
+      await fetchCHII2History()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+
+      await fetchPurdueBuoyHistory()
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('stores what a purged read fetches, so it is not a private answer', async () => {
+      // The difference between this and the deleted `bypassCache`: the fresh reading
+      // goes into the cache, so the next reader benefits instead of fetching again.
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      purgeBuoyHistory('CHII2')
+
+      const asked = await fetchCHII2History()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+
+      const next = await fetchCHII2History()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(next.fetchedAt).toBe(asked.fetchedAt)
     })
   })
 

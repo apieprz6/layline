@@ -25,14 +25,17 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          // `max-age=0` so the browser always asks. A station screen polls this on
-          // the freshness window and offers a refresh control, and a response held
-          // in the browser's own cache would answer both without the server ever
-          // hearing about it — a refresh button that does nothing for five minutes.
-          // Nothing is lost by asking: the Data Cache behind this handler is what
-          // keeps NDBC from being touched, and `s-maxage` still shields it at the
-          // edge. The browser cache was only ever saving a round trip.
-          'Cache-Control': 'public, max-age=0, s-maxage=300, must-revalidate',
+          // Not cached anywhere in front of this handler, browser or CDN. An
+          // `s-maxage` here reads like a free shield and is not one: it puts a
+          // second staleness window in series with the Data Cache's, so a poll or
+          // a tap on refresh gets a byte-identical edge copy and the function never
+          // runs. Measured on a preview at `x-vercel-cache: HIT, age: 34` returning
+          // the same `fetchedAt` — the refresh control did nothing at all.
+          //
+          // The Data Cache is the shield, and it is one window rather than two:
+          // this handler runs per request and reads it, which is a cache read, not
+          // an NDBC fetch.
+          'Cache-Control': 'no-store',
         },
       }
     )

@@ -1,4 +1,4 @@
-import { unstable_cache } from 'next/cache'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import type {
   BuoyData,
   BuoyDataResult,
@@ -369,16 +369,42 @@ function withFreshStatus(cached: CachedBuoyHistory): BuoyHistoryData {
 }
 
 // Wrapped once, at module scope: the station id travels in the call arguments,
-// which is part of the cache key, so the two buoys never share an entry. No
-// cache tags — nothing in the app purges a buoy read, and the window is the only
-// promise made about freshness.
-const cachedNDBCHistory = unstable_cache(loadNDBCHistory, ['buoy-history-ndbc'], {
+// which is part of the cache key, so the two buoys never share an entry. Tagged
+// per station so a sailor asking for a fresh reading can purge the one they are
+// looking at and not the other — see `purgeBuoyHistory`.
+const NDBC_HISTORY_TAG = 'buoy-history-ndbc'
+const PURDUE_HISTORY_TAG = 'buoy-history-purdue'
+
+const cachedNDBCHistory = unstable_cache(loadNDBCHistory, [NDBC_HISTORY_TAG], {
   revalidate: BUOY_CACHE_SECONDS,
+  tags: [NDBC_HISTORY_TAG],
 })
 
-const cachedPurdueHistory = unstable_cache(loadPurdueHistory, ['buoy-history-purdue'], {
+const cachedPurdueHistory = unstable_cache(loadPurdueHistory, [PURDUE_HISTORY_TAG], {
   revalidate: BUOY_CACHE_SECONDS,
+  tags: [PURDUE_HISTORY_TAG],
 })
+
+/**
+ * Expire one station's stored reading, so the next read fetches.
+ *
+ * This is not a bypass and does not reach a source itself — the deleted
+ * `bypassCache` read *around* the cache and stored nothing, so its caller got a
+ * private answer nobody else benefited from. Purging leaves the next read going
+ * through the same Cached Fetch, which stores what it gets and shares it with
+ * every other reader. The window still governs everything that does not ask.
+ *
+ * Only callable from a Route Handler or Server Action, which is where
+ * `revalidateTag` is allowed.
+ *
+ * `{ expire: 0 }` is Next 16's second argument, and it is the whole point: the
+ * profile says how long the entry may still be served *after* being marked stale,
+ * so anything else here would purge on paper and hand the next reader the same
+ * reading. A named profile would hide that number behind a word.
+ */
+export function purgeBuoyHistory(buoyId: string): void {
+  revalidateTag(buoyId === '45198' ? PURDUE_HISTORY_TAG : NDBC_HISTORY_TAG, { expire: 0 })
+}
 
 /**
  * Fetch CHII2 historical data
