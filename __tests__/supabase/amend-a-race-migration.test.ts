@@ -1,8 +1,9 @@
 /**
  * Static assertions over the migration that amends a whole race in one transaction.
  *
- * The behaviour is proved against a live database by scripts/verify-race-upload-rpc.sql, which needs
- * Postgres and so cannot run here. What jest can do is guard the properties that are properties of the
+ * The behaviour is proved against a live database by section 12 of scripts/verify-race-upload-rpc.sql —
+ * twenty-seven checks over the function itself, recorded in docs/testing/race-upload-transaction.md —
+ * which needs Postgres and so cannot run here. What jest can do is guard the properties of the
  * *text*: the ones whose failure mode is a plausible edit no running database would object to, and — for
  * this function above all — the ones that are about what the file does **not** say.
  *

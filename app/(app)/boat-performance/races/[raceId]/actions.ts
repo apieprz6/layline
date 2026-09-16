@@ -10,13 +10,7 @@ import { refuseAnnotations } from '@/services/races/annotations'
 import { readRecordingRowTimes } from '@/services/races/recording-rows'
 import { chartDefinitionNumbers, raceWindowRefusal } from '@/services/races/write-checks'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
-import type {
-  AmendRaceInput,
-  AmendRaceResult,
-  DeleteRaceResult,
-  RaceBoatSetupPointers,
-  UpdateRaceBoatSetupResult,
-} from '@/types'
+import type { AmendRaceInput, AmendRaceResult, DeleteRaceResult } from '@/types'
 
 /**
  * Deleting a race: one statement, then the bytes.
@@ -52,12 +46,6 @@ const ONLY_ADMIN = 'Only an admin can delete a race.'
 const NO_SUCH_RACE = 'That race is not in the archive.'
 
 /** The same two for the amendment, in its own words: what failed is what the sailor was doing. */
-const UNAVAILABLE_AMEND =
-  'The Boat Setup could not be saved, and nothing about this race was changed. Try again.'
-
-const ONLY_ADMIN_AMEND = 'Only an admin can change which Versions a race was sailed under.'
-
-/** And the same two again for the whole amendment, which is the one the flow actually calls. */
 const UNAVAILABLE_AMEND_RACE =
   'The amendment could not be saved, and nothing about this race was changed. Try again.'
 
@@ -146,131 +134,6 @@ export async function deleteRace(raceId: string): Promise<DeleteRaceResult> {
   }
 
   return { ok: true, bytes_removed: true }
-}
-
-/**
- * Amending which Boat Setup Versions a race was sailed under: all five answers, one transaction.
- *
- * Nothing in the tree calls this yet, and that is deliberate. The write path is what "editable after the
- * fact" means below the UI — columns that take an UPDATE, no append-only history, no change reason — and
- * it belongs with the schema that enforces the coupled pair. The surface that calls it is the amend flow,
- * which is the upload flow without its File step and one save for the whole amendment (LAY-114), not a
- * second form grown onto the race page.
- *
- * Every pointer stays changeable and there is no change reason on any of them (ADR 0012). The archive
- * is hand-entered backwards, so most of these will be filled in long after the race was filed, by the
- * one person who was aboard — a pointer is that sailor's own answer about their own boat, and asking
- * them to justify correcting it would only stop it being corrected.
- *
- * All five travel every time, and the function refuses a payload short of one. `->>` on an absent key
- * answers NULL, which is exactly what "the sailor set this back to not recorded" looks like — so a
- * partial payload would silently erase a pointer, and an erased pointer is indistinguishable from a
- * race that predates the artifact.
- *
- * `p_clearing` is the number of Sail Configurations the caller told the sailor would go, and the
- * function refuses unless it is the count actually standing. That is not politeness: repointing the
- * Crossover Chart Version deletes Testimony named in the old Version's words (ADR 0023), Testimony
- * nothing can recover, so an agreement made against a stale count is not an agreement.
- *
- * Nothing here restates the schema's invariants. A band belonging to another Rig Tune Version is
- * refused by the composite key, a band with no Version by `band_requires_rig_tune`, a Version of the
- * wrong kind by that pointer's own kind tag, and a viewer by the admin-only write policy the
- * function's own `SELECT ... FOR UPDATE` runs under. This validates the shape of the request and turns
- * a refusal into a sentence.
- */
-export async function amendRaceBoatSetup(
-  raceId: string,
-  setup: RaceBoatSetupPointers,
-  clearing: number
-): Promise<UpdateRaceBoatSetupResult> {
-  const account = await resolveAccount()
-
-  // Asked again here for the same reason the delete does: this is a public endpoint, and a caller's
-  // decision not to offer the amendment is not a decision about who may call it. RLS refuses it a
-  // second time and is the authority.
-  if (!account || !canWrite(account)) {
-    return { ok: false, message: ONLY_ADMIN_AMEND }
-  }
-
-  if (!isUuid(raceId)) {
-    return { ok: false, message: NO_SUCH_RACE }
-  }
-
-  // Every id is optional and every one that is present must be a uuid. Checked before the call
-  // because a malformed one is a 22P02 out of the cast inside the function, which would surface as
-  // "the archive is broken" for what is a bad request.
-  const ids = [
-    setup.polar_version_id,
-    setup.crossover_chart_version_id,
-    setup.rig_tune_version_id,
-    setup.instrument_calibration_version_id,
-    setup.rig_tune_band_id,
-  ]
-
-  if (ids.some((id) => id !== null && !isUuid(id))) {
-    return { ok: false, message: UNAVAILABLE_AMEND }
-  }
-
-  // A count, and a count of rows that exist. Negative or fractional is not a number of Sail
-  // Configurations, and the function compares this against what is standing rather than trusting it.
-  if (!Number.isInteger(clearing) || clearing < 0) {
-    return { ok: false, message: UNAVAILABLE_AMEND }
-  }
-
-  let supabase: Awaited<ReturnType<typeof createClient>>
-
-  try {
-    supabase = await createClient()
-  } catch (thrown: unknown) {
-    console.error(
-      'Race Boat Setup: Supabase client unavailable:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return { ok: false, message: UNAVAILABLE_AMEND }
-  }
-
-  const { data: cleared, error } = await supabase.rpc('amend_race_boat_setup', {
-    p_race_id: raceId,
-    // All five keys, written out rather than spread, so this list is the one the function checks for
-    // and a field renamed on `RaceBoatSetupPointers` cannot quietly go missing from the payload.
-    p_setup: {
-      polar_version_id: setup.polar_version_id,
-      crossover_chart_version_id: setup.crossover_chart_version_id,
-      rig_tune_version_id: setup.rig_tune_version_id,
-      instrument_calibration_version_id: setup.instrument_calibration_version_id,
-      rig_tune_band_id: setup.rig_tune_band_id,
-    },
-    p_clearing: clearing,
-  })
-
-  if (error) {
-    console.error('Race Boat Setup: the amendment failed:', error.message)
-
-    // The one refusal worth its own sentence: the account may not write this race, which is what the
-    // function's lock answers with. Everything else is either a bad request this code should have
-    // caught or an invariant the sailor cannot act on, and both read the same from the screen.
-    if (error.code === '42501') {
-      return { ok: false, message: ONLY_ADMIN_AMEND }
-    }
-
-    return { ok: false, message: UNAVAILABLE_AMEND }
-  }
-
-  if (typeof cleared !== 'number') {
-    // The transaction may well have committed. Logged rather than guessed at, and the sailor is told
-    // to look — the page re-reads its pointers from the Race, so what it shows next is the truth.
-    console.error(
-      'Race Boat Setup: the amendment returned no clearing count:',
-      JSON.stringify(cleared)
-    )
-    return { ok: false, message: UNAVAILABLE_AMEND }
-  }
-
-  // The race's own page only. The list states a title, a window and a filename and no pointer at all,
-  // so revalidating it here would be a claim that it shows something it does not.
-  revalidatePath(`/boat-performance/races/${raceId}`)
-
-  return { ok: true, cleared_sail_entries: cleared }
 }
 
 /**

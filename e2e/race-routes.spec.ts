@@ -42,6 +42,9 @@ test.describe('the race routes, to a guest', () => {
     // front door and the same lock (ADR 0015). What is worth a browser here is the *round trip*: the
     // section a chip pointed at survives the redirect, so signing in lands the sailor on the sea state
     // they came to fix rather than on the window they had no complaint about.
+    //
+    // A bare `goto()` for the same reason the test above uses one: the redirect chain is the assertion
+    // and nothing is clicked, so the hydration trap cannot bite.
     const response = await page.goto(
       '/boat-performance/races/9f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/amend?section=sea'
     )

@@ -224,7 +224,15 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
   }
 
   const transcription = outcome.transcription
-  const refusal = windowRefusal(transcription, input)
+  // The window's two refusals, over the file just parsed. The flow already refuses both and the database
+  // refuses both again — `races_window_ordered` and the deferred `races_window_intersects_rows`. This
+  // middle one exists so the sailor gets the sentence written for them in `race-window.ts` instead of a
+  // constraint name, and so a request that did not come from the flow is answered the same way.
+  // `raceWindowRefusal` is the amend action's too, so both doors enforce the same two rules (ADR 0009).
+  const refusal = raceWindowRefusal(
+    input,
+    transcription.rows.map((row) => wallClockSeconds(row.row_time))
+  )
 
   // The one failure the sailor is expected to hit and fix: move a handle, press save again.
   if (refusal) return { ok: false, message: refusal, start_over: false }
@@ -406,18 +414,3 @@ async function duplicateFilenames(
   return (data ?? []).map((row) => row.filename)
 }
 
-/**
- * The window's two refusals, over the file just parsed.
- *
- * The wizard already refuses both and the database refuses both again — `races_window_ordered` and the
- * deferred `races_window_intersects_rows` trigger. This middle one exists so the sailor gets the
- * sentence written for them in `race-window.ts` instead of a constraint name, and so a request that did
- * not come from the wizard is answered the same way. `raceWindowRefusal` is shared with the amend
- * action, so both doors into the flow enforce the same two rules (ADR 0009).
- */
-function windowRefusal(transcription: Transcription, input: SubmitRaceInput): string | null {
-  return raceWindowRefusal(
-    input,
-    transcription.rows.map((row) => wallClockSeconds(row.row_time))
-  )
-}

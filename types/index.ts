@@ -1913,20 +1913,6 @@ export interface RaceDetail {
 }
 
 /**
- * What amending a Race's Boat Setup answers with.
- *
- * `cleared_sail_entries` is only ever non-zero when the Crossover Chart pointer moved: the sails were
- * named in the old Version's vocabulary and cannot be re-read in the new one, so they are dropped and
- * the count is stated (ADR 0023). Every other field on the panel leaves Testimony alone.
- *
- * There is no change reason. A pointer is the sailor's own answer about their own boat, and asking
- * them to justify correcting it would make the archive harder to get right rather than more trustworthy.
- */
-export type UpdateRaceBoatSetupResult =
-  | { ok: true; cleared_sail_entries: number }
-  | { ok: false; message: string }
-
-/**
  * What deleting a race answers with.
  *
  * `bytes_removed` is false when the transaction committed and the object did not go with it — the

@@ -1527,12 +1527,346 @@ BEGIN
 END;
 $$;
 
+-- ===========================================================================
+-- 12. Amending a whole Race: public.amend_race, LAY-114's one transaction
+-- ===========================================================================
+-- The amend surface is the upload flow with its File step removed (ADR 0010 Amendment 1), and the
+-- claim this section exists to prove is the half no Jest test can reach: that the five steps really
+-- do run in one transaction against a real schema, in the one order that works, and that every
+-- refusal a sailor might meet is still raised by the constraint that owns it rather than by a copy.
+--
+-- Four properties, and each is a way this could be quietly wrong:
+--
+--   * `races.updated_at` is the whole history the ticket allows, so it has to move for an amendment
+--     that touched only an annotation table -- which is the touch triggers' job, not this function's.
+--   * An annotation's `at` is Testimony about when something happened and the window is a claim about
+--     which stretch was the race. Moving the second must not rewrite the first, and an entry left
+--     outside the new window has to survive.
+--   * The Crossover Chart pointer can only move because both annotation lists went first:
+--     race_sail_entries_race_chart_fkey is ON UPDATE RESTRICT. A re-ordering of the steps still runs
+--     and still commits, and refuses exactly the ordinary amendment that repoints a chart.
+--   * Nothing about the Recording moves. That is asserted here as a before-and-after over
+--     recording_rows and recordings, which is the strongest form of it available anywhere.
+
+-- Amend a whole Race as somebody. Same subtransaction shape as `upload_as` and `amend_as`, and for
+-- the same reason: a refused amendment must leave the Race exactly as it stood, and this suite
+-- watches both outcomes in one run.
+CREATE FUNCTION pg_temp.amend_race_as(
+    p_uid       UUID,
+    p_race_id   UUID,
+    p_race      JSONB,
+    p_setup     JSONB,
+    p_sails     JSONB DEFAULT '[]'::JSONB,
+    p_sea_state JSONB DEFAULT '[]'::JSONB,
+    OUT err     TEXT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_temp.act_as(p_uid);
+    BEGIN
+        PERFORM public.amend_race(p_race_id, p_race, p_setup, p_sails, p_sea_state);
+        -- races_window_intersects_rows is deferred to COMMIT and this suite never commits, so it is
+        -- made to fire here instead. Which is also the ordering claim: it re-checks after step 5, over
+        -- rows that never moved.
+        SET CONSTRAINTS ALL IMMEDIATE;
+    EXCEPTION WHEN OTHERS THEN
+        err := SQLERRM;
+    END;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+    IF err IS NULL THEN
+        SET CONSTRAINTS ALL DEFERRED;
+    END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+    f            RECORD;
+    v_race_id    UUID;
+    v_err        TEXT;
+    v_tuple      TEXT;
+    v_rows_before TEXT;
+    v_rows_after  TEXT;
+    v_setup      JSONB;
+BEGIN
+    SELECT * INTO f FROM _fixture;
+
+    -- A race filed with the whole vocabulary in place: chart v1, whose Definitions are 1, 2 and 3.
+    v_setup := pg_temp.nothing_recorded() || jsonb_build_object(
+        'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c001',
+        'polar_version_id',           '12000000-0000-4000-8000-0000000000a1',
+        'rig_tune_version_id',        '13000000-0000-4000-8000-0000000000d1',
+        'rig_tune_band_id',           '15000000-0000-4000-8000-0000000000b2');
+
+    SELECT race_id, err INTO v_race_id, v_err
+      FROM pg_temp.upload_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        jsonb_set(f.recording, '{id}', '"ffffffff-0000-4000-8000-00000000f120"'),
+        f.rows,
+        f.race || v_setup,
+        jsonb_build_array(jsonb_build_object(
+            'at', '2026-06-03T19:00:30', 'definition_number', 2, 'note', 'reefed early')),
+        jsonb_build_array(jsonb_build_object('at', '2026-06-03T19:00:30', 'sea_state', 'slight'))
+      );
+
+    PERFORM pg_temp.chk('a race to amend was filed', v_race_id IS NOT NULL, v_err);
+
+    SELECT string_agg(format('%s|%s|%s|%s', row_index, row_time, sog::TEXT, tws::TEXT), ',' ORDER BY row_index)
+      INTO v_rows_before FROM recording_rows WHERE recording_id = 'ffffffff-0000-4000-8000-00000000f120';
+
+    -- One call: a later start, a new title, the chart moved to v2, a sail named in v2's vocabulary,
+    -- and the sea state restated. This is the ordinary amendment, and the one a re-ordering breaks.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object(
+            'title', '  Wednesday beer can, actually  ',
+            'window_start', '2026-06-03T19:01:00',
+            'window_finish', '2026-06-03T19:02:00'),
+        v_setup || jsonb_build_object(
+            'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c002'),
+        -- 4 is a Definition of v2 and of no other Version, so this entry is only insertable because
+        -- the pointer moved first. The stamp is *before* the new window, deliberately (AC 7).
+        jsonb_build_array(jsonb_build_object(
+            'at', '2026-06-03T19:00:30', 'definition_number', 4, 'note', 'kite up on the way out')),
+        jsonb_build_array(
+            jsonb_build_object('at', '2026-06-03T19:01:00', 'sea_state', 'moderate'),
+            jsonb_build_object('at', '2026-06-03T19:02:00', 'sea_state', 'rough'))
+      );
+
+    PERFORM pg_temp.chk('an admin amends the window, the title, the chart and both lists in one call',
+        v_err IS NULL, v_err);
+
+    PERFORM pg_temp.chk('the window is the one sent',
+        (SELECT window_start = '2026-06-03T19:01:00'::TIMESTAMP
+                AND window_finish = '2026-06-03T19:02:00'::TIMESTAMP FROM races WHERE id = v_race_id));
+    -- Trimmed and blank-to-NULL exactly as the upload does it, because it is the same statement's job.
+    PERFORM pg_temp.chk('the title is trimmed, not stored with the sailor''s spaces',
+        (SELECT title = 'Wednesday beer can, actually' FROM races WHERE id = v_race_id));
+    PERFORM pg_temp.chk('the Crossover Chart pointer moved, which the DELETE before it is what allows',
+        (SELECT crossover_chart_version_id = '11000000-0000-4000-8000-00000000c002'
+           FROM races WHERE id = v_race_id));
+    PERFORM pg_temp.chk('and the other four answers are still the ones the Race records',
+        (SELECT polar_version_id = '12000000-0000-4000-8000-0000000000a1'
+                AND rig_tune_version_id = '13000000-0000-4000-8000-0000000000d1'
+                AND rig_tune_band_id = '15000000-0000-4000-8000-0000000000b2'
+                AND instrument_calibration_version_id IS NULL
+           FROM races WHERE id = v_race_id));
+
+    -- AC 7. The entry was said at 19:00:30 and the race now starts at 19:01: it stays where it was
+    -- said to be, in the vocabulary the Race now records, and nothing clamped it into the window.
+    PERFORM pg_temp.chk('the sail entry outside the new window is retained, at the time it was given',
+        (SELECT count(*) = 1 FROM race_sail_entries
+          WHERE race_id = v_race_id
+            AND at = '2026-06-03T19:00:30'::TIMESTAMP
+            AND definition_number = 4
+            AND crossover_chart_version_id = '11000000-0000-4000-8000-00000000c002'));
+    PERFORM pg_temp.chk('both lists were replaced whole rather than added to',
+        (SELECT count(*) = 1 FROM race_sail_entries WHERE race_id = v_race_id)
+        AND (SELECT count(*) = 2 FROM race_sea_state_entries WHERE race_id = v_race_id));
+
+    -- AC 5. `updated_at` is the whole history an amendment leaves, set by `races_updated_at` on the
+    -- UPDATE and by the touch triggers on both annotation tables. It is `NOW()`, which is *transaction*
+    -- time and fixed for the length of one -- so a suite that never commits cannot watch the clock move,
+    -- and asserting it advanced here would only ever be asserting that two reads of the same constant
+    -- differ. What it stands to is that the stamp is this transaction's own.
+    PERFORM pg_temp.chk('updated_at is the amendment''s own clock, not the upload''s',
+        (SELECT updated_at = transaction_timestamp() FROM races WHERE id = v_race_id));
+
+    -- AC 8. The Transcription is what the file said, and no path in Layline writes one after upload.
+    SELECT string_agg(format('%s|%s|%s|%s', row_index, row_time, sog::TEXT, tws::TEXT), ',' ORDER BY row_index)
+      INTO v_rows_after FROM recording_rows WHERE recording_id = 'ffffffff-0000-4000-8000-00000000f120';
+    PERFORM pg_temp.chk('not one recorded row changed', v_rows_after = v_rows_before);
+    PERFORM pg_temp.chk('and the Recording still says what it said about the file',
+        (SELECT row_count = 5 AND filename = '06-03-26-beer-can.csv'
+                AND first_row_time = '2026-06-03T19:00:00'::TIMESTAMP
+           FROM recordings WHERE id = 'ffffffff-0000-4000-8000-00000000f120'));
+
+    -- AC 5's other half: an edit that reaches the Race through an annotation table *alone*. Written as
+    -- direct DML rather than through the function, because that is the only way to isolate the claim --
+    -- `amend_race`'s step 4 updates the races row on every call, so an amendment can never show that the
+    -- touch triggers do anything.
+    --
+    -- And what it stands to is the tuple rather than the stamp, for the reason above: `NOW()` cannot
+    -- move inside one transaction, but an UPDATE writes a new row version either way, so `ctid` moving
+    -- is the trigger having reached the Race.
+    SELECT ctid::TEXT INTO v_tuple FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.act_as('aaaaaaa1-0000-4000-8000-000000000001');
+    INSERT INTO race_sea_state_entries (race_id, at, sea_state)
+        VALUES (v_race_id, '2026-06-03T19:01:30', 'calm');
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+
+    PERFORM pg_temp.chk('a sea state entry on its own reaches the Race, by race_sea_state_entries_touch_race',
+        (SELECT ctid::TEXT FROM races WHERE id = v_race_id) <> v_tuple);
+
+    SELECT ctid::TEXT INTO v_tuple FROM races WHERE id = v_race_id;
+    PERFORM pg_temp.act_as('aaaaaaa1-0000-4000-8000-000000000001');
+    DELETE FROM race_sail_entries WHERE race_id = v_race_id;
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+
+    PERFORM pg_temp.chk('and so does a sail entry, by race_sail_entries_touch_race',
+        (SELECT ctid::TEXT FROM races WHERE id = v_race_id) <> v_tuple);
+
+    -- Put the Race back as the amendment left it, so the refusals below are asked of a whole race.
+    PERFORM pg_temp.act_as('aaaaaaa1-0000-4000-8000-000000000001');
+    DELETE FROM race_sea_state_entries WHERE race_id = v_race_id AND at = '2026-06-03T19:01:30';
+    INSERT INTO race_sail_entries (race_id, crossover_chart_version_id, at, definition_number, note)
+        VALUES (v_race_id, '11000000-0000-4000-8000-00000000c002', '2026-06-03T19:00:30', 4,
+                'kite up on the way out');
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims', '', TRUE);
+
+    -- AC 6, the database half of both refusals. Neither is restated in the function, and the second
+    -- is deferred -- so it fires at the SET CONSTRAINTS inside the helper, after step 5.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('window_start', '2026-06-03T19:02:00',
+                           'window_finish', '2026-06-03T19:01:00'),
+        v_setup || jsonb_build_object(
+            'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c002')
+      );
+    PERFORM pg_temp.chk('a finish before its start is refused through the function',
+        v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('by race_window_ordered, and not by a copy of it inside the body',
+        v_err ILIKE '%race_window_ordered%', v_err);
+
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('window_start', '2026-06-03T21:00:00',
+                           'window_finish', '2026-06-03T22:00:00'),
+        v_setup || jsonb_build_object(
+            'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c002')
+      );
+    PERFORM pg_temp.chk('a window with no recorded row inside it is refused too',
+        v_err IS NOT NULL, v_err);
+    PERFORM pg_temp.chk('by the deferred trigger, firing after the entries went back in',
+        v_err ILIKE '%row%' OR v_err ILIKE '%intersect%', v_err);
+
+    -- And the Race is untouched by either refusal: one transaction, so a refused amendment is a
+    -- race that stands exactly as it stood.
+    PERFORM pg_temp.chk('and the refused amendments left the Race as it stood',
+        (SELECT window_start = '2026-06-03T19:01:00'::TIMESTAMP
+                AND title = 'Wednesday beer can, actually' FROM races WHERE id = v_race_id));
+    PERFORM pg_temp.chk('with its Testimony still there, both kinds',
+        (SELECT count(*) = 1 FROM race_sail_entries WHERE race_id = v_race_id)
+        AND (SELECT count(*) = 2 FROM race_sea_state_entries WHERE race_id = v_race_id));
+
+    -- A window bound the caller did not state. NULL is a real answer for a Version pointer and not
+    -- for a window (ADR 0008), and the message says which key rather than which column.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('window_start', '2026-06-03T19:01:00'),
+        v_setup
+      );
+    PERFORM pg_temp.chk('a payload short of a window bound is refused as a bad request',
+        v_err ILIKE '%window_finish is missing%', v_err);
+
+    -- A sail named against a Race that would record no chart Version. Refused by the function, in
+    -- the sailor's terms, because the constraint's own message names a column (ADR 0023).
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('window_start', '2026-06-03T19:01:00',
+                           'window_finish', '2026-06-03T19:02:00'),
+        pg_temp.nothing_recorded(),
+        jsonb_build_array(jsonb_build_object('at', '2026-06-03T19:01:00', 'definition_number', 1))
+      );
+    PERFORM pg_temp.chk('sails against a Race recording no Crossover Chart Version are refused',
+        v_err ILIKE '%this Race records none%', v_err);
+
+    -- A Definition the newly-chosen Version does not define: 3 is chart v1's and not v2's.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('window_start', '2026-06-03T19:01:00',
+                           'window_finish', '2026-06-03T19:02:00'),
+        v_setup || jsonb_build_object(
+            'crossover_chart_version_id', '11000000-0000-4000-8000-00000000c002'),
+        jsonb_build_array(jsonb_build_object('at', '2026-06-03T19:01:00', 'definition_number', 3))
+      );
+    PERFORM pg_temp.chk('a sail the chosen Version does not name is refused by the foreign key',
+        v_err IS NOT NULL, v_err);
+
+    -- Role governs writes (ADR 0019). The lock is the authorization, so a viewer is refused before
+    -- anything is deleted -- and "no such Race" is deliberately the same answer as a race that is
+    -- not there, because RLS cannot tell the sailor apart from the row.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'cccccccc-0000-4000-8000-000000000002', v_race_id,
+        jsonb_build_object('title', 'not yours to retitle',
+                           'window_start', '2026-06-03T19:01:00',
+                           'window_finish', '2026-06-03T19:02:00'),
+        v_setup
+      );
+    PERFORM pg_temp.chk('a signed-in non-admin cannot amend a Race at all',
+        v_err ILIKE '%no such Race%', v_err);
+    PERFORM pg_temp.chk('and nothing of theirs reached the Race, Testimony included',
+        (SELECT title = 'Wednesday beer can, actually' FROM races WHERE id = v_race_id)
+        AND (SELECT count(*) = 1 FROM race_sail_entries WHERE race_id = v_race_id));
+
+    -- AC 4's fourth pointer in its fourth state, and the one the flow could not reach until the chart
+    -- picker was given the "Not recorded" chip its three siblings always had: a Race that records no
+    -- Crossover Chart Version at all. NULL is a legitimate answer for every one of the four (ADR 0012),
+    -- and this is the only one that costs anything -- a Race with no Version can hold no Sail
+    -- Configurations, so the sails go with the pointer. Last in the section because it is the one
+    -- accepted amendment that leaves the Race in a state the checks above would not recognise.
+    SELECT err INTO v_err
+      FROM pg_temp.amend_race_as(
+        'aaaaaaa1-0000-4000-8000-000000000001', v_race_id,
+        jsonb_build_object('title', 'Wednesday beer can, actually',
+                           'window_start', '2026-06-03T19:01:00',
+                           'window_finish', '2026-06-03T19:02:00'),
+        pg_temp.nothing_recorded(),
+        '[]'::JSONB,
+        jsonb_build_array(jsonb_build_object('at', '2026-06-03T19:01:00', 'sea_state', 'moderate'))
+      );
+    PERFORM pg_temp.chk('the Crossover Chart pointer can be cleared back to not recorded',
+        v_err IS NULL, v_err);
+    PERFORM pg_temp.chk('and the Sail Configurations named in the old Version''s words went with it',
+        (SELECT crossover_chart_version_id IS NULL FROM races WHERE id = v_race_id)
+        AND (SELECT count(*) = 0 FROM race_sail_entries WHERE race_id = v_race_id));
+    -- The Sea State is named in nobody's vocabulary, so it has no stake in the chart pointer at all.
+    PERFORM pg_temp.chk('while the Sea State, which no Version words, is exactly what was sent',
+        (SELECT count(*) = 1 FROM race_sea_state_entries WHERE race_id = v_race_id
+            AND at = '2026-06-03T19:01:00'::TIMESTAMP AND sea_state = 'moderate'));
+END;
+$$;
+
+-- The door on this signature. A REVOKE names a signature, so this function got its own rather than
+-- inheriting anything revoked from the other two -- and a guest has no race screens at all (ADR 0015).
+--
+-- The catalog checks say it without calling anything, for the reason section 1 and section 11 both
+-- give: EXECUTE is checked when a statement is planned, and a plpgsql wrapper that has already planned
+-- this call as somebody who may make it waves a guest straight past the door.
+DO $$
+BEGIN
+    PERFORM pg_temp.chk(
+        'a guest holds no EXECUTE on amend_race',
+        NOT has_function_privilege('anon',
+            'public.amend_race(uuid,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'));
+    PERFORM pg_temp.chk(
+        'and any signed-in user does, RLS being what decides the rest',
+        has_function_privilege('authenticated',
+            'public.amend_race(uuid,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE'));
+    PERFORM pg_temp.chk(
+        'it is SECURITY INVOKER, so the lock inside it is the authorization',
+        NOT (SELECT prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.proname = 'amend_race'));
+END;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Report
 -- ---------------------------------------------------------------------------
 
 \echo ''
-\echo '=== create_race_from_upload: one transaction, and the refusals through it ==='
+\echo '=== create_race_from_upload and amend_race: one transaction each, and the refusals through them ==='
 
 SELECT n,
        CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS result,

@@ -6,6 +6,11 @@ recorded below**, and the five-argument function — LAY-111's, with its sail ha
 `20260916121000_create_race_from_upload_with_sail_definitions.sql` (LAY-130, ADR 0023) — **run on
 2026-09-16**, see [Section 9, run at last](#section-9-run-at-last--55-of-55-lay-130).
 
+It has since outgrown its name. The same file now also verifies `public.amend_race`, because an
+amendment is the upload flow minus its File step (ADR 0010 Amendment 1) and therefore the same two
+window refusals over the same fixtures — see
+[Section 12, the amendment](#section-12-the-amendment--128-of-128-lay-114).
+
 LAY-110's ninth acceptance criterion is a claim no Jest test can reach: "on submit, the
 Recording, its Transcription and the Race are written in one transaction, after the bytes have
 moved; a failure leaves bytes and no row, never a row and no bytes". The bytes half is
@@ -47,6 +52,48 @@ npx supabase db reset
 scripts/verify-race-upload-rpc.sh            # expect 55 of 55
 ```
 
+## Section 12, the amendment — 128 of 128 (LAY-114)
+
+**Run on 2026-09-16 against the local stack** (PostgreSQL 17.6, DB on `127.0.0.1:54322`):
+**128 of 128 checks passed**, sections 1–12. The suite is no longer only about the upload: sections 10
+and 11 (LAY-113) took it to 98 with the five Boat Setup pointers, and section 12 adds thirty checks
+over `public.amend_race`, the one call LAY-114 amends a whole Race with.
+
+It is here rather than in a suite of its own for the reason ADR 0010 Amendment 1 gives: an amendment
+is the upload flow minus its File step, so it is the same window refusals, the same vocabulary and
+the same table it has to leave alone. Sharing the file means both doors are watched by one set of
+fixtures and any divergence shows up as a diff between adjacent sections.
+
+Section 12 files a race, then amends the window, the title, the Crossover Chart pointer and both
+lists of Testimony in **one call**, and asks:
+
+- the window is the one sent, the title trimmed, the pointer moved from v1 to v2, and the other four
+  Boat Setup answers still the ones the Race records;
+- a sail entry left **outside** the new window is retained, at the time it was given — moving a
+  window rewrites no annotation timestamp;
+- both lists were replaced whole rather than added to;
+- **not one recorded row changed, and the Recording still says what it said about the file** — the
+  criterion the whole ticket turns on;
+- each touch trigger reaches the Race on its own, so `updated_at` moves for an edit arriving through
+  either annotation table;
+- both window refusals come back through the function from `race_window_ordered` and the deferred
+  `races_window_intersects_rows`, in the trigger's own words, with the Race left as it stood;
+- a payload short of a window bound, sails against a Race recording no chart Version, a Definition
+  the chosen Version does not name, and a signed-in non-admin are each refused, the last as
+  `no such Race, or it is not writable by this account`;
+- the Crossover Chart pointer can be cleared **back to not recorded**, with the Sail Configurations
+  named in the old Version's words going with it and the Sea State, which no Version words, untouched;
+- `anon` holds no `EXECUTE`, `authenticated` does, and the function is `SECURITY INVOKER` — the lock
+  inside it *is* the authorization.
+
+⚠️ **`NOW()` is transaction time.** Both `update_updated_at_column()` and `touch_race_updated_at()`
+call it, and the whole suite is one `BEGIN … ROLLBACK`, so `updated_at` cannot be *watched to
+advance* here and no `pg_sleep` will change that — two checks written that way failed on the first
+run for exactly this reason. What the section asserts instead: `updated_at = transaction_timestamp()`
+after the amendment, and `races.ctid` moving under direct DML on each annotation table. The `ctid`
+comparison is also the only way to isolate the touch triggers at all, because `amend_race`'s own
+step-4 UPDATE moves `updated_at` on every call.
+
 ## Re-running it
 
 ```bash
@@ -55,6 +102,8 @@ npx supabase db reset                      # applies every migration in order
 scripts/verify-race-upload-rpc.sh          # the local stack, through the container
 scripts/verify-race-upload-rpc.sh "$DB_URL" # or a hosted project
 ```
+
+Expect **128 of 128**.
 
 The suite is `scripts/verify-race-upload-rpc.sql`: one transaction that ends in `ROLLBACK`, so
 it is safe against a project holding real races. It exits non-zero if any check fails. Against

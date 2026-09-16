@@ -138,12 +138,6 @@ import RaceFindings from '../race/RaceFindings'
 import CoverageReadout from '../race/CoverageReadout'
 
 /**
- * What the sailor is told when every row already carries an entry of this kind.
- *
- * Reachable only on a very short recording, and refused rather than fudged: an entry at a time the
- * file does not have would be a time nobody tapped.
- */
-/**
  * What the sailor is told when the Boat Setup section has nothing to offer.
  *
  * A failed read, and refused rather than drawn: `readRaceBoatSetupChoices` answers null for a read that
@@ -158,6 +152,12 @@ const SETUP_UNREADABLE =
   'race records is unchanged, and saving leaves all five answers exactly as they stand. Try again in a ' +
   'moment.'
 
+/**
+ * What the sailor is told when every row already carries an entry of this kind.
+ *
+ * Reachable only on a very short recording, and refused rather than fudged: an entry at a time the
+ * file does not have would be a time nobody tapped.
+ */
 const NO_ROW_LEFT =
   'Every row in this recording already has an entry on it, so there is no time left to place another. ' +
   'Move or take off one of the entries below.'
@@ -592,9 +592,15 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
    * sails — so carrying the entries across would silently rename what the sailor said. They are
    * cleared, and the count is stated, which is the same bargain `repoint_race_crossover_chart` strikes
    * for a Race that has already been saved.
+   *
+   * `null` is one of the answers, and it is the reason this takes a nullable id at all: *this race
+   * records no Crossover Chart Version*. It is what the archive's oldest races say, it is what the
+   * other three pointers have always been able to say, and a chart pressed by mistake on a 390px
+   * screen has to have a way back — the same one-way-door argument `VersionPicker` makes. `amend_race`
+   * and `repoint_race_crossover_chart` both take NULL, so nothing below this had to change for it.
    */
   const chooseChart = useCallback(
-    (versionId: string): void => {
+    (versionId: string | null): void => {
       if (versionId === chartVersionId) return
 
       const cleared = sailEntries.length
@@ -605,7 +611,11 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
       setChartNote(
         cleared === 0
           ? null
-          : `A sail is named in one Crossover Chart Version’s own words, so switching Versions took ` +
+          : versionId === null
+            ? `A sail is named in one Crossover Chart Version’s own words, so recording no Version ` +
+              `took off ${cleared} sail ${cleared === 1 ? 'entry' : 'entries'}. Name a Version to ` +
+              `place them again.`
+            : `A sail is named in one Crossover Chart Version’s own words, so switching Versions took ` +
               `off ${cleared} sail ${cleared === 1 ? 'entry' : 'entries'}. Place them again.`
       )
     },
@@ -954,6 +964,45 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
     (mode.kind === 'amend' ||
       (section === 'review' && (!needsDuplicateConfirmation || duplicateAccepted)))
 
+  /**
+   * The three blocks each mode draws in a different place, built once here.
+   *
+   * Uploading they are all on Review; amending there is no Review, so the Boat Setup is its own section
+   * and the title carries the summary and the coverage. Same props either way, and building them once is
+   * what keeps that true — two copies of thirteen props is where the Wind Band comes to be settable one
+   * way on one screen and another way on the other.
+   */
+  const boatSetupBlock = (
+    <BoatSetupReview
+      choices={boatSetup}
+      chart={chosenChart}
+      polarVersionId={polarVersionId}
+      rigTuneVersionId={rigTuneVersionId}
+      calibrationVersionId={calibrationVersionId}
+      bandId={bandId}
+      rigTune={chosenRigTune}
+      loggedWind={loggedWind}
+      bandNote={bandNote}
+      onChoosePolar={setPolarVersionId}
+      onChooseRigTune={chooseRigTune}
+      onChooseCalibration={setCalibrationVersionId}
+      onChooseBand={setBandId}
+    />
+  )
+
+  const annotationSummary = (
+    <AnnotationSummary
+      sails={byTime(sailEntries).map((entry) => ({
+        at: entry.at,
+        text: sailEntryText(entry, sailLabels),
+      }))}
+      seaState={byTime(seaEntries).map((entry) => ({
+        at: entry.at,
+        text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
+      }))}
+    />
+  )
+
   return (
     <div
       className="lg:max-w-[1480px] lg:mx-auto"
@@ -1170,32 +1219,9 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <TitleField value={title} onChange={setTitle} />
 
-          <AnnotationSummary
-            sails={byTime(sailEntries).map((entry) => ({
-              at: entry.at,
-              text: sailEntryText(entry, sailLabels),
-            }))}
-            seaState={byTime(seaEntries).map((entry) => ({
-              at: entry.at,
-              text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
-            }))}
-          />
+          {annotationSummary}
 
-          <BoatSetupReview
-            choices={boatSetup}
-            chart={chosenChart}
-            polarVersionId={polarVersionId}
-            rigTuneVersionId={rigTuneVersionId}
-            calibrationVersionId={calibrationVersionId}
-            bandId={bandId}
-            rigTune={chosenRigTune}
-            loggedWind={loggedWind}
-            bandNote={bandNote}
-            onChoosePolar={setPolarVersionId}
-            onChooseRigTune={chooseRigTune}
-            onChooseCalibration={setCalibrationVersionId}
-            onChooseBand={setBandId}
-          />
+          {boatSetupBlock}
 
           <CoverageReadout coverage={coverage} />
 
@@ -1240,21 +1266,7 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
           {boatSetup === null ? (
             <RaceFindings findings={[{ severity: 'refusal', message: SETUP_UNREADABLE }]} />
           ) : (
-            <BoatSetupReview
-              choices={boatSetup}
-              chart={chosenChart}
-              polarVersionId={polarVersionId}
-              rigTuneVersionId={rigTuneVersionId}
-              calibrationVersionId={calibrationVersionId}
-              bandId={bandId}
-              rigTune={chosenRigTune}
-              loggedWind={loggedWind}
-              bandNote={bandNote}
-              onChoosePolar={setPolarVersionId}
-              onChooseRigTune={chooseRigTune}
-              onChooseCalibration={setCalibrationVersionId}
-              onChooseBand={setBandId}
-            />
+            boatSetupBlock
           )}
         </section>
       )}
@@ -1267,16 +1279,7 @@ export default function RaceFlow({ mode, charts, boatSetup }: RaceFlowProps): Re
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
           <TitleField value={title} onChange={setTitle} />
 
-          <AnnotationSummary
-            sails={byTime(sailEntries).map((entry) => ({
-              at: entry.at,
-              text: sailEntryText(entry, sailLabels),
-            }))}
-            seaState={byTime(seaEntries).map((entry) => ({
-              at: entry.at,
-              text: entry.sea_state ? seaStateLabel(entry.sea_state) : 'nothing stated yet',
-            }))}
-          />
+          {annotationSummary}
 
           {coverage && <CoverageReadout coverage={coverage} />}
 
@@ -1367,9 +1370,14 @@ function sailsProse(
     )
   }
 
+  // The boat has charts and this race names none of them, which is two situations in one sentence: a
+  // recording older than the boat's first chart, and a sailor who pressed "Not recorded" on purpose.
+  // Neither is asserted, because the pointer does not say which and a guess here would be a claim
+  // about the boat's history (ADR 0008).
   return (
-    'This recording is older than every Crossover Chart the boat has, so no Version was in force when ' +
-    `it was sailed. Pick the Version whose words these sails should be named in. ${kept}`
+    'This race names no Crossover Chart Version — none was in force when it was sailed, or none has ' +
+    `been picked — and a sail is named in a Version’s own words. Pick the Version whose words these ` +
+    `sails should be named in. ${kept}`
   )
 }
 
@@ -1901,6 +1909,11 @@ function SailEntryEditor({
  * the sailor wants is chosen by *when the race was*, and for a hand-entered archive that is usually
  * not the newest. The chosen one is stated even when there is nothing to change it to, since it is
  * about to be written onto the Race and read back as the source of every sail name on its page.
+ *
+ * "Not recorded" for the same reason `VersionPicker` has it: it is a real answer — this archive's
+ * oldest races were sailed before the boat's first chart — and a Version pressed by mistake must have
+ * a way back. It is the one chip here that costs something, since a race recording no Version can name
+ * no sails, so `chooseChart` states what came off.
  */
 function ChartVersionPicker({
   charts,
@@ -1909,7 +1922,7 @@ function ChartVersionPicker({
 }: {
   charts: readonly CrossoverChartChoice[]
   chosen: string | null
-  onChoose: (versionId: string) => void
+  onChoose: (versionId: string | null) => void
 }): ReactElement {
   return (
     <ChipRow label="Named in Crossover Chart">
@@ -1925,6 +1938,9 @@ function ChartVersionPicker({
           </span>
         </Chip>
       ))}
+      <Chip on={chosen === null} onPress={() => onChoose(null)}>
+        Not recorded
+      </Chip>
     </ChipRow>
   )
 }
@@ -1932,9 +1948,11 @@ function ChartVersionPicker({
 /**
  * The Boat Setup the race was sailed under: four Version pointers and the Wind Band the rig was set to.
  *
- * On Review rather than on a step of its own, because none of it is testimony about a moment — it is
- * what the boat *was* for the whole race, and the sailor is best placed to confirm it once they can see
- * which race they have made (ADR 0014).
+ * Uploading, this is on Review rather than on a step of its own, because none of it is testimony about
+ * a moment — it is what the boat *was* for the whole race, and the sailor is best placed to confirm it
+ * once they can see which race they have made (ADR 0014). Amending, the same block *is* the Boat Setup
+ * section, which is what a sailor who pressed the chip beside it on the race page came for: one
+ * component, so the four pointers and the Band cannot come to be chosen two different ways.
  *
  * Every one of the five is a pointer, defaulted to the Version in force at the recording's start and
  * changeable here and forever afterwards on the race page. Null is a real answer everywhere: this
@@ -1943,7 +1961,7 @@ function ChartVersionPicker({
  *
  * The Crossover Chart is shown here but chosen on the Sails step, because the sails were named in its
  * words and changing it there is what clears them. It is stated rather than repeated as a picker so
- * Review shows the whole answer in one place without offering two ways to change one thing.
+ * both modes show the whole answer in one place without offering two ways to change one thing.
  */
 function BoatSetupReview({
   choices,

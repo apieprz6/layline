@@ -808,6 +808,37 @@ describe('the sailor’s Testimony about the sails', () => {
     expect(input.sails).toEqual([{ at: '2026-06-03T19:00:00', definition_number: 5, note: null }])
   })
 
+  it('lets the sailor say the race records no Version at all, and takes the sails off with it', async () => {
+    // The chart pointer was a one-way door until this: the flow defaults it to whichever Version was in
+    // force, and a sailor who wanted "not recorded" — or who pressed a Version by mistake on a 390px
+    // screen — had no way back. The other three pointers have always had that chip, `amend_race` and
+    // `repoint_race_crossover_chart` both take NULL, and AC 4 asks for four editable pointers.
+    const user = userEvent.setup({ delay: null })
+    const { submit } = mount()
+
+    await toSails(user)
+    tapChart('first')
+    await user.click(screen.getByRole('button', { name: 'Main + A2' }))
+
+    await user.click(screen.getByRole('button', { name: 'Not recorded' }))
+
+    // Stated rather than done silently: a Definition number means nothing outside its own Version, so
+    // the entries cannot survive the pointer going away.
+    expect(screen.getByText(/took off 1 sail entry/)).toBeInTheDocument()
+    expect(screen.getByText(/names no Crossover Chart Version/)).toBeInTheDocument()
+    // And nothing is on offer to name a sail with, because there is no vocabulary to name one in.
+    expect(
+      screen.queryByRole('button', { name: '+ Add one by time instead' })
+    ).not.toBeInTheDocument()
+
+    await next(user, 2)
+    await user.click(screen.getByRole('button', { name: 'Save race' }))
+
+    const input = submit.mock.calls[0][0]
+    expect(input.crossover_chart_version_id).toBeNull()
+    expect(input.sails).toEqual([])
+  })
+
   it('says so and offers nothing when the charts could not be read, and still saves', async () => {
     // Null is not "the boat has no chart", and neither is a sail plan: the race saves with the sails
     // not recorded rather than with a chip row that claims the boat can name none.
@@ -853,8 +884,14 @@ describe('the sailor’s Testimony about the sails', () => {
 
     await toSails(user)
 
-    expect(screen.getByText(/older than every Crossover Chart/)).toBeInTheDocument()
+    // Said as the state it is and not as its cause: this same sentence stands where the sailor pressed
+    // "Not recorded" themselves, and the pointer does not say which happened.
+    expect(screen.getByText(/names no Crossover Chart Version/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^v2/ })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Not recorded' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
     expect(
       screen.queryByRole('button', { name: '+ Add one by time instead' })
     ).not.toBeInTheDocument()

@@ -64,29 +64,33 @@ function recordedText(value: unknown, column: string, rowIndex: number): string 
 }
 
 /**
- * The whole Transcription, or null when it could not be read in full.
+ * Every row of one Recording, in file order, or null when they could not be read in full.
  *
- * All-or-nothing, and that is the whole reason this pages. A race is at most a few thousand rows, but
- * PostgREST caps a response at 1,000 by default, and a silently truncated Transcription would produce
- * a coverage figure that looked fine and described a third of the race — so the row count is checked
- * against the Recording's own, and a disagreement returns null rather than a shorter race.
+ * The paging and the all-or-nothing are here rather than in each caller because both are properties of
+ * the *table* and not of the columns anybody wants from it. PostgREST caps a response at 1,000 rows by
+ * default, and a silently truncated Transcription reads as a shorter recording: a coverage figure that
+ * looks fine and describes a third of the race, or a window accepted over rows that are not there. So
+ * the count is checked against the Recording's own — a fact about the file written once and never
+ * updated, which is also why the loop's bound cannot move under it.
  *
- * Ordered by `row_index`, which is file order and half the primary key, so the pages join back into
- * the file rather than into whatever order the planner liked.
+ * Ordered by `row_index`, which is file order and half the primary key, so the pages join back into the
+ * file rather than into whatever order the planner liked. `row_time` would be a different order on any
+ * recording whose naive clock steps back an hour.
+ *
+ * `select` is the only thing that varies, and each caller shapes its own rows from what comes back.
  */
-export async function readRecordingRows(
+async function readRecordingPages(
   supabase: Awaited<ReturnType<typeof createClient>>,
   recordingId: string,
-  rowCount: number
-): Promise<RecordedRow[] | null> {
-  const rows: RecordedRow[] = []
+  rowCount: number,
+  select: string
+): Promise<Record<string, unknown>[] | null> {
+  const rows: Record<string, unknown>[] = []
 
-  // `row_count` is a fact about the file written once and immutable, so this bound is the file's
-  // own and cannot loop away on a moving target.
   while (rows.length < rowCount) {
     const { data, error } = await supabase
       .from('recording_rows')
-      .select(RECORDED_ROW_SELECT)
+      .select(select)
       .eq('recording_id', recordingId)
       .order('row_index', { ascending: true })
       .range(rows.length, rows.length + PAGE_ROWS - 1)
@@ -99,38 +103,12 @@ export async function readRecordingRows(
 
     if (!data || data.length === 0) break
 
-    try {
-      for (const row of data) {
-        const rowIndex = Number(row.row_index)
-        rows.push({
-          row_index: rowIndex,
-          row_time: String(row.row_time),
-          latitude: recordedText(row.latitude, 'latitude', rowIndex),
-          longitude: recordedText(row.longitude, 'longitude', rowIndex),
-          cog: recordedText(row.cog, 'cog', rowIndex),
-          sog: recordedText(row.sog, 'sog', rowIndex),
-          stw: recordedText(row.stw, 'stw', rowIndex),
-          ctw: recordedText(row.ctw, 'ctw', rowIndex),
-          tws: recordedText(row.tws, 'tws', rowIndex),
-          twa: recordedText(row.twa, 'twa', rowIndex),
-          awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
-        })
-      }
-    } catch (thrown: unknown) {
-      // The cast stopped being honoured, which is a deployment fault and not a bad race. Caught
-      // here so it is one line in the log and a not-found page, rather than an exception thrown
-      // through a Server Component.
-      console.error(
-        'Race: a recorded value did not arrive as text:',
-        thrown instanceof Error ? thrown.message : thrown
-      )
-      return null
-    }
+    rows.push(...data)
   }
 
   if (rows.length !== rowCount) {
-    // Either the read was truncated or the Transcription is short of what the Recording claims.
-    // Both make every figure derived from it a claim about rows nobody has, so neither is drawn.
+    // Either the read was truncated or the Transcription is short of what the Recording claims. Both
+    // make every figure derived from it a claim about rows nobody has, so neither is drawn.
     console.error(
       `Race: read ${rows.length} rows of a Transcription the Recording says is ${rowCount}`
     )
@@ -138,6 +116,50 @@ export async function readRecordingRows(
   }
 
   return rows
+}
+
+/**
+ * The whole Transcription in the eleven columns anything downstream reads, or null.
+ *
+ * A race's own page derives Row Quality, Coverage and Gap Seconds from these at read (ADR 0009), and the
+ * amend flow draws the same rows as charts so a sailor can move the window against them.
+ */
+export async function readRecordingRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  recordingId: string,
+  rowCount: number
+): Promise<RecordedRow[] | null> {
+  const data = await readRecordingPages(supabase, recordingId, rowCount, RECORDED_ROW_SELECT)
+
+  if (data === null) return null
+
+  try {
+    return data.map((row) => {
+      const rowIndex = Number(row.row_index)
+      return {
+        row_index: rowIndex,
+        row_time: String(row.row_time),
+        latitude: recordedText(row.latitude, 'latitude', rowIndex),
+        longitude: recordedText(row.longitude, 'longitude', rowIndex),
+        cog: recordedText(row.cog, 'cog', rowIndex),
+        sog: recordedText(row.sog, 'sog', rowIndex),
+        stw: recordedText(row.stw, 'stw', rowIndex),
+        ctw: recordedText(row.ctw, 'ctw', rowIndex),
+        tws: recordedText(row.tws, 'tws', rowIndex),
+        twa: recordedText(row.twa, 'twa', rowIndex),
+        awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
+      }
+    })
+  } catch (thrown: unknown) {
+    // The cast stopped being honoured, which is a deployment fault and not a bad race. Caught here so
+    // it is one line in the log and a not-found page, rather than an exception thrown through a Server
+    // Component.
+    console.error(
+      'Race: a recorded value did not arrive as text:',
+      thrown instanceof Error ? thrown.message : thrown
+    )
+    return null
+  }
 }
 
 /**
@@ -150,42 +172,13 @@ export async function readRecordingRows(
  *
  * One column rather than eleven. The other ten are read by nobody in this comparison, and paging a few
  * thousand rows of them out of the database to look at a timestamp is a cost with nothing bought.
- *
- * All-or-nothing for `readRecordingRows`'s reason: a truncated list of times would refuse a window over
- * rows that are there, or accept one over rows that are not.
  */
 export async function readRecordingRowTimes(
   supabase: Awaited<ReturnType<typeof createClient>>,
   recordingId: string,
   rowCount: number
 ): Promise<string[] | null> {
-  const times: string[] = []
+  const data = await readRecordingPages(supabase, recordingId, rowCount, 'row_time')
 
-  while (times.length < rowCount) {
-    const { data, error } = await supabase
-      .from('recording_rows')
-      .select('row_time')
-      .eq('recording_id', recordingId)
-      .order('row_index', { ascending: true })
-      .range(times.length, times.length + PAGE_ROWS - 1)
-      .returns<{ row_time: string }[]>()
-
-    if (error) {
-      console.error('Race: Transcription read failed:', error.message)
-      return null
-    }
-
-    if (!data || data.length === 0) break
-
-    for (const row of data) times.push(String(row.row_time))
-  }
-
-  if (times.length !== rowCount) {
-    console.error(
-      `Race: read ${times.length} rows of a Transcription the Recording says is ${rowCount}`
-    )
-    return null
-  }
-
-  return times
+  return data === null ? null : data.map((row) => String(row.row_time))
 }
