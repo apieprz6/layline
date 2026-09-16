@@ -5,9 +5,8 @@ import type { RaceFinding, RigTuneChoice, WindBandRef } from '@/types'
 /**
  * What a recorded Wind Band means beside the wind a recording actually logged.
  *
- * Pure and React-free, because three callers need the same answers and must not disagree: the wizard's
- * Review step states the finding before the race is filed, the race page states it after, and the edit
- * panel decides what happens to a band when the Rig Tune pointer moves.
+ * Pure and React-free, because two callers need the same answers and must not disagree: the wizard's
+ * Review step states the finding before the race is filed, and the race page states it after.
  *
  * Nothing here corrects anything. The band is Testimony — the rig was set the way the sailor says it
  * was — and a band that disagrees with the logged breeze is usually a boat tuned for the forecast that

@@ -21,10 +21,14 @@
  * neither: it is what the boat *was*, stated as the pointers the Race holds and never resolved afresh
  * (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, for the same reason.
  *
- * Writes are the thing the Role gates, and there are two of them: amending the Boat Setup and deleting
- * the race. Both are absent for a viewer rather than present and refused (ADR 0019). Delete sits last,
- * under everything the race says about itself, because a destructive action above the record it destroys
- * is one that gets pressed before the record is read.
+ * Nothing on this page edits what the race says. Amending a race — the window, the annotations, the
+ * Boat Setup pointers, the title — is one flow entered from here, reusing the upload flow without its
+ * File step rather than growing a second form per section (ADR 0014), and it is not this component's.
+ *
+ * Delete is the one thing on the page that is a write, so it is the one thing the Role gates: it is
+ * absent for a viewer rather than present and refused (ADR 0019). It sits last, under everything the
+ * race says about itself, because a destructive action above the record it destroys is one that gets
+ * pressed before the record is read.
  */
 
 import type { ReactElement } from 'react'
@@ -35,48 +39,27 @@ import { noteText, sailWithNote, seaStateLabel, SEA_STATES } from '@/services/ra
 import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordings/wall-clock'
 import type {
   BoatSetupVersionRef,
-  CrossoverChartChoice,
   DeleteRaceResult,
   RaceBoatSetup,
-  RaceBoatSetupChoices,
-  RaceBoatSetupPointers,
   RaceDetail,
   RaceSailAnnotation,
-  UpdateRaceBoatSetupResult,
   WindBandRef,
 } from '@/types'
 
 import CoverageReadout from './CoverageReadout'
-import RaceBoatSetupPanel from './RaceBoatSetupPanel'
 import RaceDeletePanel from './RaceDeletePanel'
 import RaceFindings from './RaceFindings'
 
 interface RaceDetailViewProps {
   race: RaceDetail
-  /** Whether this account may write. False for a viewer, and then neither write is drawn at all. */
-  canWrite: boolean
-  /**
-   * The Versions the Boat Setup panel may name, read on the page, or null where the read failed.
-   *
-   * Both are only ever asked for when the panel is going to be drawn, so a viewer's page does not read
-   * the boat's Version history in order to render nothing with it.
-   */
-  boatSetupChoices: RaceBoatSetupChoices | null
-  charts: CrossoverChartChoice[] | null
-  amendBoatSetup: (
-    raceId: string,
-    setup: RaceBoatSetupPointers,
-    clearing: number
-  ) => Promise<UpdateRaceBoatSetupResult>
+  /** Whether this account may delete. False for a viewer, and then nothing about delete is drawn. */
+  canDelete: boolean
   deleteRace: (raceId: string) => Promise<DeleteRaceResult>
 }
 
 export default function RaceDetailView({
   race,
-  canWrite,
-  boatSetupChoices,
-  charts,
-  amendBoatSetup,
+  canDelete,
   deleteRace,
 }: RaceDetailViewProps): ReactElement {
   return (
@@ -165,20 +148,6 @@ export default function RaceDetailView({
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Boat Setup</h2>
           <BoatSetupFacts setup={race.boat_setup} />
-          {/* The amendment sits directly under what it amends, so the pointers being changed are the
-              ones just read. Absent for a viewer rather than present and refused (ADR 0019). */}
-          {canWrite && (
-            <RaceBoatSetupPanel
-              raceId={race.id}
-              setup={race.boat_setup}
-              choices={boatSetupChoices}
-              charts={charts}
-              // What moving the chart Version costs, counted off the Testimony this page already read:
-              // every Sail Configuration names a Definition of the old Version and none can travel.
-              sailEntryCount={race.annotations.sails.length}
-              amendBoatSetup={amendBoatSetup}
-            />
-          )}
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
@@ -210,7 +179,7 @@ export default function RaceDetailView({
           </dl>
         </section>
 
-        {canWrite && (
+        {canDelete && (
           <RaceDeletePanel
             raceId={race.id}
             filename={race.recording.filename}

@@ -139,6 +139,12 @@ export async function deleteRace(raceId: string): Promise<DeleteRaceResult> {
 /**
  * Amending which Boat Setup Versions a race was sailed under: all five answers, one transaction.
  *
+ * Nothing in the tree calls this yet, and that is deliberate. The write path is what "editable after the
+ * fact" means below the UI — columns that take an UPDATE, no append-only history, no change reason — and
+ * it belongs with the schema that enforces the coupled pair. The surface that calls it is the amend flow,
+ * which is the upload flow without its File step and one save for the whole amendment (LAY-114), not a
+ * second form grown onto the race page.
+ *
  * Every pointer stays changeable and there is no change reason on any of them (ADR 0012). The archive
  * is hand-entered backwards, so most of these will be filled in long after the race was filed, by the
  * one person who was aboard — a pointer is that sailor's own answer about their own boat, and asking
@@ -149,7 +155,7 @@ export async function deleteRace(raceId: string): Promise<DeleteRaceResult> {
  * partial payload would silently erase a pointer, and an erased pointer is indistinguishable from a
  * race that predates the artifact.
  *
- * `p_clearing` is the number of Sail Configurations the panel told the sailor would go, and the
+ * `p_clearing` is the number of Sail Configurations the caller told the sailor would go, and the
  * function refuses unless it is the count actually standing. That is not politeness: repointing the
  * Crossover Chart Version deletes Testimony named in the old Version's words (ADR 0023), Testimony
  * nothing can recover, so an agreement made against a stale count is not an agreement.
@@ -167,9 +173,9 @@ export async function amendRaceBoatSetup(
 ): Promise<UpdateRaceBoatSetupResult> {
   const account = await resolveAccount()
 
-  // Asked again here for the same reason the delete does: this is a public endpoint, and the page's
-  // decision not to draw the panel is not a decision about who may call it. RLS refuses it a second
-  // time and is the authority.
+  // Asked again here for the same reason the delete does: this is a public endpoint, and a caller's
+  // decision not to offer the amendment is not a decision about who may call it. RLS refuses it a
+  // second time and is the authority.
   if (!account || !canWrite(account)) {
     return { ok: false, message: ONLY_ADMIN_AMEND }
   }

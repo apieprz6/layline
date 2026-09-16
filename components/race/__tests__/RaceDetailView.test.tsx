@@ -14,24 +14,18 @@
  * afresh (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, because it is
  * the same fact — and the archive's oldest races have all five of them unset.
  *
- * Then the two things on the page that are writes. The page itself is a read and is open to every
- * signed-in sailor (ADR 0019); amending the Boat Setup and deleting are not, so both affordances have to
- * be absent for a viewer rather than merely refused when pressed — a button that always answers "only an
- * admin can" is a worse screen than no button, and both actions refuse a viewer regardless.
+ * Then the one thing on the page that is a write. The page itself is a read and is open to every
+ * signed-in sailor (ADR 0019); delete is not, so the affordance has to be absent for a viewer rather
+ * than merely refused when pressed — a button that always answers "only an admin can" is a worse
+ * screen than no button, and `deleteRace` refuses a viewer regardless.
  */
 
 import { render, screen, within } from '@testing-library/react'
-import type {
-  CrossoverChartChoice,
-  RaceAnnotations,
-  RaceBoatSetup,
-  RaceBoatSetupChoices,
-  RaceDetail,
-} from '@/types'
+import type { RaceAnnotations, RaceBoatSetup, RaceDetail } from '@/types'
 import RaceDetailView from '../RaceDetailView'
 
 jest.mock('next/navigation', () => ({
-  useRouter: jest.fn(() => ({ push: jest.fn(), refresh: jest.fn() })),
+  useRouter: jest.fn(() => ({ push: jest.fn() })),
 }))
 
 const EMPTY: RaceAnnotations = { sails: [], sea_state: [] }
@@ -97,42 +91,12 @@ function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup =
 
 const deleteRace = jest.fn(async () => ({ ok: true as const, bytes_removed: true }))
 
-const amendBoatSetup = jest.fn(async () => ({ ok: true as const, cleared_sail_entries: 0 }))
-
-const CHOICES: RaceBoatSetupChoices = {
-  polar: [{ version_id: 'polar-2', version_number: 2, effective_from: '2026-02-10' }],
-  rig_tune: [
-    {
-      version_id: 'tune-3',
-      version_number: 3,
-      effective_from: '2026-04-20',
-      bands: [{ band_id: 'tune-3-base', low_kt: 8, high_kt: 12, is_base: true, label: 'Base' }],
-    },
-  ],
-  instrument_calibration: [
-    { version_id: 'cal-1', version_number: 1, effective_from: '2026-03-02' },
-  ],
-}
-
-const CHARTS: CrossoverChartChoice[] = [
-  { version_id: 'chart-1', version_number: 1, effective_from: '2026-01-15', definitions: [] },
-]
-
 /**
- * Every render answers who is looking at it, because the page cannot be drawn without that: both writes
- * are drawn or neither is. Only the last describe cares what the answer is.
+ * Every render carries the two delete props, because the page cannot be drawn without answering who
+ * is looking at it. Only the last two tests care what the answer is.
  */
-function renderRace(race: RaceDetail, mayWrite = false): void {
-  render(
-    <RaceDetailView
-      race={race}
-      canWrite={mayWrite}
-      boatSetupChoices={CHOICES}
-      charts={CHARTS}
-      amendBoatSetup={amendBoatSetup}
-      deleteRace={deleteRace}
-    />
-  )
+function renderRace(race: RaceDetail, canDelete = false): void {
+  render(<RaceDetailView race={race} canDelete={canDelete} deleteRace={deleteRace} />)
 }
 
 describe('a race nobody annotated', () => {
@@ -276,8 +240,9 @@ describe('the Boat Setup the race was sailed under', () => {
 
   it('never resolves a pointer to the newest Version', () => {
     // AC 3, and the whole reason these are columns on `races`. The fixture names Polar v2 and Rig Tune
-    // v3; the choices the page also holds name exactly those, and nothing on the page reads a
-    // `current_version_id`. What would fail here is a page that showed a Version the Race does not hold.
+    // v3, and those are the only Versions the page is given — it reads no `current_version_id` and has
+    // nothing to resolve with. What would fail here is a page that showed a Version the Race does not
+    // hold.
     renderRace(raceOf())
 
     expect(facts().queryByText('v4')).not.toBeInTheDocument()
@@ -333,20 +298,18 @@ describe('the Boat Setup the race was sailed under', () => {
   })
 })
 
-describe('who the page offers its two writes to', () => {
-  it('offers both to an admin', () => {
+describe('who the page offers the delete to', () => {
+  it('offers it to an admin', () => {
     renderRace(raceOf(), true)
 
     expect(screen.getByTestId('race-delete-open')).toBeInTheDocument()
-    expect(screen.getByTestId('race-boat-setup-panel')).toBeInTheDocument()
   })
 
-  it('shows a viewer neither affordance at all', () => {
+  it('shows a viewer no delete affordance at all', () => {
     renderRace(raceOf())
 
     expect(screen.queryByTestId('race-delete-open')).not.toBeInTheDocument()
     expect(screen.queryByText(/delete/i)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('race-boat-setup-panel')).not.toBeInTheDocument()
     // The race itself reads exactly the same for them, annotations, Boat Setup and all.
     expect(screen.getByText('Wednesday night')).toBeInTheDocument()
     expect(screen.getByText('06-03-26-wed.csv')).toBeInTheDocument()
