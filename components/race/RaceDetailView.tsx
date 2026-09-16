@@ -21,9 +21,9 @@
 import type { ReactElement } from 'react'
 import Link from 'next/link'
 import { spacing } from '@/lib/utils/design'
-import { reefLabel, seaStateLabel, SEA_STATES } from '@/services/races/annotations'
+import { noteText, sailWithNote, seaStateLabel, SEA_STATES } from '@/services/races/annotations'
 import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordings/wall-clock'
-import type { RaceDetail } from '@/types'
+import type { RaceDetail, RaceSailAnnotation } from '@/types'
 
 import CoverageReadout from './CoverageReadout'
 import RaceFindings from './RaceFindings'
@@ -90,9 +90,7 @@ export default function RaceDetailView({ race }: RaceDetailViewProps): ReactElem
             <Testimony
               entries={race.annotations.sails.map((entry) => ({
                 at: entry.at,
-                text: `${entry.sails.map((sail) => sail.label).join(' + ')} · ${reefLabel(
-                  entry.reef
-                )}`,
+                text: sailText(entry),
               }))}
               day={race.window_start}
             />
@@ -149,6 +147,23 @@ export default function RaceDetailView({ race }: RaceDetailViewProps): ReactElem
       </div>
     </div>
   )
+}
+
+/**
+ * One Sail Configuration, in the words of the Crossover Chart Version the Race points at.
+ *
+ * The label arrives already resolved against *that* Version (ADR 0012, ADR 0023) — this page never
+ * looks up a sail name, so it cannot accidentally rename a 2024 race in the current chart's words.
+ *
+ * A note-only entry reads as exactly what was written, with nothing beside it. The chart does not name
+ * everything the boat has ever flown, and putting the nearest Definition's words on an entry that named
+ * none would be Layline deciding what was up.
+ */
+function sailText(entry: RaceSailAnnotation): string {
+  const note = noteText(entry.note)
+
+  if (entry.label === null) return note
+  return sailWithNote(entry.label, note)
 }
 
 /**

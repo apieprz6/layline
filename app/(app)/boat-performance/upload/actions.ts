@@ -233,18 +233,42 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
   // constraint inside the transaction, and a constraint that fires there leaves bytes at a permanent
   // path with no row pointing at them (ADR 0013). The wizard asks first and the database asks last;
   // this is the one in the middle, because a Server Action is a public endpoint.
-  // Only asked when there is a sail to check against the locker. A race that names no sails is a
-  // legal race — six of the archive's thirteen recordings have no sail record at all — and refusing
-  // one because the `sails` table could not be read would make the wizard's own promise false: it
-  // tells a sailor with an unreadable inventory that the race still saves and its page will say the
-  // sail plan was not recorded.
-  const inventory = input.sails.length > 0 ? await inventorySailIds(supabase) : []
+  //
+  // Asked whenever a chart Version is named, and not only when a sail names it: the pointer itself is
+  // a foreign key, and `races_crossover_chart_version_fkey` fires inside the transaction — which is
+  // the one place a refusal costs orphaned bytes. A race that records no sails still carries the
+  // pointer, so it can still land there.
+  const vocabulary = await chartDefinitionNumbers(supabase, input.crossover_chart_version_id)
 
-  if (inventory === null) {
+  if (vocabulary.state === 'unknown') {
+    // Said about the Version rather than about the sails. Letting this through would refuse every
+    // Definition the sailor named, one at a time, for not being in a vocabulary that in fact could
+    // not be found at all — and would refuse nothing whatever on a race that named no sails.
+    return {
+      ok: false,
+      message:
+        'That Crossover Chart Version is not one this archive holds. Choose the chart again on the ' +
+        'sails step, then save.',
+      start_over: false,
+    }
+  }
+
+  // A read that failed says nothing about the pointer, so it is only fatal where a sail depends on
+  // it. A race that names no sails is a legal race — six of the archive's thirteen recordings have no
+  // sail record at all — and refusing one because a chart could not be read would make the wizard's
+  // own promise false: it tells a sailor with no readable chart that the race still saves and its
+  // page will say the sail plan was not recorded.
+  if (vocabulary.state === 'unreadable' && input.sails.length > 0) {
     return { ok: false, message: UNAVAILABLE, start_over: false }
   }
 
-  const annotationRefusal = refuseAnnotations(input.sails, input.sea_state, inventory)
+  // `null` is *this race records no chart Version*, which is what `refuseAnnotations` reads it as —
+  // and what an unreadable chart leaves us able to say, on a race with no sails to check.
+  const annotationRefusal = refuseAnnotations(
+    input.sails,
+    input.sea_state,
+    vocabulary.state === 'known' ? vocabulary.numbers : null
+  )
 
   if (annotationRefusal) {
     return { ok: false, message: annotationRefusal, start_over: false }
@@ -308,6 +332,9 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
       title: input.title,
       window_start: input.window_start,
       window_finish: input.window_finish,
+      // Written here and never resolved again (ADR 0012, ADR 0023). Null is a real answer — the race
+      // records no chart Version — and the function refuses any Sail Configuration alongside it.
+      crossover_chart_version_id: input.crossover_chart_version_id,
     },
     // Testimony, as given. Both may be empty, and an empty list means that kind was not recorded
     // (ADR 0010) — which is why nothing here substitutes a configuration or a Sea State.
@@ -367,24 +394,44 @@ async function duplicateFilenames(
 }
 
 /**
- * Every sail id in the boat's inventory, or null when the inventory could not be read.
+ * Every Sail Definition number the Race's own Crossover Chart Version defines.
  *
- * Null is a refusal here, unlike the duplicate check: `race_sail_entry_sails.sail_id` is a foreign
- * key, so an unreadable inventory means the one question that has to be answered before the bytes
- * move cannot be. Retired sails are included — a sail retired in March was flown in February, and
- * the archive being entered by hand means most of these races are older than the locker is.
+ * Four answers under three states, and they are separate because they call for different sentences.
+ * `known` with `numbers` is the vocabulary, and `known` with `numbers: null` is *this race records no
+ * chart Version* — legitimate (ADR 0012), and a race in which no Sail Configuration can exist.
+ * `unknown` is a read that succeeded and found nothing: `mint_boat_setup_version` refuses a Crossover
+ * Chart Version that defines no sail, so no Version legitimately has an empty vocabulary and the id
+ * names no Version this account can read. `unreadable` is a failed read, which says nothing about the
+ * pointer either way and so is only fatal where a sail depends on it.
+ *
+ * Read for the Version the sailor named, not for the chart in force now. A Version superseded last
+ * winter is exactly what an archived race from the summer before names its sails in (ADR 0012).
  */
-async function inventorySailIds(
-  supabase: Awaited<ReturnType<typeof createClient>>
-): Promise<string[] | null> {
-  const { data, error } = await supabase.from('sails').select('id').returns<{ id: string }[]>()
+type ChartVocabulary =
+  | { state: 'known'; numbers: number[] | null }
+  | { state: 'unknown' }
+  | { state: 'unreadable' }
+
+async function chartDefinitionNumbers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  versionId: string | null
+): Promise<ChartVocabulary> {
+  if (versionId === null) return { state: 'known', numbers: null }
+
+  const { data, error } = await supabase
+    .from('crossover_sail_definitions')
+    .select('number')
+    .eq('version_id', versionId)
+    .returns<{ number: number }[]>()
 
   if (error) {
-    console.error('Race upload: the sail inventory could not be read:', error.message)
-    return null
+    console.error('Race upload: the chart’s Sail Definitions could not be read:', error.message)
+    return { state: 'unreadable' }
   }
 
-  return (data ?? []).map((row) => row.id)
+  const numbers = (data ?? []).map((row) => row.number)
+
+  return numbers.length > 0 ? { state: 'known', numbers } : { state: 'unknown' }
 }
 
 /**

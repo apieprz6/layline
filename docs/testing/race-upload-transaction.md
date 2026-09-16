@@ -2,9 +2,9 @@
 
 Verification record and re-run guide for `create_race_from_upload`, in two parts: the
 three-argument function of `20260915220000_create_race_from_upload.sql` (LAY-110), **run and
-recorded below**, and the five-argument function of
-`20260915230000_create_race_from_upload_with_annotations.sql` (LAY-111), **written and not yet
-run** — see [Not run yet: LAY-111's fourteen checks](#not-run-yet-lay-111s-fourteen-checks).
+recorded below**, and the five-argument function — LAY-111's, with its sail half replaced by
+`20260916121000_create_race_from_upload_with_sail_definitions.sql` (LAY-130, ADR 0023) — **run on
+2026-09-16**, see [Section 9, run at last](#section-9-run-at-last--55-of-55-lay-130).
 
 LAY-110's ninth acceptance criterion is a claim no Jest test can reach: "on submit, the
 Recording, its Transcription and the Race are written in one transaction, after the bytes have
@@ -16,37 +16,36 @@ inserts either roll back together or they do not.
 `127.0.0.1:54322`): **31 of 31 checks passed**. That run was of sections 1–8, against the
 three-argument function. Section 9 came later and is not part of it.
 
-## Not run yet: LAY-111's fourteen checks
+## Section 9, run at last — 55 of 55 (LAY-130)
 
-`scripts/verify-race-upload-rpc.sql` now carries a ninth section — the sailor's Testimony in the
-same transaction — which takes the suite from 31 checks to 45. **Nobody has run those fourteen.**
-The environment LAY-111 was written in has no `psql`, no Postgres client library and no permission
-to start the CLI's containers, so the five-argument function has never been called.
+**Run on 2026-09-16 against the local stack** (PostgreSQL 17.6, DB on `127.0.0.1:54322`):
+**55 of 55 checks passed**, sections 1–9, and `scripts/verify-race-archive-schema.sql` alongside it
+at **141 of 141**.
 
-What that leaves unverified, and what it does not:
+The section 9 that ran is not the one LAY-111 wrote. ADR 0023 replaced the sail half of it, so the
+fourteen unrun checks were rewritten before they were ever run and the section now stands at
+twenty-four. It establishes: a Sail Configuration naming a Definition number of the Race's own
+Crossover Chart Version; the Version copied onto every entry from the Race, which no entry stated;
+a note stored verbatim beside a Definition and absent where none was given; a note-only
+Configuration accepted with a NULL `definition_number`; sail 4 refused against a Version defining
+three and accepted against one that defines it; an entry that says nothing refused by
+`sail_entry_says_something` *in those words*, with nothing of the upload surviving; two
+Configurations at one instant refused; sails on a Race with no chart Version refused before the
+Recording is written; an entry that tries to bring a Version of its own refused; and `'[]'`
+accepted as *not recorded*. The Sea State half and the empty-array case are LAY-111's, unchanged.
 
-- **Unverified**: everything section 9 asserts — that both kinds of entry are written in the same
-  transaction as the Race, that a Sail Configuration naming no sails is refused by
-  `race_sail_entries_non_empty` *in those words*, that a failed entry takes the Recording and its
-  Transcription with it, that `'[]'` is accepted as *not recorded* rather than refused, and that an
-  entry timestamped before the window's start is stored as given.
-- **Still verified**: sections 1–8. The function body they exercise is unchanged apart from the two
-  new arguments and the two new inserts, and the run above is their record.
-- **Guarded meanwhile by text, not by a database**:
-  `__tests__/supabase/race-upload-migration.test.ts`, which asserts the properties that are
-  properties of the migration's SQL — the dropped three-argument signature, the empty
-  `search_path`, `SECURITY INVOKER`, the `REVOKE … FROM PUBLIC, anon`, and that neither annotation
-  insert invents a value the payload did not carry. A text assertion cannot tell you a trigger
-  fires; that is the gap.
+**How it was run, since this environment still has no `psql`** and no permission to start the CLI's
+containers: `npm i --no-save pg` and a throwaway Node script that opens one transaction, applies
+the pending migrations, runs the suite's body up to its `-- Report` marker, prints the failures and
+`ROLLBACK`s. That is the same transaction discipline `scripts/verify-race-upload-rpc.sh` provides
+through `psql`, by another route, and the local database is shared with other checkouts — so
+nothing may commit.
 
 ```bash
 npx supabase start
 npx supabase db reset
-scripts/verify-race-upload-rpc.sh            # expect 45 of 45
+scripts/verify-race-upload-rpc.sh            # expect 55 of 55
 ```
-
-Anyone with a database in reach should run it and replace this section with what came back — and if
-a check fails, the failure is the record, not this note.
 
 ## Re-running it
 
@@ -149,6 +148,15 @@ Observed: `Connection terminated unexpectedly`, then `FATAL 57P03 the database s
 recovery mode` on the next connection for a few seconds. Writing the same call plainly —
 `v_n := public._probe(1);` — raises the catchable `permission denied for function _probe`, which
 is what the suite does.
+
+**`PERFORM` is on the crashing side of that line, which is not obvious** (LAY-130). It looks like
+the plain call and behaves like the dynamic one: `PERFORM public._probe(1);` terminates the backend
+exactly as `EXECUTE` does, while assigning the result survives. Only three shapes were tried and
+only one lives, so the rule to work by is *assign the return value*, even where nothing reads it.
+`scripts/verify-race-archive-schema.sql`'s "a guest cannot execute it at all" now depends on this:
+it was written through `pg_temp.exec_as`, which is `EXECUTE`, so it could only ever kill the
+database or pass for the wrong reason — and it passed for the wrong reason until LAY-130 revoked
+`anon`'s grant on `mint_boat_setup_version` and rewrote the check as an assignment.
 
 Nothing the application goes near: Layline never calls this function dynamically, `anon` never
 calls it at all, and the crash did not cross a transaction boundary in the same session (a

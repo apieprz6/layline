@@ -11,9 +11,14 @@
  * Three layers ask these questions, which is why the answers are here rather than in the wizard: the
  * wizard, which will not arm Save while an entry is half-finished; the Server Action, which will not
  * write one, because a Server Action is a public endpoint; and the database, which refuses regardless
- * — `race_sail_entries_non_empty` at commit, `UNIQUE (race_id, at)` per kind, and a foreign key per
- * sail. Three enforcements, one set of rules, so the sentence the sailor reads cannot drift from the
+ * — `sail_entry_says_something`, `UNIQUE (race_id, at)` per kind, and the composite key from
+ * `(crossover_chart_version_id, definition_number)` into the chosen Version's Sail Definitions.
+ * Three enforcements, one set of rules, so the sentence the sailor reads cannot drift from the
  * constraint that would have fired.
+ *
+ * A Sail Configuration names one Sail Definition of one Crossover Chart Version — the chart's own
+ * vocabulary, and the only one Layline has (ADR 0023) — or, when the boat flew something the chart
+ * does not name, a note instead.
  *
  * A draft works in absolute seconds of the recording's own naive frame, because that is the axis the
  * charts are tapped on; a submission works in stamps, because that is what a `timestamp` column
@@ -23,7 +28,6 @@
 import { nearestRowIndex } from '@/services/recordings/race-window'
 import { wallClockSeconds, wallClockStamp } from '@/services/recordings/wall-clock'
 import type {
-  ReefState,
   SailEntryDraft,
   SeaState,
   SeaStateEntryDraft,
@@ -45,36 +49,51 @@ export const SEA_STATES: readonly { value: SeaState; label: string; height: stri
   { value: 'rough', label: 'Rough', height: '3+ ft' },
 ]
 
-/**
- * The two Reef States the boat has.
- *
- * One reef point, so there are two states and no third to guess between. A Sail Configuration is a
- * set of sails *plus* one of these, which is why an entry that names sails but no Reef State is
- * half-finished rather than defaulted to `full`.
- */
-export const REEF_STATES: readonly { value: ReefState; label: string }[] = [
-  { value: 'full', label: 'Full' },
-  { value: 'reef-1', label: 'One reef' },
-]
-
 const SEA_STATE_VALUES: readonly string[] = SEA_STATES.map((each) => each.value)
-const REEF_VALUES: readonly string[] = REEF_STATES.map((each) => each.value)
 
 /**
- * The two lookups every screen that states an annotation needs, in one place.
+ * The lookup every screen that states a Sea State needs, in one place.
  *
- * They live here because a stored value whose label has gone missing is the one case worth agreeing
+ * It lives here because a stored value whose label has gone missing is the one case worth agreeing
  * on: five call sites each writing `?? '—'` or `?? '?'` is five different answers to *this race says
  * something this build does not recognise*, and the wizard's summary once disagreed with the race
  * page about the same entry. The fallback is the stored value itself, which at least names what the
  * database holds and is the only honest thing left to say.
+ *
+ * There is deliberately no equivalent for a sail. A Sail Configuration's words are the Crossover
+ * Chart Version's own, read back from `crossover_sail_definitions` for the Version the Race points
+ * at, and no table in this build could supply them (ADR 0023).
  */
 export function seaStateLabel(value: SeaState | string): string {
   return SEA_STATES.find((each) => each.value === value)?.label ?? value
 }
 
-export function reefLabel(value: ReefState | string): string {
-  return REEF_STATES.find((each) => each.value === value)?.label ?? value
+/**
+ * A note as text: trimmed, and `''` where there is none.
+ *
+ * One answer to "is there a note", because the same fact arrives in three shapes — a draft's `note` is
+ * a string the field is bound to, a stored row's is nullable, a payload's is nullable and already
+ * trimmed — and each was being written its own way. The spaces a phone keyboard added are not the
+ * note, and `sail_entry_note_non_empty` refuses the empty string outright, so *blank* and *absent*
+ * have to mean the one thing everywhere or `sail_entry_says_something` fires on an entry the wizard
+ * thought was finished.
+ */
+export function noteText(note: string | null | undefined): string {
+  return note?.trim() ?? ''
+}
+
+/**
+ * A sail's words with the note beside them: one order, one separator.
+ *
+ * Two screens say this about different things — the wizard about a draft, whose label comes from the
+ * chosen Version's chips, and the race page about a stored entry, whose label was resolved at read.
+ * What they must not do is disagree about the shape, which is the drift `seaStateLabel` above exists
+ * to prevent for the Sea State. Neither one uses this for a note-only entry: that reads as what was
+ * written and nothing else, because the nearest Definition's words would be Layline naming a sail the
+ * sailor deliberately did not name (ADR 0023).
+ */
+export function sailWithNote(label: string, note: string): string {
+  return note === '' ? label : `${label} · ${note}`
 }
 
 /**
@@ -168,33 +187,17 @@ export function annotationInForce<T extends { at: string }>(
 }
 
 /**
- * What a new entry at this time inherits: the configuration in force just before it.
+ * A new Sail Configuration at `at`, with nothing selected.
  *
- * This is what makes a single sail change two chip taps rather than seven — drop the jib, hoist the
- * kite, and everything else about the boat stays as it was. Strictly *before*, and nothing at all
- * when there is no earlier entry: the next configuration is not testimony about the time before it,
- * and a first entry with sails already lit would be Layline saying what was up.
+ * Nothing is carried forward from the entry before it, and that is ADR 0023's doing rather than an
+ * omission: a Configuration used to be a set of sails plus a Reef State, where inheriting turned a
+ * single swap from seven chip taps into two. It is now one Sail Definition, so the new entry *is*
+ * the change — seeding it with the previous Definition would pre-select the sail the sailor is about
+ * to replace, and an entry saved unchanged would be testimony that nothing happened at a time
+ * somebody said it did.
  */
-export function carriedConfiguration(
-  entries: readonly SailEntryDraft[],
-  at: number
-): { sail_ids: string[]; reef: ReefState | null } {
-  const earlier = entries.filter((entry) => entry.at < at)
-  const previous = entryInForce(earlier, at)
-
-  // A fresh array, so editing the new entry's set cannot rewrite the entry it came from.
-  return previous
-    ? { sail_ids: [...previous.sail_ids], reef: previous.reef }
-    : { sail_ids: [], reef: null }
-}
-
-/** A new Sail Configuration at `at`, inheriting whatever was up before it. */
-export function newSailEntry(
-  entries: readonly SailEntryDraft[],
-  at: number,
-  key: string
-): SailEntryDraft {
-  return { key, at, ...carriedConfiguration(entries, at) }
+export function newSailEntry(at: number, key: string): SailEntryDraft {
+  return { key, at, definition_number: null, note: '' }
 }
 
 /**
@@ -208,37 +211,16 @@ export function newSeaStateEntry(at: number, key: string): SeaStateEntryDraft {
 }
 
 /**
- * A sail added to or removed from a Configuration, in inventory order.
- *
- * Inventory order rather than tap order, because a set held in tap order renders as “A2 + Main” on
- * one entry and “Main + A2” on the next, and a sailor reading their own list would see two sail
- * plans where there is one. A copy, for React's sake.
- */
-export function toggleSail(
-  sailIds: readonly string[],
-  sailId: string,
-  inventoryOrder: readonly string[]
-): string[] {
-  const next = sailIds.includes(sailId)
-    ? sailIds.filter((each) => each !== sailId)
-    : [...sailIds, sailId]
-
-  return inventoryOrder.filter((each) => next.includes(each))
-}
-
-/**
  * Why this Sail Configuration cannot be saved yet, or null.
  *
- * The sails come first: an entry with neither is an entry nobody has started, and “say which sails
- * were up” is the question that has to be answered before the Reef State means anything.
+ * One refusal, because there is one thing to say: which sail was up. A Definition from the chart
+ * answers it, and so does a note when the boat flew something the chart does not name — which is
+ * why “Something else” with an empty note is still an entry nobody has started rather than a
+ * separate mistake. `sail_entry_says_something` says the same thing at insert.
  */
 export function refuseSailEntry(entry: SailEntryDraft): string | null {
-  if (entry.sail_ids.length === 0) {
-    return 'Say which sails were up — a sail plan with nothing in it is not something to remember.'
-  }
-
-  if (entry.reef === null) {
-    return 'Say whether the main was full or reefed.'
+  if (entry.definition_number === null && noteText(entry.note) === '') {
+    return 'Say which sail was up — pick one from the chart, or pick “Something else” and write a note.'
   }
 
   return null
@@ -280,11 +262,19 @@ export function refuseSeaStateEntry(entry: SeaStateEntryDraft): string | null {
 export function sailEntriesToSubmit(entries: readonly SailEntryDraft[]): SubmitSailEntry[] {
   return byTime(entries).map((entry) => {
     const refusal = refuseSailEntry(entry)
-    if (refusal || entry.reef === null) {
-      throw new TypeError(`a Sail Configuration was sent half-finished: ${refusal ?? 'no reef'}`)
+    if (refusal) {
+      throw new TypeError(`a Sail Configuration was sent half-finished: ${refusal}`)
     }
 
-    return { at: wallClockStamp(entry.at), reef: entry.reef, sail_ids: [...entry.sail_ids] }
+    const note = noteText(entry.note)
+
+    return {
+      at: wallClockStamp(entry.at),
+      definition_number: entry.definition_number,
+      // Null rather than '': a blank field is no note, and `sail_entry_note_non_empty` refuses the
+      // empty string outright.
+      note: note === '' ? null : note,
+    }
   })
 }
 
@@ -311,11 +301,17 @@ export function seaStateEntriesToSubmit(
  *
  * Two empty lists are not a refusal. They are a race whose sails and water were not recorded, which
  * is legal and ordinary (ADR 0010).
+ *
+ * `definitionNumbers` is every number the Crossover Chart Version this Race points at defines — the
+ * vocabulary the sails are named in — or **null** when the Race points at no Version at all. Null is
+ * a legitimate answer (ADR 0012) and one in which no Sail Configuration can exist: with no chart
+ * there is nothing to say a sail in, which is what `crossover_chart_version_id NOT NULL` and
+ * `races_id_crossover_chart_version_key` make structural rather than documented.
  */
 export function refuseAnnotations(
   sails: readonly SubmitSailEntry[],
   seaState: readonly SubmitSeaStateEntry[],
-  inventorySailIds: readonly string[]
+  definitionNumbers: readonly number[] | null
 ): string | null {
   const times = (kind: string, entries: readonly { at: string }[]): string | null => {
     const seen = new Set<string>()
@@ -343,23 +339,21 @@ export function refuseAnnotations(
   const seaTimes = times('sea state', seaState)
   if (seaTimes) return seaTimes
 
+  if (definitionNumbers === null && sails.length > 0) {
+    return 'A sail is named in a Crossover Chart Version’s own words, and this race records no Version.'
+  }
+
   for (const entry of sails) {
-    if (entry.sail_ids.length === 0) {
-      return 'A sail plan has to name at least one sail.'
+    const note = noteText(entry.note)
+
+    if (entry.definition_number === null && note === '') {
+      return 'A Sail Configuration has to name a sail from the chart or say what was up instead.'
     }
 
-    if (new Set(entry.sail_ids).size !== entry.sail_ids.length) {
-      return 'A sail plan names the same sail twice.'
-    }
-
-    for (const sailId of entry.sail_ids) {
-      if (!inventorySailIds.includes(sailId)) {
-        return 'A sail plan names a sail that is not in the boat’s inventory.'
+    if (entry.definition_number !== null) {
+      if (!Number.isInteger(entry.definition_number) || !definitionNumbers?.includes(entry.definition_number)) {
+        return `${entry.definition_number} is not a sail this Crossover Chart Version defines.`
       }
-    }
-
-    if (!REEF_VALUES.includes(entry.reef)) {
-      return `${entry.reef} is not a Reef State.`
     }
   }
 

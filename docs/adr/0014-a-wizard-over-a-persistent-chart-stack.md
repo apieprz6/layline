@@ -111,3 +111,31 @@ more taps fails rather than passing quietly.
 - **The prototype itself is not merged.** It carries mock fixtures, no persistence and a throwaway
   route; it lives on `prototype/lay-94-race-upload` as a primary source, and this ADR is what main
   keeps.
+
+## Amendment (LAY-130, 2026-09-16)
+
+The wizard's five steps, its shared window, its persistent chart stack and its tap-to-place times
+are unchanged. **Carry-forward is retired**, and the measurement moves with it.
+
+- **"A sail change costs the difference, not a fresh sail plan" no longer says anything.** ADR 0023
+  deletes the Sail Inventory: a **Sail Configuration** is now one **Sail Definition** of the
+  Crossover Chart Version the Race points at, named by a single chip. Carry-forward existed because
+  a Configuration was a *set* — inheriting four sails to change one was what made seven changes
+  affordable. With one chip per entry, the difference and the whole are the same tap, so inheriting
+  the previous entry would save nothing and would break "nothing is pre-selected in the sail and
+  sea-state steps", which stands. Each entry starts empty.
+- **`08-26-26-beer-can` now costs 18 actions, down from 24.** Same seven changes, same route through
+  the flow: pick the file, one Next into Sails, then per entry a tap on the track and one Definition
+  chip — 14 — then two Nexts to Review. What the old 24 spent and this does not: **12 chip taps**
+  building and unbuilding sail sets across the seven entries, and **one** Reef State tap on the
+  first. It buys 7 back and hands 13 in. The floor is still **5**, unchanged, and the Race's chart
+  Version costs nothing in the ordinary case because it defaults to the Version in force at the
+  recording's start time.
+- **Where a change has no Definition, the sailor pays a sentence instead of a chip.** The
+  "Something else" chip costs the same one tap and then asks for a note, so 18 is the figure when
+  all seven resolve — which is what a chart minted for this boat is for.
+- **The pinned assertion belongs to the prototype**, which is not merged and is not being amended:
+  `app/prototype-race-upload/smoke.test.tsx` on `prototype/lay-94-race-upload` still describes the
+  flow it prototyped, carry-forward and Reef State included. The figures above are re-derived from
+  that same fixture's seven entries, and it is `components/race-upload/__tests__/RaceUploadWizard.test.tsx`
+  that holds main honest to the flow as it now stands.

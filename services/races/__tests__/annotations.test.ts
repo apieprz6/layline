@@ -16,22 +16,21 @@
  */
 
 import {
-  REEF_STATES,
   SEA_STATES,
   annotationInForce,
   byTime,
-  carriedConfiguration,
   entryInForce,
   newSailEntry,
   newSeaStateEntry,
+  noteText,
   placeAnnotationTime,
   refuseAnnotations,
   refuseEntryTimes,
   refuseSailEntry,
   refuseSeaStateEntry,
   sailEntriesToSubmit,
+  sailWithNote,
   seaStateEntriesToSubmit,
-  toggleSail,
 } from '@/services/races/annotations'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type { SailEntryDraft, SeaStateEntryDraft } from '@/types'
@@ -41,14 +40,14 @@ const ROWS = [0, 1, 2, 3, 4].map((minute) => wallClockSeconds('2026-06-03T19:00:
 
 const at = (stamp: string): number => wallClockSeconds(stamp)
 
-/** The boat's own sails, in inventory order, by id. */
-const INVENTORY = ['id-main', 'id-jib-1', 'id-jib-2', 'id-A2', 'id-A3', 'id-A4']
+/** The numbers one Crossover Chart Version defines. Not 1..n: the chart numbers its own sails. */
+const DEFINED = [1, 2, 3, 7]
 
 const sailEntry = (parts: Partial<SailEntryDraft>): SailEntryDraft => ({
   key: 'k',
   at: ROWS[0],
-  sail_ids: ['id-main'],
-  reef: 'full',
+  definition_number: 1,
+  note: '',
   ...parts,
 })
 
@@ -88,106 +87,55 @@ describe('where a tap puts an entry', () => {
 })
 
 describe('what a new entry starts as', () => {
-  it('carries the previous configuration forward, so one swap is two chip taps', () => {
-    const entries = [
-      sailEntry({ key: 'a', at: ROWS[0], sail_ids: ['id-main', 'id-jib-2'], reef: 'full' }),
-    ]
+  it('starts with nothing selected, whatever was up before it', () => {
+    // Nothing is carried forward any more, and that is ADR 0023's doing rather than an omission. A
+    // Sail Configuration is now one Definition, so a new entry *is* the change: seeding it with the
+    // previous Definition would pre-select the sail the sailor is about to replace, and an entry
+    // saved unchanged would be testimony that nothing happened at a time somebody said it did.
+    const entries = [sailEntry({ key: 'a', at: ROWS[0], definition_number: 3 })]
 
-    const placed = newSailEntry(entries, ROWS[2], 'b')
-
-    expect(placed.sail_ids).toEqual(['id-main', 'id-jib-2'])
-    expect(placed.reef).toBe('full')
-  })
-
-  it('carries the entry in force, not the last one in the array', () => {
-    const entries = [
-      sailEntry({ key: 'b', at: ROWS[3], sail_ids: ['id-main', 'id-A2'], reef: 'reef-1' }),
-      sailEntry({ key: 'a', at: ROWS[0], sail_ids: ['id-main', 'id-jib-2'], reef: 'full' }),
-    ]
-
-    // Placed between the two, so the previous configuration is the 19:00 one — whatever order the
-    // list happens to be held in.
-    expect(newSailEntry(entries, ROWS[1], 'c').sail_ids).toEqual(['id-main', 'id-jib-2'])
-  })
-
-  it('copies the set rather than sharing it, so editing the new entry cannot rewrite the old one', () => {
-    const first = sailEntry({ key: 'a', at: ROWS[0], sail_ids: ['id-main'], reef: 'full' })
-    const second = newSailEntry([first], ROWS[1], 'b')
-
-    second.sail_ids.push('id-A2')
-
-    expect(first.sail_ids).toEqual(['id-main'])
-  })
-
-  it('starts the first entry with nothing selected at all', () => {
-    // The mockup's index-based pre-selection is the same failure as `ndbc.ts:395`'s
-    // `wind_direction ?? 0`: a value nobody stated, indistinguishable from one somebody did.
-    const first = newSailEntry([], ROWS[0], 'a')
-
-    expect(first.sail_ids).toEqual([])
-    expect(first.reef).toBeNull()
-  })
-
-  it('carries nothing into an entry placed before every other one', () => {
-    // There is no previous configuration to inherit, and the *next* one is not testimony about the
-    // time before it.
-    const entries = [sailEntry({ key: 'a', at: ROWS[3], sail_ids: ['id-main'], reef: 'reef-1' })]
-
-    expect(newSailEntry(entries, ROWS[0], 'b')).toMatchObject({ sail_ids: [], reef: null })
+    expect(newSailEntry(ROWS[2], 'b')).toEqual({
+      key: 'b',
+      at: ROWS[2],
+      definition_number: null,
+      note: '',
+    })
+    // And the earlier entry is untouched by the reading of it.
+    expect(entries[0].definition_number).toBe(3)
   })
 
   it('starts a sea state entry with nothing stated', () => {
     expect(newSeaStateEntry(ROWS[0], 'a')).toEqual({ key: 'a', at: ROWS[0], sea_state: null })
   })
-
-  it('carries nothing from an empty list', () => {
-    expect(carriedConfiguration([], ROWS[0])).toEqual({ sail_ids: [], reef: null })
-  })
-})
-
-describe('a Sail Configuration is a set', () => {
-  it('adds a sail in inventory order however it was tapped', () => {
-    // The chips read main, jib, kite. A set stored in tap order would render as A2 + main on one
-    // entry and main + A2 on the next, which reads as two different sail plans.
-    expect(toggleSail(['id-A2'], 'id-main', INVENTORY)).toEqual(['id-main', 'id-A2'])
-  })
-
-  it('removes a sail that is already up', () => {
-    expect(toggleSail(['id-main', 'id-A2'], 'id-A2', INVENTORY)).toEqual(['id-main'])
-  })
-
-  it('never holds the same sail twice', () => {
-    expect(toggleSail(['id-main'], 'id-main', INVENTORY)).toEqual([])
-  })
-
-  it('leaves the given set alone', () => {
-    const held = ['id-main']
-    toggleSail(held, 'id-A2', INVENTORY)
-    expect(held).toEqual(['id-main'])
-  })
 })
 
 describe('what a half-finished entry is refused for', () => {
-  it('refuses a sail entry that names no sails', () => {
-    // The database says so too, at commit, through `race_sail_entries_non_empty`. This is the
-    // sentence the sailor reads instead of the trigger's.
-    const refusal = refuseSailEntry(sailEntry({ sail_ids: [] }))
+  it('refuses an entry that says nothing at all', () => {
+    // `sail_entry_says_something` says the same thing in the database. This is the sentence the
+    // sailor reads instead of the CHECK's name.
+    const refusal = refuseSailEntry(sailEntry({ definition_number: null, note: '' }))
 
     expect(refusal).toContain('sail')
   })
 
-  it('refuses a sail entry that does not say whether the main was reefed', () => {
-    expect(refuseSailEntry(sailEntry({ reef: null }))).toContain('main')
+  it('refuses “something else” with no note, because the note is the whole of what it said', () => {
+    expect(refuseSailEntry(sailEntry({ definition_number: null, note: '   ' }))).toContain('note')
   })
 
-  it('reports the missing sails before the missing Reef State', () => {
-    expect(refuseSailEntry(sailEntry({ sail_ids: [], reef: null }))).toContain('sail')
+  it('accepts an entry that names a Definition', () => {
+    expect(refuseSailEntry(sailEntry({ definition_number: 7, note: '' }))).toBeNull()
   })
 
-  it('accepts an entry naming the main alone', () => {
-    // A Sail Configuration may be as small as the main: CONTEXT.md, and 08-26-26-beer-can's
-    // sixth change.
-    expect(refuseSailEntry(sailEntry({ sail_ids: ['id-main'], reef: 'full' }))).toBeNull()
+  it('accepts an entry that is nothing but a note', () => {
+    // The chart does not name everything the boat has ever flown, and a race sailed under the
+    // delivery main is still a race worth remembering (ADR 0023).
+    expect(
+      refuseSailEntry(sailEntry({ definition_number: null, note: 'the old delivery main' }))
+    ).toBeNull()
+  })
+
+  it('accepts a note beside a Definition', () => {
+    expect(refuseSailEntry(sailEntry({ definition_number: 2, note: 'jib was blown out' }))).toBeNull()
   })
 
   it('refuses a sea state entry with nothing stated', () => {
@@ -215,8 +163,8 @@ describe('what a half-finished entry is refused for', () => {
 
 describe('resolution, which happens at read and never on a row', () => {
   const entries = [
-    sailEntry({ key: 'b', at: ROWS[3], sail_ids: ['id-main', 'id-A2'], reef: 'full' }),
-    sailEntry({ key: 'a', at: ROWS[1], sail_ids: ['id-main', 'id-jib-2'], reef: 'full' }),
+    sailEntry({ key: 'b', at: ROWS[3], definition_number: 3 }),
+    sailEntry({ key: 'a', at: ROWS[1], definition_number: 2 }),
   ]
 
   it('resolves to the latest entry at or before the time', () => {
@@ -263,13 +211,27 @@ describe('resolution, which happens at read and never on a row', () => {
 describe('what gets sent', () => {
   it('sends stamps in the recording own naive frame, earliest first', () => {
     const entries = [
-      sailEntry({ key: 'b', at: ROWS[3], sail_ids: ['id-main'], reef: 'reef-1' }),
-      sailEntry({ key: 'a', at: ROWS[1], sail_ids: ['id-main', 'id-jib-2'], reef: 'full' }),
+      sailEntry({ key: 'b', at: ROWS[3], definition_number: 7 }),
+      sailEntry({ key: 'a', at: ROWS[1], definition_number: 2 }),
     ]
 
     expect(sailEntriesToSubmit(entries)).toEqual([
-      { at: '2026-06-03T19:01:00', reef: 'full', sail_ids: ['id-main', 'id-jib-2'] },
-      { at: '2026-06-03T19:03:00', reef: 'reef-1', sail_ids: ['id-main'] },
+      { at: '2026-06-03T19:01:00', definition_number: 2, note: null },
+      { at: '2026-06-03T19:03:00', definition_number: 7, note: null },
+    ])
+  })
+
+  it('sends a blank note as no note, and trims the one that was written', () => {
+    // `sail_entry_note_non_empty` refuses '' outright, and a note wrapped in the spaces a phone
+    // keyboard added is the note the sailor wrote.
+    expect(
+      sailEntriesToSubmit([
+        sailEntry({ key: 'a', at: ROWS[0], definition_number: null, note: '  delivery main ' }),
+        sailEntry({ key: 'b', at: ROWS[1], definition_number: 2, note: '   ' }),
+      ])
+    ).toEqual([
+      { at: '2026-06-03T19:00:00', definition_number: null, note: 'delivery main' },
+      { at: '2026-06-03T19:01:00', definition_number: 2, note: null },
     ])
   })
 
@@ -283,7 +245,9 @@ describe('what gets sent', () => {
   it('refuses to send a half-finished entry', () => {
     // The wizard will not arm Save while one exists, so reaching this is a bug rather than a
     // sailor's mistake — and a silently dropped entry would be testimony thrown away.
-    expect(() => sailEntriesToSubmit([sailEntry({ reef: null })])).toThrow(/reef|main/i)
+    expect(() =>
+      sailEntriesToSubmit([sailEntry({ definition_number: null, note: '' })])
+    ).toThrow(/sail/i)
   })
 
   it('sends sea state entries as stamps, earliest first', () => {
@@ -300,72 +264,82 @@ describe('what gets sent', () => {
 })
 
 describe('what the server refuses, because a Server Action is a public endpoint', () => {
-  const good = { at: '2026-06-03T19:01:00', reef: 'full' as const, sail_ids: ['id-main'] }
+  const good = { at: '2026-06-03T19:01:00', definition_number: 1, note: null }
 
   it('accepts two empty lists', () => {
-    expect(refuseAnnotations([], [], INVENTORY)).toBeNull()
+    expect(refuseAnnotations([], [], DEFINED)).toBeNull()
   })
 
   it('accepts stated testimony', () => {
     expect(
-      refuseAnnotations([good], [{ at: '2026-06-03T19:00:00', sea_state: 'calm' }], INVENTORY)
+      refuseAnnotations([good], [{ at: '2026-06-03T19:00:00', sea_state: 'calm' }], DEFINED)
     ).toBeNull()
   })
 
-  it('refuses an entry naming no sails', () => {
-    expect(refuseAnnotations([{ ...good, sail_ids: [] }], [], INVENTORY)).toContain('sail')
+  it('refuses an entry that says neither a Definition nor a note', () => {
+    expect(
+      refuseAnnotations([{ ...good, definition_number: null }], [], DEFINED)
+    ).toContain('sail')
   })
 
-  it('refuses a sail that is not in the boat inventory', () => {
-    // `race_sail_entry_sails.sail_id` is a foreign key, so this is refused at insert too — after
-    // the bytes have moved, which is the reason to ask first.
-    expect(refuseAnnotations([{ ...good, sail_ids: ['id-someone-elses'] }], [], INVENTORY)).toContain(
-      'inventory'
+  it('accepts an entry that is only a note', () => {
+    expect(
+      refuseAnnotations([{ ...good, definition_number: null, note: 'delivery main' }], [], DEFINED)
+    ).toBeNull()
+  })
+
+  it('refuses a note that is nothing but whitespace', () => {
+    // `sail_entry_note_non_empty`, and a submission is not a draft: '   ' reaching here means
+    // something other than the wizard sent it.
+    expect(
+      refuseAnnotations([{ ...good, definition_number: null, note: '   ' }], [], DEFINED)
+    ).toContain('sail')
+  })
+
+  it('refuses a Definition the chosen Version never defined', () => {
+    // `race_sail_entries_definition_fkey` is a composite key, so this is refused at insert too —
+    // after the bytes have moved, which is the reason to ask first (ADR 0013).
+    expect(refuseAnnotations([{ ...good, definition_number: 4 }], [], DEFINED)).toContain(
+      'Crossover Chart'
     )
   })
 
-  it('refuses the same sail twice in one entry', () => {
-    expect(refuseAnnotations([{ ...good, sail_ids: ['id-main', 'id-main'] }], [], INVENTORY)).toContain(
-      'twice'
+  it('refuses a Definition number that is not a whole number', () => {
+    expect(refuseAnnotations([{ ...good, definition_number: 1.5 }], [], DEFINED)).toContain(
+      'Crossover Chart'
     )
+  })
+
+  it('refuses any sail at all when the Race names no Crossover Chart Version', () => {
+    // No vocabulary, nothing to say a sail in. The RPC raises the same refusal, and
+    // `races_id_crossover_chart_version_key` makes it structural.
+    expect(refuseAnnotations([good], [], null)).toContain('Crossover Chart')
+  })
+
+  it('still accepts an empty sail list when the Race names no Version', () => {
+    expect(refuseAnnotations([], [{ at: good.at, sea_state: 'calm' }], null)).toBeNull()
   })
 
   it('refuses two entries of one kind at the same time', () => {
     // UNIQUE (race_id, at), and the wizard's stepping-forward is what normally makes it impossible.
-    expect(refuseAnnotations([good, { ...good, sail_ids: ['id-jib-1'] }], [], INVENTORY)).toContain(
-      'same time'
-    )
+    expect(
+      refuseAnnotations([good, { ...good, definition_number: 2 }], [], DEFINED)
+    ).toContain('same time')
   })
 
   it('allows a sail entry and a sea state entry at the same time', () => {
-    expect(
-      refuseAnnotations([good], [{ at: good.at, sea_state: 'slight' }], INVENTORY)
-    ).toBeNull()
+    expect(refuseAnnotations([good], [{ at: good.at, sea_state: 'slight' }], DEFINED)).toBeNull()
   })
 
   it('refuses a time that is not a stamp in the recording clock', () => {
-    expect(refuseAnnotations([{ ...good, at: '2026-06-03T19:01:00Z' }], [], INVENTORY)).toContain(
+    expect(refuseAnnotations([{ ...good, at: '2026-06-03T19:01:00Z' }], [], DEFINED)).toContain(
       'clock'
     )
   })
 
-  it('refuses a Reef State that is not one of the two', () => {
-    expect(
-      refuseAnnotations(
-        [{ ...good, reef: 'reef-2' as unknown as typeof good.reef }],
-        [],
-        INVENTORY
-      )
-    ).toContain('Reef State')
-  })
-
   it('refuses a Sea State that is not one of the four', () => {
     expect(
-      refuseAnnotations(
-        [],
-        [{ at: good.at, sea_state: 'choppy' as unknown as 'calm' }],
-        INVENTORY
-      )
+      refuseAnnotations([], [{ at: good.at, sea_state: 'choppy' as unknown as 'calm' }], DEFINED)
     ).toContain('Sea State')
   })
 })
@@ -377,11 +351,32 @@ describe('the words on the chips', () => {
   })
 
   it('never calls it a wave state', () => {
-    const words = [...SEA_STATES.map((each) => each.label), ...REEF_STATES.map((each) => each.label)]
+    const words = SEA_STATES.map((each) => each.label)
     expect(words.join(' ').toLowerCase()).not.toContain('wave')
   })
+})
 
-  it('offers the two Reef States', () => {
-    expect(REEF_STATES.map((each) => each.value)).toEqual(['full', 'reef-1'])
+describe('one answer about a note, for the three shapes it arrives in', () => {
+  it('reads blank, absent and whitespace as the same nothing', () => {
+    // A draft's note is a bound string, a stored row's is nullable, and each was asked its own way.
+    // The three have to agree, because `sail_entry_note_non_empty` refuses the empty string and
+    // `sail_entry_says_something` then fires on an entry the wizard believed was finished.
+    expect(noteText('')).toBe('')
+    expect(noteText(null)).toBe('')
+    expect(noteText(undefined)).toBe('')
+    expect(noteText('   ')).toBe('')
+  })
+
+  it('keeps the words and drops the keyboard’s spaces', () => {
+    expect(noteText('  jib was blown out ')).toBe('jib was blown out')
+  })
+
+  it('states a sail and its note in one order, with one separator', () => {
+    // The wizard says this about a draft and the race page about a stored entry. They may disagree
+    // about where the label came from; they may not disagree about the shape.
+    expect(sailWithNote('Main + Jib 1', 'jib was blown out')).toBe(
+      'Main + Jib 1 · jib was blown out'
+    )
+    expect(sailWithNote('Main + Jib 1', '')).toBe('Main + Jib 1')
   })
 })

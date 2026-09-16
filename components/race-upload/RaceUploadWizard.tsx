@@ -10,10 +10,17 @@
  * dimmed and with nothing to tap, so the sailor answers each question against the same picture.
  *
  * The two annotation steps are **Testimony** (ADR 0010), and everything about how they behave follows
- * from that. Nothing is pre-selected — a default would be a guess presented as a memory. Both steps
- * are skippable and two empty lists are a legal race whose page will say the sails and the water were
- * not recorded. A new sail entry inherits the previous one, because a change alters one sail rather
- * than all of them. Entry times are not bounded by the window: the sails were set before the start.
+ * from that. Nothing is pre-selected — a default would be a guess presented as a memory, so a new sail
+ * entry inherits nothing from the one before it either. Both steps are skippable and two empty lists
+ * are a legal race whose page will say the sails and the water were not recorded. Entry times are not
+ * bounded by the window: the sails were set before the start.
+ *
+ * A sail is named by naming a Sail Definition of **one** Crossover Chart Version (ADR 0023), and which
+ * Version that is belongs to the Race. The step defaults it to the Version in force when the recording
+ * started, shows it, and lets the sailor change it — a change clears the entries already placed and
+ * says so, because the numbers they hold are only meaningful inside the Version they were chosen from.
+ * With no Version there is nothing to name a sail in, so the step is closed and says which of the two
+ * reasons it is.
  *
  * **Nothing is written to the database until Save race.** Picking a file parks its bytes under
  * `tmp/{user_id}/{upload_id}/` and returns a projection to draw; every step after that is state in
@@ -39,22 +46,21 @@ import {
   type ReactNode,
 } from 'react'
 import { spacing } from '@/lib/utils/design'
-import { sailsAvailableOn } from '@/services/boat/sails'
+import { chartInForceOn } from '@/services/boat/crossoverCharts'
 import {
-  REEF_STATES,
   SEA_STATES,
   byTime,
   newSailEntry,
   newSeaStateEntry,
+  noteText,
   placeAnnotationTime,
-  reefLabel,
   refuseEntryTimes,
   refuseSailEntry,
   refuseSeaStateEntry,
   sailEntriesToSubmit,
+  sailWithNote,
   seaStateEntriesToSubmit,
   seaStateLabel,
-  toggleSail,
 } from '@/services/races/annotations'
 import type { RaceChartAxis } from '@/services/recordings/chart-series'
 import { raceChartAxis } from '@/services/recordings/chart-series'
@@ -75,9 +81,10 @@ import {
   wallClockTime,
 } from '@/services/recordings/wall-clock'
 import type {
+  CrossoverChartChoice,
+  CrossoverSailDefinition,
   RaceChannelKey,
   RaceFinding,
-  SailChoice,
   SailEntryDraft,
   SeaStateEntryDraft,
   StagedRecording,
@@ -120,20 +127,24 @@ interface RaceUploadWizardProps {
   stageRecording: (formData: FormData) => Promise<StageRecordingResult>
   submitRace: (input: SubmitRaceInput) => Promise<SubmitRaceResult>
   /**
-   * The boat's Sail Inventory, in `sort_order`, retired sails included — or null where it could not
-   * be read.
+   * Every Crossover Chart Version the boat has, newest first, each with the sails it names — or null
+   * where they could not be read.
    *
-   * Null is not an empty locker and is not treated as one: with no inventory the Sails step says so
-   * and offers nothing, rather than presenting an empty chip row as "the boat has no sails". The rest
-   * of the upload still saves, because a race with no sail plan recorded is a legal race (ADR 0010).
+   * All of them, not only the one in force: the archive is hand-entered, so a race being annotated
+   * here was probably sailed under a chart the boat has since replaced, and it has to be able to name
+   * that chart's sails in that chart's own words (ADR 0012).
+   *
+   * Null is not "the boat has no chart" and is not treated as one. Either way the Sails step says
+   * which it is and offers nothing, rather than presenting an empty chip row as an answer, and the
+   * rest of the upload still saves — a race with no sail plan recorded is a legal race (ADR 0010).
    */
-  inventory: SailChoice[] | null
+  charts: CrossoverChartChoice[] | null
 }
 
 export default function RaceUploadWizard({
   stageRecording,
   submitRace,
-  inventory,
+  charts,
 }: RaceUploadWizardProps): ReactElement {
   const router = useRouter()
 
@@ -154,6 +165,17 @@ export default function RaceUploadWizard({
   const [sailEntries, setSailEntries] = useState<SailEntryDraft[]>([])
   const [seaEntries, setSeaEntries] = useState<SeaStateEntryDraft[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+
+  /**
+   * Which Crossover Chart Version this Race's sails are named in, and what a change to it cost.
+   *
+   * Defaulted from the recording's own start time when the file is picked, and null until then — and
+   * still null afterwards if the boat had no chart yet when this was sailed, which is an ordinary state
+   * for an archive being entered backwards. Whatever it ends as is written on the Race and never
+   * resolved again (ADR 0012).
+   */
+  const [chartVersionId, setChartVersionId] = useState<string | null>(null)
+  const [chartNote, setChartNote] = useState<string | null>(null)
 
   // A counter rather than a uuid: these keys exist so React and the charts can tell two drafts apart,
   // they are never sent, and the database's own key is `(race_id, at)`.
@@ -214,14 +236,20 @@ export default function RaceUploadWizard({
     [staged]
   )
 
+  /** The Version the sails will be named in, as an object, or null while there is none. */
+  const chosenChart = useMemo(
+    () => (charts ?? []).find((chart) => chart.version_id === chartVersionId) ?? null,
+    [charts, chartVersionId]
+  )
+
   /**
-   * Whether there is anything to name a sail plan with.
+   * Whether there is anything to name a sail with.
    *
-   * A locker with nothing in it and an inventory that could not be read are different sentences, and
-   * both mean the same thing for the chart: no tap on this step could produce an entry that is ever
-   * finishable, so the step does not offer one.
+   * A boat with no Crossover Chart, a read that failed, and a recording older than the boat's first
+   * chart are three different sentences, and all three mean the same thing for the chart stack: no tap
+   * on this step could produce an entry that is ever finishable, so the step does not offer one.
    */
-  const canNameSails = (inventory ?? []).length > 0
+  const canNameSails = chosenChart !== null
 
   /** The step, as the one thing that changes about the stack. */
   const mode: StackMode =
@@ -235,15 +263,13 @@ export default function RaceUploadWizard({
           ? 'sea'
           : 'readonly'
 
-  /** A sail's own short key, for a marker label that fits on a chart. */
-  const sailKeys = useMemo(
-    () => new Map((inventory ?? []).map((sail) => [sail.id, sail.key])),
-    [inventory]
-  )
-
+  /** The chosen Version's own words, by the number an entry holds. */
   const sailLabels = useMemo(
-    () => new Map((inventory ?? []).map((sail) => [sail.id, sail.label])),
-    [inventory]
+    () =>
+      new Map(
+        (chosenChart?.definitions ?? []).map((definition) => [definition.number, definition.label])
+      ),
+    [chosenChart]
   )
 
   /**
@@ -259,10 +285,9 @@ export default function RaceUploadWizard({
         key: entry.key,
         at: entry.at,
         lane: 'sail' as const,
-        label:
-          entry.sail_ids.length > 0
-            ? entry.sail_ids.map((id) => sailKeys.get(id) ?? '?').join('+')
-            : '?',
+        // The Definition's number rather than its words: a marker is a few pixels wide, and the
+        // number is the one thing about a Definition that is short and the sailor's own.
+        label: markerLabel(entry),
         selected: selected === entry.key,
         incomplete: refuseSailEntry(entry) !== null,
         locked: mode !== 'sail',
@@ -277,7 +302,7 @@ export default function RaceUploadWizard({
         locked: mode !== 'sea',
       })),
     ],
-    [sailEntries, seaEntries, selected, mode, sailKeys]
+    [sailEntries, seaEntries, selected, mode]
   )
 
   /**
@@ -307,8 +332,8 @@ export default function RaceUploadWizard({
    * A tap places an entry of the step's own kind, at the nearest free recorded row.
    *
    * The new entry is selected, because placing one and then having to find it is two gestures for one
-   * intention — and a sail entry arrives carrying the previous entry's configuration, which is what
-   * makes seven changes on one race affordable.
+   * intention. It arrives naming nothing: one Sail Configuration is now one sail, so inheriting the
+   * previous entry's Definition would pre-select the very sail the sailor came here to replace.
    */
   const placeAnnotation = useCallback(
     (seconds: number): void => {
@@ -323,7 +348,7 @@ export default function RaceUploadWizard({
           return
         }
 
-        const entry = newSailEntry(sailEntries, at, mintKey())
+        const entry = newSailEntry(at, mintKey())
         setSailEntries([...sailEntries, entry])
         setSelected(entry.key)
         setMessage(null)
@@ -344,6 +369,33 @@ export default function RaceUploadWizard({
       }
     },
     [staged, mode, sailEntries, seaEntries, mintKey]
+  )
+
+  /**
+   * Naming the Version these sails are in, which clears the ones already named.
+   *
+   * A Definition number means something only inside one Version — v1's 3 and v2's 3 are different
+   * sails — so carrying the entries across would silently rename what the sailor said. They are
+   * cleared, and the count is stated, which is the same bargain `repoint_race_crossover_chart` strikes
+   * for a Race that has already been saved.
+   */
+  const chooseChart = useCallback(
+    (versionId: string): void => {
+      if (versionId === chartVersionId) return
+
+      const cleared = sailEntries.length
+
+      setChartVersionId(versionId)
+      setSailEntries([])
+      setSelected(null)
+      setChartNote(
+        cleared === 0
+          ? null
+          : `A sail is named in one Crossover Chart Version’s own words, so switching Versions took ` +
+              `off ${cleared} sail ${cleared === 1 ? 'entry' : 'entries'}. Place them again.`
+      )
+    },
+    [chartVersionId, sailEntries]
   )
 
   const patchSail = useCallback((key: string, change: Partial<SailEntryDraft>): void => {
@@ -388,9 +440,14 @@ export default function RaceUploadWizard({
       const finish = Math.max(...result.staged.series.row_seconds)
       setRaceWindow({ start, finish })
       setDuplicateAccepted(false)
+      // The Version in force when the recording started — the boat's chart *then*, which for a
+      // hand-entered archive is usually not the chart now. Null when the recording predates the first
+      // Version, and offered rather than guessed at from there.
+      setChartVersionId(chartInForceOn(charts ?? [], wallClockStamp(start))?.version_id ?? null)
+      setChartNote(null)
       setStep(1)
     },
-    [stageRecording]
+    [stageRecording, charts]
   )
 
   /**
@@ -482,6 +539,9 @@ export default function RaceUploadWizard({
       window_start: stamps.window_start,
       window_finish: stamps.window_finish,
       title,
+      // The Version the sail entries name their sails in, frozen onto the Race here and never
+      // resolved again. Null is a real answer and the Race then holds no Sail Configuration at all.
+      crossover_chart_version_id: chartVersionId,
       // Two lists, either of which may be empty — a race whose sails and water were not recorded is
       // an ordinary race, and an empty list is how it says so (ADR 0010).
       sails: sailEntriesToSubmit(sailEntries),
@@ -512,6 +572,9 @@ export default function RaceUploadWizard({
         setSailEntries([])
         setSeaEntries([])
         setSelected(null)
+        // The default was read off *that* recording's start time, so it goes with the recording.
+        setChartVersionId(null)
+        setChartNote(null)
         setStep(0)
       }
       return
@@ -524,6 +587,7 @@ export default function RaceUploadWizard({
     staged,
     raceWindow,
     title,
+    chartVersionId,
     sailEntries,
     seaEntries,
     duplicateAccepted,
@@ -594,7 +658,7 @@ export default function RaceUploadWizard({
           channel={channel}
           onChannelChange={setChannel}
           mode={mode}
-          hint={step === 2 && !canNameSails ? 'No sails to name' : undefined}
+          hint={step === 2 && !canNameSails ? 'No chart to name a sail in' : undefined}
           onWindowChange={setRaceWindow}
           onTapTime={onTapTime}
           markers={markers}
@@ -631,14 +695,22 @@ export default function RaceUploadWizard({
             heading="What was up, and when?"
             prose={
               canNameSails
-                ? 'Tap the track where it happened — the time comes from the recording, not from a keypad. Leave it empty if nobody wrote it down.'
-                : inventory === null
-                  ? 'The boat’s sail inventory could not be read just now, so there is nothing here to name a sail plan with. The race still saves; its page will say the sail plan was not recorded.'
-                  : 'There are no sails in the boat’s locker yet, so there is nothing here to name a sail plan with. Add them under Boat, or save the race without a sail plan — its page will say it was not recorded.'
+                ? 'Tap the track where it happened — the time comes from the recording, not from a keypad. Every sail is one the chart names; anything else goes under “Something else” with a note. Leave it empty if nobody wrote it down.'
+                : charts === null
+                  ? 'The boat’s Crossover Charts could not be read just now, and a sail is named in a chart Version’s own words — so there is nothing here to name one with. The race still saves; its page will say the sail plan was not recorded.'
+                  : charts.length === 0
+                    ? 'The boat has no Crossover Chart yet, and a sail is named in a chart Version’s own words — there is no separate list of sails. Upload a Crossover Chart under Boat, or save the race without a sail plan; its page will say it was not recorded.'
+                    : 'This recording is older than every Crossover Chart the boat has, so no Version was in force when it was sailed. Pick the Version whose words these sails should be named in, or save the race without a sail plan.'
             }
           />
 
-          {canNameSails && (
+          {charts !== null && charts.length > 0 && (
+            <ChartVersionPicker charts={charts} chosen={chartVersionId} onChoose={chooseChart} />
+          )}
+
+          {chartNote !== null && <RaceFindings findings={[{ severity: 'note', message: chartNote }]} />}
+
+          {canNameSails && chosenChart && (
             <>
               {sailEntries.length === 0 && (
                 <EmptyNote>
@@ -654,7 +726,7 @@ export default function RaceUploadWizard({
                   <SailEntryEditor
                     key={entry.key}
                     entry={entry}
-                    inventory={inventory ?? []}
+                    definitions={chosenChart.definitions}
                     onChange={(change) => patchSail(entry.key, change)}
                     onRemove={() => {
                       setSailEntries((current) => current.filter((each) => each.key !== entry.key))
@@ -666,13 +738,7 @@ export default function RaceUploadWizard({
                   <EntryRow
                     key={entry.key}
                     at={entry.at}
-                    text={
-                      entry.sail_ids.length > 0
-                        ? `${entry.sail_ids.map((id) => sailLabels.get(id) ?? id).join(' + ')} · ${
-                            entry.reef ? reefLabel(entry.reef) : 'reef not stated'
-                          }`
-                        : 'nothing named yet'
-                    }
+                    text={sailEntryText(entry, sailLabels)}
                     incomplete={refuseSailEntry(entry) !== null}
                     onPress={() => setSelected(entry.key)}
                   />
@@ -739,9 +805,7 @@ export default function RaceUploadWizard({
           <AnnotationSummary
             sails={byTime(sailEntries).map((entry) => ({
               at: entry.at,
-              text: `${entry.sail_ids.map((id) => sailLabels.get(id) ?? id).join(' + ')} · ${
-                entry.reef ? reefLabel(entry.reef) : 'reef not stated'
-              }`,
+              text: sailEntryText(entry, sailLabels),
             }))}
             seaState={byTime(seaEntries).map((entry) => ({
               at: entry.at,
@@ -1153,57 +1217,106 @@ function EntryRow({
 }
 
 /**
- * One Sail Configuration, open: its time, its set of sails, its Reef State.
+ * One Sail Configuration, open: its time, the sail the chart names, and a note.
  *
- * The chips are the whole interaction, and a new entry arrives carrying the previous one — so a
- * headsail change is the old sail off and the new one on, and everything else about the boat stays as
- * the sailor already said it was.
+ * One chip row, and it is the whole vocabulary — every Definition the chosen Version has, including
+ * the ones no cell of the grid recommends, because what the boat flew is not limited to what the chart
+ * would have advised. "Something else" is the way out of the vocabulary rather than a hole in it: it
+ * names no Definition, so the note is the only record of what was up and is required.
+ *
+ * A note is offered alongside a named sail too, and is the reason `note` is a column rather than a
+ * fallback — "jib was blown out" belongs on the entry that says the A2 went up.
  */
 function SailEntryEditor({
   entry,
-  inventory,
+  definitions,
   onChange,
   onRemove,
   onDone,
 }: {
   entry: SailEntryDraft
-  inventory: readonly SailChoice[]
+  definitions: readonly CrossoverSailDefinition[]
   onChange: (change: Partial<SailEntryDraft>) => void
   onRemove: () => void
   onDone: () => void
 }): ReactElement {
-  const day = wallClockStamp(entry.at).slice(0, 10)
-  // The locker as it was on the race's own day, plus anything already named — a sail retired since is
-  // still what was flying then.
-  const offered = sailsAvailableOn(inventory, day, entry.sail_ids)
-  const order = inventory.map((sail) => sail.id)
+  /**
+   * Whether the sailor has said "not one of these".
+   *
+   * A number and no number are the two states of the entry itself; this third one exists because a
+   * *fresh* entry also has no number, and drawing "Something else" as pressed on it would be the
+   * wizard answering the question (ADR 0010). Reopened later, a note with no Definition is that answer.
+   */
+  const [somethingElse, setSomethingElse] = useState(
+    entry.definition_number === null && noteText(entry.note) !== ''
+  )
+
+  /**
+   * Whether the entry is out of the vocabulary *now*, which is the question the chip, the label and
+   * the placeholder each ask. The `useState` above cannot answer it alone: tapping a Definition
+   * clears it in the same act, and a stale `true` would leave the note field demanding words for a
+   * sail the chart has just named.
+   */
+  const outOfVocabulary = somethingElse && entry.definition_number === null
   const refused = refuseSailEntry(entry)
+  const noteId = `race-entry-note-${entry.key}`
 
   return (
     <EntryCard at={entry.at} onChangeTime={(seconds) => onChange({ at: seconds })}>
-      <ChipRow label="Sails up">
-        {offered.map((sail) => (
+      <ChipRow label="Sail up">
+        {definitions.map((definition) => (
           <Chip
-            key={sail.id}
-            on={entry.sail_ids.includes(sail.id)}
-            onPress={() => onChange({ sail_ids: toggleSail(entry.sail_ids, sail.id, order) })}
+            key={definition.number}
+            on={entry.definition_number === definition.number}
+            onPress={() => {
+              setSomethingElse(false)
+              onChange({ definition_number: definition.number })
+            }}
           >
-            {sail.label}
+            {definition.label}
           </Chip>
         ))}
+        <Chip
+          on={outOfVocabulary}
+          onPress={() => {
+            setSomethingElse(true)
+            onChange({ definition_number: null })
+          }}
+        >
+          Something else
+        </Chip>
       </ChipRow>
 
-      <ChipRow label="Mainsail">
-        {REEF_STATES.map((reef) => (
-          <Chip
-            key={reef.value}
-            on={entry.reef === reef.value}
-            onPress={() => onChange({ reef: reef.value })}
-          >
-            {reef.label}
-          </Chip>
-        ))}
-      </ChipRow>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+        <label
+          htmlFor={noteId}
+          style={{
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {outOfVocabulary
+            ? 'What was up, in your own words'
+            : 'Note, if there is anything to add'}
+        </label>
+        <input
+          id={noteId}
+          type="text"
+          value={entry.note}
+          onChange={(event) => onChange({ note: event.target.value })}
+          placeholder={outOfVocabulary ? 'delivery main' : 'jib was blown out'}
+          style={{
+            fontSize: 'var(--text-sm)',
+            padding: '7px 9px',
+            background: 'var(--input-bg)',
+            border: '1px solid var(--input-border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-primary)',
+          }}
+        />
+      </div>
 
       {refused && (
         <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--state-warning)' }}>
@@ -1214,6 +1327,61 @@ function SailEntryEditor({
       <EntryActions onRemove={onRemove} onDone={onDone} />
     </EntryCard>
   )
+}
+
+/**
+ * Which Crossover Chart Version this Race's sails are named in.
+ *
+ * Every Version is offered, newest first, and each says the day it came into force — because the one
+ * the sailor wants is chosen by *when the race was*, and for a hand-entered archive that is usually
+ * not the newest. The chosen one is stated even when there is nothing to change it to, since it is
+ * about to be written onto the Race and read back as the source of every sail name on its page.
+ */
+function ChartVersionPicker({
+  charts,
+  chosen,
+  onChoose,
+}: {
+  charts: readonly CrossoverChartChoice[]
+  chosen: string | null
+  onChoose: (versionId: string) => void
+}): ReactElement {
+  return (
+    <ChipRow label="Named in Crossover Chart">
+      {charts.map((chart) => (
+        <Chip
+          key={chart.version_id}
+          on={chart.version_id === chosen}
+          onPress={() => onChoose(chart.version_id)}
+        >
+          {`v${chart.version_number}`}
+          <span style={{ fontSize: 9, opacity: 0.75, marginLeft: 4 }}>
+            {`from ${chart.effective_from}`}
+          </span>
+        </Chip>
+      ))}
+    </ChipRow>
+  )
+}
+
+/**
+ * What one entry says, in the chosen Version's own words.
+ *
+ * A note-only entry reads as what was written and nothing else: the nearest Definition's words would
+ * be the wizard naming a sail the sailor deliberately did not name (ADR 0023).
+ */
+function sailEntryText(entry: SailEntryDraft, labels: ReadonlyMap<number, string>): string {
+  const note = noteText(entry.note)
+
+  if (entry.definition_number === null) return note === '' ? 'nothing named yet' : note
+
+  return sailWithNote(labels.get(entry.definition_number) ?? `sail ${entry.definition_number}`, note)
+}
+
+/** The same entry, in the few characters a chart marker has. */
+function markerLabel(entry: SailEntryDraft): string {
+  if (entry.definition_number !== null) return `#${entry.definition_number}`
+  return noteText(entry.note) === '' ? '?' : 'note'
 }
 
 /** One Sea State reading, open. Four chips, nothing pre-selected. */

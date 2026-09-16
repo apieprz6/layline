@@ -117,6 +117,109 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260916121000_create_race_from_upload_with_sail_definitions.sql
+
+**Purpose**: the same five-argument `public.create_race_from_upload`, with `p_sails` now
+`[{at, definition_number, note}]` and `p_race` carrying `crossover_chart_version_id`. ADR 0023
+means a Sail Configuration is one Definition of the Race's own chart Version, so the old inner
+loop over a set of sail ids collapses to a single `INSERT ... SELECT` — there is no child table
+left to need the parent's id.
+
+**It replaces the function rather than overloading it**, and the argument types are unchanged
+(`jsonb ×5`), so this is a plain `CREATE OR REPLACE` with no `DROP`. That is the one case where a
+replacement cannot leave a stale overload behind.
+
+**The Version is written once, on the Race, and copied onto every entry from there** — no entry
+states its own, and one is refused if it tries. `p_sails` non-empty against a Race with no chart
+Version is refused before the Recording is inserted, so nothing of the upload survives a mistake
+that the wizard should have caught (ADR 0013 prefers orphaned bytes to orphaned rows).
+
+**What it does not restate**: the composite foreign keys, `sail_entry_says_something` and
+`sail_entry_note_non_empty` all live in `20260916120000` and refuse a bad entry from there. This
+function adds one refusal of its own — the null-Version case above — because a foreign key cannot
+say *why* in words the wizard can show.
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-upload-rpc.sh "$DB_URL"       # 55 checks, safe against real data
+```
+
+The suite went from 45 checks to 55 and section 9 was rewritten: a Definition number stored, the
+Race's Version copied onto entries that never stated it, a note stored verbatim beside a
+Definition, a note-only Configuration with a null `definition_number`, sail 4 refused against a
+Version that stops at 3 and accepted against one that defines it, an entry that says nothing
+refused by name, and sails against a Race with no chart Version refused with nothing written.
+**All 55 were run against the local stack and passed.**
+
+**Rollback**: re-run `20260915230000_create_race_from_upload_with_annotations.sql`, which restores
+the previous body. It only makes sense alongside a rollback of `20260916120000` — the old body
+writes `race_sail_entry_sails` and a `reef_state`, and neither exists afterwards.
+
+## Migration: 20260916120000_one_sail_vocabulary.sql
+
+**Purpose**: ADR 0023. Delete the Sail Inventory and let a Crossover Chart Version own the only
+sail vocabulary Layline has. `crossover_sail_definitions (version_id, number)` is a new table;
+`race_sail_entries` gains `crossover_chart_version_id NOT NULL`, `definition_number` and `note`;
+`sails` (with its six-row seed), `race_sail_entry_sails`, the `race_sail_entries_non_empty`
+trigger, `race_sail_entries.reef` and the `reef_state` enum all go.
+
+**The Definitions become rows for the reason `rig_tune_bands` did.** Postgres cannot reference
+into a JSONB array, and a Configuration pointing at "element 3 of a payload" is the positional
+index ADR 0007 and ADR 0011 both refuse. The payload keeps `sail_definitions` untouched — that is
+the file's own testimony — and the rows are a projection written **from the same parse, in the
+same transaction**, inside `mint_boat_setup_version`. A Version's rows and its payload cannot be
+written apart.
+
+**Two composite foreign keys replace what a trigger would have guessed at**: one to
+`races (id, crossover_chart_version_id)`, so an entry cannot disagree with its own Race, and one
+to `crossover_sail_definitions (version_id, number)`, so it cannot name a sail the Version never
+defined. `MATCH SIMPLE` is doing deliberate work in the second — a null `definition_number` is a
+note-only Configuration and the key stands aside — and no work at all in the first, where both
+columns are `NOT NULL`. A Race with a null chart pointer holding no Configurations is a
+consequence of the first key, not a check written anywhere. `ON UPDATE RESTRICT` is why repointing
+a Race's chart must clear its Configurations first, in one transaction, after the sailor is told
+how many.
+
+**It is destructive and deliberately so**: every existing `race_sail_entries` row is deleted.
+Those rows name `sails` ids against Races whose chart pointer has never been written, so there is
+nothing to translate against without inventing the translation — and the archive is hand-entered
+by its owner through the finished UI. `crossover_sail_definitions` **is** backfilled, from
+`payload->'sail_definitions'` of every existing crossover Version. No Race's chart pointer is
+backdated: null means *not recorded* (ADR 0012).
+
+**Destructive once, and it has to be said that way.** The delete names its rows —
+`WHERE crossover_chart_version_id IS NULL`, against the column added nullable just above it — so the
+first run takes every old-vocabulary row and a second run takes nothing. A plain
+`DELETE FROM race_sail_entries` reads identically on the first run and destroys hand-entered
+Testimony on any run after it, which is not recoverable from anything. Two other statements were
+re-run hazards for the same reason and are fixed the same way: the backfill skips a Version already
+projected (`NOT EXISTS`, which is not the same as an `ON CONFLICT` that would also swallow a payload
+naming one number twice), and the two dropped tables are left to take their own triggers, because
+`DROP TRIGGER IF EXISTS x ON y` *raises* once `y` is gone. Applying the whole file twice in one
+transaction, with a Configuration entered in between, was run locally on 2026-09-16: the second run
+completes, the Configuration survives, and the Definitions count is unchanged.
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-archive-schema.sh "$DB_URL"   # both new sections included
+```
+
+The schema suite loses its six-sail assertion and "a flown sail cannot be deleted" — neither has a
+subject any more — and gains the two composite-key refusals, the says-something CHECK, the
+non-empty note, and a Configuration on a chart-less Race.
+
+**Rollback**:
+```sql
+DROP TABLE IF EXISTS crossover_sail_definitions CASCADE;
+ALTER TABLE race_sail_entries
+    DROP COLUMN crossover_chart_version_id, DROP COLUMN definition_number, DROP COLUMN note;
+ALTER TABLE races DROP CONSTRAINT IF EXISTS races_id_crossover_chart_version_key;
+DROP FUNCTION IF EXISTS public.repoint_race_crossover_chart(uuid, uuid, integer);
+```
+That leaves the schema without a sail vocabulary at all. Restoring the Inventory means re-running
+`20260910183000_create_race_archive_and_boat_setup.sql`'s `sails`, `race_sail_entry_sails` and
+`reef_state` statements by hand — this migration drops them, and their rows are gone.
+
 ## Migration: 20260915230000_create_race_from_upload_with_annotations.sql
 
 **Purpose**: `public.create_race_from_upload(p_recording jsonb, p_rows jsonb, p_race jsonb,
@@ -145,9 +248,10 @@ scripts/verify-race-upload-rpc.sh "$DB_URL"       # 45 checks, safe against real
 ```
 
 The suite grew from 31 checks to 45: the fourteen new ones cover the two annotation tables, the
-empty-array case and an entry placed outside the window. **The fourteen have not been run against a
-database yet** — see the run status in `docs/testing/race-upload-transaction.md`, which is where the
-observed output goes.
+empty-array case and an entry placed outside the window. Those fourteen were never run as written —
+ADR 0023 rewrote the sail half of section 9 before a database was in reach, and what did run is the
+55-check suite recorded in `docs/testing/race-upload-transaction.md`, which is where the observed
+output goes.
 
 **Rollback**:
 ```sql

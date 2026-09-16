@@ -2,9 +2,9 @@
  * The race archive's row and enum types.
  *
  * Mostly a compile-time test: it asserts that every table and every enum in
- * 20260910183000_create_race_archive_and_boat_setup.sql has a type, importable through `@/`,
- * with the database's own column names. The runtime expectations are there so jest reports
- * something when it passes.
+ * 20260910183000_create_race_archive_and_boat_setup.sql — as 20260916120000_one_sail_vocabulary.sql
+ * left it — has a type, importable through `@/`, with the database's own column names. The runtime
+ * expectations are there so jest reports something when it passes.
  *
  * A few assertions are load-bearing rather than decorative, and are commented where they are.
  */
@@ -25,25 +25,23 @@ import type {
   InstrumentCalibrationVersion,
   PolarPayload,
   PolarVersion,
+  CrossoverSailDefinitionRow,
   Race,
   RaceSailEntry,
-  RaceSailEntrySail,
   RaceSeaStateEntry,
   Recording,
   RecordingDateOrder,
   RecordingRow,
   RecordingRowExtras,
-  ReefState,
   RigTuneBand,
   RigTunePayload,
   RigTuneShrouds,
   RigTuneVersion,
-  Sail,
   SeaState,
   ShroudPosition,
 } from '@/types'
 
-describe('the six enums', () => {
+describe('the five enums', () => {
   it('name every value the database will accept, and no others', () => {
     const kinds: BoatSetupKind[] = [
       'polar',
@@ -54,7 +52,6 @@ describe('the six enums', () => {
     const channels: CalibrationChannel[] = ['AWA', 'AWS', 'STW', 'HDG']
     const eventTypes: CalibrationEventType[] = ['autocompensation', 'other']
     const seaStates: SeaState[] = ['calm', 'slight', 'moderate', 'rough']
-    const reefs: ReefState[] = ['full', 'reef-1']
     const dateOrders: RecordingDateOrder[] = ['MDY', 'DMY']
     const positions: ShroudPosition[] = ['V1', 'D1', 'D2']
 
@@ -63,10 +60,9 @@ describe('the six enums', () => {
       channels.length,
       eventTypes.length,
       seaStates.length,
-      reefs.length,
       dateOrders.length,
       positions.length,
-    ]).toEqual([4, 4, 2, 4, 2, 2, 3])
+    ]).toEqual([4, 4, 2, 4, 2, 3])
   })
 
   it('admits only the two file-backed kinds as a Storage path kind', () => {
@@ -82,7 +78,7 @@ describe('the six enums', () => {
   })
 })
 
-describe('the twelve row types', () => {
+describe('the eleven row types', () => {
   it('use the database’s own snake_case column names', () => {
     // Rows are handed straight to and from PostgREST, so a camelCase field here would be a
     // mapping layer nobody asked for and a silent undefined at runtime.
@@ -93,15 +89,14 @@ describe('the twelve row types', () => {
       created_at: '2026-09-10T00:00:00Z',
       updated_at: '2026-09-10T00:00:00Z',
     }
-    const sail: Sail = {
-      id: 's',
-      boat_id: 'b',
-      key: 'A2',
-      label: 'A2',
-      sort_order: 5,
-      retired_on: null,
-      created_at: '2026-09-10T00:00:00Z',
-      updated_at: '2026-09-10T00:00:00Z',
+    // Layline's only sail vocabulary, and it belongs to one Crossover Chart Version (ADR 0023).
+    // `kind` is the constant tag column that makes the composite key to the Version refuse a
+    // Definition hung off a Polar.
+    const definition: CrossoverSailDefinitionRow = {
+      version_id: 'v',
+      kind: 'crossover_chart',
+      number: 5,
+      label: 'Main + A2',
     }
     const artifact: BoatSetupArtifact = {
       id: 'a',
@@ -112,9 +107,9 @@ describe('the twelve row types', () => {
       updated_at: '2026-09-10T00:00:00Z',
     }
 
-    expect([boat.model, sail.key, artifact.current_version_id]).toEqual([
+    expect([boat.model, definition.label, artifact.current_version_id]).toEqual([
       'Beneteau 10R',
-      'A2',
+      'Main + A2',
       null,
     ])
   })
@@ -204,16 +199,27 @@ describe('the twelve row types', () => {
     expect(race.rig_tune_kind).toBe('rig_tune')
   })
 
-  it('types the annotations, including the join table that carries the set', () => {
+  it('types a Sail Configuration as one Definition of one chart Version, or a note', () => {
     const entry: RaceSailEntry = {
       id: 'e',
       race_id: 'race',
+      // Half of the composite key into `crossover_sail_definitions`, and NOT NULL: a Sail
+      // Configuration with no Version to name a sail in cannot be written at all (ADR 0023).
+      crossover_chart_version_id: 'v',
       // Deliberately unbounded by the window: the sails were set before the start.
       at: '2026-07-22 17:55:00',
-      reef: 'full',
+      definition_number: 5,
+      note: null,
       created_at: '2026-09-10T00:00:00Z',
     }
-    const member: RaceSailEntrySail = { entry_id: 'e', sail_id: 's' }
+    // The chart does not name everything the boat has ever flown, so an entry may be a note and no
+    // Definition — but never neither, which `race_sail_entries_says_something` refuses.
+    const written: RaceSailEntry = {
+      ...entry,
+      id: 'e2',
+      definition_number: null,
+      note: 'delivery main',
+    }
     const sea: RaceSeaStateEntry = {
       id: 'q',
       race_id: 'race',
@@ -222,7 +228,11 @@ describe('the twelve row types', () => {
       created_at: '2026-09-10T00:00:00Z',
     }
 
-    expect([entry.reef, member.sail_id, sea.sea_state]).toEqual(['full', 's', 'moderate'])
+    expect([entry.definition_number, written.note, sea.sea_state]).toEqual([
+      5,
+      'delivery main',
+      'moderate',
+    ])
   })
 
   it('requires both figures for both sides of all three shroud positions', () => {

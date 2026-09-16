@@ -305,7 +305,6 @@ export type BoatSetupKind = 'polar' | 'crossover_chart' | 'rig_tune' | 'instrume
 export type CalibrationChannel = 'AWA' | 'AWS' | 'STW' | 'HDG'
 export type CalibrationEventType = 'autocompensation' | 'other'
 export type SeaState = 'calm' | 'slight' | 'moderate' | 'rough'
-export type ReefState = 'full' | 'reef-1'
 export type RecordingDateOrder = 'MDY' | 'DMY'
 
 /**
@@ -319,21 +318,6 @@ export interface Boat {
   id: string
   name: string
   model: string
-  created_at: string
-  updated_at: string
-}
-
-/** One sail in the boat's Sail Inventory. */
-export interface Sail {
-  id: string
-  boat_id: string
-  /** Stable slug a Sail Configuration points at: 'main', 'jib-1', 'A2'. */
-  key: string
-  /** What the sailor sees. Renaming a sail is an UPDATE of this, and nothing else. */
-  label: string
-  sort_order: number
-  /** A flown sail is never deleted, only retired out of the picker. Calendar date. */
-  retired_on: string | null
   created_at: string
   updated_at: string
 }
@@ -643,11 +627,15 @@ export type CrossoverDefinitionsParseOutcome =
   | { ok: false; reason: CrossoverDefinitionsParseRefusal; message: string; line?: number }
 
 /**
- * One Sail Configuration the chart can call for: the set of sails plus a Reef State, named.
+ * One sail this chart Version can call for, in the chart's own words.
  *
- * `number` is the integer the grid's cells hold. It is qtVlm's external id and not a Layline
- * concept — nothing else in the archive points at it — so it is stored as the file gave it and
- * never renumbered.
+ * This is Layline's only sail vocabulary (ADR 0023): a Sail Configuration on a Race names one of
+ * these by number, and there is no inventory beside it.
+ *
+ * `number` is the integer the grid's cells hold, and it is qtVlm's external id rather than a Layline
+ * concept — so it is stored as the file gave it and never renumbered. It is only ever meaningful
+ * *within one Version*, which is why everything pointing at a Definition carries the Version's id
+ * alongside the number.
  *
  * `label` is free text. Layline's own sail names are the corrected ones (`A3`), and the payload
  * gate refuses a legacy spelling rather than rewriting it: v1 of this artifact is authored right
@@ -879,6 +867,26 @@ export interface RigTuneBand {
    * what the others are stale *against* (`base_band_gaps_never_stale`).
    */
   gaps_stale: boolean
+}
+
+/**
+ * One Sail Definition of a Crossover Chart Version, as a row.
+ *
+ * The same pair of numbers and labels the Version's payload carries, projected out of the same
+ * parse inside the same transaction (ADR 0023). It exists as rows for one reason: a Sail
+ * Configuration on a Race points at one, and `(version_id, number)` is what makes that pointer a
+ * real foreign key rather than a number nobody checked. The payload is still the record of what
+ * the file said, and nothing reads these rows to render a chart.
+ *
+ * `kind` is the constant tag that carries the composite key into `boat_setup_versions (id, kind)`,
+ * exactly as `RigTuneBand.kind` does (ADR 0011).
+ */
+export interface CrossoverSailDefinitionRow {
+  version_id: string
+  kind: 'crossover_chart'
+  /** The chart's own identifier, as the file gave it. Whole and non-negative, never renumbered. */
+  number: number
+  label: string
 }
 
 /**
@@ -1181,19 +1189,30 @@ export interface Race {
 /**
  * One Sail Configuration, in force from `at` until the next entry. `at` is deliberately
  * unbounded by the Race Window: the sails were set before the start.
+ *
+ * A Configuration names one Sail Definition of one Crossover Chart Version — the chart's own
+ * vocabulary, and the only sail vocabulary Layline has (ADR 0023). `crossover_chart_version_id`
+ * repeats the Race's own pointer rather than deriving from it, because that is what carries the
+ * composite keys: `(race_id, crossover_chart_version_id)` into `races`, so an entry cannot
+ * disagree with the Race about which chart was aboard, and `(crossover_chart_version_id,
+ * definition_number)` into `crossover_sail_definitions`, so it cannot name a number that Version
+ * never defined.
+ *
+ * Both `definition_number` and `note` are nullable and at least one is present
+ * (`sail_entry_says_something`). A note alone is what the sailor flew something the chart does not
+ * name; a note beside a Definition is a remark about it.
  */
 export interface RaceSailEntry {
   id: string
   race_id: string
+  /** The Race's own chart pointer, repeated. Never null: no chart Version, no Configurations. */
+  crossover_chart_version_id: string
   at: string
-  reef: ReefState
+  /** A Sail Definition number of that Version, or null when only a note was left. */
+  definition_number: number | null
+  /** Free text, or null. Never the empty string (`sail_entry_note_non_empty`). */
+  note: string | null
   created_at: string
-}
-
-/** A Sail Configuration is a set of sails, so it is stored as a set. Never empty. */
-export interface RaceSailEntrySail {
-  entry_id: string
-  sail_id: string
 }
 
 export interface RaceSeaStateEntry {
@@ -1557,18 +1576,20 @@ export type StageRecordingResult =
 // takes. Neither is bounded by the Race Window: the sails were set before the start.
 
 /**
- * One sail as a picker offers it: the id an entry stores, and the name the sailor reads.
+ * One Crossover Chart Version as the sails step offers it: which Version, and its vocabulary.
  *
- * `retired_on` travels because a retired sail was still flown before it was retired, so a race in
- * the archive from last season has to be able to name it. The picker offers what was available on
- * the race's own day rather than what is in the locker today.
+ * Every Version travels, not only the current one, because a Race freezes a pointer at the Version
+ * that was aboard and an archived race from last season has to be able to name its sails in the
+ * chart it was actually sailed under (ADR 0012, ADR 0023). `effective_from` is what the default is
+ * chosen by: the Version in force at the recording's start time.
  */
-export interface SailChoice {
-  id: string
-  key: string
-  label: string
-  /** Calendar date, or null for a sail still in the locker. */
-  retired_on: string | null
+export interface CrossoverChartChoice {
+  version_id: string
+  version_number: number
+  /** Calendar date the sailor says this chart took effect. */
+  effective_from: string
+  /** Every Definition the Version defines, in the chart's own numbering — cited or not. */
+  definitions: CrossoverSailDefinition[]
 }
 
 /** One Sail Configuration as the wizard holds it, before anything has been written. */
@@ -1581,30 +1602,40 @@ export interface SailEntryDraft {
   /** Absolute seconds in the recording's own naive frame. */
   at: number
   /**
-   * The set of Sails flown, by `sails.id`, in inventory order. Empty while the sailor is still
-   * choosing — and refused on submit, which is what the deferred `race_sail_entries_non_empty`
-   * trigger says too.
+   * The Sail Definition number of the chosen Crossover Chart Version. Null while the sailor is
+   * still choosing, and null for good on an entry that only carries a note — the sail flown was
+   * something the chart does not name.
    */
-  sail_ids: string[]
-  /** Null until stated. Nothing is pre-selected, so there is no `full` by default. */
-  reef: ReefState | null
+  definition_number: number | null
+  /**
+   * Free text beside the Definition, or instead of it. Blank means no note, which is why this is a
+   * string rather than `string | null`: it is a text field, and a text field holds ''.
+   */
+  note: string
 }
 
 /** One Sea State reading as the wizard holds it. */
 export interface SeaStateEntryDraft {
   key: string
   at: number
-  /** Null until stated, for the same reason `SailEntryDraft.reef` is. */
+  /** Null until stated. Nothing is pre-selected, so there is no `slight` by default. */
   sea_state: SeaState | null
 }
 
-/** One Sail Configuration on its way to the database, with everything stated. */
+/**
+ * One Sail Configuration on its way to the database: a Definition number, a note, or both.
+ *
+ * The Version they are named in is not here. It is one answer for the whole Race —
+ * `SubmitRaceInput.crossover_chart_version_id` — because a sailor names their sails in one
+ * vocabulary, and `race_sail_entries_race_chart_fkey` would refuse anything else.
+ */
 export interface SubmitSailEntry {
   /** The recording's own naive frame. Unbounded by the window. */
   at: string
-  reef: ReefState
-  /** At least one, by `sails.id`. */
-  sail_ids: string[]
+  /** A Sail Definition number of the Race's chart Version, or null on a note-only entry. */
+  definition_number: number | null
+  /** Null rather than '': a blank note is no note (`sail_entry_note_non_empty`). */
+  note: string | null
 }
 
 /** One Sea State reading on its way to the database. */
@@ -1632,6 +1663,15 @@ export interface SubmitRaceInput {
   window_finish: string
   /** Blank is stored as null — an untitled race is normal (ADR 0010). */
   title: string
+  /**
+   * The Crossover Chart Version the sails are named in, frozen onto the Race at upload (ADR 0023).
+   *
+   * Null means the Race records no chart Version, which is a legitimate answer (ADR 0012) and one
+   * in which `sails` must be empty: with no vocabulary there is nothing to say a sail in. It is
+   * written here rather than resolved at read, so a chart minted next winter cannot silently
+   * re-word what this race flew.
+   */
+  crossover_chart_version_id: string | null
   /**
    * The sailor's Testimony about the sails, in time order. Empty is legal and means the sail plan
    * was not recorded — never a stand-in configuration.
@@ -1680,15 +1720,20 @@ export interface RaceListEntry {
 }
 
 /**
- * One Sail Configuration as a page states it: the sails by the name the sailor reads, and the Reef
- * State. Named sails rather than ids, because a page states what was flying.
+ * One Sail Configuration as a page states it: the Crossover Chart Version's own label for the
+ * Definition that was named, and whatever the sailor wrote beside it.
+ *
+ * `label` is the Version's own words, resolved from `crossover_sail_definitions` for the Version
+ * the Race points at — not the current chart's wording for the same number (ADR 0023). It is null
+ * exactly when `definition_number` is, which is the note-only entry: the sail was something the
+ * chart does not name, and the page states what was written rather than a label nobody chose.
  */
 export interface RaceSailAnnotation {
   /** The recording's own naive frame. Ordered with the rest of the list, earliest first. */
   at: string
-  reef: ReefState
-  /** In inventory order, never empty — the database refuses an entry that names no sails. */
-  sails: { key: string; label: string }[]
+  definition_number: number | null
+  label: string | null
+  note: string | null
 }
 
 /** One Sea State reading as a page states it. */

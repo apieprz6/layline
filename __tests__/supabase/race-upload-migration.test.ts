@@ -15,6 +15,13 @@ const MIGRATIONS = resolve(__dirname, '../../supabase/migrations')
 const FILENAME = '20260915220000_create_race_from_upload.sql'
 /** LAY-111's replacement, which drops the three-argument version and writes the annotations too. */
 const ANNOTATED = '20260915230000_create_race_from_upload_with_annotations.sql'
+/**
+ * LAY-130's replacement, where a Sail Configuration names a Sail Definition of the Crossover Chart
+ * Version the Race points at (ADR 0023). The two files above are history — a migration is never
+ * edited once pushed — so what is asserted about them is the shape they wrote at the time, and this
+ * is the one that describes the function as it now stands.
+ */
+const DEFINITIONS = '20260916121000_create_race_from_upload_with_sail_definitions.sql'
 
 /** The statements alone, since the prose above them discusses what they avoid. */
 const statements = (filename: string): string =>
@@ -25,6 +32,7 @@ const statements = (filename: string): string =>
 
 const code = statements(FILENAME)
 const annotated = statements(ANNOTATED)
+const definitions = statements(DEFINITIONS)
 
 describe('the race-upload transaction migration', () => {
   it('runs after every migration already applied, not just after the tables it writes to', () => {
@@ -102,6 +110,10 @@ describe('the migration that adds the sailor’s Testimony to it', () => {
   it('writes both annotation tables inside the same function', () => {
     // The whole reason this is one function: Testimony that is half of what the sailor said is
     // worse than a failed save, and the JS client cannot express a transaction.
+    //
+    // Three tables here, because a Sail Configuration was a set of sails then. LAY-130 collapsed
+    // the join table into a Definition number on the entry itself (ADR 0023) — this asserts what
+    // *this* file writes, which is history and does not change.
     expect(annotated).toMatch(/INSERT INTO public\.race_sail_entries/)
     expect(annotated).toMatch(/INSERT INTO public\.race_sail_entry_sails/)
     expect(annotated).toMatch(/INSERT INTO public\.race_sea_state_entries/)
@@ -148,5 +160,121 @@ describe('the migration that adds the sailor’s Testimony to it', () => {
     // Testimony; a column recording that it was typed by the person who typed it says nothing.
     expect(annotated).not.toMatch(/\bsource\b/i)
     expect(annotated).not.toMatch(/auto[_-]?match/i)
+  })
+})
+
+describe('the migration where a Configuration names a Sail Definition', () => {
+  it('runs after the schema change that gave it columns to write', () => {
+    const files = readdirSync(MIGRATIONS)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+
+    expect(files.indexOf(DEFINITIONS)).toBeGreaterThan(files.indexOf(ANNOTATED))
+    // `crossover_chart_version_id`, `definition_number` and `note` do not exist on
+    // race_sail_entries until then, and this function's INSERT names all three.
+    expect(files.indexOf(DEFINITIONS)).toBeGreaterThan(
+      files.indexOf('20260916120000_one_sail_vocabulary.sql')
+    )
+  })
+
+  it('keeps the same five arguments, so it replaces rather than overloads', () => {
+    // An overload would leave the LAY-111 body reachable, and it writes inventory ids into a table
+    // that no longer exists — a call that fails at the last insert, after the bytes have moved
+    // (ADR 0013). Same signature, so there is no shape of call that reaches the old one.
+    expect(definitions).toMatch(/CREATE OR REPLACE FUNCTION public\.create_race_from_upload\(/)
+    expect(definitions).not.toMatch(/DROP FUNCTION IF EXISTS public\.create_race_from_upload/)
+    for (const arg of ['p_recording', 'p_rows', 'p_race', 'p_sails', 'p_sea_state']) {
+      expect(definitions).toMatch(new RegExp(`${arg}\\s+JSONB`))
+    }
+  })
+
+  it('writes the Race’s chart Version from p_race, and resolves nothing itself', () => {
+    // The first thing in Layline that writes this pointer. It is the Version the sailor named their
+    // sails in, and reading "the chart in force now" here would rename an archived race's sails in
+    // words nobody used (ADR 0012).
+    expect(definitions).toMatch(
+      /v_chart_id\s+UUID := \(p_race->>'crossover_chart_version_id'\)::UUID;/
+    )
+    expect(definitions).toMatch(/crossover_chart_version_id, created_by/)
+    // Nothing looks a Version up by date, or by an artifact's current pointer.
+    expect(definitions).not.toMatch(/effective_from|current_version_id/)
+  })
+
+  it('takes each Configuration as a Definition number and a note, and no sail ids', () => {
+    expect(definitions).toMatch(/\(entry->>'definition_number'\)::INTEGER/)
+    expect(definitions).toMatch(/NULLIF\(BTRIM\(COALESCE\(entry->>'note', ''\)\), ''\)/)
+    expect(definitions).not.toMatch(/sail_ids|race_sail_entry_sails|\breef\b/)
+  })
+
+  it('writes one row per Configuration, in one statement with no loop', () => {
+    // The per-entry loop existed to get each entry's id for its join rows. With the sail on the
+    // entry itself there is nothing to come back for.
+    expect(definitions).toMatch(
+      /INSERT INTO public\.race_sail_entries \(\s*\n\s*race_id, crossover_chart_version_id, at, definition_number, note\s*\n\s*\)/
+    )
+    expect(definitions).not.toMatch(/\bLOOP\b/)
+    expect(definitions).not.toMatch(/RETURNING id INTO v_(sail_)?entry/)
+  })
+
+  it('puts the Race’s own Version on every entry rather than trusting a per-entry one', () => {
+    // A sailor names sails in one vocabulary. race_sail_entries_race_chart_fkey would refuse
+    // anything else, but sending the entry's own value would make that a refusal for the sailor to
+    // hit rather than a shape the function cannot produce.
+    expect(definitions).toMatch(/SELECT\s*\n\s*v_race_id,\s*\n\s*v_chart_id,/)
+    expect(definitions).not.toMatch(/entry->>'crossover_chart_version_id'/)
+  })
+
+  it('says why sails were refused when the Race records no chart Version', () => {
+    // NOT NULL refuses it either way. The constraint's message names a column; this names what the
+    // sailor did, which is name sails against a Race whose vocabulary was not recorded.
+    expect(definitions).toMatch(
+      /IF v_chart_id IS NULL AND jsonb_array_length\(v_sails\) > 0 THEN\s*\n\s*RAISE EXCEPTION/
+    )
+    // And before the recording insert, so nothing is written for a call that cannot finish.
+    const refusal = definitions.indexOf('IF v_chart_id IS NULL')
+    expect(refusal).toBeGreaterThanOrEqual(0)
+    expect(definitions.indexOf('INSERT INTO public.recordings')).toBeGreaterThan(refusal)
+  })
+
+  it('restates none of the refusals the table already makes', () => {
+    // The two composite keys, sail_entry_says_something, sail_entry_note_non_empty and
+    // UNIQUE (race_id, at). A copy of any of them here is a second place to drift from.
+    expect(definitions).not.toMatch(/says_something|IS NOT NULL OR note/)
+    expect(definitions).not.toMatch(/crossover_sail_definitions/)
+  })
+
+  it('treats a missing annotation array as an empty one, and never as a value', () => {
+    expect(definitions).toMatch(/COALESCE\(p_sails, '\[\]'::JSONB\)/)
+    expect(definitions).toMatch(/COALESCE\(p_sea_state, '\[\]'::JSONB\)/)
+    // Nothing is pre-selected anywhere: no default sail, no default Sea State (ADR 0010).
+    expect(definitions).not.toMatch(/COALESCE\([^)]*'calm'/)
+    expect(definitions).not.toMatch(/COALESCE\(\(entry->>'definition_number'\)/)
+  })
+
+  it('is SECURITY INVOKER with an empty search_path, like the function it replaces', () => {
+    expect(definitions).toMatch(/SECURITY INVOKER/)
+    expect(definitions).not.toMatch(/SECURITY DEFINER/)
+    expect(definitions).toMatch(/SET search_path = ''/)
+    expect(definitions).not.toMatch(
+      /(FROM|INTO)\s+(recordings|recording_rows|races|race_sail_entries|race_sea_state_entries)\b/
+    )
+  })
+
+  it('re-states the door, because CREATE OR REPLACE keeps an ACL it did not set', () => {
+    const signature = String.raw`\(JSONB, JSONB, JSONB, JSONB, JSONB\)`
+    expect(definitions).toMatch(
+      new RegExp(
+        `REVOKE ALL ON FUNCTION public\\.create_race_from_upload${signature} FROM PUBLIC, anon`
+      )
+    )
+    expect(definitions).toMatch(
+      new RegExp(
+        `GRANT EXECUTE ON FUNCTION public\\.create_race_from_upload${signature} TO authenticated`
+      )
+    )
+  })
+
+  it('says what it is for, in the database', () => {
+    expect(definitions).toMatch(/COMMENT ON FUNCTION public\.create_race_from_upload/)
   })
 })
