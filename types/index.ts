@@ -149,6 +149,14 @@ export interface UserPreferences {
     chii2: DataSourcePreference
     45198: DataSourcePreference
   }
+  /**
+   * The sailor's chosen theme, so that a choice made on the phone is there on the
+   * laptop. Optional because absent and `auto` are different facts: `auto` is a
+   * choice — follow civil twilight at Navy Pier — and absent means this sailor has
+   * never chosen on any device, which is every row that predates the field.
+   * `localStorage` remains the browser's own copy and answers first paint.
+   */
+  theme?: ThemePreference
 }
 
 export interface Profile {

@@ -7,7 +7,7 @@ import HamburgerMenu from './HamburgerMenu'
 import AuthSheet from '@/components/auth/AuthSheet'
 import { signInWithGoogle, signOutHere } from '@/lib/account/browserAuth'
 import { relativePathOrHome } from '@/lib/account/nextPath'
-import { useTheme } from '@/lib/hooks/useTheme'
+import { useThemeSync } from '@/lib/hooks/useTheme'
 import { useRefreshOnIdentityChange } from '@/lib/hooks/useRefreshOnIdentityChange'
 import type { Account } from '@/types'
 
@@ -31,7 +31,13 @@ export default function AppLayout({ children, account }: AppLayoutProps) {
    */
   const [signInDestination, setSignInDestination] = useState<string | null>(null)
   const pathname = usePathname()
-  useTheme()
+
+  // The root layout runs the theme on every screen; what only the chrome can do is
+  // say who the sailor is, from the **Account** it was handed. That is what lets a
+  // preference chosen on another device arrive, and what makes a change made here
+  // reach the **Profile** rather than this browser alone. It does not read the theme,
+  // so a change does not re-render the whole app.
+  useThemeSync(account?.userId ?? null)
 
   // The client learns *when* the identity changed, never who it is.
   useRefreshOnIdentityChange()

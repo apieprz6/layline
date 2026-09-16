@@ -1,72 +1,82 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getTimes } from 'suncalc'
+import { useEffect, useSyncExternalStore } from 'react'
+import { usePathname } from 'next/navigation'
+import {
+  getServerThemeSnapshot,
+  getThemeSnapshot,
+  setThemePreference,
+  startTheme,
+  subscribeToTheme,
+  syncThemeWithAccount,
+} from '@/lib/theme/store'
 import type { ThemePreference, ResolvedTheme } from '@/types'
 
 export type { ThemePreference, ResolvedTheme }
 
-const STORAGE_KEY = 'layline-theme-preference'
-const NAVY_PIER_LAT = 41.89
-const NAVY_PIER_LNG = -87.60
-const REEVALUATE_INTERVAL_MS = 60_000
-
-function isNightTime(): boolean {
-  const now = new Date()
-  const times = getTimes(now, NAVY_PIER_LAT, NAVY_PIER_LNG)
-  const dawn = times.dawn ?? times.sunrise ?? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6)
-  const dusk = times.dusk ?? times.sunset ?? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 20)
-  return now < dawn || now > dusk
-}
-
-function resolveTheme(preference: ThemePreference): ResolvedTheme {
-  if (preference === 'nightvision') return 'nightvision'
-  if (preference === 'solar') return 'solar'
-  return isNightTime() ? 'nightvision' : 'solar'
-}
-
+/**
+ * The theme, for a screen that shows or changes it.
+ *
+ * Reads the one store in `lib/theme/store.ts` rather than holding its own copy, so
+ * that however many instances are mounted they agree — a second instance still
+ * holding `auto` used to undo an explicit choice at the next dawn (LAY-128). The
+ * returned shape has not changed.
+ *
+ * `setPreference` is the store's own function, so it is referentially stable across
+ * renders and safe in a dependency array.
+ */
 export function useTheme(): {
   theme: ResolvedTheme
   preference: ThemePreference
   setPreference: (pref: ThemePreference) => void
 } {
-  const [preference, setPreferenceState] = useState<ThemePreference>(() => {
-    if (typeof window === 'undefined') return 'auto'
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'solar' || stored === 'nightvision' || stored === 'auto') {
-      return stored
-    }
-    return 'auto'
-  })
+  const { theme, preference } = useSyncExternalStore(
+    subscribeToTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot
+  )
 
-  const [tick, setTick] = useState(0)
+  return { theme, preference, setPreference: setThemePreference }
+}
 
-  // tick changes on interval to re-evaluate time-dependent resolveTheme()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const theme = useMemo(() => resolveTheme(preference), [preference, tick])
-
-  const setPreference = useCallback((pref: ThemePreference) => {
-    localStorage.setItem(STORAGE_KEY, pref)
-    setPreferenceState(pref)
-  }, [])
-
-  useEffect(() => {
-    if (theme === 'nightvision') {
-      document.documentElement.classList.add('theme-nightvision')
-    } else {
-      document.documentElement.classList.remove('theme-nightvision')
-    }
-  }, [theme])
+/**
+ * Runs the theme on every screen, from the root layout.
+ *
+ * The chrome is not on every screen — `/station/[buoyId]` is outside `app/(app)/` —
+ * and a tab opened cold on one of those ran no store at all: no preference from the
+ * **Profile**, and no twilight crossing, until a routing action mounted the chrome.
+ * The root layout is the one layout every route has, so this belongs there.
+ *
+ * `/auth/callback` is the one screen it starts the theme on without asking the
+ * **Profile**. The browser is still exchanging the code there, so the server would
+ * answer for nobody, and the question would put a request that refreshes auth cookies
+ * alongside the one writing them. The sailor is about to be named — `CompleteSignIn`
+ * routes onward without a document load, and the chrome asks then.
+ */
+export function useThemeRuntime(): void {
+  const midHandshake = usePathname() === '/auth/callback'
 
   useEffect(() => {
-    if (preference !== 'auto') return
+    startTheme({ askProfile: !midHandshake })
+  }, [midHandshake])
+}
 
-    const interval = setInterval(() => {
-      setTick(t => t + 1)
-    }, REEVALUATE_INTERVAL_MS)
-
-    return () => clearInterval(interval)
-  }, [preference])
-
-  return { theme, preference, setPreference }
+/**
+ * Tells the store who is signed in, for the chrome that owns no part of the theme.
+ *
+ * `AppLayout` used to call `useTheme()` and throw the result away, which is what
+ * made it a second holder of the preference. It subscribes to nothing now, so the
+ * whole app does not re-render when the theme changes, and running the theme is no
+ * longer its job either — `useThemeRuntime` does that from the root layout, which
+ * every route reaches. What is left is the one thing only the chrome can say.
+ *
+ * The `userId` is the server-resolved **Account**'s, handed down as a prop
+ * (ADR 0018); passing it here is what lets a preference chosen on another device
+ * arrive, and what tells the store there is a **Profile** worth writing to. `null`
+ * is a **Guest**, whose preference lives in `localStorage` alone.
+ */
+export function useThemeSync(userId: string | null): void {
+  useEffect(() => {
+    syncThemeWithAccount(userId)
+  }, [userId])
 }
