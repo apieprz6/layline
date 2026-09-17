@@ -325,13 +325,13 @@ describe('who the page offers the delete to', () => {
 })
 
 describe('the way into the amendment', () => {
-  /** The five chips, and the section each one opens the flow at. */
+  /** The five chips, the section each one opens the flow at, and what each says it will amend. */
   const CHIPS = [
-    ['amend-window', 'window'],
-    ['amend-title', 'title'],
-    ['amend-sails', 'sails'],
-    ['amend-sea', 'sea'],
-    ['amend-setup', 'setup'],
+    ['amend-window', 'window', 'Amend the race window'],
+    ['amend-title', 'title', 'Amend the race title'],
+    ['amend-sails', 'sails', 'Amend the sails'],
+    ['amend-sea', 'sea', 'Amend the sea state'],
+    ['amend-setup', 'setup', 'Amend the boat setup'],
   ] as const
 
   it('gives every Testimony section a chip that opens the flow at that section', () => {
@@ -346,6 +346,31 @@ describe('the way into the amendment', () => {
         `/boat-performance/races/race-1/amend?section=${section}`
       )
     }
+  })
+
+  it('names what each chip amends, since five of them read "Amend" and a pencil says nothing aloud', () => {
+    // The chips are told apart on screen by the line each sits on, which is nothing to a sailor
+    // listening to the page. The visible word is inside the spoken name rather than replaced by it.
+    renderRace(raceOf(), true)
+
+    for (const [testId, , spoken] of CHIPS) {
+      const chip = screen.getByTestId(testId)
+      expect(chip).toHaveAccessibleName(spoken)
+      expect(chip).toHaveTextContent('Amend')
+    }
+  })
+
+  it('puts the title and window chips on the lines they amend, not in a row beneath the prose', () => {
+    // What the placement answers: a pill reading "Window", three lines below the window and under a
+    // paragraph about clocks, reads as a caption of something rather than a way to change anything.
+    // Beside the line it amends, the chip's subject is already on the screen next to it.
+    renderRace(raceOf(), true)
+
+    const titleLine = screen.getByTestId('amend-title').parentElement as HTMLElement
+    expect(within(titleLine).getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday night')
+
+    const windowLine = screen.getByTestId('amend-window').parentElement as HTMLElement
+    expect(within(windowLine).getByText('Jun 3 · 19:00 – 20:30')).toBeInTheDocument()
   })
 
   it('offers no chip for the Transcription, because no section of the flow edits one', () => {

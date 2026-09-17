@@ -103,37 +103,42 @@ export default function RaceDetailView({
         </Link>
 
         <header style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
-          <h1
-            style={{
-              margin: 0,
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {race.title ?? wallClockDay(race.window_start)}
-          </h1>
-          <p
-            style={{
-              margin: 0,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-accent)',
-            }}
-          >
-            {wallClockWindow(race.window_start, race.window_finish)}
-          </p>
+          {/*
+           * The title's chip and the window's chip sit on the lines they amend rather than in a row
+           * of their own beneath them. A chip labelled "Title" under three lines of prose is a chip
+           * whose subject the sailor has to work out; the same chip beside the title has already
+           * said it, which is how the three section headings below have always read.
+           */}
+          <div style={AMENDABLE_LINE}>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--text-xl)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              {race.title ?? wallClockDay(race.window_start)}
+            </h1>
+            {canAmend && <AmendChip raceId={race.id} section="title" />}
+          </div>
+          <div style={AMENDABLE_LINE}>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-accent)',
+              }}
+            >
+              {wallClockWindow(race.window_start, race.window_finish)}
+            </p>
+            {canAmend && <AmendChip raceId={race.id} section="window" />}
+          </div>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
             The recording’s own clock, exactly as its instruments wrote it — no timezone was applied
             in either direction.
           </p>
-          {canAmend && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: spacing(1) }}>
-              {/* The window and the title, the two things the header itself states. */}
-              <AmendChip raceId={race.id} section="window" label="Window" />
-              <AmendChip raceId={race.id} section="title" label="Title" />
-            </div>
-          )}
         </header>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
@@ -410,11 +415,64 @@ function SectionHeading({
 }
 
 /**
+ * A line of the header with its chip beside it: what the race says, then the way to correct it.
+ *
+ * Wrapping is allowed and centre alignment survives it, because the title is a name a sailor chose and
+ * at 390px a long one takes two lines. `alignItems: 'center'` then keeps the chip against the last of
+ * them rather than floating beside the first.
+ */
+const AMENDABLE_LINE = {
+  display: 'flex',
+  flexWrap: 'wrap' as const,
+  alignItems: 'center',
+  gap: spacing(2),
+}
+
+/**
+ * What each chip amends, as a sentence, because "Amend" alone is only unambiguous to someone who can
+ * see what it sits next to. Five chips reading "Amend" is what a screen reader would otherwise
+ * announce, and the pencil beside the word carries nothing to a listener at all.
+ */
+const AMENDS = {
+  window: 'Amend the race window',
+  title: 'Amend the race title',
+  sails: 'Amend the sails',
+  sea: 'Amend the sea state',
+  setup: 'Amend the boat setup',
+} as const
+
+/** A pencil, so the chip reads as an edit before it is read as a word. Decoration: the label speaks. */
+function EditIcon(): ReactElement {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  )
+}
+
+/**
  * The way into the amend flow, at one section of it.
  *
  * A link and not a button, because it is a navigation: `?section=` is the whole of the state it carries,
  * so the URL a sailor lands on is the URL they can send to themselves, and the section they pressed is
  * the section that opens (ADR 0010 Amendment 1's "sections, not steps").
+ *
+ * It carries a pencil as well as the word. A bordered pill holding a noun — "Window", "Title" — reads as
+ * a label of the thing it names rather than an invitation to change it, which is exactly how it was read;
+ * the pencil is the part of the chip that says *edit*, and the word beside it is what stops the pencil
+ * having to be guessed at. Neither alone was enough.
  *
  * There is no chip for the Transcription, and that is not an omission — no section of the flow edits one,
  * `amend_race` names neither `recordings` nor `recording_rows`, and `file` is not one of the sections the
@@ -423,18 +481,19 @@ function SectionHeading({
 function AmendChip({
   raceId,
   section,
-  label,
 }: {
   raceId: string
-  section: 'window' | 'sails' | 'sea' | 'setup' | 'title'
-  /** Defaults to "Amend", which is the right word beside a heading that already names the section. */
-  label?: string
+  section: keyof typeof AMENDS
 }): ReactElement {
   return (
     <Link
       href={`/boat-performance/races/${raceId}/amend?section=${section}`}
       data-testid={`amend-${section}`}
+      aria-label={AMENDS[section]}
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
         padding: '5px 10px',
         borderRadius: 999,
         border: '1px solid var(--surface-border)',
@@ -446,7 +505,8 @@ function AmendChip({
         whiteSpace: 'nowrap',
       }}
     >
-      {label ?? 'Amend'}
+      <EditIcon />
+      Amend
     </Link>
   )
 }
