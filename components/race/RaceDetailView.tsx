@@ -22,9 +22,13 @@
  * (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, for the same reason.
  *
  * Nothing on this page edits what the race says, and every section that *can* be amended says so with a
- * chip that opens the flow at that section. The flow is the upload flow without its File step rather than
- * a second form per section (ADR 0010 Amendment 1), so the chips are links into one screen and not five
- * inline editors — and a sailor who pressed "Sails" arrives at Sails rather than at step one of a wizard.
+ * way into the flow at that section. The flow is the upload flow without its File step rather than a
+ * second form per section (ADR 0010 Amendment 1), so those are links into one screen and not five inline
+ * editors — and a sailor who pressed "Sails" arrives at Sails rather than at step one of a wizard.
+ *
+ * There are two shapes of it, for two shapes of thing they sit in: a pencil inside a line of text for the
+ * title and the window, which are sentences with no gutter to hold anything, and a pilled pencil with the
+ * word in the gutter of a section heading, which has one. Same link, same accessible name.
  *
  * The page draws the **Testimony/Transcription boundary** as a line, with words on it. Above it is what
  * the sailor said, all of it amendable. Below it is the recording and what Layline derives from the
@@ -104,37 +108,37 @@ export default function RaceDetailView({
 
         <header style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
           {/*
-           * The title's chip and the window's chip sit on the lines they amend rather than in a row
-           * of their own beneath them. A chip labelled "Title" under three lines of prose is a chip
-           * whose subject the sailor has to work out; the same chip beside the title has already
-           * said it, which is how the three section headings below have always read.
+           * The pencil goes *inside* the line it amends, in the line's own text flow.
+           *
+           * A chip labelled "Title", in a row of its own under three lines of prose, is a chip whose
+           * subject the sailor has to work out — and two of them stacked there crowded the header
+           * they belonged to. An inline pencil cannot do either: it names its subject by sitting in
+           * it, and it adds no height to the line and no mass between the lines, because a padded
+           * inline element grows outside the line box rather than stretching it. That is also what
+           * gets an 11px glyph a 30px tap target without moving anything on the page.
            */}
-          <div style={AMENDABLE_LINE}>
-            <h1
-              style={{
-                margin: 0,
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--text-xl)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              {race.title ?? wallClockDay(race.window_start)}
-            </h1>
-            {canAmend && <AmendChip raceId={race.id} section="title" />}
-          </div>
-          <div style={AMENDABLE_LINE}>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-accent)',
-              }}
-            >
-              {wallClockWindow(race.window_start, race.window_finish)}
-            </p>
-            {canAmend && <AmendChip raceId={race.id} section="window" />}
-          </div>
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--text-xl)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {race.title ?? wallClockDay(race.window_start)}
+            {canAmend && <AmendPencil raceId={race.id} section="title" size={14} />}
+          </h1>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--text-accent)',
+            }}
+          >
+            {wallClockWindow(race.window_start, race.window_finish)}
+            {canAmend && <AmendPencil raceId={race.id} section="window" size={11} />}
+          </p>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
             The recording’s own clock, exactly as its instruments wrote it — no timezone was applied
             in either direction.
@@ -415,23 +419,12 @@ function SectionHeading({
 }
 
 /**
- * A line of the header with its chip beside it: what the race says, then the way to correct it.
+ * What each way in amends, as a sentence.
  *
- * Wrapping is allowed and centre alignment survives it, because the title is a name a sailor chose and
- * at 390px a long one takes two lines. `alignItems: 'center'` then keeps the chip against the last of
- * them rather than floating beside the first.
- */
-const AMENDABLE_LINE = {
-  display: 'flex',
-  flexWrap: 'wrap' as const,
-  alignItems: 'center',
-  gap: spacing(2),
-}
-
-/**
- * What each chip amends, as a sentence, because "Amend" alone is only unambiguous to someone who can
- * see what it sits next to. Five chips reading "Amend" is what a screen reader would otherwise
- * announce, and the pencil beside the word carries nothing to a listener at all.
+ * "Amend" alone is only unambiguous to someone who can see what it sits next to, and the pencil that
+ * says *edit* on the screen says nothing at all aloud. Two of the five ways in are a pencil and no
+ * word, so without this they would announce as a bare link; the other three would announce as three
+ * links called "Amend".
  */
 const AMENDS = {
   window: 'Amend the race window',
@@ -441,12 +434,22 @@ const AMENDS = {
   setup: 'Amend the boat setup',
 } as const
 
-/** A pencil, so the chip reads as an edit before it is read as a word. Decoration: the label speaks. */
-function EditIcon(): ReactElement {
+/** One `?section=` of the amend flow, which is the whole of the state either way in carries. */
+function amendHref(raceId: string, section: keyof typeof AMENDS): string {
+  return `/boat-performance/races/${raceId}/amend?section=${section}`
+}
+
+/**
+ * A pencil, sized to whatever it sits in.
+ *
+ * `verticalAlign` is what makes it inline-safe and is ignored where it is a flex item, so the same icon
+ * serves the pencil in a line of text and the pill beside a heading.
+ */
+function EditIcon({ size }: { size: number }): ReactElement {
   return (
     <svg
-      width="11"
-      height="11"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -455,7 +458,7 @@ function EditIcon(): ReactElement {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-      style={{ display: 'block', flexShrink: 0 }}
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
     >
       <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
     </svg>
@@ -463,20 +466,55 @@ function EditIcon(): ReactElement {
 }
 
 /**
- * The way into the amend flow, at one section of it.
+ * The way into the amend flow from a line of text: a pencil inside the line it amends.
+ *
+ * The header's two facts are sentences, not headings, and they have no spare gutter — so the way to
+ * correct one goes in it rather than beside it. Nothing about the line changes: an inline element's
+ * padding grows *outside* the line box instead of stretching it, so a 30px tap target hangs over the
+ * lines above and below without moving either of them, and the header keeps the rhythm it has when
+ * nobody may amend anything.
+ *
+ * No word, because the line is the word. `aria-label` and `title` both carry what it amends, for the
+ * two readers who cannot see what it sits in.
+ */
+function AmendPencil({
+  raceId,
+  section,
+  /** Matched to the type it sits in by eye: 14 against the 20px title, 11 against the 12px window. */
+  size,
+}: {
+  raceId: string
+  section: keyof typeof AMENDS
+  size: number
+}): ReactElement {
+  return (
+    <Link
+      href={amendHref(raceId, section)}
+      data-testid={`amend-${section}`}
+      aria-label={AMENDS[section]}
+      title={AMENDS[section]}
+      style={{ padding: '8px', color: 'var(--text-accent)', textDecoration: 'none' }}
+    >
+      <EditIcon size={size} />
+    </Link>
+  )
+}
+
+/**
+ * The way into the amend flow from a section heading: a pill, with a pencil and the word.
  *
  * A link and not a button, because it is a navigation: `?section=` is the whole of the state it carries,
  * so the URL a sailor lands on is the URL they can send to themselves, and the section they pressed is
  * the section that opens (ADR 0010 Amendment 1's "sections, not steps").
  *
- * It carries a pencil as well as the word. A bordered pill holding a noun — "Window", "Title" — reads as
- * a label of the thing it names rather than an invitation to change it, which is exactly how it was read;
- * the pencil is the part of the chip that says *edit*, and the word beside it is what stops the pencil
- * having to be guessed at. Neither alone was enough.
+ * The pill survives here, where the header's did not, because a heading has a gutter to its right that
+ * holds one without crowding anything, and because the word has to be said somewhere: "Amend" beside
+ * SAILS is what teaches the pencils above it what they are. The pencil rides along so the two treatments
+ * are recognisably one affordance.
  *
- * There is no chip for the Transcription, and that is not an omission — no section of the flow edits one,
- * `amend_race` names neither `recordings` nor `recording_rows`, and `file` is not one of the sections the
- * route will accept. The absence below the line is the same fact the line states.
+ * There is no way in for the Transcription, and that is not an omission — no section of the flow edits
+ * one, `amend_race` names neither `recordings` nor `recording_rows`, and `file` is not one of the
+ * sections the route will accept. The absence below the line is the same fact the line states.
  */
 function AmendChip({
   raceId,
@@ -487,7 +525,7 @@ function AmendChip({
 }): ReactElement {
   return (
     <Link
-      href={`/boat-performance/races/${raceId}/amend?section=${section}`}
+      href={amendHref(raceId, section)}
       data-testid={`amend-${section}`}
       aria-label={AMENDS[section]}
       style={{
@@ -505,7 +543,7 @@ function AmendChip({
         whiteSpace: 'nowrap',
       }}
     >
-      <EditIcon />
+      <EditIcon size={10} />
       Amend
     </Link>
   )

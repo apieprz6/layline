@@ -348,29 +348,30 @@ describe('the way into the amendment', () => {
     }
   })
 
-  it('names what each chip amends, since five of them read "Amend" and a pencil says nothing aloud', () => {
-    // The chips are told apart on screen by the line each sits on, which is nothing to a sailor
-    // listening to the page. The visible word is inside the spoken name rather than replaced by it.
+  it('names what each one amends, since a pencil says nothing aloud and three read "Amend"', () => {
+    // On the screen they are told apart by what each sits in, which is nothing to a sailor listening to
+    // the page: two are a pencil and no word at all, and the other three would be three links called
+    // "Amend". Where there is a visible word it stays inside the spoken name rather than being replaced.
     renderRace(raceOf(), true)
 
     for (const [testId, , spoken] of CHIPS) {
-      const chip = screen.getByTestId(testId)
-      expect(chip).toHaveAccessibleName(spoken)
-      expect(chip).toHaveTextContent('Amend')
+      expect(screen.getByTestId(testId)).toHaveAccessibleName(spoken)
     }
+    expect(screen.getByTestId('amend-sails')).toHaveTextContent('Amend')
   })
 
-  it('puts the title and window chips on the lines they amend, not in a row beneath the prose', () => {
+  it('puts the title and window pencils inside the lines they amend, not in a row beneath the prose', () => {
     // What the placement answers: a pill reading "Window", three lines below the window and under a
-    // paragraph about clocks, reads as a caption of something rather than a way to change anything.
-    // Beside the line it amends, the chip's subject is already on the screen next to it.
+    // paragraph about clocks, reads as a caption of something rather than a way to change anything — and
+    // two of them stacked there crowded the header. Inside the line, the pencil's subject is the line.
     renderRace(raceOf(), true)
 
-    const titleLine = screen.getByTestId('amend-title').parentElement as HTMLElement
-    expect(within(titleLine).getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday night')
+    const title = screen.getByRole('heading', { level: 1 })
+    expect(title).toContainElement(screen.getByTestId('amend-title'))
+    expect(title).toHaveTextContent('Wednesday night')
 
-    const windowLine = screen.getByTestId('amend-window').parentElement as HTMLElement
-    expect(within(windowLine).getByText('Jun 3 · 19:00 – 20:30')).toBeInTheDocument()
+    const window = screen.getByText(/Jun 3 · 19:00 – 20:30/)
+    expect(window).toContainElement(screen.getByTestId('amend-window'))
   })
 
   it('offers no chip for the Transcription, because no section of the flow edits one', () => {
