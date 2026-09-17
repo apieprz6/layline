@@ -34,4 +34,27 @@ test.describe('the race routes, to a guest', () => {
     // let an unauthenticated request put bytes in the bucket.
     await expect(page.locator('input[type="file"]')).toHaveCount(0)
   })
+
+  test('serves a guest no part of the amend flow either, and keeps the section they aimed at', async ({
+    page,
+  }) => {
+    // The amend route is the same flow minus the File step (ADR 0010 Amendment 1), so it is the same
+    // front door and the same lock (ADR 0015). What is worth a browser here is the *round trip*: the
+    // section a chip pointed at survives the redirect, so signing in lands the sailor on the sea state
+    // they came to fix rather than on the window they had no complaint about.
+    //
+    // A bare `goto()` for the same reason the test above uses one: the redirect chain is the assertion
+    // and nothing is clicked, so the hydration trap cannot bite.
+    const response = await page.goto(
+      '/boat-performance/races/9f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/amend?section=sea'
+    )
+
+    expect(response?.status()).toBe(200)
+    expect(response?.url()).toContain('signin=')
+    expect(response?.url()).toContain('amend')
+    expect(response?.url()).toContain('section%3Dsea')
+    // No flow of any kind was drawn: no section tabs, and no window fields to move.
+    await expect(page.getByTestId('amend-sections')).toHaveCount(0)
+    await expect(page.locator('#race-window-start')).toHaveCount(0)
+  })
 })

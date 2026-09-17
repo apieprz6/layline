@@ -135,6 +135,25 @@ function isSigned(values: readonly (number | null)[]): boolean {
 }
 
 /**
+ * What the projection reads of a row: its time, its position, and the four channels.
+ *
+ * Seven fields of twenty-one, and named as a subset rather than as a whole Transcription row because
+ * the rows do not always arrive as one. A file just parsed carries all twenty-one; a stored race read
+ * back for amending is fetched with eleven columns, because the ten nobody draws are ten columns
+ * paged out of the database for nothing. Either satisfies this.
+ */
+export type ChartableRow = Pick<
+  TranscriptionRow,
+  'row_time' | 'latitude' | 'longitude' | 'sog' | 'tws' | 'twa' | 'awa_calc'
+>
+
+/** A recording as the projection needs it: its bounds, and rows the four channels can be read off. */
+export interface ChartableTranscription
+  extends Pick<Transcription, 'first_row_time' | 'last_row_time'> {
+  rows: readonly ChartableRow[]
+}
+
+/**
  * A reading, folded to a signed −180..180 where its channel wraps past 180 instead of going
  * negative. Identity for a channel that is already signed (`twa`) or has no sign at all (a
  * speed) — only a `wraps` channel's column ever needs this.
@@ -187,7 +206,7 @@ function foldAngle(
  * and so that it is unmistakably the assessment over the whole Transcription (ADR 0009).
  */
 export function raceChartSeries(
-  transcription: Pick<Transcription, 'rows' | 'first_row_time' | 'last_row_time'>,
+  transcription: ChartableTranscription,
   quality: TranscriptionQuality
 ): RaceChartSeries {
   const { rows } = transcription

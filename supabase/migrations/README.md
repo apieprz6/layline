@@ -117,6 +117,68 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20260916170000_amend_a_race.sql
+
+**Purpose**: LAY-114. One call that amends a whole Race — its title, both window bounds, all five
+Boat Setup answers and both lists of Testimony — because ADR 0010 Amendment 1 says an amendment is
+one save with no Review gate and no step ordering.
+
+**What it creates**:
+- `public.amend_race(p_race_id UUID, p_race JSONB, p_setup JSONB, p_sails JSONB, p_sea_state JSONB) RETURNS VOID`
+
+**No new column, table, constraint or type, and nothing dropped.** Everything an amendment writes has
+been writable since `20260910183000`; what was missing is a way to write it all *at once*.
+`amend_race_boat_setup` moves the five pointers and touches neither the title, nor the window, nor
+either annotation table — so correcting a race entered wrong took three round trips through three
+surfaces, any two of which could succeed while the third failed. That is a claim about the
+transaction before it is a claim about a screen: a sailor who moves the start two minutes later and
+takes off the jib change that turns out to be on the wrong side of it has corrected one thing.
+
+**The order inside it is the only order that works.** Lock the Race (`SECURITY INVOKER` plus
+`SELECT … FOR UPDATE`, so the admin-only write policy is what refuses a viewer, before anything is
+deleted); delete both annotation lists, which is what lets the chart pointer move at all, since
+`race_sail_entries_race_chart_fkey` is `ON UPDATE RESTRICT`; delegate to `amend_race_boat_setup` with
+a clearing count of `0`, which is the true count once nothing is standing; update the title and the
+window; re-insert both lists against whatever Version the Race now points at.
+
+**It cannot touch the Transcription.** Not `recordings`, not one column of `recording_rows`, and
+being SQL it has no reach into Storage. Row Quality, Coverage and Gap Seconds are derived from those
+rows at read (ADR 0009), which is why an amended window re-derives all three with nothing here to
+recompute. **No change reason and no per-field history**: `races.updated_at` is the whole record,
+moved by `races_updated_at` on the step-4 UPDATE and by `race_sail_entries_touch_race` /
+`race_sea_state_entries_touch_race` on the entries, so an amendment that only corrected the sea state
+still advances it.
+
+**Nothing here restates a constraint.** `race_window_ordered` fires on the UPDATE and the deferred
+`races_window_intersects_rows` at commit, over rows that were always there. The three refusals it
+does raise are the ones a constraint cannot word: a payload missing a window bound, an argument that
+is an object where an array belongs, and sails named against a Race that records no Crossover Chart
+Version.
+
+```bash
+supabase db push                                  # or paste the file into the SQL editor
+scripts/verify-race-upload-rpc.sh "$DB_URL"       # 128 checks, safe against real data
+```
+
+The upload suite went from 98 checks to 128: section 12 files a race, amends the window, the title,
+the chart pointer and both lists in one call, and then asks whether the window is the one sent, the
+title trimmed, the pointer moved and the other four answers untouched; whether a sail entry left
+outside the new window is retained at the time it was given; whether both lists were replaced whole;
+whether not one recorded row or Recording column changed; whether each touch trigger reaches the
+Race on its own; and whether both window refusals, the missing-bound refusal, the no-chart refusal,
+a Definition the chosen Version does not name, and a non-admin caller are all refused with the Race
+left as it stood, and whether the chart pointer can be cleared back to not recorded with the
+Sail Configurations going with it. **All 128 were run against the local stack and passed.**
+
+⚠️ **`NOW()` is transaction time**, fixed for the length of a transaction — so a suite that runs
+inside one `BEGIN … ROLLBACK` cannot watch `updated_at` *advance*, and no `pg_sleep` will help.
+Section 12 asserts `updated_at = transaction_timestamp()` instead, and proves the touch triggers by
+watching `races.ctid` move under direct DML on each annotation table.
+
+**Rollback**: `DROP FUNCTION IF EXISTS public.amend_race(UUID, JSONB, JSONB, JSONB, JSONB);`. Nothing
+else is affected — the amendments already made survive it, and `amend_race_boat_setup` goes back to
+being the only way to move a pointer.
+
 ## Migration: 20260916150000_race_boat_setup_pointers.sql
 
 **Purpose**: LAY-113. A Race records all five Boat Setup answers — the Polar, Crossover Chart, Rig

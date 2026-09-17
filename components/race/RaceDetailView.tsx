@@ -21,9 +21,21 @@
  * neither: it is what the boat *was*, stated as the pointers the Race holds and never resolved afresh
  * (ADR 0012). A pointer nobody set reads as not recorded, in the same treatment, for the same reason.
  *
- * Nothing on this page edits what the race says. Amending a race — the window, the annotations, the
- * Boat Setup pointers, the title — is one flow entered from here, reusing the upload flow without its
- * File step rather than growing a second form per section (ADR 0014), and it is not this component's.
+ * Nothing on this page edits what the race says, and every section that *can* be amended says so with a
+ * way into the flow at that section. The flow is the upload flow without its File step rather than a
+ * second form per section (ADR 0010 Amendment 1), so those are links into one screen and not five inline
+ * editors — and a sailor who pressed "Sails" arrives at Sails rather than at step one of a wizard.
+ *
+ * There are two shapes of it, for two shapes of thing they sit in: a pencil inside a line of text for the
+ * title and the window, which are sentences with no gutter to hold anything, and a pilled pencil with the
+ * word in the gutter of a section heading, which has one. Same link, same accessible name.
+ *
+ * The page draws the **Testimony/Transcription boundary** as a line, with words on it. Above it is what
+ * the sailor said, all of it amendable. Below it is the recording and what Layline derives from the
+ * recording — Coverage, Gap Seconds and the Row Quality notes — and none of that is editable by any path
+ * in Layline, because a Transcription is immutable (ADR 0010) and the three figures are derived at read
+ * and stored nowhere (ADR 0009). The line is explicit rather than implied by the reading order: a sailor
+ * who can correct the sail plan needs to know why they cannot correct the wind speed beneath it.
  *
  * Delete is the one thing on the page that is a write, so it is the one thing the Role gates: it is
  * absent for a viewer rather than present and refused (ADR 0019). It sits last, under everything the
@@ -31,7 +43,7 @@
  * pressed before the record is read.
  */
 
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import Link from 'next/link'
 import { formatBandRange } from '@/lib/boat/rigTune'
 import { spacing } from '@/lib/utils/design'
@@ -54,12 +66,20 @@ interface RaceDetailViewProps {
   race: RaceDetail
   /** Whether this account may delete. False for a viewer, and then nothing about delete is drawn. */
   canDelete: boolean
+  /**
+   * Whether this account may amend, which is what draws the chips at all.
+   *
+   * Absent rather than present-and-refused, for the reason delete is: an affordance a viewer cannot use
+   * is an invitation to find that out by pressing it. The route and the Server Action both re-check.
+   */
+  canAmend: boolean
   deleteRace: (raceId: string) => Promise<DeleteRaceResult>
 }
 
 export default function RaceDetailView({
   race,
   canDelete,
+  canAmend,
   deleteRace,
 }: RaceDetailViewProps): ReactElement {
   return (
@@ -87,6 +107,16 @@ export default function RaceDetailView({
         </Link>
 
         <header style={{ display: 'flex', flexDirection: 'column', gap: spacing(1) }}>
+          {/*
+           * The pencil goes *inside* the line it amends, in the line's own text flow.
+           *
+           * A chip labelled "Title", in a row of its own under three lines of prose, is a chip whose
+           * subject the sailor has to work out — and two of them stacked there crowded the header
+           * they belonged to. An inline pencil cannot do either: it names its subject by sitting in
+           * it, and it adds no height to the line and no mass between the lines, because a padded
+           * inline element grows outside the line box rather than stretching it. That is also what
+           * gets an 11px glyph a 30px tap target without moving anything on the page.
+           */}
           <h1
             style={{
               margin: 0,
@@ -96,6 +126,7 @@ export default function RaceDetailView({
             }}
           >
             {race.title ?? wallClockDay(race.window_start)}
+            {canAmend && <AmendPencil raceId={race.id} section="title" size={14} />}
           </h1>
           <p
             style={{
@@ -106,6 +137,7 @@ export default function RaceDetailView({
             }}
           >
             {wallClockWindow(race.window_start, race.window_finish)}
+            {canAmend && <AmendPencil raceId={race.id} section="window" size={11} />}
           </p>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
             The recording’s own clock, exactly as its instruments wrote it — no timezone was applied
@@ -114,7 +146,9 @@ export default function RaceDetailView({
         </header>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
-          <h2 style={SECTION_HEADING}>Sails</h2>
+          <SectionHeading amend={canAmend ? <AmendChip raceId={race.id} section="sails" /> : null}>
+            Sails
+          </SectionHeading>
           {race.annotations.sails.length > 0 ? (
             <Testimony
               entries={race.annotations.sails.map((entry) => ({
@@ -129,7 +163,9 @@ export default function RaceDetailView({
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
-          <h2 style={SECTION_HEADING}>Sea state</h2>
+          <SectionHeading amend={canAmend ? <AmendChip raceId={race.id} section="sea" /> : null}>
+            Sea state
+          </SectionHeading>
           {race.annotations.sea_state.length > 0 ? (
             <Testimony
               entries={race.annotations.sea_state.map((entry) => ({
@@ -146,9 +182,13 @@ export default function RaceDetailView({
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
-          <h2 style={SECTION_HEADING}>Boat Setup</h2>
+          <SectionHeading amend={canAmend ? <AmendChip raceId={race.id} section="setup" /> : null}>
+            Boat Setup
+          </SectionHeading>
           <BoatSetupFacts setup={race.boat_setup} />
         </section>
+
+        <TranscriptionBoundary />
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Coverage</h2>
@@ -353,6 +393,205 @@ const SECTION_HEADING = {
   textTransform: 'uppercase' as const,
   letterSpacing: '0.1em',
   color: 'var(--text-muted)',
+}
+
+/** A heading with the amend chip beside it, where there is one to draw. */
+function SectionHeading({
+  children,
+  amend,
+}: {
+  children: ReactNode
+  amend: ReactNode
+}): ReactElement {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: spacing(2),
+      }}
+    >
+      <h2 style={SECTION_HEADING}>{children}</h2>
+      {amend}
+    </div>
+  )
+}
+
+/**
+ * What each way in amends, as a sentence.
+ *
+ * "Amend" alone is only unambiguous to someone who can see what it sits next to, and the pencil that
+ * says *edit* on the screen says nothing at all aloud. Two of the five ways in are a pencil and no
+ * word, so without this they would announce as a bare link; the other three would announce as three
+ * links called "Amend".
+ */
+const AMENDS = {
+  window: 'Amend the race window',
+  title: 'Amend the race title',
+  sails: 'Amend the sails',
+  sea: 'Amend the sea state',
+  setup: 'Amend the boat setup',
+} as const
+
+/** One `?section=` of the amend flow, which is the whole of the state either way in carries. */
+function amendHref(raceId: string, section: keyof typeof AMENDS): string {
+  return `/boat-performance/races/${raceId}/amend?section=${section}`
+}
+
+/**
+ * A pencil, sized to whatever it sits in.
+ *
+ * `verticalAlign` is what makes it inline-safe and is ignored where it is a flex item, so the same icon
+ * serves the pencil in a line of text and the pill beside a heading.
+ */
+function EditIcon({ size }: { size: number }): ReactElement {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+    >
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  )
+}
+
+/**
+ * The way into the amend flow from a line of text: a pencil inside the line it amends.
+ *
+ * The header's two facts are sentences, not headings, and they have no spare gutter — so the way to
+ * correct one goes in it rather than beside it. Nothing about the line changes: an inline element's
+ * padding grows *outside* the line box instead of stretching it, so a 30px tap target hangs over the
+ * lines above and below without moving either of them, and the header keeps the rhythm it has when
+ * nobody may amend anything.
+ *
+ * No word, because the line is the word. `aria-label` and `title` both carry what it amends, for the
+ * two readers who cannot see what it sits in.
+ */
+function AmendPencil({
+  raceId,
+  section,
+  /** Matched to the type it sits in by eye: 14 against the 20px title, 11 against the 12px window. */
+  size,
+}: {
+  raceId: string
+  section: keyof typeof AMENDS
+  size: number
+}): ReactElement {
+  return (
+    <Link
+      href={amendHref(raceId, section)}
+      data-testid={`amend-${section}`}
+      aria-label={AMENDS[section]}
+      title={AMENDS[section]}
+      style={{ padding: '8px', color: 'var(--text-accent)', textDecoration: 'none' }}
+    >
+      <EditIcon size={size} />
+    </Link>
+  )
+}
+
+/**
+ * The way into the amend flow from a section heading: a pill, with a pencil and the word.
+ *
+ * A link and not a button, because it is a navigation: `?section=` is the whole of the state it carries,
+ * so the URL a sailor lands on is the URL they can send to themselves, and the section they pressed is
+ * the section that opens (ADR 0010 Amendment 1's "sections, not steps").
+ *
+ * The pill survives here, where the header's did not, because a heading has a gutter to its right that
+ * holds one without crowding anything, and because the word has to be said somewhere: "Amend" beside
+ * SAILS is what teaches the pencils above it what they are. The pencil rides along so the two treatments
+ * are recognisably one affordance.
+ *
+ * There is no way in for the Transcription, and that is not an omission — no section of the flow edits
+ * one, `amend_race` names neither `recordings` nor `recording_rows`, and `file` is not one of the
+ * sections the route will accept. The absence below the line is the same fact the line states.
+ */
+function AmendChip({
+  raceId,
+  section,
+}: {
+  raceId: string
+  section: keyof typeof AMENDS
+}): ReactElement {
+  return (
+    <Link
+      href={amendHref(raceId, section)}
+      data-testid={`amend-${section}`}
+      aria-label={AMENDS[section]}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '5px 10px',
+        borderRadius: 999,
+        border: '1px solid var(--surface-border)',
+        background: 'var(--surface-elevated)',
+        color: 'var(--text-accent)',
+        fontSize: 'var(--text-xs)',
+        fontWeight: 600,
+        textDecoration: 'none',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <EditIcon size={10} />
+      Amend
+    </Link>
+  )
+}
+
+/**
+ * The line between what the sailor said and what the file said.
+ *
+ * Drawn, and captioned, because the asymmetry above and below it is the single most important thing about
+ * this page and nothing else on the screen would explain it. Everything above is Testimony and every bit
+ * of it is amendable; everything below is the Transcription and figures derived from it at read, and no
+ * path in Layline can alter any of it (ADR 0010, ADR 0009).
+ *
+ * Coverage, Gap Seconds and Row Quality sit below rather than above because they are measurements of the
+ * recording and not claims about the race — which is also why an amended window changes all three without
+ * anything recomputing them: they are worked out from the rows the next time the page is read.
+ */
+function TranscriptionBoundary(): ReactElement {
+  return (
+    <div
+      data-testid="transcription-boundary"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: spacing(1),
+        borderTop: '2px solid var(--text-primary)',
+        paddingTop: spacing(3),
+      }}
+    >
+      <h2 style={{ ...SECTION_HEADING, color: 'var(--text-primary)' }}>
+        Below this line: the recording
+      </h2>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
+        Everything above is what the sailor said, and every bit of it can be amended. Everything below is
+        what the file said and what Layline works out from it — Coverage, Gap Seconds and the Row Quality
+        notes. None of it is editable, here or by any other path: the recording is kept exactly as it was
+        transcribed, and the three figures are derived from it each time this page is read, so amending
+        the window above changes them with nothing to recompute.
+      </p>
+    </div>
+  )
 }
 
 /**

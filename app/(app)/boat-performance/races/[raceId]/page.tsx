@@ -40,5 +40,14 @@ export default async function RacePage({
 
   if (!race) notFound()
 
-  return <RaceDetailView race={race} canDelete={canWrite(account)} deleteRace={deleteRace} />
+  const writable = canWrite(account)
+
+  return (
+    <RaceDetailView
+      race={race}
+      canDelete={writable}
+      canAmend={writable}
+      deleteRace={deleteRace}
+    />
+  )
 }

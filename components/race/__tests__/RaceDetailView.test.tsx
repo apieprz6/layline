@@ -95,8 +95,15 @@ const deleteRace = jest.fn(async () => ({ ok: true as const, bytes_removed: true
  * Every render carries the two delete props, because the page cannot be drawn without answering who
  * is looking at it. Only the last two tests care what the answer is.
  */
-function renderRace(race: RaceDetail, canDelete = false): void {
-  render(<RaceDetailView race={race} canDelete={canDelete} deleteRace={deleteRace} />)
+function renderRace(race: RaceDetail, canDelete = false, canAmend = canDelete): void {
+  render(
+    <RaceDetailView
+      race={race}
+      canDelete={canDelete}
+      canAmend={canAmend}
+      deleteRace={deleteRace}
+    />
+  )
 }
 
 describe('a race nobody annotated', () => {
@@ -314,5 +321,117 @@ describe('who the page offers the delete to', () => {
     expect(screen.getByText('Wednesday night')).toBeInTheDocument()
     expect(screen.getByText('06-03-26-wed.csv')).toBeInTheDocument()
     expect(screen.getByTestId('boat-setup-facts')).toBeInTheDocument()
+  })
+})
+
+describe('the way into the amendment', () => {
+  /** The five chips, the section each one opens the flow at, and what each says it will amend. */
+  const CHIPS = [
+    ['amend-window', 'window', 'Amend the race window'],
+    ['amend-title', 'title', 'Amend the race title'],
+    ['amend-sails', 'sails', 'Amend the sails'],
+    ['amend-sea', 'sea', 'Amend the sea state'],
+    ['amend-setup', 'setup', 'Amend the boat setup'],
+  ] as const
+
+  it('gives every Testimony section a chip that opens the flow at that section', () => {
+    // AC 2. The chip is the whole of what makes the sections a set rather than a sequence from here: a
+    // sailor who came to fix the sea state lands on the sea state, and has not walked a window they had
+    // no complaint about to get there.
+    renderRace(raceOf(), true)
+
+    for (const [testId, section] of CHIPS) {
+      expect(screen.getByTestId(testId)).toHaveAttribute(
+        'href',
+        `/boat-performance/races/race-1/amend?section=${section}`
+      )
+    }
+  })
+
+  it('names what each one amends, since a pencil says nothing aloud and three read "Amend"', () => {
+    // On the screen they are told apart by what each sits in, which is nothing to a sailor listening to
+    // the page: two are a pencil and no word at all, and the other three would be three links called
+    // "Amend". Where there is a visible word it stays inside the spoken name rather than being replaced.
+    renderRace(raceOf(), true)
+
+    for (const [testId, , spoken] of CHIPS) {
+      expect(screen.getByTestId(testId)).toHaveAccessibleName(spoken)
+    }
+    expect(screen.getByTestId('amend-sails')).toHaveTextContent('Amend')
+  })
+
+  it('puts the title and window pencils inside the lines they amend, not in a row beneath the prose', () => {
+    // What the placement answers: a pill reading "Window", three lines below the window and under a
+    // paragraph about clocks, reads as a caption of something rather than a way to change anything — and
+    // two of them stacked there crowded the header. Inside the line, the pencil's subject is the line.
+    renderRace(raceOf(), true)
+
+    const title = screen.getByRole('heading', { level: 1 })
+    expect(title).toContainElement(screen.getByTestId('amend-title'))
+    expect(title).toHaveTextContent('Wednesday night')
+
+    const window = screen.getByText(/Jun 3 · 19:00 – 20:30/)
+    expect(window).toContainElement(screen.getByTestId('amend-window'))
+  })
+
+  it('offers no chip for the Transcription, because no section of the flow edits one', () => {
+    // AC 8, on this page. The absence below the line is the same fact the line states — and `file` is
+    // not one of the sections the route will accept either, so there is no URL to type instead.
+    renderRace(raceOf(), true)
+
+    expect(screen.queryByTestId('amend-file')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('amend-review')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId(/^amend-/)).toHaveLength(CHIPS.length)
+  })
+
+  it('shows a viewer no chip at all, the way it shows them no delete', () => {
+    // The page is a read and every signed-in sailor may open it; amending is a write (ADR 0019). An
+    // affordance that always answered "only an admin can" would be a worse screen than none.
+    renderRace(raceOf())
+
+    expect(screen.queryAllByTestId(/^amend-/)).toHaveLength(0)
+    // And the race still reads whole, Testimony and Boat Setup and all.
+    expect(screen.getByText('Wednesday night')).toBeInTheDocument()
+    expect(screen.getByTestId('transcription-boundary')).toBeInTheDocument()
+  })
+})
+
+describe('the line between what the sailor said and what the file said', () => {
+  it('draws the boundary, and says which side is which', () => {
+    // AC 9. The asymmetry above and below is the most important thing about this page and nothing else
+    // on the screen would explain it: everything above is amendable Testimony, everything below is the
+    // Transcription and the figures derived from it at read (ADR 0010, ADR 0009).
+    renderRace(raceOf(), true)
+
+    const boundary = screen.getByTestId('transcription-boundary')
+    expect(boundary).toBeInTheDocument()
+    expect(within(boundary).getByText('Below this line: the recording')).toBeInTheDocument()
+    expect(boundary).toHaveTextContent(/None of it is editable, here or by any other path/)
+    // AC 10 as the page states it: the three figures re-derive, so there is nothing to recompute.
+    expect(boundary).toHaveTextContent(/amending the window above changes them with nothing to recompute/)
+  })
+
+  it('puts Row Quality and Gap Seconds on the recorded side of it', () => {
+    // Both are measurements of the recording rather than claims about the race, which is why they are
+    // below the line and why an amended window changes them without anything recomputing them.
+    renderRace(raceOf(), true)
+
+    const page = document.body.textContent ?? ''
+    const line = page.indexOf('Below this line: the recording')
+    expect(line).toBeGreaterThan(0)
+    expect(page.indexOf('Coverage')).toBeGreaterThan(line)
+    expect(page.indexOf('Row Quality')).toBeGreaterThan(line)
+    // And the Testimony is on the sailor's side, above it.
+    expect(page.indexOf('Sails')).toBeLessThan(line)
+    expect(page.indexOf('Sea state')).toBeLessThan(line)
+    expect(page.indexOf('Boat Setup')).toBeLessThan(line)
+  })
+
+  it('draws the line for a viewer too, because it is a fact about the archive', () => {
+    renderRace(raceOf())
+
+    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(
+      /Everything above is what the sailor said/
+    )
   })
 })

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import RaceUploadWizard from '@/components/race-upload/RaceUploadWizard'
+import RaceFlow from '@/components/race-flow/RaceFlow'
 import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
@@ -19,10 +19,14 @@ export const dynamic = 'force-dynamic'
  * (ADR 0015). A signed-in sailor who is not an admin is told so plainly and shown nothing else: Role
  * governs writes, and uploading is the write (ADR 0019).
  *
- * The two Server Actions are passed to the wizard as props rather than imported by it. That keeps the
- * wizard a plain client component with an injectable seam — a test drives the whole five-step flow
- * against two stubs — and it keeps the `'use server'` module out of the client bundle's import graph
- * except as the two references Next replaces with endpoints.
+ * The flow itself is `RaceFlow`, which is also the amend surface (ADR 0010 Amendment 1) — the same
+ * component with its File step absent. This page is the upload door into it, so it hands it the `upload`
+ * mode: the two Server Actions, and nothing to amend.
+ *
+ * Those actions are passed as props rather than imported by the flow. That keeps it a plain client
+ * component with an injectable seam — a test drives the whole five-step flow against two stubs — and it
+ * keeps the `'use server'` module out of the client bundle's import graph except as the two references
+ * Next replaces with endpoints.
  *
  * The Crossover Chart Versions are read here, on the server, and handed down whole: the Sails step
  * names a sail by naming a Sail Definition of one of them (ADR 0023), and a client component fetching
@@ -35,7 +39,7 @@ export const dynamic = 'force-dynamic'
  * The Polar, Rig Tune and Instrument Calibration Versions are read here for the same reasons and handed
  * down the same way, for the Review step's other three pointers and the Wind Band (ADR 0012). Two reads
  * rather than one because the chart's list carries the sail vocabulary the Sails step needs, and reading
- * the chart twice would give the wizard two lists that could disagree.
+ * the chart twice would give the flow two lists that could disagree.
  *
  * Both actions re-check the Role anyway. This page decides what to render; a Server Action is a public
  * endpoint and decides for itself.
@@ -73,9 +77,8 @@ export default async function RaceUploadPage(): Promise<ReactElement> {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
-      <RaceUploadWizard
-        stageRecording={stageRecording}
-        submitRace={submitRace}
+      <RaceFlow
+        mode={{ kind: 'upload', stageRecording, submitRace }}
         charts={charts}
         boatSetup={boatSetup}
       />

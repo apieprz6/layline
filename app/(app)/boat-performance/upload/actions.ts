@@ -11,11 +11,11 @@ import {
 } from '@/lib/storage/paths'
 import { createClient } from '@/lib/supabase/server'
 import { refuseAnnotations } from '@/services/races/annotations'
+import { chartDefinitionNumbers, raceWindowRefusal } from '@/services/races/write-checks'
 import { raceChartSeries } from '@/services/recordings/chart-series'
 import { recordingFindings } from '@/services/recordings/coverage'
 import { describeRecording } from '@/services/recordings/provenance'
 import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
-import { raceWindowSeconds, refuseRaceWindow } from '@/services/recordings/race-window'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
@@ -224,7 +224,15 @@ export async function submitRace(input: SubmitRaceInput): Promise<SubmitRaceResu
   }
 
   const transcription = outcome.transcription
-  const refusal = windowRefusal(transcription, input)
+  // The window's two refusals, over the file just parsed. The flow already refuses both and the database
+  // refuses both again — `races_window_ordered` and the deferred `races_window_intersects_rows`. This
+  // middle one exists so the sailor gets the sentence written for them in `race-window.ts` instead of a
+  // constraint name, and so a request that did not come from the flow is answered the same way.
+  // `raceWindowRefusal` is the amend action's too, so both doors enforce the same two rules (ADR 0009).
+  const refusal = raceWindowRefusal(
+    input,
+    transcription.rows.map((row) => wallClockSeconds(row.row_time))
+  )
 
   // The one failure the sailor is expected to hit and fix: move a handle, press save again.
   if (refusal) return { ok: false, message: refusal, start_over: false }
@@ -406,68 +414,3 @@ async function duplicateFilenames(
   return (data ?? []).map((row) => row.filename)
 }
 
-/**
- * Every Sail Definition number the Race's own Crossover Chart Version defines.
- *
- * Four answers under three states, and they are separate because they call for different sentences.
- * `known` with `numbers` is the vocabulary, and `known` with `numbers: null` is *this race records no
- * chart Version* — legitimate (ADR 0012), and a race in which no Sail Configuration can exist.
- * `unknown` is a read that succeeded and found nothing: `mint_boat_setup_version` refuses a Crossover
- * Chart Version that defines no sail, so no Version legitimately has an empty vocabulary and the id
- * names no Version this account can read. `unreadable` is a failed read, which says nothing about the
- * pointer either way and so is only fatal where a sail depends on it.
- *
- * Read for the Version the sailor named, not for the chart in force now. A Version superseded last
- * winter is exactly what an archived race from the summer before names its sails in (ADR 0012).
- */
-type ChartVocabulary =
-  | { state: 'known'; numbers: number[] | null }
-  | { state: 'unknown' }
-  | { state: 'unreadable' }
-
-async function chartDefinitionNumbers(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  versionId: string | null
-): Promise<ChartVocabulary> {
-  if (versionId === null) return { state: 'known', numbers: null }
-
-  const { data, error } = await supabase
-    .from('crossover_sail_definitions')
-    .select('number')
-    .eq('version_id', versionId)
-    .returns<{ number: number }[]>()
-
-  if (error) {
-    console.error('Race upload: the chart’s Sail Definitions could not be read:', error.message)
-    return { state: 'unreadable' }
-  }
-
-  const numbers = (data ?? []).map((row) => row.number)
-
-  return numbers.length > 0 ? { state: 'known', numbers } : { state: 'unknown' }
-}
-
-/**
- * The window's two refusals, re-asked on the server against the file's own rows.
- *
- * The wizard already refuses both and the database refuses both again — `races_window_ordered` and
- * the deferred `races_window_intersects_rows` trigger. This middle one exists so the sailor gets the
- * sentence written for them in `race-window.ts` instead of a constraint name, and so a request that
- * did not come from the wizard is answered the same way.
- */
-function windowRefusal(transcription: Transcription, input: SubmitRaceInput): string | null {
-  let window: ReturnType<typeof raceWindowSeconds>
-
-  try {
-    window = raceWindowSeconds({
-      window_start: input.window_start,
-      window_finish: input.window_finish,
-    })
-  } catch {
-    return 'Those are not two times in this recording’s own clock. Set the window again.'
-  }
-
-  const rowSeconds = transcription.rows.map((row) => wallClockSeconds(row.row_time))
-
-  return refuseRaceWindow(window, rowSeconds)?.message ?? null
-}

@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
+import { readRecordingRows } from '@/services/races/recording-rows'
 import { coverageRowsFrom, raceCoverage, windowFindings } from '@/services/recordings/coverage'
 import { raceWindowSeconds } from '@/services/recordings/race-window'
 import { assessRowQuality, withinRaceWindow } from '@/services/recordings/row-quality'
-import type { QualityAssessableRow } from '@/services/recordings/row-quality'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
   BoatSetupVersionRef,
@@ -23,29 +23,11 @@ import type {
  * still froze the first rows of the race, and clipping first is what hid one archive recording's 146
  * frozen rows.
  *
- * Reading everything is also why this pages. A race is at most a few thousand rows, but PostgREST
- * caps a response at 1,000 by default, and a silently truncated Transcription would produce a
- * coverage figure that looked fine and described a third of the race — so the row count is checked
- * against the Recording's own, and a disagreement refuses the page rather than illustrating it.
+ * Reading everything is also why `readRecordingRows` pages, and why the row count it read is checked
+ * against the Recording's own: a silently truncated Transcription would produce a coverage figure
+ * that looked fine and described a third of the race. The same read serves the amendment flow's
+ * charts, so the picture a sailor crops a window on is the rows this page scores it against.
  */
-
-/**
- * The eight fields Row Quality and coverage read, and nothing else. A Transcription is 21 channels
- * wide and none of the other thirteen is consulted by either.
- *
- * The four measurements are cast to `text` in the request, so what arrives is the NUMERIC output
- * Postgres holds — which is the file's own bytes, by the round trip `qtvlm.ts` guarantees. Left as
- * JSON numbers they would arrive as JavaScript doubles, and a Dropout is found by comparing a row
- * to the one above it verbatim.
- */
-const ROWS_SELECT =
-  'row_index, row_time, latitude::text, longitude::text, cog::text, sog::text, stw::text, ctw::text, ' +
-  // The ninth, and not one Row Quality reads: it is here for the mean wind the Wind Band is compared
-  // against, which is derived at read and stored nowhere (ADR 0009).
-  'tws::text'
-
-/** PostgREST's own default ceiling on a response, which is what makes paging necessary at all. */
-const PAGE_ROWS = 1000
 
 const RACE_SELECT =
   'id, title, window_start, window_finish, ' +
@@ -81,9 +63,6 @@ interface RaceRow {
   }
 }
 
-/** One row of the Transcription as this module reads it: Row Quality's eight, and TWS beside them. */
-type RaceRowWithWind = QualityAssessableRow & { tws: string | null }
-
 /** A Boat Setup Version as `boat_setup_versions` holds it, for the four pointers to resolve against. */
 interface BoatSetupVersionRow {
   id: string
@@ -116,93 +95,6 @@ interface DefinitionRow {
 interface SeaStateEntryRow {
   at: string
   sea_state: SeaState
-}
-
-/**
- * A cast column, as the cast promises it: text, or absent.
- *
- * A number here means the `::text` in `ROWS_SELECT` stopped being honoured, which would turn every
- * verbatim comparison into a comparison of doubles quietly. Throwing makes that a failed page with
- * a line in the log instead of Row Quality that is subtly wrong forever.
- */
-function recordedText(value: unknown, column: string, rowIndex: number): string | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'string') return value
-
-  throw new TypeError(
-    `${column} of row ${rowIndex} came back as ${typeof value}; the ::text cast in ROWS_SELECT is ` +
-      'what keeps a recorded value comparable verbatim'
-  )
-}
-
-/**
- * The whole Transcription, a page at a time, or null when it could not be read in full.
- *
- * Ordered by `row_index`, which is file order and half the primary key, so the pages join back into
- * the file rather than into whatever order the planner liked.
- */
-async function readTranscription(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  recordingId: string,
-  rowCount: number
-): Promise<RaceRowWithWind[] | null> {
-  const rows: RaceRowWithWind[] = []
-
-  // `row_count` is a fact about the file written once and immutable, so this bound is the file's
-  // own and cannot loop away on a moving target.
-  while (rows.length < rowCount) {
-    const { data, error } = await supabase
-      .from('recording_rows')
-      .select(ROWS_SELECT)
-      .eq('recording_id', recordingId)
-      .order('row_index', { ascending: true })
-      .range(rows.length, rows.length + PAGE_ROWS - 1)
-      .returns<Record<string, unknown>[]>()
-
-    if (error) {
-      console.error('Race: Transcription read failed:', error.message)
-      return null
-    }
-
-    if (!data || data.length === 0) break
-
-    try {
-      for (const row of data) {
-        const rowIndex = Number(row.row_index)
-        rows.push({
-          row_index: rowIndex,
-          row_time: String(row.row_time),
-          latitude: recordedText(row.latitude, 'latitude', rowIndex),
-          longitude: recordedText(row.longitude, 'longitude', rowIndex),
-          cog: recordedText(row.cog, 'cog', rowIndex),
-          sog: recordedText(row.sog, 'sog', rowIndex),
-          stw: recordedText(row.stw, 'stw', rowIndex),
-          ctw: recordedText(row.ctw, 'ctw', rowIndex),
-          tws: recordedText(row.tws, 'tws', rowIndex),
-        })
-      }
-    } catch (thrown: unknown) {
-      // The cast stopped being honoured, which is a deployment fault and not a bad race. Caught
-      // here so it is one line in the log and a not-found page, rather than an exception thrown
-      // through a Server Component.
-      console.error(
-        'Race: a recorded value did not arrive as text:',
-        thrown instanceof Error ? thrown.message : thrown
-      )
-      return null
-    }
-  }
-
-  if (rows.length !== rowCount) {
-    // Either the read was truncated or the Transcription is short of what the Recording claims.
-    // Both make every figure on the page a claim about rows nobody has, so neither is illustrated.
-    console.error(
-      `Race: read ${rows.length} rows of a Transcription the Recording says is ${rowCount}`
-    )
-    return null
-  }
-
-  return rows
 }
 
 /**
@@ -437,7 +329,7 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
   // race here for you", which is what the page says.
   if (!race) return null
 
-  const rows = await readTranscription(supabase, race.recordings.id, race.recordings.row_count)
+  const rows = await readRecordingRows(supabase, race.recordings.id, race.recordings.row_count)
   if (!rows) return null
 
   // All-or-nothing, like the Transcription: a page that could not read the Testimony would otherwise
