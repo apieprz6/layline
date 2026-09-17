@@ -257,6 +257,75 @@ describe('an angle axis does not move under the sailor', () => {
   })
 })
 
+describe('AWA never runs off the chart, whatever side of the bow it lands on', () => {
+  /** Every y coordinate a chart drew, across every polyline point and every dot. */
+  function heights(container: HTMLElement): number[] {
+    return [...polylines(container).flat(), ...dotCentres(container)].map(([, y]) => y)
+  }
+
+  function dotCentres(container: HTMLElement): [number, number][] {
+    return Array.from(container.querySelectorAll('circle[r="1.5"]')).map((circle) => [
+      Number(circle.getAttribute('cx')),
+      Number(circle.getAttribute('cy')),
+    ])
+  }
+
+  it('keeps every AWA point within the plot, for a reading recorded past 180', () => {
+    // 340° and 20° are both 20° off the bow, on opposite sides — the exact case that used to
+    // paint a spike off the top of a fixed 0–180 axis.
+    const rows = [row(0, { awa_calc: '20' }), row(1, { awa_calc: '340' }), row(2, { awa_calc: '15' })]
+    const { container, axis } = chartOf(rows, 'awa')
+
+    const plotTop = 12 // PAD_TOP
+    const plotBottom = plotTop + (124 - 12 - 18) // height − PAD_TOP − PAD_BOTTOM
+    for (const y of heights(container)) {
+      expect(y).toBeGreaterThanOrEqual(plotTop)
+      expect(y).toBeLessThanOrEqual(plotBottom)
+    }
+    // A sanity check that this is actually the axis in play, not a fluke of an unrelated chart.
+    expect(axis.first).toBeLessThan(axis.last)
+  })
+
+  it('colours the line by tack, splitting a run where the tack changes', () => {
+    const rows = [
+      row(0, { awa_calc: '20' }),
+      row(1, { awa_calc: '25' }),
+      row(2, { awa_calc: '340' }),
+      row(3, { awa_calc: '345' }),
+    ]
+    const { container } = chartOf(rows, 'awa')
+
+    const starboard = container.querySelectorAll('polyline[stroke="var(--tack-starboard)"]')
+    const port = container.querySelectorAll('polyline[stroke="var(--tack-port)"]')
+    expect(starboard.length).toBeGreaterThan(0)
+    expect(port.length).toBeGreaterThan(0)
+    // No plain, tack-agnostic segment is left over once a channel carries a tack.
+    expect(container.querySelectorAll('polyline[stroke="var(--blue-500)"]')).toHaveLength(0)
+  })
+
+  it('colours TWA by tack too, for the same reason', () => {
+    const rows = [
+      row(0, { twa: '-42' }),
+      row(1, { twa: '-40' }),
+      row(2, { twa: '38' }),
+      row(3, { twa: '40' }),
+    ]
+    const { container } = chartOf(rows, 'twa')
+
+    expect(container.querySelectorAll('polyline[stroke="var(--tack-port)"]').length).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('polyline[stroke="var(--tack-starboard)"]').length
+    ).toBeGreaterThan(0)
+  })
+
+  it('leaves a speed on its plain colour, since it carries no tack', () => {
+    const rows = [row(0, { sog: '6.2' }), row(1, { sog: '6.6' })]
+    const { container } = chartOf(rows, 'sog')
+
+    expect(container.querySelectorAll('polyline[stroke="var(--blue-500)"]')).toHaveLength(1)
+  })
+})
+
 /**
  * An annotation's time is unbounded by the recording — the sails were set before the boat's log
  * started — and the axis is drawn from the rows plus ten minutes of slack. So a legal entry can sit

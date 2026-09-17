@@ -41,6 +41,13 @@
   --wind-heavy:    #C47000;   /* 16–22 kts — amber */
   --wind-storm:    #CC1100;   /* 23+ kts — red */
 
+  /* Tack — port/starboard split for a signed angle channel's line (TWA, AWA). A dedicated pair
+     rather than reusing wind-light/wind-storm: --tack-port is a crimson distinct in hue from
+     --wind-storm's orange-red, so a tack-colored line is never confused with the dead-feed hatch
+     drawn on the same chart. */
+  --tack-starboard: #1E8E5A;  /* green */
+  --tack-port:      #DC143C;  /* red */
+
   /* Semantic — trend colors (wind analysis badges) */
   --trend-building:       #007A52;   /* Speed increasing — green (reuses wind-light) */
   --trend-building-bg:    rgba(0, 122, 82, 0.08);
@@ -338,6 +345,11 @@
   --wind-medium: #CC2222;
   --wind-heavy: #EE3300;
   --wind-storm: #FF0000;
+
+  /* Tack — night vision. Distinguished by lightness alone, same as the trend pairs below: a hue
+     split is the whole thing this theme gives up. */
+  --tack-starboard: #992222;
+  --tack-port:      #FF3333;
 
   --trend-building: #BB3333;
   --trend-building-bg: rgba(187, 51, 51, 0.08);
