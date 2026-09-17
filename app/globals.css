@@ -615,6 +615,12 @@
   50%      { opacity: 0.45; }
 }
 
+/* A request in flight — the station header's refresh control while it waits. */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .body-sm {
   font-family: var(--font-body);
   font-size: var(--text-sm);

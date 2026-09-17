@@ -65,7 +65,7 @@ _Avoid_: Race time (implies a fixed recurring schedule), forecast time (that's a
 
 **Current Conditions**:
 The present state of the wind as reported by Buoys, with no Target Time applied. The default view. Distinct from a forecast, which is always a prediction for some other moment.
-_Avoid_: Live conditions (reserved for the Live Fetch concept), real-time
+_Avoid_: Live conditions (every reading reaches a screen through a Cached Fetch, so nothing here is live), real-time
 
 ### Data Status
 
@@ -86,13 +86,19 @@ Fetch failed with no cached data available. Data source unavailable.
 
 ### Data Fetching
 
-**Live Fetch**:
-Fresh API call bypassing cache. Used on dedicated live data pages with auto-refresh.
-_Avoid_: Real-time, uncached
-
 **Cached Fetch**:
-Returns cached data if within TTL (10 minutes for history data, aligned with NDBC's update frequency). Used on dashboard for performance.
+The only way Buoy data is read. Served from Next's Data Cache, which is shared across serverless instances, so a visit that lands on a cold one is still a hit. A failed read is never stored — the next request retries live.
 _Avoid_: Standard fetch, normal fetch
+
+**Freshness Window**:
+How long a stored reading is served before a Cached Fetch asks the source again: five minutes for Buoy data, half NDBC's ten-minute publishing cadence. It bounds when a refresh is *triggered*, not how old a reading may be — past the window the reader is still handed the stored one and the refresh runs behind the request, so the fresh reading reaches the next reader. Nothing refreshes a cache nobody reads, so after a quiet spell the first reader can get a reading of any age. A screen that wants fresher data shortens the window or performs a **Purge**; what it never does is go around the cache.
+_Avoid_: TTL, cache expiry, live fetch (there is no uncached path)
+
+**Purge**:
+Expiring a station's stored reading so the next **Cached Fetch** reaches the source instead of being served the stored one. The only thing that shortens the **Freshness Window**, and the only reason a tap on refresh can change what is on screen — reading again inside the window returns the same reading with the same `fetchedAt`. Not a bypass: the fetch it causes still goes through the cache and stores what it gets, so the fresh reading is shared with every other reader rather than handed privately to whoever asked. Only a deliberate act does this — a poll never does — and it is floored at thirty seconds per station, because the thing on the other side is a public service.
+_Avoid_: Cache bust, force refresh, hard refresh, invalidate (that is the mechanism, not the act)
+
+Which is why **Data Source Status** is derived from a reading's own newest sample every time it is read, never stored beside it: a status is only true of the moment it was computed, and a cached reading outlives that moment.
 
 **Cache Adapter**:
 Abstraction layer for weather model caching strategies. Implementations include InMemoryWeatherCache (default), with support for future Redis/Vercel KV backends. Allows cache strategy swapping without changing fetch logic.
@@ -405,7 +411,10 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - Each **Weather Model Result** has one **Data Source Status** at any given time
 - **CHII2** is always operational (never seasonally offline)
 - **Purdue Buoy** is seasonal (May-October only)
-- **Live Fetch** ignores cache, **Cached Fetch** respects cache TTL
+- Every **Cached Fetch** respects the **Freshness Window**; there is no uncached path to a **Buoy**, and a **Purge** is not one — it shortens the window for one station's next read, which still goes through the cache and stores what it gets
+- Only a deliberate act **purges**; no poll, no page load and no background refresh does
+- Nothing caches in front of a buoy route handler, browser or CDN: a window there would compose with the **Freshness Window** rather than replace it
+- A **Data Source Status** is derived at read time from the newest sample, never stored in a cache entry
 - **Staleness** determines **Data Source Status** (online → recent → stale → offline)
 - **Station Card** has collapsed (dashboard) and expanded (Wind Data page) states
 - **Wind History** provides 10-minute interval data that UI components filter by time range
@@ -429,8 +438,14 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 > **Dev:** "Should we treat **Purdue Buoy** being **Offline** in November as an error?"
 > **Domain expert:** "No — that's expected. Mark it **Offline** with a note that it's seasonal. **Error** is for unexpected failures."
 
-> **Dev:** "What's the difference between **Live Fetch** and **Cached Fetch**?"
-> **Domain expert:** "**Cached Fetch** is for the dashboard where 10-minute-old data is fine (NDBC updates every 10 minutes anyway). **Live Fetch** is for the dedicated buoy page where someone's actively monitoring conditions before heading out — they want the absolute latest."
+> **Dev:** "The station page is for someone actively monitoring conditions before heading out. Can it skip the cache and get the absolute latest?"
+> **Domain expert:** "There's nothing to skip to. NDBC publishes every ten minutes, so asking more often than the **Freshness Window** returns the same numbers — and a page that bypassed the cache would be the one page that fetched on every load. What that sailor needs is to *know* how old the reading is, which is what the **Data Source Status** and the fetch age in the header are for."
+
+> **Dev:** "Then what does the refresh control on a **Station Card**'s screen do, if there's nothing to skip to?"
+> **Domain expert:** "It **purges**, then reads. Asking again on its own would be answered from inside the window with the same reading and the same `fetchedAt` — the screen wouldn't change and the fetch age would keep climbing, which is a control that lies about having done something. Expiring the reading first is what makes the next read a real one. The sailor gets our newest, not our stored."
+
+> **Dev:** "Doesn't that put us back to fetching on every load, which is what we deleted `bypassCache` to stop?"
+> **Domain expert:** "No, on two counts. A **Purge** only happens when someone deliberately asks — nothing on a timer does it — and the fetch it causes goes through the cache and *stores* what it gets, so the next reader gets it free. `bypassCache` read around the cache and kept the answer to itself, so every reader paid. And there's a floor: if the stored reading is less than thirty seconds old the tap is a no-op, because NDBC is a public service and a held finger isn't a reason to hammer it."
 
 > **Dev:** "The wind direction changed from 230° to 250°. Is that **veering** or **backing**?"
 > **Domain expert:** "That's **veering** — clockwise rotation. If it went from 250° to 230°, that would be **backing**."
