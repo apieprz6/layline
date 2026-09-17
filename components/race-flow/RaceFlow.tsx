@@ -1477,7 +1477,21 @@ function SectionTabs({
   )
 }
 
-/** The one gesture that starts everything, and the only one on the File step. */
+/**
+ * The one gesture that starts everything, and the only one on the File step.
+ *
+ * A file input's default rendering — a grey "Choose File" beside "No file chosen" — reads as a
+ * caption, not as the one thing to do on this card, so the input is taken out of the flow and the
+ * whole card is drawn as the action, the way `PolarUploadPanel` and `CrossoverChartUploadPanel`
+ * already draw theirs. It is not replaced by a `button` that clicks it from JavaScript: the real
+ * input stays in the page, so a click, a tap, a Space press and a dropped file all land where the
+ * browser expects them to.
+ *
+ * Ghost, not primary: `FooterNav`'s own "Next" is `kind="primary"` and sits fixed on screen for
+ * every step including this one, so a solid card here would be a second button competing with it.
+ * The whole card is the click target rather than a compact button, for a thumb-sized target at the
+ * 390px width this is read on.
+ */
 function FilePicker({
   busy,
   onPick,
@@ -1485,20 +1499,48 @@ function FilePicker({
   busy: boolean
   onPick: (file: File | null) => void
 }): ReactElement {
+  const [file, setFile] = useState<File | null>(null)
+  const [focused, setFocused] = useState(false)
+
+  function onChoose(chosen: File | null): void {
+    setFile(chosen)
+    onPick(chosen)
+  }
+
   return (
-    <div
+    <label
+      htmlFor="race-file"
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: spacing(2),
-        background: 'var(--surface-elevated)',
-        border: '1px dashed var(--surface-border)',
-        borderRadius: 'var(--radius-md)',
+        background: 'var(--btn-ghost-bg)',
+        border: '1px solid var(--btn-ghost-border)',
+        borderRadius: 7,
         padding: spacing(4),
+        cursor: busy ? 'progress' : 'pointer',
+        opacity: busy ? 0.6 : 1,
+        position: 'relative',
+        // The focus ring belongs on what is drawn, and the input that has the focus is invisible
+        // — so the ring is moved by hand rather than by `:focus-visible`.
+        boxShadow: focused ? '0 0 0 2px var(--page-bg), 0 0 0 4px var(--blue-500)' : undefined,
       }}
     >
-      <label
-        htmlFor="race-file"
+      {/* Out of the flow but still the focusable control: `display: none` would take the input
+          out of the tab order and the accessibility tree, leaving a label only a mouse can use. */}
+      <input
+        id="race-file"
+        aria-label="qtVlm CSV export"
+        type="file"
+        accept=".csv,text/csv,text/plain"
+        disabled={busy}
+        onChange={(event) => onChoose(event.target.files?.[0] ?? null)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, inset: 0 }}
+      />
+
+      <span
         style={{
           fontSize: 9.5,
           textTransform: 'uppercase',
@@ -1507,21 +1549,30 @@ function FilePicker({
         }}
       >
         qtVlm CSV export
-      </label>
-      <input
-        id="race-file"
-        type="file"
-        accept=".csv,text/csv,text/plain"
-        disabled={busy}
-        onChange={(event) => onPick(event.target.files?.[0] ?? null)}
-        style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}
-      />
-      <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+      </span>
+
+      <span style={{ display: 'flex', alignItems: 'center', gap: spacing(2) }}>
+        <span aria-hidden="true" style={{ color: 'var(--btn-ghost-fg)' }}>
+          ↑
+        </span>
+        <span
+          style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: 'var(--weight-semibold)',
+            color: file === null ? 'var(--text-muted)' : 'var(--btn-ghost-fg)',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {file === null ? 'No file chosen yet' : file.name}
+        </span>
+      </span>
+
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         {busy
           ? 'Reading the file…'
           : 'Choosing a file reads it and draws it. Nothing is saved until the last step.'}
-      </p>
-    </div>
+      </span>
+    </label>
   )
 }
 

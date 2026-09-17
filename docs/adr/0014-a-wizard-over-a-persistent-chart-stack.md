@@ -94,6 +94,13 @@ more taps fails rather than passing quietly.
   derivation on our side.
 - **Angles are scaled to a fixed 0–180, or −180–180 where the file is signed**, so switching channel
   never silently rescales the y-axis under the sailor. Speeds scale to the file.
+  `AWA (calc)` doesn't fit either shape as recorded — it is unsigned over the full 0..360, not
+  negative past 180 the way `TWA` is — so it is folded to a signed −180..180 before it is drawn, and
+  plotted as that fold's magnitude on the same fixed 0–180 scale `TWA` uses when unsigned. Nothing
+  folded is written back; the fold is a fact about the chart, not about the column. Both angle
+  channels are coloured by the tack their fold carries — the same information a raw 0..360 bearing
+  would give, read off the sign instead of off a wider axis, and it is what keeps a tack at
+  head-to-wind from drawing as a spike (`services/recordings/chart-series.ts`).
 - **Missing values are `null`, never a sentinel.** `-1` is a valid wind angle, so a sentinel would be
   a fabricated stand-in for a missing reading — the thing ADR 0008 forbids.
 - **The wizard writes nothing until submit** (ADR 0013), which is what lets a draft be abandoned at

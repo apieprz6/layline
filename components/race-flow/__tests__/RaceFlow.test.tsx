@@ -290,6 +290,19 @@ function tapChart(end: 'first' | 'last'): void {
   )
 }
 
+describe('the FilePicker card', () => {
+  it('says no file is chosen until one is', () => {
+    mount()
+    expect(screen.getByText('No file chosen yet')).toBeInTheDocument()
+  })
+
+  it('is one control: the label the sailor sees is what the browser fires', () => {
+    mount()
+    const input = screen.getByLabelText('qtVlm CSV export')
+    expect(input).toHaveAttribute('type', 'file')
+  })
+})
+
 describe('the five steps, and what they cost', () => {
   it('costs five actions for a race with nothing to annotate', async () => {
     // ADR 0014's own figure, and the one this wizard is answerable for: pick the file, three Nexts,
@@ -1210,6 +1223,9 @@ describe('a refusal from the server', () => {
     await pickFile(user)
 
     expect(screen.getByText(/no Date column/)).toBeInTheDocument()
+    // The card still says which file that refusal was about — the native "No file chosen"
+    // goes with the native button, so nothing else on screen would say so.
+    expect(screen.getByText('06-03-26-wed.csv')).toBeInTheDocument()
     // No stack, because there is nothing to draw, and Next has nothing to advance to.
     expect(screen.queryByRole('img', { name: /GPS track/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()

@@ -54,6 +54,13 @@ const PAD_TOP = 12
 /** Room under the plot for the two row-time labels. */
 const PAD_BOTTOM = 18
 
+/** Which colour a run or dot draws in, from the tack a point carries — plain for a speed. */
+const TACK_COLOUR: Record<'port' | 'starboard' | 'plain', string> = {
+  port: 'var(--tack-port)',
+  starboard: 'var(--tack-starboard)',
+  plain: 'var(--blue-500)',
+}
+
 interface ChannelChartProps {
   series: RaceChartSeries
   channel: RaceChannelKey
@@ -85,7 +92,9 @@ export default function ChannelChart({
   const dragging = useRef<'start' | 'finish' | null>(null)
 
   const meta = raceChannel(channel)
-  const values = series.channels[channel]
+  // `plotted`, not `channels`: for AWA this is the fold's magnitude, which is what keeps a
+  // reading past 180 on the chart at all rather than off the top of a fixed 0–180 axis.
+  const values = series.plotted[channel]
   const isAngle = meta.kind === 'angle'
   const signed = series.signed[channel]
 
@@ -125,29 +134,37 @@ export default function ChannelChart({
   )
 
   /**
-   * The trace, in runs — broken at a missing value and broken through every Frozen row — plus the
-   * readings a break leaves on their own.
+   * The trace, in runs — broken at a missing value, broken through every Frozen row, and broken
+   * wherever the tack flips, so the colour change is a split rather than a lie about a single
+   * uniform run. Plus the readings a break leaves on their own.
    *
    * A run of one point cannot be a polyline, and dropping it would draw a value the boat did record
    * as nothing at all. On a feed that alternates reading, copy, reading, copy, that is the whole
    * channel erased from a chart that then looks empty rather than intermittent. Those readings are
    * drawn as dots, which is what one measurement between two absences is.
+   *
+   * A tack split carries its boundary point into both runs, so the two colours meet at a point
+   * rather than leaving a visible gap where the line changes colour.
    */
   const { runs, dots } = useMemo(() => {
-    const collected: string[] = []
-    const isolated: { cx: number; cy: number }[] = []
+    const collected: { points: string; colour: string }[] = []
+    const isolated: { cx: number; cy: number; colour: string }[] = []
     let run: { cx: number; cy: number }[] = []
+    let runColour = TACK_COLOUR.plain
 
     const flush = (): void => {
       if (run.length > 1) {
-        collected.push(
-          run.map((point) => `${point.cx.toFixed(1)},${point.cy.toFixed(1)}`).join(' ')
-        )
+        collected.push({
+          points: run.map((point) => `${point.cx.toFixed(1)},${point.cy.toFixed(1)}`).join(' '),
+          colour: runColour,
+        })
       } else if (run.length === 1) {
-        isolated.push(run[0])
+        isolated.push({ ...run[0], colour: runColour })
       }
       run = []
     }
+
+    const tack = series.tack[channel]
 
     for (let at = 0; at < series.row_seconds.length; at += 1) {
       const value = values[at]
@@ -157,12 +174,23 @@ export default function ChannelChart({
         flush()
         continue
       }
-      run.push({ cx: x(series.row_seconds[at]), cy: y(value) })
+
+      const point = { cx: x(series.row_seconds[at]), cy: y(value) }
+      const colour = TACK_COLOUR[tack[at] ?? 'plain']
+
+      if (run.length > 0 && colour !== runColour) {
+        const boundary = run[run.length - 1]
+        flush()
+        run.push(boundary)
+      }
+
+      runColour = colour
+      run.push(point)
     }
 
     flush()
     return { runs: collected, dots: isolated }
-  }, [series.row_seconds, series.frozen, values, x, y])
+  }, [series.row_seconds, series.frozen, series.tack, channel, values, x, y])
 
   const frozenSpans = useMemo(
     () => raceChartSpans(series.row_seconds, series.frozen),
@@ -302,12 +330,12 @@ export default function ChannelChart({
         />
       ))}
 
-      {runs.map((points, index) => (
+      {runs.map((run, index) => (
         <polyline
           key={`run-${index}`}
-          points={points}
+          points={run.points}
           fill="none"
-          stroke="var(--blue-500)"
+          stroke={run.colour}
           strokeWidth="1.4"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -316,7 +344,7 @@ export default function ChannelChart({
 
       {/* A reading with no neighbour to join. Drawn, because it happened. */}
       {dots.map((dot, index) => (
-        <circle key={`dot-${index}`} cx={dot.cx} cy={dot.cy} r="1.5" fill="var(--blue-500)" />
+        <circle key={`dot-${index}`} cx={dot.cx} cy={dot.cy} r="1.5" fill={dot.colour} />
       ))}
 
       {/* Over the trace on purpose: the hatch is a claim about the line, so it has to be on top. */}
@@ -507,12 +535,28 @@ export default function ChannelChart({
  */
 export function TraceLegend({ channel }: { channel: RaceChannelKey }): ReactElement {
   const meta = raceChannel(channel)
+  const isAngle = meta.kind === 'angle'
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
-      <LegendItem swatch={<span style={{ width: 12, height: 2, background: 'var(--blue-500)' }} />}>
-        {meta.label} as recorded
-      </LegendItem>
+      {isAngle ? (
+        // An angle's line is never plain blue — every reading carries a tack — so the legend
+        // names the two colours it actually draws rather than a single "as recorded" swatch.
+        <>
+          <LegendItem
+            swatch={<span style={{ width: 12, height: 2, background: 'var(--tack-starboard)' }} />}
+          >
+            {meta.label}, starboard
+          </LegendItem>
+          <LegendItem swatch={<span style={{ width: 12, height: 2, background: 'var(--tack-port)' }} />}>
+            {meta.label}, port
+          </LegendItem>
+        </>
+      ) : (
+        <LegendItem swatch={<span style={{ width: 12, height: 2, background: 'var(--blue-500)' }} />}>
+          {meta.label} as recorded
+        </LegendItem>
+      )}
       <LegendItem
         swatch={
           <span
