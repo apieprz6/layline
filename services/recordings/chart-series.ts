@@ -52,6 +52,12 @@ export const RACE_CHANNELS: readonly {
   source_column: string
   /** Angles wrap and share one fixed scale; speeds scale to the file. */
   kind: 'speed' | 'angle'
+  /**
+   * Whether the channel is written unsigned over a full 0..360 rather than negative past 180.
+   * Only `awa_calc` does this (types/index.ts); `twa` is already signed and never needs the
+   * fold `plotted`/`tack` apply below.
+   */
+  wraps: boolean
   /** One sentence about where the number came from — never a badge per value (ADR 0008). */
   provenance: string
 }[] = [
@@ -62,6 +68,7 @@ export const RACE_CHANNELS: readonly {
     unit: 'kt',
     source_column: 'SOG',
     kind: 'speed',
+    wraps: false,
     provenance:
       'Speed over ground, from GPS. Progress across the seabed rather than through the water, so a current is in it.',
   },
@@ -72,6 +79,7 @@ export const RACE_CHANNELS: readonly {
     unit: 'kt',
     source_column: 'TWS',
     kind: 'speed',
+    wraps: false,
     provenance:
       'True wind speed as the instruments reported it, never adjusted. Where STW and CTW are blank the figure was computed from GPS instead, and those stretches are washed blue.',
   },
@@ -82,6 +90,7 @@ export const RACE_CHANNELS: readonly {
     unit: '°',
     source_column: 'TWA',
     kind: 'angle',
+    wraps: false,
     provenance:
       'True wind angle as reported, signed negative to port. The file also carries a TWA (calc) column, which Layline stores and reads nowhere.',
   },
@@ -92,6 +101,7 @@ export const RACE_CHANNELS: readonly {
     unit: '°',
     source_column: 'AWA (calc)',
     kind: 'angle',
+    wraps: true,
     provenance:
       'Apparent wind angle. The boat never measured it — qtVlm calculated it, and the column name says so. Stored exactly as the file gives it and labelled a calculation wherever it is shown.',
   },
@@ -125,6 +135,48 @@ function isSigned(values: readonly (number | null)[]): boolean {
 }
 
 /**
+ * A reading, folded to a signed −180..180 where its channel wraps past 180 instead of going
+ * negative. Identity for a channel that is already signed (`twa`) or has no sign at all (a
+ * speed) — only a `wraps` channel's column ever needs this.
+ */
+function foldSigned(value: number, wraps: boolean): number {
+  return wraps && value > 180 ? value - 360 : value
+}
+
+/**
+ * What the chart draws for a reading's height, and which side it puts the wind on.
+ *
+ * Both come from the same fold on purpose, so a channel's line and its colour can never disagree
+ * about which tack a point belongs to. Only a `wraps` channel's height is the fold's *magnitude*
+ * — that is the whole fix, trading a column that runs to 360 for one that fits the fixed 0..180
+ * scale `twa` already draws on. A channel that is signed natively keeps its actual signed height,
+ * unchanged, since it never left −180..180 to begin with. Non-negative folds to starboard, which
+ * is arbitrary only at the two angles it actually matters — an `awa_calc` of exactly 180 (dead
+ * astern) and a `twa` of exactly 0 (dead ahead) — where there is no wind on either side to get
+ * wrong.
+ */
+function foldAngle(
+  values: readonly (number | null)[],
+  wraps: boolean
+): { plotted: (number | null)[]; tack: ('port' | 'starboard' | null)[] } {
+  const plotted: (number | null)[] = []
+  const tack: ('port' | 'starboard' | null)[] = []
+
+  for (const value of values) {
+    if (value === null) {
+      plotted.push(null)
+      tack.push(null)
+      continue
+    }
+    const folded = foldSigned(value, wraps)
+    plotted.push(wraps ? Math.abs(folded) : folded)
+    tack.push(folded < 0 ? 'port' : 'starboard')
+  }
+
+  return { plotted, tack }
+}
+
+/**
  * The arrays the chart stack reads, over the whole recording.
  *
  * The **whole** recording, deliberately: cropping here would be cropping the ghost track the
@@ -148,7 +200,9 @@ export function raceChartSeries(
   }
 
   const channels = {} as Record<RaceChannelKey, (number | null)[]>
+  const plotted = {} as Record<RaceChannelKey, (number | null)[]>
   const signed = {} as Record<RaceChannelKey, boolean>
+  const tack = {} as Record<RaceChannelKey, ('port' | 'starboard' | null)[]>
 
   for (const channel of RACE_CHANNELS) {
     const values = rows.map((row) => coordinate(row[channel.field]))
@@ -156,6 +210,15 @@ export function raceChartSeries(
     // A speed is never drawn below zero, so asking the question of one would only invite a
     // negative axis on a file with a bad sample in it.
     signed[channel.key] = channel.kind === 'angle' && isSigned(values)
+
+    if (channel.kind === 'angle') {
+      const folded = foldAngle(values, channel.wraps)
+      plotted[channel.key] = folded.plotted
+      tack[channel.key] = folded.tack
+    } else {
+      plotted[channel.key] = values
+      tack[channel.key] = values.map(() => null)
+    }
   }
 
   return {
@@ -165,7 +228,9 @@ export function raceChartSeries(
     latitude: rows.map((row) => coordinate(row.latitude)),
     longitude: rows.map((row) => coordinate(row.longitude)),
     channels,
+    plotted,
     signed,
+    tack,
     frozen: quality.rows.map((row) => row.frozen),
     not_water_referenced: quality.rows.map((row) => row.not_water_referenced),
     low_speed: quality.rows.map((row) => row.low_speed),

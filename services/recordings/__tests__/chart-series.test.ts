@@ -138,6 +138,43 @@ describe('an angle axis is a fact about the file', () => {
   })
 })
 
+describe('AWA is folded to the magnitude scale TWA already fits, and both carry tack', () => {
+  it('folds awa_calc past 180 to the same 0..180 magnitude, without touching the raw column', () => {
+    const series = project([
+      row(1, { awa_calc: '340' }), // 20° off the bow, to port
+      row(2, { awa_calc: '20' }), // 20° off the bow, to starboard
+    ])
+
+    // Nothing recorded changes: the file's own 0..360 figure is still there to read.
+    expect(series.channels.awa).toEqual([340, 20])
+    // What the chart draws for height is the same 20° either way — that symmetry is the fix.
+    expect(series.plotted.awa).toEqual([20, 20])
+    expect(series.tack.awa).toEqual(['port', 'starboard'])
+  })
+
+  it('leaves TWA exactly as read, since it is already signed and never wraps', () => {
+    const series = project([row(1, { twa: '-42' }), row(2, { twa: '38' })])
+
+    expect(series.plotted.twa).toEqual([-42, 38])
+    expect(series.tack.twa).toEqual(['port', 'starboard'])
+  })
+
+  it('treats the boundary as starboard on both channels: awa_calc at 180, twa at 0', () => {
+    const series = project([row(1, { awa_calc: '180' }), row(2, { twa: '0' })])
+
+    expect(series.tack.awa[0]).toBe('starboard')
+    expect(series.tack.twa[1]).toBe('starboard')
+  })
+
+  it('carries no tack for a speed, or for a missing reading', () => {
+    const series = project([row(1, { sog: '6.2' }), row(2, {})])
+
+    expect(series.tack.sog).toEqual([null, null])
+    expect(series.tack.awa).toEqual([null, null])
+    expect(series.plotted.awa).toEqual([null, null])
+  })
+})
+
 describe('every array describes the same rows', () => {
   const rows = [
     row(1, { latitude: '41.85', longitude: '-87.55', cog: '10', sog: '6.2', stw: '6.0', ctw: '12' }),
@@ -318,9 +355,23 @@ describeArchive('over the owner’s recordings', () => {
       return raceChartSeries(transcription, assessRowQuality(transcription.rows)).signed
     })
 
-    // qtVlm writes TWA negative to port, and `AWA (calc)` unsigned over 0..360. If this ever
-    // flips, the fixed 0..180 scale for AWA is the thing that breaks.
+    // qtVlm writes TWA negative to port, and `AWA (calc)` unsigned over 0..360 — past 180 rather
+    // than negative. `signed` staying false for AWA is correct: its axis is the fixed 0..180 a
+    // magnitude fits, not −180..180. The wrap itself is handled by `plotted`, checked below.
     expect(signed.some((each) => each.twa)).toBe(true)
     expect(signed.every((each) => !each.awa)).toBe(true)
+  })
+
+  it('keeps every archive recording’s plotted AWA inside 0..180, however far past 180 the file runs', () => {
+    for (const filename of archiveFilenames) {
+      const { transcription } = transcribe(filename)
+      const series = raceChartSeries(transcription, assessRowQuality(transcription.rows))
+
+      // The season has real rows past 180 (up to ~356°); this is the axis-clipping bug itself,
+      // caught directly rather than left to a comment predicting it.
+      expect(
+        series.plotted.awa.every((value) => value === null || (value >= 0 && value <= 180))
+      ).toBe(true)
+    }
   })
 })

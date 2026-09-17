@@ -1471,10 +1471,24 @@ export interface RaceChartSeries {
   /** Null is absent and draws as a break. `-1` is a wind angle, never a missing one. */
   channels: Record<RaceChannelKey, (number | null)[]>
   /**
+   * What a chart actually draws for the value's height — identical to `channels` for every
+   * channel except `awa`, whose column is unsigned 0..360 (types/index.ts on `awa_calc`) and is
+   * folded here to a magnitude on the same 0..180 scale `twa` already fits, rather than clipped
+   * against it. Nothing folded is written back; `channels` still carries the reading as the file
+   * gave it.
+   */
+  plotted: Record<RaceChannelKey, (number | null)[]>
+  /**
    * Whether the file writes this channel negative anywhere, which is what makes its axis
    * −180..180 instead of 0..180. Judged over the whole recording so cropping never rescales it.
    */
   signed: Record<RaceChannelKey, boolean>
+  /**
+   * Which side the wind was on, for a channel whose sign (or, for `awa`, fold) carries a tack —
+   * null for a speed channel, and for a missing reading. Read off the same fold `plotted` uses,
+   * not off `channels` directly, so `awa`'s and `twa`'s conventions agree: negative is port.
+   */
+  tack: Record<RaceChannelKey, ('port' | 'starboard' | null)[]>
   frozen: boolean[]
   not_water_referenced: boolean[]
   /**
