@@ -48,3 +48,6 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /blob-report/
+# the admin fixture's session tokens (e2e/auth.setup.ts) — never a secret worth reviewing in a
+# diff, but a token all the same
+/e2e/.auth/

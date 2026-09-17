@@ -113,6 +113,34 @@ stall on an interactive debconf prompt (e.g. a pending kernel upgrade) and print
 "Failed to open terminal". That prompt is cosmetic — verify with `dpkg --audit`
 and by launching a browser — but it's easier to avoid than to diagnose.
 
+## Authenticated specs
+
+Everything above is one suite, and it is all a **Guest** sees — `mobile-390` and `desktop`
+carry no session, by construction, and nothing under `e2e/authenticated/` is theirs to
+collect. LAY-137 added a second, smaller suite, on two more projects, for what only an
+authenticated browser can answer.
+
+`e2e/auth.setup.ts` is a Playwright `setup` project, not a spec. It signs in as a dedicated
+local-only **admin** fixture — never `sailor@example.com`, whichever account that is on the
+machine running it — created idempotently against the local Supabase stack's Admin API, then
+promoted to `admin` through the service-role client because an authenticated account can never
+write its own Role (ADR 0019). It captures the resulting session as Playwright `storageState`
+(`e2e/.auth/admin.json`, gitignored) by driving a real `@supabase/ssr` `createServerClient`
+through `setSession()` and recording whatever cookies it writes — the same package
+`lib/supabase/server.ts` uses, so nothing about the cookie's name, encoding or chunking is
+guessed by hand.
+
+Two projects, `mobile-390-auth` and `desktop-auth`, declare `dependencies: ['setup']` and reuse
+that `storageState`. They only collect specs under `e2e/authenticated/`; `mobile-390` and
+`desktop` explicitly ignore that directory. That split is deliberate: a guest spec living in the
+flat `e2e/` directory is guest by construction, not by a developer remembering not to add
+`storageState` to it.
+
+Only local Supabase is reachable this way — `auth.setup.ts` refuses to run at all if
+`NEXT_PUBLIC_SUPABASE_URL` isn't `127.0.0.1`/`localhost`. There is one admin fixture and no
+viewer fixture; add one the same way if a spec ever needs to assert what a signed-in non-admin
+sees, rather than reaching for it up front.
+
 ## What is not automatable
 
 **The Google OAuth round trip.** Google blocks sign-in from automated browsers,
@@ -120,9 +148,10 @@ so no Playwright test can carry a real account through `/auth/callback`. Tickets
 that depend on a completed sign-in keep owner-verification acceptance criteria,
 and that is not a gap to be closed by cleverness — don't burn a session trying.
 
-Anything downstream of an *established* session can still be tested by seeding
-Supabase auth cookies or storage state; it's only the provider handshake that is
-off limits.
+Anything downstream of an *established* session can be tested this way — see
+"Authenticated specs" above — because `supabase/config.toml` deliberately leaves the
+email/password provider on for the local stack alone; it's only the provider handshake
+itself that is off limits, and hosted turns that provider back off.
 
 **Database behaviour, for a different reason.** Triggers, RLS policies, `CHECK`
 constraints and column privileges are SQL: neither runner can see them, because
