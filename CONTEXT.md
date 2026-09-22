@@ -299,6 +299,10 @@ _Avoid_: Garbage collection, cleanup job, cron, reaper (nothing is scheduled, an
 The wave conditions a sailor reports from the boat, as one of `calm` / `slight` / `moderate` / `rough` (roughly 0-1 / 1-2 / 2-3 / 3+ ft). Human-observed and human-entered; never inferred from wind. An **Annotation**.
 _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0-9 and is not what these bands are)
 
+**Analysis Filter**:
+The shared six-dimension filter — wind speed, point of sail, sail used, wave state (**Sea State**), time of day, and a season/date range — that narrows which **Recording Rows** the Polar performance, Sail Selection Chart, and Instrument Tuning screens read. Matches row by row, never by **Race**: **Sail Configuration** and **Sea State** resolve onto rows individually, and a Race may cross more than one value of either across its duration. A row with no annotation for a filtered dimension matches an explicit **Unknown** bucket, on by default alongside every real value — never silently included or dropped. See ADR 0026.
+_Avoid_: Conditions filter, search filter, query (that names the layer that reads an Analysis Filter, not the filter itself)
+
 ### Users & Authentication
 
 **Guest**:
@@ -382,6 +386,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Maneuver** and a row's **Row Quality** are independent axes computed separately and never merged into one field; only **Frozen** ever gates a **Maneuver Window**, because there is no real heading to flip there
 - **Countable** composes **Row Quality** and **Maneuver Window**: a row fails it for any of three independent reasons — **Frozen**, **Low-Speed**, or inside a **Maneuver Window** — checked together as one test (ADR 0025)
 - **Polar Efficiency**, **VMG Efficiency**, the Sail Selection Chart's percent-of-target, and every Instrument Tuning check read only **Countable** rows; the per-Race GPS-track heatmap renders a non-Countable point too, since it is a track and not an average, but styles it as a distinct excluded state rather than by its own percent-of-target (ADR 0025)
+- An **Analysis Filter** matching a row and that row being **Countable** are independent questions: a row can match every selected bucket and still be excluded from a number if it is not Countable (ADR 0026)
 - A **Measured Offset** is computed from a **Race** and displayed; it is never written into a **Transcription** or into an **Instrument Calibration**
 - A **Crossover Chart** carries its own **Sail Definitions**, in the same Version: a cell names one, every cell must resolve to one, and a Sail Definition need not appear in any cell — so no cell can resolve against a list it was not authored against
 - A **Crossover Chart** **Version** is uploaded as two files in one action — the grid and the definitions — and the grid file's name and hash are the Version's own columns while the definitions file's live inside the payload, because a second file is not machinery every artifact shares (ADR 0022)
