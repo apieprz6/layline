@@ -267,6 +267,18 @@ _Avoid_: Status (the prior art's single `STATUS` column is what this replaces), 
 A span where the boat's data feed died but the navigation software kept writing rows on schedule, repeating the last known fix verbatim — position, `COG` and `SOG` frozen at one value while the instrument channels go blank. There is no gap in the timeline, so a Dropout is invisible to anything that trusts timestamps: the rows look like data and are fabrication. Detected by a run of identical position, and marked, never deleted or nulled.
 _Avoid_: Gap (there is no gap — that is the whole problem), outage, stale (that word already means aged *cached weather* in Layline), signal loss
 
+**Maneuver**:
+What the boat was doing across a `TWA` sign flip in a **Recording**: a `tack`, a `gybe`, or a **rounding** — a flip whose two sides sit on opposite sides of the beam, a change of point of sail rather than either of the other two. Computed as its own axis, independent of **Row Quality**: a row can be both **Low-Speed** and inside a **Maneuver Window** at once, and both facts survive. See `docs/research/lay-140-maneuver-detection.md`.
+_Avoid_: Status (the prior art's single `STATUS` column is what this replaces, same as **Row Quality**), tack/gybe (bare, when a rounding is also possible)
+
+**Maneuver Window**:
+The span of **Recording Rows** around a **Maneuver**'s `TWA` sign flip — one row before the flip, three after — during which boat speed is still turning or recovering from the turn. A **Frozen** row may never anchor or fall inside one: there is no real heading there to flip.
+_Avoid_: Maneuver (bare — that names the tack/gybe/rounding label; this is the row span it covers)
+
+**Countable**:
+Whether a **Recording Row** may be read by a performance metric. A row is Countable unless it is **Frozen**, **Low-Speed**, or inside a **Maneuver Window** — one combined test, the same for **Polar Efficiency**, **VMG Efficiency**, the Sail Selection Chart, and every Instrument Tuning check (ADR 0025). Not Countable is a hard exclusion from the number itself, not a caveat attached to it.
+_Avoid_: Valid, clean, usable, in-scope (those are judgements this term makes precise)
+
 **Gap Seconds**:
 Elapsed time since the previous non-**Frozen** **Recording Row**. Reads the sampling interval at normal cadence and hours across the seam of a **Dropout**. Anything computing a row-to-row rate of change must read this rather than assume a fixed interval, or a two-hour dropout reads as one ordinary step.
 _Avoid_: Interval, delta, sample rate (all of which imply the regular value this exists to contradict)
@@ -367,6 +379,9 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Frozen** **Recording Row** supports no claim at all; **Not Water-Referenced** and **Low-Speed** are narrower judgements about rows whose values are real
 - **Row Quality** says how far a row can be trusted; what the boat was *doing* is a separate axis, and the two never share a field
 - **Gap Seconds** is measured between non-**Frozen** rows, so it is defined by **Row Quality** and must be recomputed with it
+- A **Maneuver** and a row's **Row Quality** are independent axes computed separately and never merged into one field; only **Frozen** ever gates a **Maneuver Window**, because there is no real heading to flip there
+- **Countable** composes **Row Quality** and **Maneuver Window**: a row fails it for any of three independent reasons — **Frozen**, **Low-Speed**, or inside a **Maneuver Window** — checked together as one test (ADR 0025)
+- **Polar Efficiency**, **VMG Efficiency**, the Sail Selection Chart's percent-of-target, and every Instrument Tuning check read only **Countable** rows; the per-Race GPS-track heatmap renders a non-Countable point too, since it is a track and not an average, but styles it as a distinct excluded state rather than by its own percent-of-target (ADR 0025)
 - A **Measured Offset** is computed from a **Race** and displayed; it is never written into a **Transcription** or into an **Instrument Calibration**
 - A **Crossover Chart** carries its own **Sail Definitions**, in the same Version: a cell names one, every cell must resolve to one, and a Sail Definition need not appear in any cell — so no cell can resolve against a list it was not authored against
 - A **Crossover Chart** **Version** is uploaded as two files in one action — the grid and the definitions — and the grid file's name and hash are the Version's own columns while the definitions file's live inside the payload, because a second file is not machinery every artifact shares (ADR 0022)
