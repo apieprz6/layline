@@ -10,7 +10,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "playwright test",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "prototype:lay147": "NEXT_PUBLIC_PROTOTYPE_LAY147=1 next build && NEXT_PUBLIC_PROTOTYPE_LAY147=1 next start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
