@@ -268,6 +268,13 @@ export interface ChannelMeta {
    * plausibly moves the asymmetry.
    */
   marks: CalEvent['channel'][]
+  /**
+   * The chart that actually proves this channel's figure, and the statement of how much the
+   * figure rests on. Both are specified by closed tickets but designed by none of them — LAY-149
+   * owns their form. Named here so the card is visibly a summary of something rather than the
+   * last word on it.
+   */
+  opens: { chart: string; strength: string }
 }
 
 export const CHANNELS: ChannelMeta[] = [
@@ -280,6 +287,10 @@ export const CHANNELS: ChannelMeta[] = [
     how: 'The boat’s own course through the water against GPS course over ground, averaged over Countable rows and binned by heading.',
     caveat: 'CTW = HDG + leeway, so a little of this figure is leeway rather than compass.',
     marks: ['HDG'],
+    opens: {
+      chart: 'Deviation curve · error by heading, 10° bins',
+      strength: '78% heading coverage · worst bin +6.1°',
+    },
   },
   {
     key: 'awa',
@@ -291,6 +302,10 @@ export const CHANNELS: ChannelMeta[] = [
     caveat:
       'Not a Measured Offset for AWA. Its only input is qtVlm’s recomputed AWA, never the masthead’s reading, so the asymmetry cannot be pinned on the vane — it may be HDG deviation or a leeway-model error leaking through.',
     marks: ['AWA', 'HDG'],
+    opens: {
+      chart: 'Upwind and downwind asymmetry, paired by tack',
+      strength: '41 pairs · upwind −0.9° / downwind −2.4°',
+    },
   },
   {
     key: 'stw',
@@ -302,6 +317,10 @@ export const CHANNELS: ChannelMeta[] = [
     caveat:
       'Assumes current is negligible — measured true for this boat on Lake Michigan, and not safe to carry to another venue.',
     marks: ['STW'],
+    opens: {
+      chart: 'SOG on STW scatter, against the 1:1 line',
+      strength: '612 weighted points · R² 0.91',
+    },
   },
 ]
 

@@ -322,6 +322,38 @@ function ChannelCard({ meta }: { meta: ChannelMeta }): ReactElement {
           population — those rows cannot appear in the scatter, so they are counted here instead.
         </div>
       )}
+
+      {/* The card is a summary, not the last word. The chart named here is the one that actually
+          proves the figure — a deviation curve, a paired asymmetry plot, a SOG-on-STW scatter —
+          and every one of them is specified by a closed ticket but designed by none of them.
+          Stubbed rather than drawn, the same way the filter is: LAY-149 owns their form. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          borderTop: '1px solid var(--surface-divider)',
+          marginTop: 2,
+          paddingTop: 8,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 10.5, color: 'var(--text-accent)', fontWeight: 600 }}>
+            {meta.opens.chart}
+          </div>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              color: 'var(--text-muted)',
+              marginTop: 2,
+            }}
+          >
+            {meta.opens.strength} · LAY-149 designs this
+          </div>
+        </div>
+        <span style={{ flexShrink: 0, color: 'var(--text-muted)', fontSize: 15 }}>›</span>
+      </div>
     </section>
   )
 }
