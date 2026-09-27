@@ -35,6 +35,28 @@ they are not three arrangements of the same screen.
 | **Q3 Calibration Events** | dashed vertical rules annotating each channel's trend | events **are** the table's rows — not annotations at all | full-height rules crossing all three lanes, plus interleaved in the feed |
 | **Q4 Overall teaser** | same row shape as its neighbour, amber diagnostic pill | row with a **second line**, so the shape differs from the file row | promoted out of the row list into a **mini-chart card** |
 
+### A's drawer
+
+**A is the only variant with an interaction in it.** Its whole card is the target — not a link at the
+bottom of one, since everything on the card summarises the same single measurement — and tapping it
+opens a bottom sheet holding the chart that actually *proves* the figure:
+
+- `HDG` → the **deviation curve on a compass rose**, 10° bins, broken (never bridged) wherever a bin
+  held fewer than 3 rows, with a stub across the zero ring at each of those headings.
+- `AWA` → **upwind and downwind pairs plotted separately**, one dot per tack. The two populations
+  sitting 1.5° apart is the picture of why this is not a Measured Offset.
+- `STW` → the **`SOG`-on-`STW` scatter**, this era's fit against the 1:1 line, diverging with speed.
+
+The sheet follows `components/auth/AuthSheet.tsx` — dim at `z-190`, sheet at `z-200`, grab handle,
+Escape and the dim both close it.
+
+**These chart forms are [LAY-149]'s question, not this ticket's.** What A settles is only that the
+card opens a *drawer* rather than navigating to a route. The drawer deliberately shows the current
+era only: whether per-Race and older eras overlay, toggle, or get their own charts is still open, and
+drawing a guess would quietly answer it.
+
+[LAY-149]: https://linear.app/layline-sailing/issue/LAY-149
+
 ## Things every variant is already committed to (not up for grabs here)
 
 These come from closed tickets, so a variant that broke one would be wrong, not different.

@@ -15,4 +15,22 @@ for (const v of ['A', 'B', 'C']) {
   }
 }
 
+// Variant A's cards open a drawer, so they only prove anything once clicked — and a click only
+// lands on a hydrated node, which is why this runs against `next start` and never `next dev`.
+await page.goto(`${base}?variant=A&view=screen`, { waitUntil: 'networkidle' })
+const cards = page.locator('section[role="button"]')
+const count = await cards.count()
+for (let index = 0; index < count; index += 1) {
+  await cards.nth(index).click()
+  const drawer = page.locator('[role="dialog"]')
+  await drawer.waitFor({ state: 'visible', timeout: 5000 })
+  await page.waitForTimeout(250)
+  const channel = ['hdg', 'awa', 'stw'][index]
+  await page.screenshot({ path: `/tmp/lay147-drawer-${channel}.png` })
+  const clipped = await drawer.evaluate((node) => node.scrollHeight > node.clientHeight)
+  console.log('drawer', channel, 'scrolls', clipped)
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached', timeout: 5000 })
+}
+
 await browser.close()

@@ -1,5 +1,10 @@
-import type { ReactElement } from 'react'
+// Client, only because a channel card opens a drawer. The other two variants stay Server
+// Components; this is the one variant with an interaction in it.
+'use client'
+
+import { useState, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
+import ChannelDrawer from './ChannelDrawer'
 import { DiagnosticOnlyNote, FilterStub, ScreenHeader } from './Chrome'
 import { Row } from './OverallShell'
 import {
@@ -193,9 +198,25 @@ function ChannelCard({ meta }: { meta: ChannelMeta }): ReactElement {
   const band = BAND_WORDS[bandOf(current)]
   const excluded = RACES.filter((race) => !pointOf(race, meta.key).ok)
   const isAsymmetry = meta.key === 'awa'
+  const [open, setOpen] = useState(false)
 
   return (
     <section
+      // The whole card is the target, not a link at the bottom of it: everything on the card is a
+      // summary of the same one measurement, so there is no part of it that should lead somewhere
+      // else. `role="button"` rather than a real `<button>`, because a button's content model is
+      // phrasing content and this card is a stack of headings and figures.
+      role="button"
+      tabIndex={0}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => setOpen(true)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          setOpen(true)
+        }
+      }}
       style={{
         background: 'var(--surface-raised)',
         border: '1px solid var(--surface-border)',
@@ -205,8 +226,12 @@ function ChannelCard({ meta }: { meta: ChannelMeta }): ReactElement {
         display: 'flex',
         flexDirection: 'column',
         gap: spacing(2),
+        cursor: 'pointer',
+        textAlign: 'left',
       }}
     >
+      {open && <ChannelDrawer meta={meta} onClose={() => setOpen(false)} />}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
           <div
@@ -232,21 +257,24 @@ function ChannelCard({ meta }: { meta: ChannelMeta }): ReactElement {
             {meta.term}
           </div>
         </div>
-        <span
-          style={{
-            flexShrink: 0,
-            alignSelf: 'flex-start',
-            background: band.bg,
-            color: band.fg,
-            borderRadius: 9999,
-            padding: '2px 8px',
-            fontSize: 8.5,
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-          }}
-        >
-          {band.label}
-        </span>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              background: band.bg,
+              color: band.fg,
+              borderRadius: 9999,
+              padding: '2px 8px',
+              fontSize: 8.5,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+            }}
+          >
+            {band.label}
+          </span>
+          <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 15 }}>
+            ›
+          </span>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
@@ -323,36 +351,29 @@ function ChannelCard({ meta }: { meta: ChannelMeta }): ReactElement {
         </div>
       )}
 
-      {/* The card is a summary, not the last word. The chart named here is the one that actually
-          proves the figure — a deviation curve, a paired asymmetry plot, a SOG-on-STW scatter —
-          and every one of them is specified by a closed ticket but designed by none of them.
-          Stubbed rather than drawn, the same way the filter is: LAY-149 owns their form. */}
+      {/* Not a second target — the whole card already is one. This only says what opening it gets
+          you, because "tap for more" is worth nothing and "tap for the deviation curve, which
+          rests on 78% of the rose" is worth something. */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
           borderTop: '1px solid var(--surface-divider)',
           marginTop: 2,
           paddingTop: 8,
         }}
       >
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10.5, color: 'var(--text-accent)', fontWeight: 600 }}>
-            {meta.opens.chart}
-          </div>
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              color: 'var(--text-muted)',
-              marginTop: 2,
-            }}
-          >
-            {meta.opens.strength} · LAY-149 designs this
-          </div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-accent)', fontWeight: 600 }}>
+          {meta.opens.chart}
         </div>
-        <span style={{ flexShrink: 0, color: 'var(--text-muted)', fontSize: 15 }}>›</span>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-muted)',
+            marginTop: 2,
+          }}
+        >
+          {meta.opens.strength}
+        </div>
       </div>
     </section>
   )
