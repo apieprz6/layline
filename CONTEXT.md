@@ -300,8 +300,8 @@ The wave conditions a sailor reports from the boat, as one of `calm` / `slight` 
 _Avoid_: Wave state, chop, Douglas number (the formal Douglas scale is numeric 0-9 and is not what these bands are)
 
 **Analysis Filter**:
-The shared six-dimension filter — wind speed, point of sail, sail used, wave state (**Sea State**), time of day, and a season/date range — that narrows which **Recording Rows** the Polar performance, Sail Selection Chart, and Instrument Tuning screens read. Matches row by row, never by **Race**: **Sail Configuration** and **Sea State** resolve onto rows individually, and a Race may cross more than one value of either across its duration. A row with no annotation for a filtered dimension matches an explicit **Unknown** bucket, on by default alongside every real value — never silently included or dropped. See ADR 0026.
-_Avoid_: Conditions filter, search filter, query (that names the layer that reads an Analysis Filter, not the filter itself)
+The shared six-dimension filter — wind speed, point of sail, sail used, wave state (**Sea State**), time of day, and when — that narrows which **Recording Rows** the Polar performance, Sail Selection Chart, and Instrument Tuning screens read. Matches row by row, never by **Race**: **Sail Configuration** and **Sea State** resolve onto rows individually, and a Race may cross more than one value of either across its duration. A row with no annotation for a filtered dimension matches an explicit **Not recorded** bucket, on by default alongside every real value — never silently included or dropped. Drawn as a rail of one chip per dimension that never hides, over a **Coverage Ledger**; buckets are multi-select and a bucket with no rows shows disabled rather than vanishing. One component across all three screens, each declaring which dimensions it offers: a dimension whose values are the chart's own answer is left out, which is why the Sail Selection Chart has no "sail used". Lives in client state and is mirrored into the URL, so narrowing never waits on a navigation and a narrowed view is still a link. See ADR 0026 and ADR 0029.
+_Avoid_: Conditions filter, search filter, query (that names the layer that reads an Analysis Filter, not the filter itself), Unknown bucket (the word is **Not recorded**, everywhere)
 
 ### Users & Authentication
 
@@ -355,6 +355,10 @@ Aggregated status display showing count of online stations, average wind across 
 
 **Trend Badge**:
 Pill-shaped indicator showing speed or direction trend (e.g., "↑ Building +1.5 kts" or "↻ Veering +8° / 2h").
+
+**Coverage Ledger**:
+The permanent line under an **Analysis Filter** stating how much is matched — rows, and how many **Races** they come from — and then how much of that rests on rows nobody annotated ("Of those, 1,593 (49%) have no Sea state recorded"). Always shown, never only on narrowing: half the archive carries no **Sea State** or **Sail Configuration**, and a figure that appeared only when something looked wrong would leave a sailor reasoning about numbers without knowing what they rest on. Carries the one switch that admits or excludes unrecorded rows across every dimension at once, itself read from the buckets currently selected rather than held separately. See ADR 0029.
+_Avoid_: Coverage warning, data quality banner, completeness score (it states a share, it does not grade anything)
 
 ### Data Structures
 
