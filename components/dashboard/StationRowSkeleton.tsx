@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import Skeleton, { SkeletonText } from '@/components/common/Skeleton'
-import { isPurdueSeason } from '@/services/buoys/ndbc'
+import { isPurdueSeason } from '@/services/buoys/season'
 import { spacing } from '@/lib/utils/design'
 
 /**

@@ -60,9 +60,17 @@ not exist, and no `loading.tsx` exists anywhere below `(app)/boat-management` or
   that does `render(await SomePage())` gets the fallback. `__tests__/helpers/resolveServerTree.tsx`
   calls the async components the way the server does; the two boat page suites use it and assert about
   the settled screen as before.
-- `/settings` has no skeleton. It is the one prerendered page in the app, so its prefetch carries the
-  whole screen and a fallback would never get a turn; with the dashboard's boundary moved into
-  `(dashboard)`, there is also nothing left for it to inherit.
+- `/settings` has no skeleton. With the dashboard's boundary moved into `(dashboard)`, there is
+  nothing left for it to inherit.
+
+  > **Amended by LAY-131 (2026-09-16).** This bullet also said `/settings` was "the one prerendered
+  > page in the app, so its prefetch carries the whole screen and a fallback would never get a turn".
+  > That was true of the build in front of us and not of production. `resolveAccount()` returned a
+  > **Guest** without reading cookies when the Supabase keys were missing, so a keyless build — a local
+  > one, or CI — prerendered the whole `(app)` group, while production read cookies and rendered every
+  > screen per request. The degraded path now reads the cookies too, so `/settings` is dynamic
+  > everywhere and the reason it has no skeleton is only the second clause. This is also what
+  > `app/(app)/layout.tsx` said all along.
 - Nested boat routes — `/boat-management/polar`, `/boat-performance/upload`, the rest — have no
   skeleton yet, and cannot get one from a `loading.tsx`. Each is guarded in the same way, so each needs
   its own boundary below its own guard. That is a ticket per screen, not a file per folder.

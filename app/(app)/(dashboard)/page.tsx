@@ -6,7 +6,11 @@ import ModelComparison from '@/components/dashboard/ModelComparison'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
-export const dynamic = 'force-dynamic'
+// Buoy freshness window, matching the buoy service's own. The parent layout reads
+// cookies, so this route renders per request and the Data Cache — not this export —
+// is what keeps a repeated visit off NDBC. It is here so the freshness the screen
+// actually offers is stated where a reader of the page will look for it.
+export const revalidate = 300
 
 const SHOW_CURRENT_WIND_CARD = false
 const SHOW_RACE_BRIEFING = false
