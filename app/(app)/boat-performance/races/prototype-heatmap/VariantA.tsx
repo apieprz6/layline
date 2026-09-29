@@ -17,16 +17,10 @@
 
 import type { ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
-import type { PrototypeRace, TrackPoint } from './prototype-data'
+import type { PrototypeRace } from './prototype-data'
 import { token } from './prototype-tokens'
-import {
-  DropoutBridges,
-  ScaleBar,
-  bridges,
-  frozenRings,
-  project,
-  segments,
-} from './prototype-geometry'
+import { MAP_WIDTH, bridges, frozenRings, project, segments } from './prototype-geometry'
+import HeatmapMap, { type DrawnSegment } from './HeatmapMap'
 
 /** The most vertical room a map may take on a 390px phone before it stops being glanceable. */
 const MAP_HEIGHT = 440
@@ -57,7 +51,23 @@ function bandColour(ratio: number): string {
 }
 
 export default function VariantA({ race }: { race: PrototypeRace }): ReactElement {
-  const projection = project(race.points, MAP_HEIGHT)
+  // `false`: the frame stays 360×440 whatever shape the track is, and a thin track is dealt with by
+  // zooming into it. The projection still fits the whole track at zoom 1, so nothing starts off-screen.
+  const projection = project(race.points, MAP_HEIGHT, MAP_WIDTH, false)
+
+  // The colour decision stays here, on the server, next to the bands that justify it. What crosses to
+  // the client is drawn geometry — a path string and a colour — so the camera can move but nothing on
+  // the other side can re-decide what a row meant.
+  const drawn: DrawnSegment[] = projection
+    ? segments(race.points, projection, (point) => point.state === 'frozen').map((segment) => ({
+        points: segment.points,
+        colour:
+          segment.point.state === 'measured' && segment.point.ratio !== null
+            ? bandColour(segment.point.ratio)
+            : null,
+        dotted: segment.point.state === 'suppressed',
+      }))
+    : []
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: spacing(4) }}>
@@ -65,80 +75,15 @@ export default function VariantA({ race }: { race: PrototypeRace }): ReactElemen
 
       <section style={{ marginBottom: spacing(6) }}>
         {projection ? (
-          <svg
-            viewBox={`0 0 ${projection.width} ${projection.height}`}
-            role="img"
-            aria-label="The race track, coloured by how each stretch compared with the boat's target speed."
-            style={{
-              display: 'block',
-              width: '100%',
-              maxWidth: projection.width,
-              height: 'auto',
-              margin: '0 auto',
-            }}
-          >
-            <rect
-              x="0"
-              y="0"
-              width={projection.width}
-              height={projection.height}
-              rx="6"
-              fill="var(--surface-elevated)"
-            />
-
-            {/* Excluded first, underneath: a hairline the coloured track overlays rather than
-                competes with. The boat was there, so the line is continuous; it carries no colour,
-                so it makes no claim. */}
-            {segments(race.points, projection, (point) => point.state === 'frozen').map(
-              (segment, at) =>
-                segment.point.state === 'measured' ? null : (
-                  <polyline
-                    key={`excluded-${at}`}
-                    points={segment.points}
-                    fill="none"
-                    stroke="var(--text-muted)"
-                    strokeWidth="1"
-                    opacity="0.5"
-                    strokeDasharray={segment.point.state === 'suppressed' ? '1 2' : undefined}
-                  />
-                )
-            )}
-
-            {/* The measurement. One segment per row, so the colour changes where the boat's
-                performance changed and not where a Polar row boundary happens to fall. */}
-            {segments(race.points, projection, (point) => point.state === 'frozen').map(
-              (segment, at) =>
-                segment.point.state === 'measured' && segment.point.ratio !== null ? (
-                  <polyline
-                    key={`measured-${at}`}
-                    points={segment.points}
-                    fill="none"
-                    stroke={bandColour(segment.point.ratio)}
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                  />
-                ) : null
-            )}
-
-            {/* Verbatim from `TrackMap`: ADR 0014 makes ringing Frozen rows an obligation of every
-                map in Layline, and the track is already drawn broken into and out of them. */}
-            <DropoutBridges bridges={bridges(race.points, projection)} />
-
-            {frozenRings(race.points, projection).map((ring, at) => (
-              <circle
-                key={`frozen-${at}`}
-                cx={ring.cx}
-                cy={ring.cy}
-                r="3.4"
-                fill="none"
-                stroke="var(--wind-storm)"
-                strokeWidth="1"
-                opacity="0.6"
-              />
-            ))}
-
-            <ScaleBar projection={projection} />
-          </svg>
+          <HeatmapMap
+            width={projection.width}
+            height={projection.height}
+            metresPerUnit={projection.metresPerUnit}
+            label="The race track, coloured by how each stretch compared with the boat's target speed. Zoomable and pannable."
+            segments={drawn}
+            dropouts={bridges(race.points, projection)}
+            rings={frozenRings(race.points, projection)}
+          />
         ) : (
           <NoTrack />
         )}

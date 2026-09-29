@@ -20,7 +20,7 @@
 
 import type { ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
-import type { PrototypeRace, TrackPoint } from './prototype-data'
+import type { PrototypeRace } from './prototype-data'
 import { token } from './prototype-tokens'
 import {
   DropoutBridges,
@@ -135,7 +135,7 @@ export default function VariantC({ race }: { race: PrototypeRace }): ReactElemen
               )
             )}
 
-            <DropoutBridges bridges={bridges(race.points, projection)} />
+            <DropoutBridges bridges={bridges(race.points, projection)} width={projection.width} />
 
             {frozenRings(race.points, projection).map((ring, at) => (
               <circle
@@ -165,7 +165,11 @@ export default function VariantC({ race }: { race: PrototypeRace }): ReactElemen
               />
             ))}
 
-            <ScaleBar projection={projection} />
+            <ScaleBar
+              width={projection.width}
+              height={projection.height}
+              metresPerUnit={projection.metresPerUnit}
+            />
           </svg>
         ) : (
           <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>

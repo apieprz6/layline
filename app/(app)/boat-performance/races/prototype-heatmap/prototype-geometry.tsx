@@ -24,17 +24,23 @@ export interface Projection {
 }
 
 /**
- * Fit the track into a box of its own shape, within the space allowed.
+ * Fit the track into the space allowed.
  *
  * A Lake Michigan distance race is long and thin — Chicago to Waukegan is 25nm north with maybe 2nm
  * of lateral spread — and a fixed 4:3 box spends 80% of a phone screen on empty water either side of
- * it. Since a heatmap's whole job is to make short stretches of track legible, the box takes the
- * track's aspect ratio and the *longest* dimension gets the room.
+ * it. With `shrinkToTrack` the box takes the track's own aspect ratio and the longest dimension gets
+ * the room, which is the cheapest answer when the whole track is all you will ever see.
+ *
+ * A **zoomable** map wants the opposite: `shrinkToTrack: false` keeps the box at a stable
+ * `maxWidth × maxHeight` whatever shape the track is, so the frame does not resize under the sailor
+ * when they switch races, and the thin track is dealt with by zooming into it instead of by
+ * reshaping the frame around it.
  */
 export function project(
   points: readonly TrackPoint[],
   maxHeight: number,
-  maxWidth = MAP_WIDTH
+  maxWidth = MAP_WIDTH,
+  shrinkToTrack = true
 ): Projection | null {
   let minLat = Infinity
   let maxLat = -Infinity
@@ -59,9 +65,8 @@ export function project(
   const scale = Math.min((maxWidth - MAP_PAD * 2) / spanX, (maxHeight - MAP_PAD * 2) / spanY)
   const centreLon = (minLon + maxLon) / 2
 
-  // Shrink the box onto the track rather than centring the track in a box of the wrong shape.
-  const width = Math.min(maxWidth, spanX * scale + MAP_PAD * 2)
-  const height = Math.min(maxHeight, spanY * scale + MAP_PAD * 2)
+  const width = shrinkToTrack ? Math.min(maxWidth, spanX * scale + MAP_PAD * 2) : maxWidth
+  const height = shrinkToTrack ? Math.min(maxHeight, spanY * scale + MAP_PAD * 2) : maxHeight
 
   return {
     x: (lon) => width / 2 + (lon - centreLon) * kx * scale,
@@ -90,15 +95,29 @@ export function scaleBarLabel(metres: number): string {
  *
  * A fifth of the box wide rather than a fixed 60 units, because the box is now the track's own
  * shape and on a thin one 60 units was most of its width.
+ *
+ * `zoom` is why this is pinned chrome rather than part of the track: it is drawn *outside* the
+ * zoomable layer, in stable box coordinates, and re-reads its own distance at the current zoom. A
+ * scale bar that travelled with the pan would be the one thing on the map able to lie about distance.
  */
-export function ScaleBar({ projection }: { projection: Projection }): ReactElement {
-  const { metresPerUnit, width, height } = projection
-  const metres = niceDistance(metresPerUnit * (width / 5))
+export function ScaleBar({
+  width,
+  height,
+  metresPerUnit,
+  zoom = 1,
+}: {
+  width: number
+  height: number
+  metresPerUnit: number
+  zoom?: number
+}): ReactElement {
+  const metresPerUnitOnScreen = metresPerUnit / zoom
+  const metres = niceDistance(metresPerUnitOnScreen * (width / 5))
 
   return (
     <g opacity="0.75">
       <line
-        x1={width - MAP_PAD - metres / metresPerUnit}
+        x1={width - MAP_PAD - metres / metresPerUnitOnScreen}
         y1={height - 12}
         x2={width - MAP_PAD}
         y2={height - 12}
@@ -112,6 +131,9 @@ export function ScaleBar({ projection }: { projection: Projection }): ReactEleme
         fontSize="7"
         fontFamily="var(--font-mono)"
         fill="var(--text-muted)"
+        stroke="var(--surface-base)"
+        strokeWidth="2.4"
+        paintOrder="stroke"
       >
         {scaleBarLabel(metres)}
       </text>
@@ -225,13 +247,41 @@ export function bridges(
   return out
 }
 
-/** Only the gaps long enough to be worth labelling — a two-row dropout needs no annotation. */
-export function DropoutBridges({ bridges: list }: { bridges: readonly Bridge[] }): ReactElement {
+/**
+ * Only the gaps long enough to be worth labelling — a two-row dropout needs no annotation.
+ *
+ * The label is clamped inside the box rather than centred on the gap, because the box is the track's
+ * own shape: Chicago–Waukegan fits in 60 units of width and a centred `feed dead 2h11` ran off both
+ * edges, so the map read `feed dead 2` and `feed dead` — the duration, which is the entire point of
+ * the annotation, was the part that got clipped.
+ */
+export function DropoutBridges({
+  bridges: list,
+  width,
+  zoom = 1,
+}: {
+  bridges: readonly Bridge[]
+  /** The box width, to keep a label from running off the edge. Not the whole `Projection`, because
+   *  that carries closures and this component is rendered inside a Client Component. */
+  width: number
+  zoom?: number
+}): ReactElement {
+  // Type is not geography: a label that grew 12× with the track would be unreadable at full zoom and
+  // the dashes would turn into bars, so everything here is divided back out of the zoom.
+  const fontSize = 7 / zoom
+  const halo = 2.4 / zoom
+
   return (
     <>
       {list.map((bridge, at) => {
-        const span = Math.hypot(bridge.x2 - bridge.x1, bridge.y2 - bridge.y1)
+        const span = Math.hypot(bridge.x2 - bridge.x1, bridge.y2 - bridge.y1) * zoom
         if (span < 14) return null
+
+        const label = `feed dead ${minutes(bridge.seconds)}`
+        // 3.9 units per character at fontSize 7 in the mono face, near enough to keep it inside.
+        const half = (label.length * 3.9) / 2 / zoom
+        const wanted = (bridge.x1 + bridge.x2) / 2
+        const x = Math.min(Math.max(wanted, half + 2), Math.max(width - half - 2, half + 2))
 
         return (
           <g key={`bridge-${at}`}>
@@ -244,16 +294,20 @@ export function DropoutBridges({ bridges: list }: { bridges: readonly Bridge[] }
               strokeWidth="1"
               strokeDasharray="4 4"
               opacity="0.5"
+              vectorEffect="non-scaling-stroke"
             />
             <text
-              x={(bridge.x1 + bridge.x2) / 2}
-              y={(bridge.y1 + bridge.y2) / 2 - 4}
+              x={x}
+              y={(bridge.y1 + bridge.y2) / 2 - halo}
               textAnchor="middle"
-              fontSize="7"
+              fontSize={fontSize}
               fontFamily="var(--font-mono)"
               fill="var(--wind-storm)"
+              stroke="var(--surface-base)"
+              strokeWidth={halo}
+              paintOrder="stroke"
             >
-              feed dead {minutes(bridge.seconds)}
+              {label}
             </text>
           </g>
         )
