@@ -1,8 +1,13 @@
-# ADR 0031: Instrument Tuning Is One Card per Calibration Channel, Banded by Its Own Scatter, and Each Card Opens Its Chart
+# ADR 0032: Instrument Tuning Is One Card per Calibration Channel, Banded by Its Own Scatter, and Each Card Opens Its Chart
 
 ## Status
 
-Accepted. Resolves LAY-147 ("Prototype the Instrument Tuning screen") — its four questions being how
+Accepted. **Renumbered from 0031 to 0032** by LAY-148, which found three ADRs claiming two numbers:
+LAY-151's rig-tune ADR had landed on `main` under 0031 as well, and it keeps that number because it
+is the one already cited from `types/index.ts`, the rig-tune components, the migrations README and
+ADR 0007. Nothing here changed but the number.
+
+Resolves LAY-147 ("Prototype the Instrument Tuning screen") — its four questions being how
 three channels' trended diagnostic data is laid out, how "diagnostic only, no suggested fix" reads on
 screen, whether and how **Calibration Event** dates annotate a trend, and what the Overall-tab teaser
 says next to the "Instrument calibration" row it has to be told apart from.
