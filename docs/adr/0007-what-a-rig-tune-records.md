@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Its "no correction exception" rule is superseded by ADR 0031.
 
 ## Context
 
@@ -79,7 +79,7 @@ A **Version is the whole table**: every band, its edges, which band is base, and
 
 The current pointer moves **forward only**. There is no restore action and no repointing to an earlier Version; changing a tune means hand-editing the values and saving a new Version. Past Versions must nonetheless be **readable**, because a Race freezes a pointer at one and that pointer is worthless if nobody can open it. The design has no way to view an older tune at all — its version rows are not clickable and the card always renders current values — so read-only viewing is new work.
 
-A Rig Tune Version is immutable, with no correction exception. It is a measurement of the boat, not a transcription off a display, so the reasoning that made **Instrument Calibration** correctable in place (ADR 0005) does not apply here: a wrong Rig Tune is superseded by the right one.
+~~A Rig Tune Version is immutable, with no correction exception.~~ *Superseded by ADR 0031:* a Rig Tune Version may be corrected in place for a recording mistake — a band left out, a figure mistyped, the wrong date. A change to the rig itself is still superseded by a new Version.
 
 ### Notes
 
