@@ -26,6 +26,7 @@ jest.mock('@/services/boat/readRigTune', () => ({
 // module reaches for `next/cache` and a Supabase client.
 jest.mock('../actions', () => ({
   saveRigTuneVersion: jest.fn(async () => ({ ok: true })),
+  correctRigTuneVersion: jest.fn(async () => ({ ok: true })),
 }))
 
 import RigTunePageRoute from '../page'
@@ -94,6 +95,7 @@ function page(over: Partial<RigTunePage> = {}): RigTunePage {
     artifact_id: 'artifact-rig',
     current_version_id: 'v2',
     versions: [versionRow()],
+    races_by_version: {},
     ...over,
   }
 }
@@ -302,11 +304,11 @@ describe('/boat-management/rig-tune', () => {
     expect(screen.getByTestId('shown-version-effective')).toHaveTextContent('4 May 2026')
     expect(screen.getAllByTestId('rig-tune-band')).toHaveLength(1)
     expect(screen.getByTestId('past-version-notice')).toBeInTheDocument()
+    // A past Version can be corrected now (ADR 0031), so the notice no longer forbids it.
+    expect(screen.getByTestId('past-version-notice').textContent).not.toMatch(/never/i)
   })
 
-  it('offers no way to edit a past Version, even to an admin', async () => {
-    // The pointer moves forward only: a past Version is testimony, and the way to change
-    // the rig is to measure it and mint the next one (ADR 0007).
+  it('offers no new Version from a past one: a retune is measured out of the tune in force', async () => {
     resolveAccount.mockResolvedValue({ ...CREW, role: 'admin' })
     readRigTune.mockResolvedValue(
       page({ versions: [versionRow(), versionRow({ id: 'v1', version_number: 1 })] })
@@ -314,7 +316,149 @@ describe('/boat-management/rig-tune', () => {
 
     await renderPage({ version: '1' })
 
-    expect(screen.queryByRole('button', { name: /record|save/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /record a new version/i })).not.toBeInTheDocument()
+  })
+
+  it('offers a viewer no correction of any Version', async () => {
+    readRigTune.mockResolvedValue(
+      page({ versions: [versionRow(), versionRow({ id: 'v1', version_number: 1 })] })
+    )
+
+    await renderPage({ version: '1' })
+    expect(screen.queryByRole('button', { name: /correct/i })).not.toBeInTheDocument()
+  })
+
+  describe('correcting a Version in place', () => {
+    /** v1, a past Version, with one band, sailed under by three Races. */
+    const V1 = versionRow({
+      id: 'v1',
+      version_number: 1,
+      effective_from: '2026-05-04',
+      note: 'First tune measured off the boat.',
+      bands: [
+        bandRow({
+          id: 'v1-light',
+          version_id: 'v1',
+          low_kt: 0,
+          high_kt: 9,
+          is_base: false,
+          label: 'Light',
+          gaps_stale: true,
+          shrouds: shrouds(70, 62, 60, -1),
+        }),
+        bandRow({ id: 'v1-base', version_id: 'v1', low_kt: 9, high_kt: null }),
+      ],
+    })
+
+    beforeEach(() => {
+      resolveAccount.mockResolvedValue({ ...CREW, role: 'admin' })
+      readRigTune.mockResolvedValue(
+        page({ versions: [versionRow(), V1], races_by_version: { v1: 3, v2: 1 } })
+      )
+    })
+
+    async function openCorrection(params: Record<string, string> = { version: '1' }): Promise<void> {
+      await renderPage(params)
+      await userEvent.click(screen.getByRole('button', { name: /correct v1 in place/i }))
+    }
+
+    it('offers an admin a correction of a past Version, and of the one in force', async () => {
+      await renderPage({ version: '1' })
+      expect(screen.getByRole('button', { name: 'Correct v1 in place' })).toBeInTheDocument()
+    })
+
+    it('offers the Version in force a correction beside a new Version', async () => {
+      await renderPage()
+
+      expect(screen.getByRole('button', { name: 'Correct v2 in place' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /record a new version/i })).toBeInTheDocument()
+    })
+
+    it('opens the same editor seeded from that Version, its date and reason included', async () => {
+      await openCorrection()
+
+      const bands = screen.getAllByTestId('rig-tune-band-fields')
+      expect(bands).toHaveLength(2)
+      expect(within(bands[0]).getByLabelText(/V1 port Turnbuckle Gap/i)).toHaveValue('70')
+      expect(screen.getByLabelText(/took effect/i)).toHaveValue('2026-05-04')
+      expect(screen.getByLabelText(/why this version/i)).toHaveValue(
+        'First tune measured off the boat.'
+      )
+    })
+
+    it('says what a correction costs, naming how many Races it changes the table for', async () => {
+      await openCorrection()
+
+      expect(screen.getByTestId('correction-consequence')).toHaveTextContent(
+        'This changes v1 itself rather than adding a Version. The 3 Races sailed under it will report against the corrected table — so correct a recording mistake here, and record a new Version instead when the rig actually changed.'
+      )
+    })
+
+    it('offers no way to save until something has changed', async () => {
+      await openCorrection()
+
+      expect(screen.getByRole('button', { name: /^save/i })).toBeDisabled()
+    })
+
+    it('shows each non-base band’s stale flag as the sailor’s to set, and never the base’s', async () => {
+      await openCorrection()
+
+      const [light, base] = screen.getAllByTestId('rig-tune-band-fields')
+      expect(within(light).getByRole('checkbox', { name: /gaps are stale/i })).toBeChecked()
+      expect(within(base).queryByRole('checkbox', { name: /gaps are stale/i })).not.toBeInTheDocument()
+
+      // A band added in the correction was measured against nothing anybody has said moved.
+      await userEvent.click(screen.getByRole('button', { name: /add a band/i }))
+      const added = screen.getAllByTestId('rig-tune-band-fields')[2]
+      expect(within(added).getByRole('checkbox', { name: /gaps are stale/i })).not.toBeChecked()
+    })
+
+    it('offers no stale flag when recording a new Version, where the mint rule decides it', async () => {
+      await renderPage()
+      await userEvent.click(screen.getByRole('button', { name: /record a new version/i }))
+
+      expect(screen.queryByRole('checkbox', { name: /gaps are stale/i })).not.toBeInTheDocument()
+    })
+
+    it('sends the corrected table against that Version, kept bands under their own ids', async () => {
+      const { correctRigTuneVersion, saveRigTuneVersion } = jest.requireMock('../actions')
+
+      await openCorrection()
+      const [light] = screen.getAllByTestId('rig-tune-band-fields')
+      await userEvent.click(within(light).getByRole('checkbox', { name: /gaps are stale/i }))
+      await userEvent.click(screen.getByRole('button', { name: /^save/i }))
+
+      expect(saveRigTuneVersion).not.toHaveBeenCalled()
+      expect(correctRigTuneVersion).toHaveBeenCalledTimes(1)
+      const [versionId, draft] = correctRigTuneVersion.mock.calls[0]
+      expect(versionId).toBe('v1')
+      expect(draft.bands.map((b: { key: string; gaps_stale: boolean }) => [b.key, b.gaps_stale])).toEqual([
+        ['v1-light', false],
+        ['v1-base', false],
+      ])
+    })
+
+    it('puts a refusal where the sailor can see it, and keeps the table as typed', async () => {
+      const { correctRigTuneVersion } = jest.requireMock('../actions')
+      correctRigTuneVersion.mockResolvedValue({
+        ok: false,
+        message: 'This tune is not ready to save.',
+        problems: [
+          {
+            band_key: null,
+            message:
+              'The 9 kt and up band cannot be removed: Beer can (22 Jul 2026) was sailed set to it. Amend that Race onto another band first.',
+          },
+        ],
+      })
+
+      await openCorrection()
+      await userEvent.click(screen.getAllByRole('button', { name: /remove this band/i })[1])
+      await userEvent.click(screen.getByRole('button', { name: /^save/i }))
+
+      expect(screen.getByText(/Beer can \(22 Jul 2026\) was sailed set to it/)).toBeInTheDocument()
+      expect(screen.getAllByTestId('rig-tune-band-fields')).toHaveLength(1)
+    })
   })
 
   it('falls back to the Version in force when the query names one that does not exist', async () => {

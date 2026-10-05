@@ -930,6 +930,11 @@ export interface RigTunePage {
   current_version_id: string | null
   /** Newest first. Empty on an unrecorded artifact. */
   versions: RigTuneVersionRecord[]
+  /**
+   * How many Races point at each Version, by Version id; a Version no Race names is absent.
+   * Counted at read, so a correction can say how many Races it changes the table for.
+   */
+  races_by_version: Record<string, number>
 }
 
 /**
@@ -963,7 +968,11 @@ export interface RigTuneBandSeed {
 }
 
 export interface RigTuneBandDraft {
-  /** Stable for the length of the edit only. Not a database id — a Version mints new rows. */
+  /**
+   * Stable for the length of the edit. A recorded band's key is its row id, which minting
+   * never writes back (a Version mints new rows) and a correction does, so the band stays the
+   * row a Race points at (ADR 0031). An added band's key is local and never sent.
+   */
   key: string
   label: string
   low_kt: string
@@ -972,6 +981,12 @@ export interface RigTuneBandDraft {
   is_base: boolean
   note: string
   shrouds: RigTuneDraftShrouds
+  /**
+   * The sailor's own statement that this band's Gaps are stale, editable only when correcting
+   * a Version. Minting ignores it and decides staleness from `seed` (ADR 0007); a correction
+   * stores it as stated and recomputes nothing (ADR 0031).
+   */
+  gaps_stale: boolean
   seed: RigTuneBandSeed | null
 }
 
@@ -1006,6 +1021,21 @@ export interface RigTuneVersionInput {
   effective_from: string
   note: string
   bands: RigTuneBandInput[]
+}
+
+/**
+ * One band of a corrected table. `id` names the recorded row it updates in place, keeping
+ * every Race that points at it; null is a band added in the correction (ADR 0031).
+ */
+export interface RigTuneCorrectionBandInput extends RigTuneBandInput {
+  id: string | null
+}
+
+/** A whole corrected table, ready for `correct_rig_tune_version`. Bands ascend by `low_kt`. */
+export interface RigTuneCorrectionInput {
+  effective_from: string
+  note: string
+  bands: RigTuneCorrectionBandInput[]
 }
 
 /**

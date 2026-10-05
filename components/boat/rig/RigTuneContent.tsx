@@ -13,7 +13,7 @@ import type { RigTunePage, RigTuneVersionRecord } from '@/types'
 interface RigTuneContentProps {
   /** `null` when the artifact could not be read — not an unrecorded one. */
   page: RigTunePage | null
-  /** Whether this sailor may mint a Version: `admin` only (ADR 0019). */
+  /** Whether this sailor may mint or correct a Version: `admin` only (ADR 0019). */
   canWrite: boolean
   /** The `version_number` the query asked for, or null for the one in force. */
   requestedVersion: number | null
@@ -154,7 +154,7 @@ export default function RigTuneContent({
                 ? 'Nothing is recorded yet. Measure the rig and type what the caliper says — the first Version is this boat’s own tune, not a guide’s.'
                 : 'Nothing is recorded yet. The first Version is measured off this boat, so there is nothing to read until it has been.'}
             </p>
-            {canWrite && <RigTuneEditor current={null} />}
+            {canWrite && <RigTuneEditor mode="record" version={null} />}
           </>
         ) : (
           <>
@@ -174,8 +174,8 @@ export default function RigTuneContent({
                 }}
               >
                 This is not the tune the boat is set to. It is kept because a Race recorded
-                against it still names it, and the way past it is to measure the rig and
-                record the next Version — never to edit this one.
+                against it still names it. A change to the rig is measured and recorded as the
+                next Version; only a recording mistake in this one is corrected here.
               </p>
             )}
             {stale && (
@@ -202,7 +202,18 @@ export default function RigTuneContent({
             <RigTuneBandTable bands={version.bands} />
             {/* Only from the Version in force, and never from a past one: the pointer moves
                 forward only, so a retune is measured out of what the boat is set to now. */}
-            {canWrite && !past && <RigTuneEditor current={version} />}
+            {canWrite && !past && <RigTuneEditor mode="record" version={version} />}
+            {/* From every Version, past ones included, because the Races a recording mistake
+                misleads are the ones sailed under it (ADR 0031). Keyed by the Version, so
+                opening another one never carries this one's draft across. */}
+            {canWrite && (
+              <RigTuneEditor
+                key={version.id}
+                mode="correct"
+                version={version}
+                raceCount={page.races_by_version[version.id] ?? 0}
+              />
+            )}
             <RigTuneVersionHistory
               versions={page.versions}
               currentVersionId={page.current_version_id}

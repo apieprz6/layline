@@ -388,13 +388,13 @@ CREATE CONSTRAINT TRIGGER boat_setup_artifacts_forward_only_current
 Applied to all four kinds, not just the uploaded ones. "Current" going backwards is a bug in
 every case, and a Rig Tune is the one where it would be least visible.
 
-### Immutability, with the calibration exception
+### Immutability, with two exceptions
 
 ```sql
 CREATE OR REPLACE FUNCTION public.enforce_version_immutability()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
-    IF OLD.kind <> 'instrument_calibration' THEN
+    IF OLD.kind NOT IN ('instrument_calibration', 'rig_tune') THEN
         RAISE EXCEPTION
             'a % Version is immutable; mint a new Version instead', OLD.kind;
     END IF;
@@ -408,8 +408,14 @@ BEGIN
     OR NEW.filename      IS DISTINCT FROM OLD.filename
     OR NEW.content_sha256 IS DISTINCT FROM OLD.content_sha256 THEN
         RAISE EXCEPTION
-            'only payload, note and effective_from may be corrected on an '
-            'instrument_calibration Version';
+            'only the content, note and effective_from of this % Version may be corrected',
+            OLD.kind;
+    END IF;
+
+    IF OLD.kind = 'rig_tune' AND NEW.payload IS DISTINCT FROM OLD.payload THEN
+        RAISE EXCEPTION
+            'a rig_tune Version''s payload stays empty; its bands are corrected through '
+            'correct_rig_tune_version';
     END IF;
 
     RETURN NEW;
@@ -423,8 +429,12 @@ CREATE TRIGGER boat_setup_versions_immutable
 
 An Instrument Calibration Version is a transcription off a display. Left uncorrectable, a
 mistyped figure would stand permanently as what the boat ran, and every Race pointing at it
-would report against a number that never existed. Nothing else in Boat Setup can be edited: an
-upload is re-uploaded, and a wrong Rig Tune is superseded by the right one.
+would report against a number that never existed. A Rig Tune Version is the second exception
+(ADR 0031, `20261005200000_correct_a_rig_tune_version.sql`): a band tuned for and never entered
+is a recording mistake too, and superseding it would leave every Race sailed under it reporting
+against a table that was never the boat's. Its row may change `note` and `effective_from` only;
+its content is its bands, corrected through `correct_rig_tune_version`. A rig that actually
+changed is still a new Version, and a Polar or Crossover Chart upload is re-uploaded.
 
 There is **no `DELETE` policy** on `boat_setup_versions` (see RLS below), so a Version is never
 removed — only superseded. Cascades from `boat_setup_artifacts` still work, because referential
@@ -436,6 +446,13 @@ The one place a payload's interior is pointed at from outside, and therefore the
 departure from ADR 0011's JSONB rule. A Race records which Wind Band the boat was set to; under
 a pure JSONB payload that pointer would be a positional index or a magic key, both of which
 ADR 0007 forbids.
+
+Bands are written only by `mint_rig_tune_version` and `correct_rig_tune_version`. The
+`rig_tune_bands_write_path` trigger refuses an `INSERT`, `UPDATE` or `DELETE` made any other
+way — the admin `FOR ALL` policy alone would let one band be rewritten on its own — and reads a
+transaction-local setting the two functions raise for their own writes. A correction updates a
+kept band in place, so its id, and every Race's `rig_tune_band_id` pointing at it, survive
+(ADR 0031).
 
 ```sql
 CREATE TABLE IF NOT EXISTS rig_tune_bands (

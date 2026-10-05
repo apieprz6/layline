@@ -7,7 +7,7 @@ import type { Boat, RigTuneBand, RigTunePage, RigTuneVersionRecord } from '@/typ
  * Every Version, not just the one in force: a Race freezes a pointer at the Version the boat
  * was set to, and that pointer is worthless if nobody can open what it points at (ADR 0007).
  * Like `readBoatSetup`, this needs no Account passed in: RLS gives every signed-in account
- * SELECT on all three tables, because Role governs writes only (ADR 0019).
+ * SELECT on every table it reads, races included, because Role governs writes only (ADR 0019).
  */
 
 /**
@@ -88,6 +88,23 @@ export async function readRigTune(): Promise<RigTunePage | null> {
     return null
   }
 
+  // One column of every Race that names a Rig Tune, counted here. One boat's archive is small
+  // enough that this is cheaper than asking PostgREST for an aggregate it disables by default.
+  const { data: races, error: racesError } = await supabase
+    .from('races')
+    .select('rig_tune_version_id')
+    .not('rig_tune_version_id', 'is', null)
+
+  if (racesError || !races) {
+    console.error('Rig Tune: races read failed:', racesError?.message ?? 'no rows')
+    return null
+  }
+
+  const racesByVersion: Record<string, number> = {}
+  for (const { rig_tune_version_id: id } of races as { rig_tune_version_id: string }[]) {
+    racesByVersion[id] = (racesByVersion[id] ?? 0) + 1
+  }
+
   return {
     boat,
     artifact_id: artifact.id,
@@ -103,5 +120,6 @@ export async function readRigTune(): Promise<RigTunePage | null> {
       // Newest first: the Version in force is what the screen opens on, and the history
       // below it reads backwards from there.
       .sort((a, b) => b.version_number - a.version_number),
+    races_by_version: racesByVersion,
   }
 }

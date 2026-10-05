@@ -711,6 +711,12 @@ SELECT pg_temp.refuses(
 -- ===========================================================================
 -- Rig Tune Wind Bands
 -- ===========================================================================
+-- These fixtures stand in for mint_rig_tune_version, so they open the write path the way it
+-- does: rig_tune_bands_write_path refuses a band written any other way (LAY-151), and the
+-- table's own constraints are worth attacking without a function in the way. Closed again at
+-- the end of the staleness checks; "Correcting a Rig Tune Version" attacks the guard itself.
+
+SELECT set_config('layline.rig_tune_band_write', 'on', TRUE);
 
 SELECT pg_temp.accepts(
     'a rig_tune Version with a Base Tune and two bands above it is accepted',
@@ -826,6 +832,8 @@ SELECT pg_temp.refuses(
      WHERE id = '40000000-0000-4000-8000-000000000001'
     $sql$
 );
+
+SELECT set_config('layline.rig_tune_band_write', '', TRUE);
 
 DO $$
 DECLARE
@@ -2283,6 +2291,455 @@ BEGIN
         'a guest cannot execute it at all',
         COALESCE(v_err LIKE '%permission denied for function%', FALSE),
         COALESCE(v_err, 'expected a refusal; the call was accepted')
+    );
+END;
+$$;
+
+-- ===========================================================================
+-- Correcting a Rig Tune Version
+-- ===========================================================================
+-- 20261005200000_correct_a_rig_tune_version.sql (LAY-151, ADR 0031): a rig_tune Version may
+-- change its note and effective_from, its bands change only through correct_rig_tune_version,
+-- and a correction keeps every kept band's id so a Race pointing at one still does.
+--
+-- Two fresh Versions are minted first, so the one corrected has a neighbour on each side and
+-- the one after it is the one in force. The first Race is moved onto the corrected Version's
+-- breeze band, so there is a Race whose pointer a correction must leave standing.
+
+DO $$
+DECLARE
+    v_secdef BOOLEAN;
+BEGIN
+    SELECT p.prosecdef INTO v_secdef
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'correct_rig_tune_version';
+
+    PERFORM pg_temp.chk(
+        'correct_rig_tune_version runs as its caller, not as its owner',
+        v_secdef IS FALSE,
+        format('prosecdef=%s', COALESCE(v_secdef::TEXT, 'no such function'))
+    );
+
+    PERFORM pg_temp.chk(
+        'and a guest holds no EXECUTE on it (ADR 0015)',
+        NOT has_function_privilege(
+            'anon', 'public.correct_rig_tune_version(UUID, DATE, TEXT, JSONB)', 'EXECUTE'),
+        format('authenticated=%s anon=%s',
+            has_function_privilege(
+                'authenticated', 'public.correct_rig_tune_version(UUID, DATE, TEXT, JSONB)', 'EXECUTE'),
+            has_function_privilege(
+                'anon', 'public.correct_rig_tune_version(UUID, DATE, TEXT, JSONB)', 'EXECUTE'))
+    );
+END;
+$$;
+
+-- The ids the checks below need, by name, since the functions allocate them.
+CREATE TEMP TABLE _correction (
+    name TEXT PRIMARY KEY,
+    id   UUID
+);
+
+DO $$
+DECLARE
+    v_shrouds JSONB := '{"V1": {"port": {"gap_mm": 70, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 70, "turns_from_base": 0}},
+                         "D1": {"port": {"gap_mm": 62, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 62, "turns_from_base": 0}},
+                         "D2": {"port": {"gap_mm": 60, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 60, "turns_from_base": 0}}}';
+    v_err TEXT;
+BEGIN
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.mint_rig_tune_version(
+                    DATE '2026-09-20', 'the tune with a band missing', %L::JSONB)$q$,
+            jsonb_build_array(
+                jsonb_build_object('low_kt', 0, 'high_kt', 10, 'is_base', true,
+                                   'label', 'Light base', 'shrouds', v_shrouds),
+                jsonb_build_object('low_kt', 10, 'high_kt', NULL, 'is_base', false,
+                                   'label', 'Breeze', 'gaps_stale', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk('fixture: the Version to correct is minted', v_err IS NULL, v_err);
+
+    INSERT INTO _correction
+    SELECT 'version', id FROM boat_setup_versions
+     WHERE kind = 'rig_tune' AND note = 'the tune with a band missing';
+    INSERT INTO _correction
+    SELECT 'base', b.id FROM rig_tune_bands b JOIN _correction c ON c.id = b.version_id
+     WHERE c.name = 'version' AND b.is_base;
+    INSERT INTO _correction
+    SELECT 'breeze', b.id FROM rig_tune_bands b JOIN _correction c ON c.id = b.version_id
+     WHERE c.name = 'version' AND NOT b.is_base;
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.mint_rig_tune_version(
+                    DATE '2026-10-01', 'the rig actually moved', %L::JSONB)$q$,
+            jsonb_build_array(
+                jsonb_build_object('low_kt', 0, 'high_kt', NULL, 'is_base', true,
+                                   'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk('fixture: and the Version after it, now in force', v_err IS NULL, v_err);
+
+    INSERT INTO _correction
+    SELECT 'next', id FROM boat_setup_versions
+     WHERE kind = 'rig_tune' AND note = 'the rig actually moved';
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$UPDATE races SET rig_tune_version_id = %L, rig_tune_band_id = %L
+                   WHERE id = '60000000-0000-4000-8000-000000000001'$q$,
+            (SELECT id FROM _correction WHERE name = 'version'),
+            (SELECT id FROM _correction WHERE name = 'breeze'))
+    );
+    PERFORM pg_temp.chk('fixture: a Race is set to the breeze band', v_err IS NULL, v_err);
+END;
+$$;
+
+-- The guard ------------------------------------------------------------------
+
+DO $$
+DECLARE
+    v_err TEXT;
+BEGIN
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$UPDATE rig_tune_bands SET label = 'typed over' WHERE id = %L$q$,
+            (SELECT id FROM _correction WHERE name = 'base'))
+    );
+    PERFORM pg_temp.chk(
+        'a band cannot be edited directly, even by an admin: only the two functions write one',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the UPDATE was accepted')
+    );
+END;
+$$;
+
+SELECT pg_temp.refuses(
+    'nor by the database owner, whom RLS does not stop',
+    format($q$UPDATE rig_tune_bands SET high_kt = 9 WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'base'))
+);
+
+SELECT pg_temp.refuses(
+    'a band cannot be deleted directly',
+    format($q$DELETE FROM rig_tune_bands WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'base'))
+);
+
+SELECT pg_temp.refuses(
+    'nor added to a Version that already exists',
+    format($q$INSERT INTO rig_tune_bands (version_id, low_kt, high_kt, shrouds)
+              VALUES (%L, 30, 35, '{"V1": {}, "D1": {}, "D2": {}}'::JSONB)$q$,
+        (SELECT id FROM _correction WHERE name = 'version'))
+);
+
+-- The Version row ------------------------------------------------------------
+
+SELECT pg_temp.accepts(
+    'a rig_tune Version''s note and effective date can be corrected',
+    format($q$UPDATE boat_setup_versions
+                 SET note = 'the tune with a band missing', effective_from = DATE '2026-09-20'
+               WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'version'))
+);
+
+SELECT pg_temp.refuses(
+    'but not its version_number',
+    format($q$UPDATE boat_setup_versions SET version_number = 99 WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'version'))
+);
+
+SELECT pg_temp.refuses(
+    'nor its recorded_at, which keeps meaning when it was first entered',
+    format($q$UPDATE boat_setup_versions SET recorded_at = NOW() - INTERVAL '1 year'
+               WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'version'))
+);
+
+SELECT pg_temp.refuses(
+    'nor its payload, which stays empty: the content is the bands',
+    format($q$UPDATE boat_setup_versions SET payload = '{"bands": []}'::JSONB WHERE id = %L$q$,
+        (SELECT id FROM _correction WHERE name = 'version'))
+);
+
+-- The correction -------------------------------------------------------------
+
+DO $$
+DECLARE
+    v_version UUID := (SELECT id FROM _correction WHERE name = 'version');
+    v_base    UUID := (SELECT id FROM _correction WHERE name = 'base');
+    v_breeze  UUID := (SELECT id FROM _correction WHERE name = 'breeze');
+    v_next    UUID := (SELECT id FROM _correction WHERE name = 'next');
+    v_shrouds JSONB := '{"V1": {"port": {"gap_mm": 71, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 71, "turns_from_base": 0}},
+                         "D1": {"port": {"gap_mm": 63, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 63, "turns_from_base": 0}},
+                         "D2": {"port": {"gap_mm": 60, "turns_from_base": 0},
+                                "starboard": {"gap_mm": 60, "turns_from_base": 0}}}';
+    v_number      INTEGER;
+    v_recorded    TIMESTAMPTZ;
+    v_number2     INTEGER;
+    v_recorded2   TIMESTAMPTZ;
+    v_effective   DATE;
+    v_pointer     UUID;
+    v_next_flags  TEXT;
+    v_next_after  TEXT;
+    v_err         TEXT;
+    v_bands       TEXT;
+    v_race_band   UUID;
+    v_count       INTEGER;
+BEGIN
+    SELECT version_number, recorded_at INTO v_number, v_recorded
+      FROM boat_setup_versions WHERE id = v_version;
+    SELECT string_agg(id || ':' || gaps_stale, ',' ORDER BY low_kt) INTO v_next_flags
+      FROM rig_tune_bands WHERE version_id = v_next;
+
+    v_err := pg_temp.exec_as(
+        'cccccccc-0000-4000-8000-000000000002',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-20', 'crew', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_base, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'a signed-in non-admin cannot correct a Rig Tune Version',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    -- The mistake ADR 0031 was written for: a band tuned for and never entered. Adding it moves
+    -- its neighbour's edge, because the table is contiguous.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'the tune with a band missing', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(
+                jsonb_build_object('id', v_base, 'low_kt', 0, 'high_kt', 6, 'is_base', true,
+                                   'label', 'Light base', 'shrouds', v_shrouds),
+                jsonb_build_object('low_kt', 6, 'high_kt', 10, 'is_base', false,
+                                   'label', 'Forgotten', 'gaps_stale', false, 'shrouds', v_shrouds),
+                jsonb_build_object('id', v_breeze, 'low_kt', 10, 'high_kt', NULL, 'is_base', false,
+                                   'label', 'Breeze', 'gaps_stale', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'an admin adds a missing band to a past Version in place', v_err IS NULL, v_err);
+
+    SELECT version_number, recorded_at, effective_from INTO v_number2, v_recorded2, v_effective
+      FROM boat_setup_versions WHERE id = v_version;
+    PERFORM pg_temp.chk(
+        'it is the same Version: same number, same recorded_at, the corrected date',
+        v_number2 = v_number AND v_recorded2 = v_recorded AND v_effective = DATE '2026-09-21',
+        format('v%s -> v%s, effective %s', v_number, v_number2, v_effective)
+    );
+
+    SELECT current_version_id INTO v_pointer FROM boat_setup_artifacts WHERE kind = 'rig_tune';
+    PERFORM pg_temp.chk(
+        'and the current pointer has not moved off the Version after it',
+        v_pointer = v_next,
+        format('pointer=%s next=%s', v_pointer, v_next)
+    );
+
+    SELECT string_agg(
+               CASE id WHEN v_base THEN 'base' WHEN v_breeze THEN 'breeze' ELSE 'new' END
+               || ' ' || low_kt || '-' || COALESCE(high_kt::TEXT, 'open')
+               || CASE WHEN gaps_stale THEN ' stale' ELSE '' END,
+               ', ' ORDER BY low_kt)
+      INTO v_bands
+      FROM rig_tune_bands WHERE version_id = v_version;
+    PERFORM pg_temp.chk(
+        'kept bands keep their ids, the new one is inserted, and gaps_stale is stored as sent',
+        v_bands = 'base 0-6, new 6-10, breeze 10-open stale',
+        v_bands
+    );
+
+    SELECT rig_tune_band_id INTO v_race_band FROM races
+     WHERE id = '60000000-0000-4000-8000-000000000001';
+    PERFORM pg_temp.chk(
+        'the Race set to the breeze band still points at it',
+        v_race_band = v_breeze,
+        format('race band=%s breeze=%s', v_race_band, v_breeze)
+    );
+
+    SELECT string_agg(id || ':' || gaps_stale, ',' ORDER BY low_kt) INTO v_next_after
+      FROM rig_tune_bands WHERE version_id = v_next;
+    PERFORM pg_temp.chk(
+        'no other Version''s bands or flags were touched',
+        v_next_after = v_next_flags,
+        v_next_after
+    );
+
+    -- Moving the base onto another kept band, sliding an edge past where another band
+    -- started and removing a band, all at once: the order a single-pass UPDATE would trip
+    -- the unique indexes on.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'the tune with a band missing', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(
+                jsonb_build_object('id', v_base, 'low_kt', 0, 'high_kt', 12, 'is_base', false,
+                                   'shrouds', v_shrouds),
+                jsonb_build_object('id', v_breeze, 'low_kt', 12, 'high_kt', NULL, 'is_base', true,
+                                   'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'the Base Tune moves, an edge slides past a neighbour''s and a band goes, in one call',
+        v_err IS NULL,
+        v_err
+    );
+
+    SELECT count(*) INTO v_count FROM rig_tune_bands WHERE version_id = v_version;
+    SELECT is_base::TEXT INTO v_bands FROM rig_tune_bands WHERE id = v_breeze;
+    PERFORM pg_temp.chk(
+        'leaving two bands, the breeze band now the base',
+        v_count = 2 AND v_bands = 'true',
+        format('%s bands, breeze is_base=%s', v_count, v_bands)
+    );
+
+    -- Refusals. Each must leave the table as it stands, which the last check reads back.
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'drop breeze', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_base, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'removing the band a Race points at is refused (ON DELETE RESTRICT)',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-13', 'too early', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_breeze, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'an effective date before the previous Version''s is refused',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-10-02', 'too late', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_breeze, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', true, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'and one after the next Version''s',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'foreign band', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(
+                jsonb_build_object('id', v_breeze, 'low_kt', 0, 'high_kt', 12, 'is_base', true,
+                                   'shrouds', v_shrouds),
+                jsonb_build_object('id', '40000000-0000-4000-8000-000000000009', 'low_kt', 12,
+                                   'high_kt', NULL, 'is_base', false, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'a band id from another Version is refused rather than ignored',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'no base', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_breeze, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', false, 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'a corrected table with no Base Tune is refused',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-09-21', 'stale base', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(jsonb_build_object('id', v_breeze, 'low_kt', 0, 'high_kt', NULL,
+                                                 'is_base', true, 'gaps_stale', true,
+                                                 'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'the Base Tune is never stale, in a correction either',
+        v_err IS NOT NULL,
+        COALESCE(v_err, 'the call was accepted')
+    );
+
+    SELECT count(*) INTO v_count FROM rig_tune_bands WHERE version_id = v_version;
+    SELECT effective_from INTO v_effective FROM boat_setup_versions WHERE id = v_version;
+    PERFORM pg_temp.chk(
+        'and every refusal left the Version as it was',
+        v_count = 2 AND v_effective = DATE '2026-09-21',
+        format('%s bands, effective %s', v_count, v_effective)
+    );
+
+    v_err := pg_temp.exec_as(
+        'aaaaaaa1-0000-4000-8000-000000000001',
+        format($q$SELECT public.correct_rig_tune_version(
+                    %L, DATE '2026-10-01', 'on the day', %L::JSONB)$q$,
+            v_version,
+            jsonb_build_array(
+                jsonb_build_object('id', v_base, 'low_kt', 0, 'high_kt', 12, 'is_base', false,
+                                   'shrouds', v_shrouds),
+                jsonb_build_object('id', v_breeze, 'low_kt', 12, 'high_kt', NULL, 'is_base', true,
+                                   'shrouds', v_shrouds)))
+    );
+    PERFORM pg_temp.chk(
+        'an effective date equal to a neighbour''s is accepted',
+        v_err IS NULL,
+        v_err
+    );
+END;
+$$;
+
+-- A band whose Version is gone is let go with it, so the guard does not make a Version
+-- undeletable by cascade. The Version minted in "Rig Tune staleness and minting" is neither
+-- in force nor pointed at by any Race, so nothing but its bands stands in the way. Undone by
+-- raising out of the block.
+DO $$
+DECLARE
+    v_err     TEXT;
+    v_left    BIGINT := -1;
+    v_version UUID := (
+        SELECT id FROM boat_setup_versions
+         WHERE note = 'first tune measured off the boat with a caliper'
+    );
+BEGIN
+    BEGIN
+        DELETE FROM boat_setup_versions WHERE id = v_version;
+        SELECT count(*) INTO v_left FROM rig_tune_bands WHERE version_id = v_version;
+        RAISE EXCEPTION '__undo_cascade__';
+    EXCEPTION WHEN OTHERS THEN
+        IF SQLERRM <> '__undo_cascade__' THEN v_err := SQLERRM; END IF;
+    END;
+
+    PERFORM pg_temp.chk(
+        'deleting a Version still takes its bands with it, guard or no guard',
+        v_err IS NULL AND v_left = 0,
+        COALESCE(v_err, format('%s bands left', v_left))
     );
 END;
 $$;

@@ -2,6 +2,7 @@ import { isCalendarDate } from '@/lib/utils/calendarDate'
 import type {
   RigTuneBandDraft,
   RigTuneBandInput,
+  RigTuneCorrectionInput,
   RigTuneDraft,
   RigTuneDraftShrouds,
   RigTunePositionDraft,
@@ -57,16 +58,23 @@ export function buildDraftShrouds(
 /**
  * The recorded tune, opened for editing — or an empty table when nothing is recorded.
  *
- * The date and the change reason start blank: they describe the Version being made, and a
- * reason inherited from the last one would explain the wrong change. Every band keeps a
- * `seed` of what it was last measured as, which is what tells a band left alone from one
- * re-measured in this edit — the distinction the staleness rule turns on (ADR 0007).
+ * Recording a new Version, the date and the change reason start blank: they describe the
+ * Version being made, and a reason inherited from the last one would explain the wrong
+ * change. Correcting one, they start as that Version's own, because a correction fixes what
+ * the Version says rather than describing a new one, and the reason is normally left alone
+ * (ADR 0031). Every band keeps a `seed` of what it was last measured as, which is what tells
+ * a band left alone from one re-measured in this edit — the distinction the staleness rule
+ * turns on (ADR 0007) — and its stored `gaps_stale`, which only a correction lets the sailor
+ * change.
  *
  * An unrecorded artifact opens as one empty band because there is no seed for a Rig Tune:
  * v1 is measured off this boat, and a guide's published figures stored as v1 would be
  * indistinguishable from that measurement.
  */
-export function draftFromVersion(version: RigTuneVersionRecord | null): RigTuneDraft {
+export function draftFromVersion(
+  version: RigTuneVersionRecord | null,
+  mode: 'record' | 'correct' = 'record'
+): RigTuneDraft {
   if (version === null) {
     return {
       effective_from: '',
@@ -75,12 +83,15 @@ export function draftFromVersion(version: RigTuneVersionRecord | null): RigTuneD
     }
   }
 
+  const correcting = mode === 'correct'
+
   return {
-    effective_from: '',
-    change_reason: '',
+    effective_from: correcting ? version.effective_from : '',
+    change_reason: correcting ? version.note : '',
     bands: version.bands.map((band) => ({
-      // The recorded row's id, which is stable for the length of the edit. It is never
-      // written back: a Version mints new band rows (ADR 0011).
+      // The recorded row's id, which is stable for the length of the edit. Minting never
+      // writes it back, because a Version mints new band rows (ADR 0011); a correction does,
+      // so the band stays the row a Race points at (ADR 0031).
       key: band.id,
       label: band.label ?? '',
       low_kt: String(band.low_kt),
@@ -88,6 +99,7 @@ export function draftFromVersion(version: RigTuneVersionRecord | null): RigTuneD
       is_base: band.is_base,
       note: band.note ?? '',
       shrouds: draftShrouds(band.shrouds),
+      gaps_stale: band.gaps_stale,
       seed: { shrouds: band.shrouds, gaps_stale: band.gaps_stale, was_base: band.is_base },
     })),
   }
@@ -103,6 +115,8 @@ export function newBandDraft(over: Partial<RigTuneBandDraft> = {}): RigTuneBandD
     is_base: false,
     note: '',
     shrouds: buildDraftShrouds(() => ({ gap_mm: '', turns_from_base: '0' })),
+    // Added in this edit, so nobody has said its Gaps were taken against another base.
+    gaps_stale: false,
     seed: null,
     ...over,
   }
@@ -154,9 +168,64 @@ function halfTurns(magnitude: number): string {
   return whole === 0 ? half : `${whole}${half}`
 }
 
+/**
+ * A new Version out of the draft, with staleness decided by the mint rule (`withStaleGaps`).
+ */
 export function buildRigTuneVersionInput(
   draft: RigTuneDraft
 ): { ok: true; input: RigTuneVersionInput } | { ok: false; problems: RigTuneProblem[] } {
+  const { effectiveFrom, changeReason, read, problems } = readDraft(draft)
+
+  const bands = withStaleGaps(read).sort((a, b) => a.low_kt - b.low_kt)
+
+  // Only worth checking once every edge parsed: an unread band would report a phantom gap.
+  if (problems.length === 0) checkBandTable(bands, problems)
+
+  if (problems.length > 0) return { ok: false, problems }
+
+  return { ok: true, input: { effective_from: effectiveFrom, note: changeReason, bands } }
+}
+
+/**
+ * A corrected table out of the draft, for `correct_rig_tune_version` (ADR 0031).
+ *
+ * The same reading and the same table rules as a new Version, so a correction can never hold
+ * a table a mint would refuse. Two things differ. Every band seeded from the recorded Version
+ * goes back under its row id, so it is updated in place and every Race set to it still is;
+ * a band added in this edit goes with none and is inserted. And `withStaleGaps` does not run:
+ * fixing a typo changes nothing about what was measured when, so each band's flag is the
+ * sailor's own statement — except on the Base Tune, which is what the others are stale
+ * *against* and is never stale itself.
+ */
+export function buildRigTuneCorrectionInput(
+  draft: RigTuneDraft
+): { ok: true; input: RigTuneCorrectionInput } | { ok: false; problems: RigTuneProblem[] } {
+  const { effectiveFrom, changeReason, read, problems } = readDraft(draft)
+
+  const bands = read
+    .map(({ typed, band }) => ({
+      ...band,
+      id: typed.seed === null ? null : typed.key,
+      gaps_stale: !band.is_base && typed.gaps_stale,
+    }))
+    .sort((a, b) => a.low_kt - b.low_kt)
+
+  if (problems.length === 0) checkBandTable(bands, problems)
+
+  if (problems.length > 0) return { ok: false, problems }
+
+  return { ok: true, input: { effective_from: effectiveFrom, note: changeReason, bands } }
+}
+
+/** What both builders read off a draft before deciding what each band's flag says. */
+interface ReadDraft {
+  effectiveFrom: string
+  changeReason: string
+  read: ReadBand[]
+  problems: RigTuneProblem[]
+}
+
+function readDraft(draft: RigTuneDraft): ReadDraft {
   const problems: RigTuneProblem[] = []
 
   const effectiveFrom = draft.effective_from.trim()
@@ -204,21 +273,7 @@ export function buildRigTuneVersionInput(
     })
   }
 
-  const bands = withStaleGaps(read).sort((a, b) => a.low_kt - b.low_kt)
-
-  // Only worth checking once every edge parsed: an unread band would report a phantom gap.
-  if (problems.length === 0) checkBandTable(bands, problems)
-
-  if (problems.length > 0) return { ok: false, problems }
-
-  return {
-    ok: true,
-    input: {
-      effective_from: effectiveFrom,
-      note: changeReason,
-      bands,
-    },
-  }
+  return { effectiveFrom, changeReason, read, problems }
 }
 
 /** One band as it was typed, beside the band it reads as. */

@@ -3,6 +3,7 @@ import type { RigTuneShrouds } from '@/types'
 
 const boatMaybeSingle = jest.fn()
 const artifactMaybeSingle = jest.fn()
+const racesNot = jest.fn()
 
 const from = jest.fn((table: string) => {
   if (table === 'boats') {
@@ -12,6 +13,9 @@ const from = jest.fn((table: string) => {
     return {
       select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: artifactMaybeSingle }) }) }),
     }
+  }
+  if (table === 'races') {
+    return { select: () => ({ not: racesNot }) }
   }
   throw new Error(`readRigTune asked for an unexpected table: ${table}`)
 })
@@ -76,6 +80,7 @@ describe('readRigTune', () => {
       data: { id: 'artifact-rig', current_version_id: 'v2', versions: [versionRow()] },
       error: null,
     })
+    racesNot.mockResolvedValue({ data: [], error: null })
   })
 
   afterEach(() => {
@@ -88,8 +93,33 @@ describe('readRigTune', () => {
       artifact_id: 'artifact-rig',
       current_version_id: 'v2',
       versions: [versionRow()],
+      races_by_version: {},
     })
     expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it('counts the Races sailed under each Version, so a correction can say what it changes', async () => {
+    racesNot.mockResolvedValue({
+      data: [
+        { rig_tune_version_id: 'v2' },
+        { rig_tune_version_id: 'v1' },
+        { rig_tune_version_id: 'v2' },
+      ],
+      error: null,
+    })
+
+    const page = await readRigTune()
+
+    expect(racesNot).toHaveBeenCalledWith('rig_tune_version_id', 'is', null)
+    expect(page?.races_by_version).toEqual({ v2: 2, v1: 1 })
+  })
+
+  it('reads nothing when the Races cannot be counted, rather than a count of none', async () => {
+    // "No Race sailed under it" is a claim the correction form would make on this count.
+    racesNot.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
+
+    await expect(readRigTune()).resolves.toBeNull()
+    expect(consoleError).toHaveBeenCalled()
   })
 
   it('orders the Versions newest first and each Version bands up the wind axis', async () => {
@@ -133,6 +163,7 @@ describe('readRigTune', () => {
       artifact_id: 'artifact-rig',
       current_version_id: null,
       versions: [],
+      races_by_version: {},
     })
     expect(consoleError).not.toHaveBeenCalled()
   })

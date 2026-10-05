@@ -343,6 +343,8 @@ CREATE CONSTRAINT TRIGGER boat_setup_artifacts_forward_only_current
 -- mistyped figure would stand permanently as what the boat ran, and every Race pointing at
 -- it would report against a number that never existed. Nothing else in Boat Setup can be
 -- edited: an upload is re-uploaded, and a wrong Rig Tune is superseded by the right one.
+-- (Superseded for Rig Tune by 20261005200000_correct_a_rig_tune_version.sql, ADR 0031: a
+-- recording mistake in a Rig Tune Version is now corrected in place too.)
 
 CREATE OR REPLACE FUNCTION public.enforce_version_immutability()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
