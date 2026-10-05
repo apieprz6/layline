@@ -210,9 +210,7 @@ export default function RigTuneEditor(props: RigTuneEditorProps): ReactElement {
             color: 'var(--btn-primary-fg)',
           }}
         >
-          {props.mode === 'correct'
-            ? `Correct v${props.version.version_number} in place`
-            : 'Record a new Version'}
+          {correcting ? `Correct v${version?.version_number} in place` : 'Record a new Version'}
         </button>
       </div>
     )
@@ -240,8 +238,8 @@ export default function RigTuneEditor(props: RigTuneEditorProps): ReactElement {
             padding: spacing(3),
           }}
         >
-          {props.mode === 'correct'
-            ? `Unsaved corrections to v${props.version.version_number}. Saving changes this Version itself.`
+          {correcting
+            ? `Unsaved corrections to v${version?.version_number}. Saving changes this Version itself.`
             : 'Unsaved changes to this Rig Tune. Saving records the whole table as one new Version.'}
         </p>
       )}

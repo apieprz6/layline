@@ -37,6 +37,19 @@ function refuse(message: string, problems: RigTuneProblem[] = []): SaveRigTuneRe
   return { ok: false, message, problems }
 }
 
+/** The server client, or null — logged — when there is no Supabase to write to. */
+async function openClient(what: string): Promise<Awaited<ReturnType<typeof createClient>> | null> {
+  try {
+    return await createClient()
+  } catch (thrown: unknown) {
+    console.error(
+      `${what}: Supabase client unavailable:`,
+      thrown instanceof Error ? thrown.message : thrown
+    )
+    return null
+  }
+}
+
 /**
  * A Server Action is a public endpoint, so the admin check is made here from the **Profile**
  * — the editor not rendering for a viewer is a courtesy, not the check. RLS refuses the same
@@ -60,17 +73,8 @@ export async function saveRigTuneVersion(draft: RigTuneDraft): Promise<SaveRigTu
     return refuse(HAS_PROBLEMS, built.problems)
   }
 
-  let supabase: Awaited<ReturnType<typeof createClient>>
-
-  try {
-    supabase = await createClient()
-  } catch (thrown: unknown) {
-    console.error(
-      'Rig Tune: Supabase client unavailable:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return refuse(UNAVAILABLE)
-  }
+  const supabase = await openClient('Rig Tune')
+  if (supabase === null) return refuse(UNAVAILABLE)
 
   // No artifact id is passed: the function locks the one `rig_tune` row itself and allocates
   // `version_number` under that lock, so nothing here can name a Version or an artifact the
@@ -135,17 +139,8 @@ export async function correctRigTuneVersion(
     return refuse(HAS_PROBLEMS, built.problems)
   }
 
-  let supabase: Awaited<ReturnType<typeof createClient>>
-
-  try {
-    supabase = await createClient()
-  } catch (thrown: unknown) {
-    console.error(
-      'Rig Tune correction: Supabase client unavailable:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return refuse(UNAVAILABLE)
-  }
+  const supabase = await openClient('Rig Tune correction')
+  if (supabase === null) return refuse(UNAVAILABLE)
 
   const { data: versions, error: versionsError } = await supabase
     .from('boat_setup_versions')
@@ -265,10 +260,10 @@ function removalRefusal(
     return race.title === null ? `an untitled race (${day})` : `${race.title} (${day})`
   })
 
-  const list =
-    named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
+  const one = named.length === 1
+  const list = one ? named[0] : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
 
   return `The ${formatBandRange(band.low_kt, band.high_kt)} band cannot be removed: ${list} ${
-    named.length === 1 ? 'was' : 'were'
-  } sailed set to it. Amend ${named.length === 1 ? 'that Race' : 'those Races'} onto another band first.`
+    one ? 'was' : 'were'
+  } sailed set to it. Amend ${one ? 'that Race' : 'those Races'} onto another band first.`
 }
