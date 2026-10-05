@@ -42,6 +42,8 @@ ALTER TABLE public.rig_tune_bands
 ALTER TABLE public.rig_tune_bands
     ADD CONSTRAINT base_band_gaps_never_stale CHECK (NOT (is_base AND gaps_stale));
 
+-- Restated by 20261005200000_correct_a_rig_tune_version.sql, which lets a correction change
+-- the flag as the sailor states it (ADR 0031).
 COMMENT ON COLUMN public.rig_tune_bands.gaps_stale IS
     'The Gaps no longer describe the rig, because the Base Tune was re-measured and this band was not. Decided by the app when the Version is minted and then immutable like the rest of the row -- never recomputed from the base, which would need the thread pitch ADR 0007 deliberately does not store. The Turns are unaffected. Never true of the Base Tune (base_band_gaps_never_stale).';
 

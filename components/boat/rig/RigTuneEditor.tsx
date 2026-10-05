@@ -2,7 +2,10 @@
 
 import { useState, type CSSProperties, type FormEvent, type ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
-import { saveRigTuneVersion } from '@/app/(app)/boat-management/rig-tune/actions'
+import {
+  correctRigTuneVersion,
+  saveRigTuneVersion,
+} from '@/app/(app)/boat-management/rig-tune/actions'
 import {
   SHROUD_ORDER,
   SHROUD_SIDES,
@@ -23,10 +26,24 @@ import type {
   ShroudSide,
 } from '@/types'
 
-interface RigTuneEditorProps {
-  /** The Version in force, which a new one is edited out of. Null when nothing is recorded. */
-  current: RigTuneVersionRecord | null
-}
+/**
+ * `record` mints a new Version out of the one in force; `correct` fixes a Version in place
+ * (ADR 0031). One component for both, as `CalibrationVersionForm` is, so that a correction can
+ * never hold a field a new Version lacks, and the table rules bind both by construction.
+ */
+type RigTuneEditorProps =
+  | {
+      mode: 'record'
+      /** The Version in force, which a new one is edited out of. Null when nothing is recorded. */
+      version: RigTuneVersionRecord | null
+    }
+  | {
+      mode: 'correct'
+      /** The Version being corrected, which may be a past one. */
+      version: RigTuneVersionRecord
+      /** How many Races point at it, which the consequence copy names before the save. */
+      raceCount: number
+    }
 
 /** Half a turn, the finest a turnbuckle is set to by hand (ADR 0007). */
 const TURN_STEP = 0.5
@@ -98,13 +115,24 @@ function bandName(band: RigTuneBandDraft, index: number): string {
  *
  * Validation lives in `lib/boat/rigTune.ts` and runs again inside the Server Action, which is
  * where the refusals shown here come from — the client never decides a table is writable.
+ *
+ * In `correct` mode the same form fixes a Version in place for a recording mistake (ADR 0031):
+ * it opens on that Version's own date and reason, every recorded band goes back under its row
+ * id so a Race set to it still is, and each non-base band's stale flag becomes the sailor's to
+ * state, because a correction does not run the staleness rule.
  */
-export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactElement {
+export default function RigTuneEditor(props: RigTuneEditorProps): ReactElement {
+  const { mode, version } = props
+  const correcting = mode === 'correct'
+  // Both editors can be open on the Version in force at once, so every id and the Base Tune
+  // radio group are namespaced by mode rather than shared.
+  const prefix = correcting ? 'rig-correct' : 'rig'
+
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [problems, setProblems] = useState<RigTuneProblem[]>([])
-  const [initial, setInitial] = useState<RigTuneDraft>(() => draftFromVersion(current))
+  const [initial, setInitial] = useState<RigTuneDraft>(() => draftFromVersion(version, mode))
   const [draft, setDraft] = useState<RigTuneDraft>(initial)
 
   // A whole-object diff, because the unit of change is the table (ADR 0007). The draft holds
@@ -112,7 +140,7 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
 
   function reopen(): void {
-    const fresh = draftFromVersion(current)
+    const fresh = draftFromVersion(version, mode)
     setInitial(fresh)
     setDraft(fresh)
     setProblems([])
@@ -147,12 +175,14 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
     setSaving(true)
     setMessage(null)
     setProblems([])
-    const result = await saveRigTuneVersion(draft)
+    const result = props.mode === 'correct'
+      ? await correctRigTuneVersion(props.version.id, draft)
+      : await saveRigTuneVersion(draft)
     setSaving(false)
 
     if (result.ok) {
       // The screen is revalidated on the server, so the new Version arrives as the one in
-      // force and the form closes onto it.
+      // force — or the corrected one arrives as itself — and the form closes onto it.
       setOpen(false)
       reopen()
       return
@@ -180,7 +210,9 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             color: 'var(--btn-primary-fg)',
           }}
         >
-          Record a new Version
+          {props.mode === 'correct'
+            ? `Correct v${props.version.version_number} in place`
+            : 'Record a new Version'}
         </button>
       </div>
     )
@@ -208,16 +240,32 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             padding: spacing(3),
           }}
         >
-          Unsaved changes to this Rig Tune. Saving records the whole table as one new Version.
+          {props.mode === 'correct'
+            ? `Unsaved corrections to v${props.version.version_number}. Saving changes this Version itself.`
+            : 'Unsaved changes to this Rig Tune. Saving records the whole table as one new Version.'}
+        </p>
+      )}
+
+      {props.mode === 'correct' && (
+        <p
+          data-testid="correction-consequence"
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--wind-heavy)',
+          }}
+        >
+          {correctionConsequence(props.version.version_number, props.raceCount)}
         </p>
       )}
 
       <div>
-        <label htmlFor="rig-effective-from" style={LABEL_STYLE}>
+        <label htmlFor={`${prefix}-effective-from`} style={LABEL_STYLE}>
           Took effect
         </label>
         <input
-          id="rig-effective-from"
+          id={`${prefix}-effective-from`}
           type="date"
           value={draft.effective_from}
           onChange={(event) => setDraft({ ...draft, effective_from: event.target.value })}
@@ -226,11 +274,11 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
       </div>
 
       <div>
-        <label htmlFor="rig-change-reason" style={LABEL_STYLE}>
+        <label htmlFor={`${prefix}-change-reason`} style={LABEL_STYLE}>
           Why this Version exists
         </label>
         <textarea
-          id="rig-change-reason"
+          id={`${prefix}-change-reason`}
           rows={2}
           value={draft.change_reason}
           onChange={(event) => setDraft({ ...draft, change_reason: event.target.value })}
@@ -258,11 +306,11 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
           >
             <div style={{ display: 'flex', gap: spacing(2) }}>
               <div style={{ flex: 1 }}>
-                <label htmlFor={`${band.key}-low`} style={LABEL_STYLE}>
+                <label htmlFor={`${prefix}-${band.key}-low`} style={LABEL_STYLE}>
                   Starts at (kt)
                 </label>
                 <input
-                  id={`${band.key}-low`}
+                  id={`${prefix}-${band.key}-low`}
                   inputMode="decimal"
                   value={band.low_kt}
                   onChange={(event) =>
@@ -272,11 +320,11 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <label htmlFor={`${band.key}-high`} style={LABEL_STYLE}>
+                <label htmlFor={`${prefix}-${band.key}-high`} style={LABEL_STYLE}>
                   Up to (kt)
                 </label>
                 <input
-                  id={`${band.key}-high`}
+                  id={`${prefix}-${band.key}-high`}
                   inputMode="decimal"
                   placeholder="open"
                   value={band.high_kt}
@@ -289,11 +337,11 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             </div>
 
             <div>
-              <label htmlFor={`${band.key}-label`} style={LABEL_STYLE}>
+              <label htmlFor={`${prefix}-${band.key}-label`} style={LABEL_STYLE}>
                 What the guide calls it
               </label>
               <input
-                id={`${band.key}-label`}
+                id={`${prefix}-${band.key}-label`}
                 value={band.label}
                 onChange={(event) =>
                   editBand(band.key, (was) => ({ ...was, label: event.target.value }))
@@ -316,7 +364,7 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             >
               <input
                 type="radio"
-                name="rig-base-band"
+                name={`${prefix}-base-band`}
                 checked={band.is_base}
                 onChange={() => setDraft((was) => rebaseOnto(was, band.key))}
               />
@@ -405,11 +453,11 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             ))}
 
             <div>
-              <label htmlFor={`${band.key}-note`} style={LABEL_STYLE}>
+              <label htmlFor={`${prefix}-${band.key}-note`} style={LABEL_STYLE}>
                 Note for this band
               </label>
               <input
-                id={`${band.key}-note`}
+                id={`${prefix}-${band.key}-note`}
                 value={band.note}
                 onChange={(event) =>
                   editBand(band.key, (was) => ({ ...was, note: event.target.value }))
@@ -417,6 +465,32 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
                 style={TEXT_INPUT_STYLE}
               />
             </div>
+
+            {/* The sailor's own statement, and only in a correction: a new Version's flags
+                are decided by the mint rule, and a correction never recomputes them (ADR
+                0031). Never on the Base Tune, which the others are stale against. */}
+            {correcting && !band.is_base && (
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: spacing(2),
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={band.gaps_stale}
+                  onChange={(event) =>
+                    editBand(band.key, (was) => ({ ...was, gaps_stale: event.target.checked }))
+                  }
+                />
+                These Gaps are stale — measured against a Base Tune that has since been
+                re-measured
+              </label>
+            )}
 
             {bandProblems.map((problem) => (
               <p key={problem.message} role="alert" style={PROBLEM_STYLE}>
@@ -488,11 +562,25 @@ export default function RigTuneEditor({ current }: RigTuneEditorProps): ReactEle
             opacity: saving || !dirty ? 0.6 : 1,
           }}
         >
-          {saving ? 'Saving' : 'Save this Version'}
+          {saving ? 'Saving' : correcting ? 'Save the correction' : 'Save this Version'}
         </button>
       </div>
     </form>
   )
+}
+
+/**
+ * What a correction costs, said before the save: the Races already sailed under this Version
+ * keep pointing at it, so they will read the corrected table, and nothing records that the
+ * table was ever otherwise (ADR 0031).
+ */
+function correctionConsequence(versionNumber: number, raceCount: number): string {
+  const sailed =
+    raceCount === 0
+      ? 'No Race has been sailed under it yet'
+      : `The ${raceCount} ${raceCount === 1 ? 'Race' : 'Races'} sailed under it will report against the corrected table`
+
+  return `This changes v${versionNumber} itself rather than adding a Version. ${sailed} — so correct a recording mistake here, and record a new Version instead when the rig actually changed.`
 }
 
 const PROBLEM_STYLE: CSSProperties = {

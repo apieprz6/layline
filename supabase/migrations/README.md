@@ -117,6 +117,56 @@ DROP TYPE IF EXISTS recording_date_order, reef_state, sea_state, calibration_eve
     calibration_channel, boat_setup_kind;
 ```
 
+## Migration: 20261005200000_correct_a_rig_tune_version.sql
+
+**Purpose**: LAY-151, ADR 0031. A Rig Tune Version can be corrected in place for a recording
+mistake — a band tuned for and never entered, a mistyped Gap, the wrong date — and its Wind Bands
+cannot be changed any other way.
+
+**What it creates or replaces**:
+- `public.enforce_version_immutability()`, widened: a `rig_tune` Version may change `note` and
+  `effective_from`, and its `payload` stays as it was (`'{}'`). Every column already refused for
+  calibration stays refused for both kinds.
+- `public.enforce_rig_tune_band_write_path()` and its trigger `rig_tune_bands_write_path`
+  (`BEFORE INSERT OR UPDATE OR DELETE`).
+- `public.mint_rig_tune_version(date, text, jsonb)`, re-created to open the band guard around its
+  insert. Nothing else about it changes.
+- `public.correct_rig_tune_version(uuid, date, text, jsonb) RETURNS VOID`.
+- Restated comments on `rig_tune_bands` and `rig_tune_bands.gaps_stale`, which called the bands
+  immutable.
+
+**Why a guard, and why a setting.** Until now "bands are immutable" lived only in a column
+comment: the admin policy on `rig_tune_bands` is `FOR ALL` and no trigger stopped an `UPDATE`. A
+correction opens the bands deliberately, so the trigger closes every other route. The two
+functions raise `layline.rig_tune_band_write` with `set_config(..., TRUE)` for the length of
+their own writes; `set_config` is in `pg_catalog`, which PostgREST does not expose, so a client
+cannot raise it itself. Both functions stay `SECURITY INVOKER` — RLS still decides *who*, the
+guard only *how*. A band whose Version has already been deleted is let go, so a cascade from
+`boat_setup_artifacts` still works.
+
+**Kept bands are updated in two passes.** Each is first parked on a placeholder edge above any
+wind, off the base and off the open top, and only then moved to where it is going. A single pass
+would trip `rig_tune_bands_one_base`, `rig_tune_bands_one_open_top` or `UNIQUE (version_id,
+low_kt)` mid-statement whenever a correction moves the base or slides an edge past another band's,
+and none of the three can be deferred — the first two are partial indexes.
+
+**What it refuses.** No bands; not exactly one Base Tune; a Version that is not a `rig_tune`
+Version this account can lock (a viewer gets `42501`); a band id that is not one of this
+Version's, or the same one twice; and an `effective_from` before the previous Version's or after
+the next one's (equal is allowed). Removing a band a Race points at is refused by
+`races`' `ON DELETE RESTRICT` key, which the Server Action names the Races for first.
+`gaps_stale` is stored as sent and never recomputed, here or on any other Version, and the
+current pointer is never touched.
+
+**Rollback**:
+```sql
+DROP FUNCTION IF EXISTS public.correct_rig_tune_version(UUID, DATE, TEXT, JSONB);
+DROP TRIGGER IF EXISTS rig_tune_bands_write_path ON public.rig_tune_bands;
+DROP FUNCTION IF EXISTS public.enforce_rig_tune_band_write_path();
+-- then re-run the enforce_version_immutability() and mint_rig_tune_version() bodies from
+-- 20260910183000 and 20260915190000 respectively.
+```
+
 ## Migration: 20260916170000_amend_a_race.sql
 
 **Purpose**: LAY-114. One call that amends a whole Race — its title, both window bounds, all five

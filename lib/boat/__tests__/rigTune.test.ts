@@ -1,4 +1,5 @@
 import {
+  buildRigTuneCorrectionInput,
   buildRigTuneVersionInput,
   draftFromVersion,
   formatBandRange,
@@ -48,6 +49,7 @@ function band(over: Partial<RigTuneBandDraft> = {}): RigTuneBandDraft {
     is_base: true,
     note: '',
     shrouds: evenShrouds('72', '64', '61'),
+    gaps_stale: false,
     seed: null,
     ...over,
   }
@@ -515,6 +517,107 @@ describe('buildRigTuneVersionInput', () => {
   })
 })
 
+describe('buildRigTuneCorrectionInput', () => {
+  /** A two-band v2 opened for correction: both bands are recorded rows, so both carry an id. */
+  function correcting(): RigTuneDraft {
+    return draft({
+      effective_from: '2026-08-01',
+      change_reason: 'Re-measured after the shrouds were reset.',
+      bands: [
+        seeded(
+          band({
+            key: 'band-light',
+            label: 'Light',
+            low_kt: '0',
+            high_kt: '9',
+            is_base: false,
+            shrouds: evenShrouds('70', '62', '60', '-1'),
+            gaps_stale: true,
+          }),
+          true
+        ),
+        seeded(band({ key: 'band-base', label: 'Mac base', low_kt: '9', high_kt: '' })),
+      ],
+    })
+  }
+
+  it('sends each kept band back under the id it was recorded with, and an added one with none', () => {
+    // A Race records the band it was set to, so a band kept through a correction has to stay
+    // the same row (ADR 0031). Mint mode never sends these ids: it writes new rows.
+    const was = correcting()
+    const forgotten = band({
+      key: 'band-added',
+      label: 'Forgotten',
+      low_kt: '6',
+      high_kt: '9',
+      is_base: false,
+      shrouds: evenShrouds('71', '63', '60', '-0.5'),
+    })
+    const result = buildRigTuneCorrectionInput({
+      ...was,
+      bands: [{ ...was.bands[0], high_kt: '6' }, forgotten, was.bands[1]],
+    })
+
+    if (!result.ok) throw new Error(JSON.stringify(result.problems))
+    expect(result.input.bands.map((b) => [b.id, b.low_kt, b.high_kt])).toEqual([
+      ['band-light', 0, 6],
+      [null, 6, 9],
+      ['band-base', 9, null],
+    ])
+    expect(result.input.effective_from).toBe('2026-08-01')
+    expect(result.input.note).toBe('Re-measured after the shrouds were reset.')
+  })
+
+  it('stores the staleness the sailor states, and never recomputes it from the base', () => {
+    // Re-measuring the base in a correction would mark every other band stale under the mint
+    // rule. A correction is fixing what was typed, so it does not run that rule (ADR 0031).
+    const was = correcting()
+    const base = withGap(was.bands[1], 'V1', 'port', '73')
+    const result = buildRigTuneCorrectionInput({
+      ...was,
+      bands: [{ ...was.bands[0], gaps_stale: false }, base],
+    })
+
+    if (!result.ok) throw new Error(JSON.stringify(result.problems))
+    expect(result.input.bands.map((b) => b.gaps_stale)).toEqual([false, false])
+
+    const kept = buildRigTuneCorrectionInput({ ...was, bands: [was.bands[0], base] })
+    if (!kept.ok) throw new Error(JSON.stringify(kept.problems))
+    expect(kept.input.bands[0].gaps_stale).toBe(true)
+  })
+
+  it('never calls the Base Tune stale, whatever its box said before it became the base', () => {
+    const was = correcting()
+    const result = buildRigTuneCorrectionInput({
+      ...was,
+      bands: [
+        { ...was.bands[0], is_base: true, shrouds: evenShrouds('70', '62', '60', '0') },
+        { ...was.bands[1], is_base: false, shrouds: evenShrouds('72', '64', '61', '1') },
+      ],
+    })
+
+    if (!result.ok) throw new Error(JSON.stringify(result.problems))
+    expect(result.input.bands[0]).toMatchObject({ is_base: true, gaps_stale: false })
+  })
+
+  it('refuses what a new Version refuses: the table rules bind both', () => {
+    const was = correcting()
+
+    // The reason stays required: the Version still exists for the reason it always did.
+    expect(buildRigTuneCorrectionInput({ ...was, change_reason: '  ' })).toEqual({
+      ok: false,
+      problems: [{ band_key: null, message: 'Say why this Version exists.' }],
+    })
+
+    expect(
+      buildRigTuneCorrectionInput({
+        ...was,
+        bands: [{ ...was.bands[0], high_kt: '8' }, was.bands[1]],
+      })
+    ).toEqual({ ok: false, problems: [{ band_key: null, message: 'No band covers 8 to 9 kt.' }] })
+  })
+})
+
 describe('draftFromVersion', () => {
   const recorded: RigTuneVersionRecord = {
     id: 'v2',
@@ -578,6 +681,19 @@ describe('draftFromVersion', () => {
     // And whether it was the Base Tune, which is what tells re-measuring the base — the
     // thing that makes the other bands' Gaps stale — from moving the flag elsewhere.
     expect(opened.bands[1].seed?.was_base).toBe(true)
+  })
+
+  it('opens a Version for correction with its own date and reason, and its stored flags', () => {
+    // A correction fixes this Version rather than describing a new one, so what it said about
+    // itself is the starting point, and normally left alone (ADR 0031).
+    const opened = draftFromVersion(recorded, 'correct')
+
+    expect(opened.effective_from).toBe('2026-08-01')
+    expect(opened.change_reason).toBe('Re-measured after the shrouds were reset.')
+    expect(opened.bands.map((b) => [b.key, b.gaps_stale])).toEqual([
+      ['band-light', true],
+      ['band-base', false],
+    ])
   })
 
   it('opens an unrecorded Rig Tune as one empty band, the Base Tune, from 0 kt', () => {
