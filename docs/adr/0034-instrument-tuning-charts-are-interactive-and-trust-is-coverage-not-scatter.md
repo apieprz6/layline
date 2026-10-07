@@ -16,12 +16,11 @@ population its blank-`STW` coverage stat is computed over). Builds on LAY-145's 
 (absence is a legitimate answer) and ADR 0030 (the print identifies the value, colour only finds it).
 
 The four variants this was decided against live on the throwaway branch
-`prototype/lay-149-diagnostic-charts` (`c4ebc82`), pushed but never merged. Variant **D** won, after two
+`prototype/lay-149-diagnostic-charts` (`d726674`), pushed but never merged. Variant **D** won, after two
 rounds of review with the owner. **Unlike LAY-147's prototype, this one ran on the real archive**: its
 `compute-charts.py` ports `compass_calibration.py` and `awa_offset.py` as LAY-145 specs them, plus ADR
-0027's regression, over the 2,707 Countable rows of 13 Races (reproduced as LAY-146 did). The script is
-published; its output `charts.json` is not, because it is derived from the owner's private archive and
-this repository is public. The 2026-07-04 `HDG` era boundary was taken from Handsome-Pete's
+0027's regression, over the 2,707 Countable rows of 13 Races (reproduced as LAY-146 did). Its output,
+`charts.json`, is committed on that branch by the owner's choice, so the branch builds as it stands. The 2026-07-04 `HDG` era boundary was taken from Handsome-Pete's
 `compass-calibrations.yaml`, standing in for the **Calibration Event** the owner has not yet entered
 (ADR 0032's correct failure: until it is entered, the screen has one Era).
 
