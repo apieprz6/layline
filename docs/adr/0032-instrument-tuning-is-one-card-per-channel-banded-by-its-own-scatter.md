@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted. **Renumbered from 0031 to 0032** by LAY-148, which found three ADRs claiming two numbers:
+Accepted, **with its verdict band superseded by ADR 0034** (LAY-149): on the real archive the race-to-race
+σ it divides by measured heading mix rather than noise, and trust is now stated as coverage. The rest of
+this ADR stands. **Renumbered from 0031 to 0032** by LAY-148, which found three ADRs claiming two numbers:
 LAY-151's rig-tune ADR had landed on `main` under 0031 as well, and it keeps that number because it
 is the one already cited from `types/index.ts`, the rig-tune components, the migrations README and
 ADR 0007. Nothing here changed but the number.
