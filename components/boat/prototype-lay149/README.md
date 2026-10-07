@@ -1,10 +1,10 @@
 # PROTOTYPE — LAY-149, the three charts behind Instrument Tuning
 
 **Throwaway. Do not build on this.** It lives on `prototype/lay-149-diagnostic-charts`, branched
-from LAY-147's prototype, and never lands on `main`. **The branch publishes code, never data:**
-`charts.json` holds per-row `STW`/`SOG` pairs and per-heading figures from the owner's private
-archive, so it is gitignored and never committed. Regenerate it before building with
-`python3 components/boat/prototype-lay149/compute-charts.py`, which reads `~/git/Handsome-Pete`.
+from LAY-147's prototype, and never lands on `main`. `charts.json` — per-row `STW`/`SOG` pairs and
+per-heading figures derived from the owner's archive — is committed, by the owner's choice, so the
+branch builds as it stands. Regenerate it with `python3 components/boat/prototype-lay149/compute-charts.py`,
+which reads `~/git/Handsome-Pete`.
 
 > Three variants of the sheet each Instrument Tuning card opens — `HDG` deviation curve, `AWA`
 > tack-pair split, `STW` speed check — plus each variant's per-Race tile, switchable via
