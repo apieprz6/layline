@@ -2585,6 +2585,17 @@ export interface AsymmetryFigure {
   wider_tack: Tack | null
   /** Twice the Asymmetry, which is the gap between the tacks themselves. */
   wider_by_deg: number
+  /**
+   * The angle each tack held, as a magnitude — what the **Tack Dial** draws a ray at.
+   *
+   * Both positive, unlike `TackSegment.held_angle_deg`'s signed convention, because the dial puts
+   * starboard right and port left and the side is the picture rather than the sign.
+   *
+   * `(starboard − port) / 2` is `asymmetry_deg`, by construction and at every level: the figure and
+   * the two angles behind it are one arithmetic, so a dial can never label its rays with a number
+   * that disagrees with where it drew them.
+   */
+  held_deg: { starboard: number; port: number }
   pair_count: number
   /** Why this is not a Measured Offset and names no channel to adjust. */
   caveat: string
@@ -2597,6 +2608,8 @@ export interface EraAsymmetryFigure extends AsymmetryFigure {
     race_id: string
     window_start: string
     asymmetry_deg: number
+    /** This Race's own two rays, so a Race picked on the dial is drawn from its own figure. */
+    held_deg: { starboard: number; port: number }
     pair_count: number
   }[]
 }
@@ -2640,6 +2653,29 @@ export interface EraAwaAsymmetry {
   /** The Races that produced none, with the reason. */
   excluded: Extract<RaceAwaAsymmetryResult, { ok: false }>[]
   caveat: string
+}
+
+/**
+ * How much a figure rests on — ADR 0034's replacement for ADR 0032's σ band.
+ *
+ * A statement about the evidence and never about the instrument: `SOLID` means a season covered the
+ * measurement, not that the channel is correctly set. No value here is a compliment.
+ */
+export type CoverageVerdict = 'SOLID' | 'THIN' | 'ANECDOTAL'
+
+/**
+ * The verdict with the reason that earned it, which travel together and are never separated.
+ *
+ * The word is always printed and never carried by colour alone (ADR 0030), and it is never printed
+ * alone either: a word with no reason beside it is a grade, and these are not grading the boat.
+ *
+ * Here rather than in `services/analysis/coverage-verdict.ts` because three charts, three cards and
+ * the Overall-tab teaser all name it.
+ */
+export interface CoverageStatement {
+  verdict: CoverageVerdict
+  /** A clause, lower-case and unpunctuated, that reads after the word: "24 of 36 headings …". */
+  reason: string
 }
 
 // ---------------------------------------------------------------------------
