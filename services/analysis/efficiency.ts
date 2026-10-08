@@ -29,11 +29,12 @@
  * season figure adds these races' sums, it does not average their ratios.
  */
 
-import { sameRowOrder, zone } from '@/services/analysis/maneuvers'
+import { zone } from '@/services/analysis/maneuvers'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
 import { vmgKnots } from '@/services/analysis/polar-targets'
+import { channelValue } from '@/services/analysis/readable-rows'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
-import type { AnalysisRow, EfficiencyAggregate, RowEfficiency } from '@/types'
+import type { EfficiencyAggregate, RowEfficiency } from '@/types'
 
 /**
  * What scoring reads of a row: the three channels, and ADR 0025's verdict.
@@ -41,6 +42,10 @@ import type { AnalysisRow, EfficiencyAggregate, RowEfficiency } from '@/types'
  * Written as its own interface for the reason `QualityAssessableRow` is — so this module cannot
  * quietly grow a dependency on a channel it has no rule about. Every value is text, exactly as the
  * file wrote it, and is read as a number only here.
+ *
+ * A `ReadableRow` satisfies this, which is how a caller gets one: `readableRows` already joins a
+ * Transcription to its Countable verdicts and already refuses to line two misaligned row lists up
+ * by index, so there is no second join here to disagree with it.
  */
 export interface ScorableRow {
   row_index: number
@@ -53,38 +58,6 @@ export interface ScorableRow {
   twa: string | null
   /** Not **Frozen**, not **Low-Speed**, not inside a **Maneuver Window** (ADR 0025). */
   countable: boolean
-}
-
-/**
- * A recording's channels joined to its **Countable** verdicts, row by row.
- *
- * Both lists must be the same rows in the same order, which throws rather than silently handing one
- * row's channels to its neighbour's verdict — the same guard `analysisRows` keeps for the same
- * reason.
- */
-export function scorableRows(
-  rows: readonly Pick<ScorableRow, 'row_index' | 'row_time' | 'sog' | 'tws' | 'twa'>[],
-  analysis: readonly AnalysisRow[]
-): ScorableRow[] {
-  if (!sameRowOrder(rows, analysis)) {
-    throw new Error('channels and Countable verdicts were computed over different rows')
-  }
-
-  return rows.map((row, index) => ({ ...row, countable: analysis[index].countable }))
-}
-
-/**
- * A recorded value as a number, or absent.
- *
- * Absent covers the instrument saying nothing and — which a Transcription the parser produced
- * cannot contain — a value that is not finite. `Number('')` is 0 and `Number(null)` is 0, and a
- * fabricated zero knot of boat speed would read as 0% of target rather than as no answer.
- */
-function recorded(value: string | null): number | null {
-  if (value === null) return null
-
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
 }
 
 /**
@@ -135,9 +108,9 @@ function distanceNm(knots: number, seconds: number): number {
  * answer was unflattering, and a **Filler-Anchored** target is not one of those cases.
  */
 export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): RowEfficiency {
-  const sog = recorded(row.sog)
-  const tws = recorded(row.tws)
-  const twa = recorded(row.twa)
+  const sog = channelValue(row.sog)
+  const tws = channelValue(row.tws)
+  const twa = channelValue(row.twa)
 
   const target_speed = twa !== null && tws !== null ? targets.targetSpeed(twa, tws) : null
   const vmg_zone = twa === null ? null : zone(twa)
@@ -204,7 +177,7 @@ export function aggregateEfficiency(
     }
 
     const scored = computeRowEfficiency(row, targets)
-    const sog = recorded(row.sog)
+    const sog = channelValue(row.sog)
 
     if (scored.target_speed === null || sog === null) {
       totals.rows_without_target += 1

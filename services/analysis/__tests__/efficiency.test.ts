@@ -3,13 +3,14 @@ import {
   aggregateEfficiency,
   computeRowEfficiency,
   rowIntervalSeconds,
-  scorableRows,
 } from '@/services/analysis/efficiency'
 import type { ScorableRow } from '@/services/analysis/efficiency'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
+import { readableRows } from '@/services/analysis/readable-rows'
+import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
 import { assessRowQuality } from '@/services/recordings/row-quality'
-import type { PolarPayload } from '@/types'
+import type { PolarPayload, Transcription } from '@/types'
 
 /**
  * Polar Efficiency and VMG Efficiency, per row and over a window.
@@ -338,37 +339,39 @@ describe('aggregateEfficiency', () => {
   })
 })
 
-describe('scorableRows', () => {
-  const recording = [
-    { row_index: 1, row_time: '2026-07-01 19:00:00', sog: '5.4', tws: '10', twa: '60' },
-    { row_index: 2, row_time: '2026-07-01 19:00:30', sog: '1.2', tws: '10', twa: '60' },
-  ]
-
-  /** Row Quality and Maneuvers over the same rows, which is the only order this is computed in. */
-  function verdicts(rows: typeof recording) {
-    const withChannels = rows.map((at) => ({
-      ...at,
-      latitude: '41.85',
-      longitude: '-87.55',
-      cog: '10',
-      stw: '5',
-      ctw: '12',
-    }))
-    const quality = assessRowQuality(withChannels)
-    return analysisRows(quality, detectManeuvers(withChannels, quality))
+describe('what a caller hands this module', () => {
+  /**
+   * `ScorableRow` is a narrow port — six fields of a row with twenty-one — so that this module
+   * cannot quietly grow a dependency on a channel it has no rule about. It is deliberately *not* a
+   * second shape to build: a `ReadableRow` satisfies it, and `readableRows` is the one join from a
+   * Transcription to its Countable verdicts, with the one refusal to line two misaligned row lists
+   * up by index. The join and that refusal are `readable-rows.test.ts`'s to pin; what is pinned
+   * here is that the two compose at all.
+   */
+  /** Two fixes half a minute apart on starboard, the second of them barely moving. */
+  function recording(): Transcription {
+    const header = 'Date;Longitude;Latitude;COG;SOG;TWS;TWA'
+    const lines = [
+      '07/01/2026 19:00:00;-87.61237000;41.88459000;210.0;5.4;10.0;60.0',
+      '07/01/2026 19:00:30;-87.61237100;41.88459100;211.0;1.2;10.0;60.0',
+    ]
+    const outcome = parseQtvlmRecording([header, ...lines, ''].join('\n'))
+    if (!outcome.ok) throw new Error(`expected a Transcription, got ${outcome.reason}`)
+    return outcome.transcription
   }
 
-  it('carries the Countable verdict onto the channels, row by row', () => {
-    const joined = scorableRows(recording, verdicts(recording))
+  it('takes a ReadableRow as a ScorableRow, with no second join in between', () => {
+    const { rows } = recording()
+    const quality = assessRowQuality(rows)
+    const joined: ScorableRow[] = readableRows(
+      rows,
+      analysisRows(quality, detectManeuvers(rows, quality))
+    )
 
     expect(joined[0].countable).toBe(true)
     // 1.2 knots is below the Low-Speed gate: the boat was not sailing.
     expect(joined[1].countable).toBe(false)
-  })
-
-  it('throws rather than hand one row’s channels to another row’s verdict', () => {
-    expect(() => scorableRows(recording.slice(0, 1), verdicts(recording))).toThrow(
-      /different rows/
-    )
+    // 5.4 knots against the 6-knot target at TWA 60 in 10, over the one measured interval.
+    expect(aggregateEfficiency(joined, targets).polar_efficiency).toBeCloseTo(0.9)
   })
 })

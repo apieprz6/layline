@@ -25,6 +25,27 @@ export function isCountable(row: Pick<AnalysisRow, 'quality' | 'maneuver_window'
   return !row.quality.frozen && !row.quality.low_speed && row.maneuver_window === null
 }
 
+/** The three reasons, in the order this module reads them. One row gets one of them. */
+export type NotCountableReason = 'frozen' | 'low_speed' | 'maneuver_window'
+
+/**
+ * Which of the three reasons excluded this row, or null where none did.
+ *
+ * Here beside `isCountable` rather than in each check that wants it, for the same reason the
+ * verdict itself is: a second copy of the order would be a second chance for two screens to
+ * disagree about why a row was left out. A row may hold more than one reason — 48 of the archive's
+ * are both Low-Speed and inside a Maneuver Window — and this answers with the first, which is also
+ * the order the two counts the archive publishes were measured in (845 Frozen, then 90 Low-Speed).
+ */
+export function notCountableReason(
+  row: Pick<AnalysisRow, 'quality' | 'maneuver_window'>
+): NotCountableReason | null {
+  if (row.quality.frozen) return 'frozen'
+  if (row.quality.low_speed) return 'low_speed'
+  if (row.maneuver_window !== null) return 'maneuver_window'
+  return null
+}
+
 /**
  * Row Quality and Maneuvers joined row by row, with the Countable verdict beside them.
  *
@@ -62,11 +83,14 @@ export function analysisRows(
  * The bounds question is `insideRaceWindow`'s, not this function's. That predicate exists because
  * several callers ask it, and a copy of `>=`/`<=` here would be one more chance to disagree about
  * the row on the gun.
+ *
+ * Generic in the row, so an `AnalysisRow` joined to anything — its channels, for the Instrument
+ * Tuning checks — comes back out with that still attached rather than narrowed away.
  */
-export function analysisRowsWithin(
-  rows: readonly AnalysisRow[],
+export function analysisRowsWithin<Row extends Pick<AnalysisRow, 'row_time'>>(
+  rows: readonly Row[],
   window: RaceWindow
-): AnalysisRow[] {
+): Row[] {
   const seconds = raceWindowSeconds(window)
 
   return rows.filter((row) => insideRaceWindow(wallClockSeconds(row.row_time), seconds))

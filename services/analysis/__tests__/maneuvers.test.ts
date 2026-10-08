@@ -6,10 +6,7 @@
  * rule that disagrees with a real file fails here.
  */
 
-import {
-  analysisRows,
-  isCountable,
-} from '@/services/analysis/countable'
+import { analysisRows, isCountable, notCountableReason } from '@/services/analysis/countable'
 import {
   MANEUVER_DETECTOR_VERSION,
   MANEUVER_WINDOW_AFTER,
@@ -272,6 +269,23 @@ describe('Countable', () => {
 
   it('does not turn on Not Water-Referenced, which says what the wind columns mean', () => {
     expect(isCountable(facts({ not_water_referenced: true }))).toBe(true)
+  })
+
+  it('names which of the three reasons excluded a row, and nothing for a row they did not', () => {
+    // Said once here rather than in each check that wants to count its exclusions, so two screens
+    // cannot disagree about why a row was left out.
+    expect(notCountableReason(facts())).toBeNull()
+    expect(notCountableReason(facts({ frozen: true }))).toBe('frozen')
+    expect(notCountableReason(facts({ low_speed: true }))).toBe('low_speed')
+    expect(notCountableReason(facts({}, 'gybe'))).toBe('maneuver_window')
+  })
+
+  it('names the first reason where a row holds two, which Frozen always is', () => {
+    // 48 rows of the archive are both Low-Speed and inside a Maneuver Window, and both facts
+    // survive on the row (ADR 0025) — this answers with one of them because a count has to put
+    // each row in one bucket, and says which.
+    expect(notCountableReason(facts({ frozen: true, low_speed: true }, 'tack'))).toBe('frozen')
+    expect(notCountableReason(facts({ low_speed: true }, 'tack'))).toBe('low_speed')
   })
 })
 

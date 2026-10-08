@@ -33,13 +33,10 @@ import {
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import type { ScorableRow } from '@/services/analysis/efficiency'
-import {
-  aggregateEfficiency,
-  computeRowEfficiency,
-  scorableRows,
-} from '@/services/analysis/efficiency'
+import { aggregateEfficiency, computeRowEfficiency } from '@/services/analysis/efficiency'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
+import { readableRows } from '@/services/analysis/readable-rows'
 import {
   classifyPolarCells,
   isAnchorable,
@@ -215,11 +212,10 @@ describeSeason('a season of races, scored against those two artifacts', () => {
     const rows = transcribe(filename).transcription.rows
     const quality = assessRowQuality(rows)
     const assessed = analysisRows(quality, detectManeuvers(rows, quality))
-    const inside = new Set(
-      analysisRowsWithin(assessed, raceWindowFor(filename)).map((at) => at.row_index)
-    )
 
-    return scorableRows(rows, assessed).filter((at) => inside.has(at.row_index))
+    // Joined before the window and clipped after it, which is the order every one of these
+    // figures is computed in: a tack just before the gun still marks the rows it recovers into.
+    return analysisRowsWithin(readableRows(rows, assessed), raceWindowFor(filename))
   }
 
   const season = once(() =>
