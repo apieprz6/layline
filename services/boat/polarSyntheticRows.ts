@@ -39,9 +39,17 @@
  * A ramp needs two rows to be a ramp. The lowest row is only filler if the row above it doubles
  * it, which is what keeps an ORC certificate's own close-hauled row — a real 3.96 knots at
  * TWA 52 — from being read as a seed.
+ *
+ * ## Two grains, two jobs
+ *
+ * All of the above answers per *row*, which is the grain the display rule needs: its job is hiding
+ * rows wholesale. Scoring a row the boat actually sailed needs the same signatures asked per
+ * *cell* (`classifyPolarCells`, ADR 0036), because a certificate's ramp clears at a different
+ * angle in every wind-speed column. The two live together because both describe what the file
+ * contains and nothing else; composing either with a recorded row is `services/analysis/`'s job.
  */
 
-import type { PolarPayload, PolarRowOrigin, PolarSuppression } from '@/types'
+import type { PolarCellOrigin, PolarPayload, PolarRowOrigin, PolarSuppression } from '@/types'
 
 /**
  * A tenth of a knot. Generous against the rounding a sixfold multiple of a two-decimal base
@@ -94,6 +102,83 @@ export function classifyPolarRows(payload: PolarPayload): PolarRowOrigin[] {
   }
 
   return origins
+}
+
+/**
+ * The same question one grain finer: where did each *cell* come from?
+ *
+ * `classifyPolarRows` answers for a row because its caller hides rows, and that is the wrong grain
+ * for scoring a row the boat actually sailed (ADR 0036). Measured on this boat's certificate, the
+ * ramp clears at a different angle in every wind-speed column — real from TWA 40 above 10 knots,
+ * from 45 in 6–8, and only from 52 in 4 — so `polarSuppression`'s single 52° floor discards six
+ * measured cells at TWA 40 and eight at 45, including the boat's best upwind angle in every
+ * condition it can sail in. Nothing here changes that floor: the table's job is hiding rows, and
+ * for that job one verdict per row is correct.
+ *
+ * Three differences from the row-level walk, each for a reason:
+ *
+ *   - **The ramp is walked per column, not per row.** Still contiguously up from the base row,
+ *     because filler is a floor and not a scatter — which is also what keeps the library fixture's
+ *     row 50, real data whose lightest cell happens to land on the ramp, from being condemned by
+ *     a coincidence the walk never reaches.
+ *   - **There is no `partial-ramp-filler`.** It was the row-level name for "this row's columns
+ *     disagree", and at cell grain the disagreement *is* the answer.
+ *   - **A zero is its own answer.** `no-data` is per-cell here rather than only describing a row
+ *     of zeroes: a cell holding 0 is the file saying nothing at that angle and wind speed, and
+ *     interpolating through it would invent a target far below anything the boat was measured at.
+ *
+ * `interpolated` stays a row-level verdict, read straight off `classifyPolarRows`. Its signature —
+ * the exact mean of the rows either side — is only evidence of a generator when it holds in every
+ * column at once; asked of one cell it would condemn any smooth stretch of a real polar. Nothing
+ * is lost by that, because an interpolated cell anchors a Target Speed exactly as a measured one
+ * does (ADR 0028, ADR 0036) and the label is all that would change.
+ *
+ * One row per TWA, one entry per TWS, in the payload's own order.
+ */
+export function classifyPolarCells(payload: PolarPayload): PolarCellOrigin[][] {
+  const rows = payload.boat_speed
+  const rowOrigins = classifyPolarRows(payload)
+
+  const cells: PolarCellOrigin[][] = rows.map((row, index) =>
+    row.map((speed) => {
+      if (speed === 0) return 'no-data'
+      return rowOrigins[index] === 'interpolated' ? 'interpolated' : 'measured'
+    })
+  )
+
+  // The lowest row the file says anything in, which is the ramp's seed where there is a ramp.
+  const base = rows.findIndex((row) => row.some((speed) => speed !== 0))
+  if (base === -1) return cells
+
+  /** Whether this cell is its own multiple of the base cell below it, by position. */
+  const onRamp = (index: number, column: number): boolean => {
+    const seed = rows[base][column]
+    // A column the base row left empty generates no ramp, so no cell above it is on one.
+    if (seed === 0) return false
+
+    const speed = rows[index]?.[column]
+    if (speed === undefined) return false
+
+    return Math.abs(speed - seed * (index - base + 1)) <= RAMP_TOLERANCE
+  }
+
+  for (let column = 0; column < rows[base].length; column += 1) {
+    // A ramp needs two cells to be a ramp, for the reason the row-level walk needs two rows: an
+    // ORC certificate's own close-hauled speed must not be read as a seed for lack of a second
+    // point on the line.
+    if (!onRamp(base + 1, column)) continue
+
+    for (let index = base; index < rows.length && onRamp(index, column); index += 1) {
+      if (cells[index][column] !== 'no-data') cells[index][column] = 'ramp-filler'
+    }
+  }
+
+  return cells
+}
+
+/** Whether a cell may anchor a **Target Speed**: the file measured it, or a generator smoothed it. */
+export function isAnchorable(origin: PolarCellOrigin): boolean {
+  return origin === 'measured' || origin === 'interpolated'
 }
 
 export function polarSuppression(payload: PolarPayload): PolarSuppression {

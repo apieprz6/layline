@@ -1,0 +1,222 @@
+/**
+ * **Polar Efficiency** and **VMG Efficiency**: one row, and a race or a season of them.
+ *
+ * ADR 0026's `computeRowEfficiency` seam, filled in. The numerator is `SOG` and not `STW` (ADR
+ * 0027): the Polar is a through-water target, so the paddlewheel is the dimensionally correct
+ * choice, but its calibration varies between sessions — measured on this boat, `STW` runs a couple
+ * of percent under `SOG` around 4–5 knots and roughly ten by 9–10 — while Lake Michigan's current
+ * at this venue is negligible, so `SOG`'s one theoretical weakness barely applies and `STW`'s
+ * practical one does.
+ *
+ * ## Why a race figure is a ratio of sums and never a mean of percentages
+ *
+ * The obvious aggregate — average every row's percent of target — is wrong twice over here, and
+ * ADR 0036 rules it out.
+ *
+ * A **Filler-Anchored** row's target can read far too low, because the cell it came from is a
+ * certificate ramping up from zero rather than a measurement. That drives an individual percentage
+ * arbitrarily high, and a mean of percentages lets a handful of such rows dominate a figure nobody
+ * can see the rows behind. Summing distances instead puts each row in proportion to how far the
+ * boat actually went in it.
+ *
+ * And the rows are not evenly spaced. qtVlm logs on events, not on a clock: one archive recording's
+ * median in-window cadence is 75 seconds, and the largest gap in the archive is hours wide. A flat
+ * per-row mean silently weights a 10-second row the same as a 10-minute one, so each row is
+ * weighted by its own measured interval — the same rule `services/recordings/provenance.ts`
+ * follows, and never an assumed cadence.
+ *
+ * The sums travel beside the ratio, because sums survive re-aggregation and averages do not: a
+ * season figure adds these races' sums, it does not average their ratios.
+ */
+
+import { sameRowOrder } from '@/services/analysis/maneuvers'
+import type { PolarTargets } from '@/services/analysis/polar-targets'
+import { vmgLegOf } from '@/services/analysis/polar-targets'
+import { wallClockSeconds } from '@/services/recordings/wall-clock'
+import type { AnalysisRow, EfficiencyAggregate, RowEfficiency } from '@/types'
+
+/**
+ * What scoring reads of a row: the three channels, and ADR 0025's verdict.
+ *
+ * Written as its own interface for the reason `QualityAssessableRow` is — so this module cannot
+ * quietly grow a dependency on a channel it has no rule about. Every value is text, exactly as the
+ * file wrote it, and is read as a number only here.
+ */
+export interface ScorableRow {
+  row_index: number
+  row_time: string
+  /** Knots over the ground. The efficiency numerator (ADR 0027). */
+  sog: string | null
+  /** Knots of true wind speed, which is one of the Polar's two axes. */
+  tws: string | null
+  /** Signed, −180..180, positive = starboard (ADR 0008). */
+  twa: string | null
+  /** Not **Frozen**, not **Low-Speed**, not inside a **Maneuver Window** (ADR 0025). */
+  countable: boolean
+}
+
+/**
+ * A recording's channels joined to its **Countable** verdicts, row by row.
+ *
+ * Both lists must be the same rows in the same order, which throws rather than silently handing one
+ * row's channels to its neighbour's verdict — the same guard `analysisRows` keeps for the same
+ * reason.
+ */
+export function scorableRows(
+  rows: readonly Pick<ScorableRow, 'row_index' | 'row_time' | 'sog' | 'tws' | 'twa'>[],
+  analysis: readonly AnalysisRow[]
+): ScorableRow[] {
+  if (!sameRowOrder(rows, analysis)) {
+    throw new Error('channels and Countable verdicts were computed over different rows')
+  }
+
+  return rows.map((row, index) => ({ ...row, countable: analysis[index].countable }))
+}
+
+/**
+ * A recorded value as a number, or absent.
+ *
+ * Absent covers the instrument saying nothing and — which a Transcription the parser produced
+ * cannot contain — a value that is not finite. `Number('')` is 0 and `Number(null)` is 0, and a
+ * fabricated zero knot of boat speed would read as 0% of target rather than as no answer.
+ */
+function recorded(value: string | null): number | null {
+  if (value === null) return null
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * How long each row lasted, in seconds, measured and never assumed.
+ *
+ * A row is a sample at an instant, and what it describes is the boat from that instant until the
+ * next sample contradicts it — so a row's interval is the gap to the row after it, which is the
+ * step `describeRecording` already measures. Two rows get no interval and both are right to:
+ *
+ *   - **The last row in hand.** There is no following sample, so no span was measured. Standing in
+ *     the median cadence would be inventing one, and a single row out of thousands is a cheaper
+ *     loss than a figure built on an assumed clock.
+ *   - **A row the naive wall clock stepped backwards across.** The hour a fall-back repeats is
+ *     recorded twice and never converted away to hide it, so one step a season is −3,600 seconds.
+ *     That is not a duration; a negative weight would subtract a real row's distance from the race.
+ *
+ * Measured over *every* row given, which must be every row in the window and not only the Countable
+ * ones: an excluded row's own interval then falls out of the sums entirely, rather than being
+ * credited to whichever neighbour happens to be Countable.
+ */
+export function rowIntervalSeconds(rows: readonly Pick<ScorableRow, 'row_time'>[]): number[] {
+  const seconds = rows.map((row) => wallClockSeconds(row.row_time))
+
+  return rows.map((_, index) => {
+    if (index + 1 >= rows.length) return 0
+
+    const step = seconds[index + 1] - seconds[index]
+    return step >= 0 ? step : 0
+  })
+}
+
+/** Distance covered at a speed over an interval. Knots are nautical miles per hour. */
+function distanceNm(knots: number, seconds: number): number {
+  return (knots * seconds) / 3600
+}
+
+/**
+ * One row scored against a Polar.
+ *
+ * Says nothing about whether the row is **Countable** — that is the caller's gate and this is the
+ * measurement. A null figure means the row or the Polar could not answer; it never means the
+ * answer was unflattering, and a **Filler-Anchored** target is not one of those cases.
+ */
+export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): RowEfficiency {
+  const sog = recorded(row.sog)
+  const tws = recorded(row.tws)
+  const twa = recorded(row.twa)
+
+  const target_speed = twa !== null && tws !== null ? targets.targetSpeed(twa, tws) : null
+  const vmg_leg = twa === null ? null : vmgLegOf(twa)
+  const target_vmg = vmg_leg !== null && tws !== null ? targets.targetVmg(vmg_leg, tws) : null
+
+  // `|cos|`, because downwind VMG is progress to leeward: the sign would only restate the leg.
+  const vmg = sog !== null && twa !== null ? sog * Math.abs(Math.cos((twa * Math.PI) / 180)) : null
+
+  return {
+    row_index: row.row_index,
+    target_speed,
+    polar_efficiency:
+      sog !== null && target_speed !== null && target_speed.knots > 0
+        ? sog / target_speed.knots
+        : null,
+    vmg_leg,
+    vmg,
+    target_vmg,
+    vmg_efficiency:
+      vmg !== null && target_vmg !== null && target_vmg.knots > 0 ? vmg / target_vmg.knots : null,
+  }
+}
+
+/**
+ * A race's or a season's figure: total distance over total target-implied distance.
+ *
+ * Hand this **every** row in the window, Countable or not, with its verdict on it — the intervals
+ * are measured over all of them and summed over the Countable ones, which is what keeps an excluded
+ * row's time out of the figure instead of in a neighbour's weight.
+ *
+ * For a season, sum these aggregates' own sums rather than calling this across races: the rows of
+ * two races are not one sequence, and differencing across the seam would weight the last row of one
+ * race by the gap to the first row of the next.
+ */
+export function aggregateEfficiency(
+  rows: readonly ScorableRow[],
+  targets: PolarTargets
+): EfficiencyAggregate {
+  const intervals = rowIntervalSeconds(rows)
+
+  const totals = {
+    rows: 0,
+    filler_anchored_rows: 0,
+    elapsed_seconds: 0,
+    actual_distance_nm: 0,
+    target_distance_nm: 0,
+    actual_vmg_distance_nm: 0,
+    target_vmg_distance_nm: 0,
+    rows_without_target: 0,
+  }
+
+  rows.forEach((row, index) => {
+    const seconds = intervals[index]
+    if (!row.countable || seconds === 0) return
+
+    const scored = computeRowEfficiency(row, targets)
+    const sog = recorded(row.sog)
+
+    if (scored.target_speed === null || sog === null) {
+      totals.rows_without_target += 1
+      return
+    }
+
+    totals.rows += 1
+    totals.elapsed_seconds += seconds
+    totals.actual_distance_nm += distanceNm(sog, seconds)
+    totals.target_distance_nm += distanceNm(scored.target_speed.knots, seconds)
+    if (scored.target_speed.filler_anchored) totals.filler_anchored_rows += 1
+
+    // The VMG sums take their own subset of the rows. A row with a Target Speed and no Target VMG
+    // is rare — the TWS axis answers both — but counting it in one sum and not the other would
+    // silently divide distances the boat covered by targets for a different set of rows.
+    if (scored.vmg !== null && scored.target_vmg !== null) {
+      totals.actual_vmg_distance_nm += distanceNm(scored.vmg, seconds)
+      totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.knots, seconds)
+    }
+  })
+
+  return {
+    ...totals,
+    polar_efficiency:
+      totals.target_distance_nm > 0 ? totals.actual_distance_nm / totals.target_distance_nm : null,
+    vmg_efficiency:
+      totals.target_vmg_distance_nm > 0
+        ? totals.actual_vmg_distance_nm / totals.target_vmg_distance_nm
+        : null,
+  }
+}

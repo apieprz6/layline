@@ -44,6 +44,12 @@ going past 40 and 45 on that basis. The row-level rule is correct for the table,
 rows wholesale, and wrong for scoring, which discards six real cells at TWA 40 and seven at TWA 45 for
 no reason the file supports.
 
+> **Correction, LAY-154.** At TWA 45 it is **eight**, not seven — which is what the table directly
+> above already says: one ramp cell in the lightest column and the remaining eight real. Six at TWA
+> 40 is right. Measured off the certificate by the implementation and pinned in
+> `services/analysis/__tests__/archive-targets.test.ts`; nothing else in this ADR turns on the
+> count.
+
 A second question rode along with the first. Beat angle moves with wind speed — 47° to 40° across this
 boat's own TWS axis, per the interpolated VMG curve — and every one of those angles sits at or below
 52°, so the current floor was suppressing the boat's best upwind angle in every condition it can sail

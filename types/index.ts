@@ -452,6 +452,27 @@ export type PolarRowOrigin =
   | 'measured'
 
 /**
+ * Where one *cell* of a Polar grid came from, read off the grid itself.
+ *
+ * The same signatures `PolarRowOrigin` reports, at the grain scoring needs (ADR 0036). A row is
+ * the right grain for hiding rows wholesale and the wrong grain for scoring one: on this boat's
+ * certificate the filler ramp clears at TWA 40 above 10 knots, at 45 in 6–8, and only at 52 in
+ * 4 — so a single row-level verdict either keeps filler or discards measurements.
+ *
+ * `partial-ramp-filler` has no per-cell spelling: a cell is on the ramp or it is not, and
+ * "partial" was only ever a statement about the columns of a row disagreeing.
+ */
+export type PolarCellOrigin =
+  /** Zero. The file's own statement that it has nothing at this angle and wind speed. */
+  | 'no-data'
+  /** This cell is its own multiple of the base row's, so it is on the file's ramp. */
+  | 'ramp-filler'
+  /** Its row is the exact mean of the rows either side, in every column. */
+  | 'interpolated'
+  /** Nothing about it says generated, so it is read as the boat's own speed. */
+  | 'measured'
+
+/**
  * Which angles a Polar grid may be displayed at, and why the rest are not.
  *
  * The suppression is a display rule and never a storage rule: the payload keeps every row the
@@ -1533,6 +1554,121 @@ export interface AnalysisRow {
    * that is not Countable never enters a performance number; it may still be drawn.
    */
   countable: boolean
+}
+
+/**
+ * A **Target Speed**: what the **Polar** says the boat could do at one angle and wind speed.
+ *
+ * Carries its own trust rather than being withheld for want of it (ADR 0036). A row the boat
+ * actually sailed is real however weak the grid cell it is compared against, so the doubt belongs
+ * on the number and never in place of it — the whole of what `filler_anchored` is for.
+ */
+export interface TargetSpeed {
+  /** Knots, bilinearly interpolated between the Polar's own axis values. */
+  knots: number
+  /**
+   * At least one cell the interpolation read is the Polar's own manufactured filler rather than a
+   * measurement — **Filler-Anchored**. One fabricated corner flags the whole bracket: a bracket
+   * with three real corners is not a safer unflagged one.
+   */
+  filler_anchored: boolean
+}
+
+/**
+ * A **Target VMG**: an *estimate* of the best VMG the Polar can produce on one leg at one wind
+ * speed.
+ *
+ * Never the certificate's own published optimum, and the gap is not confined to the edges of the
+ * measured region: a rectangular TWA × TWS grid cannot hold an optimum that moves with wind speed,
+ * and this boat's own figures put several wind speeds' true peak closer to a neighbouring angle
+ * than the certificate's stated precision can distinguish (ADR 0036). So the caveat is standing,
+ * and the angle the search landed on is deliberately not part of this shape: Layline states no
+ * point beat or gybe angle, from any Polar, under any construction.
+ */
+export interface TargetVmg {
+  /** Knots of VMG, as a magnitude — speed to windward upwind, to leeward downwind. */
+  knots: number
+  /** At least one cell the search read or interpolated through is filler. */
+  filler_anchored: boolean
+}
+
+/** Which half of the Polar a VMG target is searched over. The boundary is `ZONE_BOUNDARY_DEG`. */
+export type VmgLeg = 'upwind' | 'downwind'
+
+/**
+ * What a **Crossover Chart** recommends at one angle and wind speed, and which cell said so.
+ *
+ * The axis values are reported because the lookup floors rather than interpolating (ADR 0028): a
+ * boat at 24.6 knots is reading the 24-knot column, and a screen that cannot say so cannot explain
+ * why two rows a knot apart got the same answer.
+ */
+export interface SailRecommendation {
+  /** The **Sail Definition** number the cell holds. */
+  sail_number: number
+  /** That Definition's own label — the chart's words, which are the only words a sail has. */
+  label: string
+  /** The chart's own TWA the floor landed on. */
+  chart_twa: number
+  /** The chart's own TWS the floor landed on. */
+  chart_tws: number
+}
+
+/**
+ * One row scored against the **Polar**: ADR 0026's efficiency seam, filled in.
+ *
+ * Every figure may be null, and null always means the same thing — the row or the Polar could not
+ * answer, never that the answer was unflattering. A **Filler-Anchored** target is *not* one of
+ * those cases: it is computed, shown, and flagged.
+ */
+export interface RowEfficiency {
+  row_index: number
+  /** Null where the row's own angle or wind speed falls outside the Polar's axes. */
+  target_speed: TargetSpeed | null
+  /** **SOG** over **Target Speed** (ADR 0027). Null without a target or without an `SOG`. */
+  polar_efficiency: number | null
+  /** Which half of the Polar this row's VMG target was searched over. Null without a `TWA`. */
+  vmg_leg: VmgLeg | null
+  /** `SOG` × |cos(TWA)|: progress toward the mark the leg is on. Always derived. */
+  vmg: number | null
+  /** Null outside the Polar's TWS axis, or where its real cells cannot answer on this leg. */
+  target_vmg: TargetVmg | null
+  /** **VMG** over **Target VMG**. Carries `TARGET_VMG_CAVEAT` wherever it is shown. */
+  vmg_efficiency: number | null
+}
+
+/**
+ * A **Polar Efficiency** and **VMG Efficiency** figure for a race or a season: a ratio of sums,
+ * never a mean of per-row percentages (ADR 0036).
+ *
+ * A Filler-Anchored row's target can read far too low and drive its own percentage arbitrarily
+ * high, and averaging percentages lets a handful of those dominate a number nobody can see the
+ * rows behind. Summing distances instead weights each row by how long it actually lasted, which is
+ * also the only honest weighting for an event-triggered logger.
+ *
+ * The sums travel alongside the ratio because sums survive re-aggregation and averages do not: a
+ * season figure is these rows' sums added to another race's, never these ratios averaged.
+ */
+export interface EfficiencyAggregate {
+  /** **Countable** rows that carried both a measured interval and a target. */
+  rows: number
+  /** How many of those carried a **Filler-Anchored** target. Stated, never used to exclude. */
+  filler_anchored_rows: number
+  /** Measured seconds behind the figure — summed row intervals, never a cadence × row count. */
+  elapsed_seconds: number
+  /** Σ `SOG` × interval, in nautical miles. */
+  actual_distance_nm: number
+  /** Σ **Target Speed** × interval, in nautical miles. */
+  target_distance_nm: number
+  /** The two above divided. Null where no row could be summed. */
+  polar_efficiency: number | null
+  /** Σ **VMG** × interval, over the rows that had a VMG target. */
+  actual_vmg_distance_nm: number
+  /** Σ **Target VMG** × interval, over those same rows. */
+  target_vmg_distance_nm: number
+  /** Those two divided. Null where no row could be summed. Carries `TARGET_VMG_CAVEAT`. */
+  vmg_efficiency: number | null
+  /** Countable rows with an interval but no **Target Speed** — out of the Polar's axes. */
+  rows_without_target: number
 }
 
 // ---------------------------------------------------------------------------
