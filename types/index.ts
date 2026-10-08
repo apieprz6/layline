@@ -1568,6 +1568,261 @@ export interface AnalysisRow {
   countable: boolean
 }
 
+/**
+ * A row with both of its halves: the Countable verdict, and the channels the verdict is about.
+ *
+ * Every Instrument Tuning check needs a figure and permission to use it at once, and neither half
+ * is derivable from the other. Joined by `services/analysis/readable-rows.ts`, which is also where
+ * the refusal to line two misaligned row lists up by index lives.
+ *
+ * Readable, not a reading: a reading is one channel and this is a whole **Recording Row**.
+ */
+export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
+
+// ---------------------------------------------------------------------------
+// What the archive says is still off: the Instrument Tuning checks
+// ---------------------------------------------------------------------------
+// Three things these shapes are careful about, all of them from ADR 0032/0034/0035 and
+// `docs/research/compass-calibration-and-awa-offset-port.md`.
+//
+// First, no figure is ever `NaN` and no absence is ever a zero. Every aggregate is `number | null`,
+// null meaning "nothing to average", and a Race that could not be measured leaves a refusal with
+// its reason rather than a point at the origin.
+//
+// Second, every figure carries its own caveat as data. A Measured Offset read through a proxy and
+// an Asymmetry whose causes cannot be separated are both honest only with a sentence attached, and
+// a sentence the renderer had to remember to add is one a second renderer will forget.
+//
+// Third, the two checks' outputs are deliberately not symmetrical. `HDG`'s is a curve with a scalar
+// beside it; the Asymmetry is two populations that lean opposite ways and has no scalar spanning
+// them. There is no type here for an upwind-and-downwind average, because there is no such figure.
+
+/** Which side the wind is on. Non-negative folds to starboard, as everywhere else in Layline. */
+export type Tack = 'starboard' | 'port'
+
+/**
+ * The two points of sail a **Tack Pair** may be at.
+ *
+ * Reaching is read and then discarded — between 50° and 110° inclusive, a held apparent wind angle
+ * says too little about where the wind is for the two tacks to be compared — so it is not a value
+ * any paired figure can take.
+ */
+export type PairedPointOfSail = 'upwind' | 'downwind'
+
+/**
+ * One **Calibration Era**: a stretch of one channel's life over which a figure means one thing.
+ *
+ * Bounded by what somebody recorded and never by a step in the data. `from_date` is null for the
+ * stretch before the first recorded act, `until_date` for the Era still running.
+ */
+export interface CalibrationEra {
+  /** Stable across renders, so a chart can key its series on an Era. */
+  key: string
+  channel: CalibrationChannel
+  /** Inclusive. Null means "everything before the first recorded act on this channel". */
+  from_date: string | null
+  /** Exclusive. Null means "still running". */
+  until_date: string | null
+  /** The Calibration Log entries on `from_date` that opened it. Empty on the first Era. */
+  opened_by: CalibrationLogEntry[]
+}
+
+/**
+ * One 10° heading bin of one Race's deviation curve.
+ *
+ * `row_count` is every row that fell in the bin, including the ones under the gate, so a chart can
+ * tell a heading nobody sailed from one sailed too little to average (ADR 0034). `mean_error_deg`
+ * is null in both of those cases, and the count is what says which.
+ */
+export interface HeadingBin {
+  bin_start_deg: number
+  bin_center_deg: number
+  row_count: number
+  mean_error_deg: number | null
+}
+
+/**
+ * One Race's **Measured Offset** for `HDG`, via `COG`.
+ *
+ * Also the per-Race summary tile, and the per-Race point every Era aggregate averages — one figure,
+ * computed once. `mean_offset_deg` is weighted over rows, so a heading the Race spent longer on
+ * weighs more in it; the Era's own means state their weighting separately.
+ */
+export interface RaceHeadingOffset {
+  race_id: string
+  window_start: string
+  mean_offset_deg: number
+  /** Null for a Race with one readable row, which `MIN_VALID_ROWS` already excludes. */
+  std_dev_deg: number | null
+  max_abs_error_deg: number
+  row_count: number
+  /** Bins with a mean of their own, out of 36. */
+  headings_covered: number
+  /** The same figure as a share of the rose, 0..1 — 14% to 56% across this archive's Races. */
+  heading_coverage: number
+  /** All 36, in heading order. */
+  bins: HeadingBin[]
+  /** `CTW = HDG + leeway`, said in full. Travels with the figure, never left to a renderer. */
+  caveat: string
+}
+
+/** A Race measured, or a Race excluded with the count that excluded it. */
+export type RaceHeadingOffsetResult =
+  | { ok: true; race_id: string; window_start: string; offset: RaceHeadingOffset }
+  | {
+      ok: false
+      race_id: string
+      window_start: string
+      reason: 'too-few-rows'
+      row_count: number
+    }
+
+/** One bin of an Era's curve: the mean of the Races' own means there, and those means. */
+export interface EraHeadingBin {
+  bin_start_deg: number
+  bin_center_deg: number
+  /** Null where no Race had a figure at this heading. Never a zero standing in for one. */
+  mean_error_deg: number | null
+  race_count: number
+  race_means: { race_id: string; mean_error_deg: number }[]
+}
+
+/**
+ * One **Calibration Era**'s `HDG` Measured Offset: the curve, the swing, and both means of it.
+ *
+ * The swing is the card's headline — a single bin's figure, and so the one number here with no
+ * weighting to disclose. The two means are the same figure read two ways, named rather than one of
+ * them printed as "the" mean: every heading equal, or every Race equal.
+ */
+export interface EraHeadingOffset {
+  era: CalibrationEra
+  /** All 36, in heading order. */
+  bins: EraHeadingBin[]
+  /** Null where the Era produced no bin with a figure. */
+  swing: {
+    highest: EraHeadingBin & { mean_error_deg: number }
+    lowest: EraHeadingBin & { mean_error_deg: number }
+    swing_deg: number
+  } | null
+  /** Every heading weighted equally. */
+  mean_of_bins_deg: number | null
+  /** Every Race weighted equally, each Race's own figure being row-weighted. */
+  mean_of_races_deg: number | null
+  race_count: number
+  headings_covered: number
+  /** A bin resting on one Race is that Race's heading mix; this is ADR 0034's coverage input. */
+  headings_on_two_or_more_races: number
+  /** 36, carried so a share can be read off this shape without importing the constant. */
+  heading_bin_count: number
+  /** The Races that produced a figure, oldest first. */
+  races: RaceHeadingOffset[]
+  /** The Races that produced none, with the reason — not points at zero. */
+  excluded: Extract<RaceHeadingOffsetResult, { ok: false }>[]
+  caveat: string
+}
+
+/** A steady stretch on one tack at one point of sail: half of a **Tack Pair**. */
+export interface TackSegment {
+  tack: Tack
+  point_of_sail: PairedPointOfSail
+  start_time: string
+  end_time: string
+  /** Every row it was measured over, in order — what a tapped pair lists (ADR 0034). */
+  row_indexes: number[]
+  /** The mean signed apparent wind angle it held: positive starboard, negative port. */
+  held_angle_deg: number
+}
+
+/**
+ * A **Tack Pair**: a steady starboard segment and a steady port segment at the same point of sail,
+ * no more than five minutes apart.
+ *
+ * The unit an **Apparent Wind Asymmetry** is measured in. `asymmetry_deg` is half the difference
+ * between the two held angles, positive where starboard reads the wider angle.
+ */
+export interface TackPair {
+  point_of_sail: PairedPointOfSail
+  /** The earlier segment's start, which is when the pair happened. */
+  at: string
+  /** Between the first segment's last row and the second's first. */
+  gap_seconds: number
+  starboard: TackSegment
+  port: TackSegment
+  asymmetry_deg: number
+}
+
+/**
+ * One point of sail's **Apparent Wind Asymmetry**.
+ *
+ * Never a **Measured Offset**, and there is deliberately no shape here for an upwind-and-downwind
+ * average: on this archive the two lean opposite ways, so their mean states the opposite of the
+ * finding (ADR 0035).
+ */
+export interface AsymmetryFigure {
+  point_of_sail: PairedPointOfSail
+  /** Half the difference between the tacks' held angles. Positive: starboard reads wider. */
+  asymmetry_deg: number
+  /** Null only where the two tacks read identically. */
+  wider_tack: Tack | null
+  /** Twice the Asymmetry, which is the gap between the tacks themselves. */
+  wider_by_deg: number
+  pair_count: number
+  /** Why this is not a Measured Offset and names no channel to adjust. */
+  caveat: string
+}
+
+/** An Era's figure for one point of sail: the mean of each Race's own, with those kept beside it. */
+export interface EraAsymmetryFigure extends AsymmetryFigure {
+  race_count: number
+  race_figures: {
+    race_id: string
+    window_start: string
+    asymmetry_deg: number
+    pair_count: number
+  }[]
+}
+
+/**
+ * One Race's Apparent Wind Asymmetry, upwind and downwind.
+ *
+ * Either side is null where that Race paired no tacks at it — one point of sail measured is a real
+ * finding, and the other's absence is not a zero.
+ */
+export interface RaceAwaAsymmetry {
+  race_id: string
+  window_start: string
+  upwind: AsymmetryFigure | null
+  downwind: AsymmetryFigure | null
+  /** Every pair found, in time order — what the Tack Dial draws a dot per (ADR 0034). */
+  pairs: TackPair[]
+  caveat: string
+}
+
+/** A Race measured, or a Race excluded with the count that excluded it. */
+export type RaceAwaAsymmetryResult =
+  | { ok: true; race_id: string; window_start: string; asymmetry: RaceAwaAsymmetry }
+  | { ok: false; race_id: string; window_start: string; reason: 'too-few-rows'; row_count: number }
+  | {
+      ok: false
+      race_id: string
+      window_start: string
+      reason: 'too-few-segments' | 'no-pairs'
+      segment_count: number
+    }
+
+/** One **Calibration Era**'s Apparent Wind Asymmetry, the two points of sail kept apart. */
+export interface EraAwaAsymmetry {
+  era: CalibrationEra
+  upwind: EraAsymmetryFigure | null
+  downwind: EraAsymmetryFigure | null
+  race_count: number
+  /** The Races that produced a figure, oldest first. */
+  races: RaceAwaAsymmetry[]
+  /** The Races that produced none, with the reason. */
+  excluded: Extract<RaceAwaAsymmetryResult, { ok: false }>[]
+  caveat: string
+}
+
 // ---------------------------------------------------------------------------
 // Uploading a race, and what a race states afterwards
 // ---------------------------------------------------------------------------
