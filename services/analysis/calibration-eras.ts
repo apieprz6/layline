@@ -13,6 +13,7 @@
  * `compass-calibrations.yaml`, and with it the failure mode where somebody forgets to edit it.
  */
 
+import { eraKey } from '@/lib/boat/calibrationLog'
 import type { CalibrationChannel, CalibrationEra, CalibrationLogEntry } from '@/types'
 
 /** Whether a Log entry is an act on this channel, and so a boundary for it. */
@@ -53,7 +54,7 @@ export function calibrationEras(
   const boundaries = [...new Set(onChannel.map((entry) => dayOf(entry.date)))].sort()
 
   return [null, ...boundaries].map((from_date, index) => ({
-    key: `${channel}:${from_date ?? 'opening'}`,
+    key: eraKey(channel, from_date),
     channel,
     from_date,
     until_date: boundaries[index] ?? null,

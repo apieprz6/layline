@@ -343,7 +343,13 @@ describe('the Era aggregate', () => {
     const eras = paddlewheelDivergence([honest, high], buildCalibrationLog([], [autocompensation]))
 
     expect(eras).toHaveLength(1)
-    expect(eras[0].era).toEqual({ channel: 'STW', from: null, until: null, opened_by: [] })
+    expect(eras[0].era).toEqual({
+      key: 'STW:opening',
+      channel: 'STW',
+      from_date: null,
+      until_date: null,
+      opened_by: [],
+    })
   })
 
   it('splits the season at an `STW` act, and never at a step in the data', () => {

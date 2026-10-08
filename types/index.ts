@@ -1139,39 +1139,6 @@ export type CalibrationLogEntry =
     }
 
 /**
- * One **Calibration Era** of one **Calibration Channel**: the stretch over which a
- * **Measured Offset** for that channel means one thing.
- *
- * Bounded by the **Calibration Log**'s own entries for the channel and by nothing else —
- * never by a step in the data, because a boundary Layline invented would be Layline
- * asserting that a person did something to the boat (ADR 0027). Derived per channel, so
- * the `HDG` Eras and the `STW` Eras need not line up.
- *
- * Here rather than in one check's own module because every Instrument Tuning check reads
- * the same shape, and the projection that produces it belongs to the Log.
- */
-export interface CalibrationEra {
-  channel: CalibrationChannel
-  /**
-   * Calendar date the Era opens on, inclusive. Null for the stretch before the first
-   * entry touching this channel — the boat was set to *something* then, and nobody wrote
-   * down what, which is a different Era and not an absent one.
-   */
-  from: string | null
-  /** The date the next Era opens on, exclusive. Null for the Era still running. */
-  until: string | null
-  /**
-   * Every Log entry on the boundary date that touched this channel, so a chart can mark
-   * the act and name it. Empty for the opening Era.
-   *
-   * A list because two acts on one day are one boundary — a Version minted the same day
-   * an Event was performed is the ordinary case (`buildCalibrationLog` orders them), and
-   * naming only one of them would describe half of what happened.
-   */
-  opened_by: CalibrationLogEntry[]
-}
-
-/**
  * One qtVlm VDR export, as recorded. Every field but `date_order` is a fact about the
  * file, written once and never updated.
  */
@@ -1780,20 +1747,43 @@ export type Tack = 'starboard' | 'port'
 export type PairedPointOfSail = 'upwind' | 'downwind'
 
 /**
- * One **Calibration Era**: a stretch of one channel's life over which a figure means one thing.
+ * One **Calibration Era** of one **Calibration Channel**: a stretch of that channel's life over
+ * which a **Measured Offset** or an **Apparent Wind Asymmetry** means one thing.
  *
- * Bounded by what somebody recorded and never by a step in the data. `from_date` is null for the
- * stretch before the first recorded act, `until_date` for the Era still running.
+ * Bounded by the **Calibration Log**'s own entries for the channel and by nothing else — never by
+ * a step in the data, because a boundary Layline invented would be Layline asserting that a person
+ * did something to the boat (ADR 0027). Derived per channel, so the `HDG` Eras and the `STW` Eras
+ * need not line up.
+ *
+ * Here rather than in one check's own module because every Instrument Tuning check reads the same
+ * shape, and the projection that produces it belongs to the Log.
+ *
+ * LAY-156 and LAY-157 each declared this interface, on branches neither of which could see the
+ * other; they auto-merged into two declarations of one name, which TypeScript merges into a shape
+ * requiring both sets of fields and which therefore no producer satisfied. This is the survivor —
+ * the superset, since `key` is in it — and the two producers now agree on it. That there are still
+ * *two* producers is the part this did not fix: see LAY-163.
  */
 export interface CalibrationEra {
   /** Stable across renders, so a chart can key its series on an Era. */
   key: string
   channel: CalibrationChannel
-  /** Inclusive. Null means "everything before the first recorded act on this channel". */
+  /**
+   * Calendar date the Era opens on, inclusive. Null for the stretch before the first entry
+   * touching this channel — the boat was set to *something* then, and nobody wrote down what,
+   * which is a different Era and not an absent one.
+   */
   from_date: string | null
-  /** Exclusive. Null means "still running". */
+  /** The date the next Era opens on, exclusive. Null for the Era still running. */
   until_date: string | null
-  /** The Calibration Log entries on `from_date` that opened it. Empty on the first Era. */
+  /**
+   * Every Log entry on the boundary date that touched this channel, so a chart can mark the act
+   * and name it. Empty for the opening Era.
+   *
+   * A list because two acts on one day are one boundary — a Version minted the same day an Event
+   * was performed is the ordinary case (`buildCalibrationLog` orders them), and naming only one of
+   * them would describe half of what happened.
+   */
   opened_by: CalibrationLogEntry[]
 }
 
