@@ -15,8 +15,9 @@ that should not move.
 Applies ADR 0025's **Countable** rule to a map, fills in the render side of the exception ADR 0025
 already wrote for this screen, and takes ADR 0028's Target Speed lookup as given. Discharges the
 obligation ADR 0014 placed on "any map view in Layline" to mark **Dropouts**, and finds that ringing
-frozen points is not enough on its own. Raises LAY-150, which reopens *for the scoring path only*
-how the Polar's trustworthy floor is determined.
+frozen points is not enough on its own. Raised LAY-150, which reopened *for the scoring path only*
+how the Polar's trustworthy floor is determined — resolved by ADR 0036, which this ADR's sub-floor
+render state is amended to match.
 
 Decided against three variants on a throwaway branch, `prototype/lay-148-heatmap`, driven by two real
 recordings and the boat's real ORC certificate. That branch is the artifact and is not merged.
@@ -102,9 +103,13 @@ ramp.
 
 - **Low-Speed or inside a Maneuver Window** — a continuous hairline in `--text-muted`, under the
   coloured track. Geometry, no claim.
-- **Below the Polar's own measured floor** — the same hairline, **dotted**. A distinct state, which
-  is the ticket's third question answered: an extreme colour at the end of the scale would say the
-  boat was 480% of target when what is true is that we have nothing to compare it with.
+- **Below the Polar's own measured floor** — *amended by ADR 0036.* Originally decided as the same
+  hairline, dotted: an extreme colour at the end of the scale would say the boat was 480% of target
+  when what is true is that we have nothing to compare it with. ADR 0036 found trust is per-cell, not
+  per-row, and that a sailed row should never read as "no data" at all — so a **Filler-Anchored** row
+  is now coloured by its computed percent like any other, carrying a distinct marker rather than going
+  uncoloured. The ticket's underlying worry — an extreme colour claiming certainty the data does not
+  have — is addressed by the marker, not by withholding the colour.
 - **Frozen** — ringed in `--wind-storm`, and the track is drawn **broken into and out of the run**,
   exactly as ADR 0014 requires and `TrackMap` already does.
 - **No computable target** (in range, but the Polar cannot answer) — the plain hairline. ADR 0028
@@ -161,17 +166,18 @@ what was just seen rather than a preamble to it.
 
 ### The Polar's floor is read off the Polar, never written down
 
-The dotted state's threshold comes from `polarSuppression()` on the Race's own bound **Polar
-Version** — 52° for this boat — and the legend names the number it actually used. `~45°` is a fact
-about two example files, not a constant, and a screen that hardcodes it mislabels rows.
+As first shipped, the dotted state's threshold came from `polarSuppression()` on the Race's own bound
+**Polar Version** — 52° for this boat, with the legend naming the number it actually used — rather than
+a hardcoded `~45°`, which is a fact about two example files, not a constant. The threshold-detection
+principle stands; the dotted state it fed does not, per the amendment below.
 
-**It is also not the right shape**, which the prototype found by measuring: that floor is one scalar
-per file, and the filler ramp in this certificate stops at a different row in every wind-speed
-column (real from 40° above 10 kt, from 45° at 6–8 kt, only from 52° at 4 kt). The current floor
-therefore suppresses the boat's best upwind angle in every condition it can sail in. **LAY-150**
-carries that; this ADR deliberately ships the scalar floor and the distinct dotted state, because the
-*rendering* ruling does not depend on where the floor lands, only on the floor being detected rather
-than declared. Whatever LAY-150 settles changes how many rows are dotted, not what dotted means.
+**It was also not the right shape**, which the prototype found by measuring: that floor was one
+scalar per file, and the filler ramp in this certificate stops at a different row in every wind-speed
+column (real from 40° above 10 kt, from 45° at 6–8 kt, only from 52° at 4 kt). The scalar floor
+therefore suppressed the boat's best upwind angle in every condition it can sail in. **Resolved by
+LAY-150 (ADR 0036)**: trust is per-cell, and a Filler-Anchored row is coloured and flagged rather than
+left dotted and uncoloured — so the dotted sub-floor state this ADR shipped no longer exists as its own
+render state. See ADR 0036 for the per-cell rule and the Filler-Anchored marker that replaces it.
 
 ## Consequences
 
@@ -180,9 +186,9 @@ than declared. Whatever LAY-150 settles changes how many rows are dotted, not wh
   specifies. LAY-143 flagged this as likely a different access pattern; it is. The map wants ~1,700
   rows of one race, not a bucketed aggregate over thirteen.
 - **The excluded reason must survive to the renderer as a discriminated state**, not as a boolean or
-  a null percentage. Four states draw differently (hairline, dotted hairline, ring, bridge) and
-  collapsing them back into "not Countable" would re-lose the distinction ADR 0009 was written to
-  protect.
+  a null percentage. Three states draw differently (hairline, ring, bridge), and a **Filler-Anchored**
+  row carries a fourth, non-excluded marker on top of its own colour (ADR 0036) — collapsing any of
+  these back into "not Countable" would re-lose the distinction ADR 0009 was written to protect.
 - **Seven new design tokens**, with declared night-vision mappings, for the diverging ramp. They are
   a `%`-of-target ramp and must not be reused for anything else, exactly as this ADR refuses to reuse
   the wind bands.

@@ -96,6 +96,14 @@ calibration story, and both are worth being able to find.
 This is ADR 0012's stance applied to a grid: the absence of a target is a legitimate answer with a
 reason, not a hole to fill.
 
+**Amended by ADR 0036 for state 4's "below the Polar's first measured angle" half.** Trust turned out
+to be per-cell, not bounded by one scalar angle — this certificate's filler ramp clears at a different
+TWA in every wind-speed column, not uniformly at 45°. Most of the 74-cell region resolves to **state 2**
+instead: a shown percent, flagged **Filler-Anchored**. State 4's `–` survives only for a cell truly past
+either axis's defined range (this chart's 25/30 kt columns, which the Polar's certificate structurally
+cannot reach past 24 kt) — the one case ADR 0028 still calls missing. State 3 is untouched; it was
+never about the Polar's filler.
+
 ### Disagreement is four verdicts and a reserved fifth, never a "wrong" mark
 
 Per cell, over its Countable rows: **Agrees** (`=`), **Differs** (`≠`), **Mixed** (`±`, and 38 cells
