@@ -1118,6 +1118,39 @@ export type CalibrationLogEntry =
     }
 
 /**
+ * One **Calibration Era** of one **Calibration Channel**: the stretch over which a
+ * **Measured Offset** for that channel means one thing.
+ *
+ * Bounded by the **Calibration Log**'s own entries for the channel and by nothing else —
+ * never by a step in the data, because a boundary Layline invented would be Layline
+ * asserting that a person did something to the boat (ADR 0027). Derived per channel, so
+ * the `HDG` Eras and the `STW` Eras need not line up.
+ *
+ * Here rather than in one check's own module because every Instrument Tuning check reads
+ * the same shape, and the projection that produces it belongs to the Log.
+ */
+export interface CalibrationEra {
+  channel: CalibrationChannel
+  /**
+   * Calendar date the Era opens on, inclusive. Null for the stretch before the first
+   * entry touching this channel — the boat was set to *something* then, and nobody wrote
+   * down what, which is a different Era and not an absent one.
+   */
+  from: string | null
+  /** The date the next Era opens on, exclusive. Null for the Era still running. */
+  until: string | null
+  /**
+   * Every Log entry on the boundary date that touched this channel, so a chart can mark
+   * the act and name it. Empty for the opening Era.
+   *
+   * A list because two acts on one day are one boundary — a Version minted the same day
+   * an Event was performed is the ordinary case (`buildCalibrationLog` orders them), and
+   * naming only one of them would describe half of what happened.
+   */
+  opened_by: CalibrationLogEntry[]
+}
+
+/**
  * One qtVlm VDR export, as recorded. Every field but `date_order` is a fact about the
  * file, written once and never updated.
  */
