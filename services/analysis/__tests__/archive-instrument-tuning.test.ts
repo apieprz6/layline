@@ -20,10 +20,10 @@
  * Two of its figures come out differently, both for reasons worth stating rather than chasing:
  *
  * - **The `+3.3°` era mean.** This implementation reads `+3.63°` averaging every heading equally
- *   and `+3.09°` averaging every Race equally (σ 2.6 over those seven Race means, which is the
- *   other half of the ADR's retired band, reproduced). ADR 0035 is the reason the discrepancy does
- *   not matter: the card now leads with the swing, and the mean is a secondary line that has to
- *   state its own weighting — which is exactly the ambiguity a single `+3.3°` was hiding.
+ *   and `+3.09°` averaging every Race equally. The other half of that retired band is reproduced:
+ *   its σ 2.6 is the population spread over those same seven Race means. ADR 0035 is the reason the
+ *   `+3.3°` itself does not matter: the card now leads with the swing, and the mean is a secondary
+ *   line that has to state its own weighting — exactly the ambiguity a single `+3.3°` was hiding.
  * - **The Asymmetry moving `−3.8° → −5.5°` across the autocompensation.** The `−5.5` is reproduced
  *   to the decimal; the `−3.8` is reproducible only by averaging upwind and downwind together,
  *   which is the one figure this service refuses to compute. Pinned below as what the prior art's
@@ -43,7 +43,8 @@ import { calibrationEras } from '@/services/analysis/calibration-eras'
 import { headingOffsetByEra, raceHeadingOffset } from '@/services/analysis/compass-deviation'
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
-import { SOG_MIN_KNOTS, analysisReadings, channelValue } from '@/services/analysis/readings'
+import { SOG_MIN_KNOTS, channelValue, readableRows } from '@/services/analysis/readable-rows'
+import { sampleStdDev } from '@/services/analysis/statistics'
 import {
   archiveFilenames,
   describeArchive,
@@ -52,7 +53,7 @@ import {
 } from '@/services/recordings/__tests__/archive'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import type {
-  AnalysisReading,
+  ReadableRow,
   CalibrationEra,
   CalibrationEvent,
   EraAwaAsymmetry,
@@ -65,7 +66,7 @@ import type {
 interface ArchiveRace {
   race_id: string
   window_start: string
-  rows: AnalysisReading[]
+  rows: ReadableRow[]
 }
 
 function races(): ArchiveRace[] {
@@ -73,7 +74,7 @@ function races(): ArchiveRace[] {
     const rows = transcribe(filename).transcription.rows
     const quality = assessRowQuality(rows)
     const window = raceWindowFor(filename)
-    const readings = analysisReadings(rows, analysisRows(quality, detectManeuvers(rows, quality)))
+    const readings = readableRows(rows, analysisRows(quality, detectManeuvers(rows, quality)))
 
     return {
       race_id: filename.replace(/\.csv$/, ''),
@@ -213,6 +214,38 @@ describeArchive('the archive, read as the Measured Offset for HDG', () => {
     expect(stJoe?.row_count).toBe(634)
     expect(stJoe?.mean_offset_deg).toBeCloseTo(8.08, 2)
     expect(since.mean_of_races_deg).toBeCloseTo(3.09, 2)
+  })
+
+  it('reads 2,514 rows, not one of which is Not Water-Referenced', () => {
+    // Why this check does not gate on Not Water-Referenced where the Asymmetry check does: the
+    // question is moot on this archive, because every row with a quiet paddlewheel is already
+    // Frozen or Low-Speed and so not Countable (`archive-maneuvers.test.ts` pins that). Measured
+    // rather than argued, so that a future recording where the log fails on a moving boat shows up
+    // here as a changed count rather than as a silently different population.
+    const readable = races().flatMap((race) =>
+      race.rows.filter((row) => {
+        const sog = channelValue(row.sog)
+        if (!row.countable || sog === null || sog < SOG_MIN_KNOTS) return false
+        return channelValue(row.ctw) !== null && channelValue(row.cog) !== null
+      })
+    )
+
+    expect(readable).toHaveLength(2514)
+    expect(readable.filter((row) => row.quality.not_water_referenced)).toHaveLength(0)
+  })
+
+  it('and the scatter the retired σ band divided by is mostly heading mix', () => {
+    const [, since] = headingEras()
+    const means = since.races.map((race) => race.mean_offset_deg)
+
+    // ADR 0032's band read `+3.3° / 2.6°` and ADR 0034 retired it, on the grounds that this spread
+    // is a fact about which courses each Race sailed rather than about how well each figure was
+    // measured. The σ is reproduced here as the population figure the prototype took (2.55); over
+    // seven Race means the sample σ this repo's `statistics.ts` would give is 2.76. Nothing on
+    // either returned shape carries it — it is pinned here because its retirement is the reason
+    // the card leads with the swing.
+    expect(means).toHaveLength(7)
+    expect(sampleStdDev(means)).toBeCloseTo(2.76, 2)
   })
 
   it('carries the caveat on every figure it returns', () => {

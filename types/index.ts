@@ -1539,10 +1539,12 @@ export interface AnalysisRow {
  * A row with both of its halves: the Countable verdict, and the channels the verdict is about.
  *
  * Every Instrument Tuning check needs a figure and permission to use it at once, and neither half
- * is derivable from the other. Joined by `services/analysis/readings.ts`, which is also where the
- * refusal to line two misaligned row lists up by index lives.
+ * is derivable from the other. Joined by `services/analysis/readable-rows.ts`, which is also where
+ * the refusal to line two misaligned row lists up by index lives.
+ *
+ * Readable, not a reading: a reading is one channel and this is a whole **Recording Row**.
  */
-export interface AnalysisReading extends AnalysisRow, TranscriptionChannels {}
+export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
 
 // ---------------------------------------------------------------------------
 // What the archive says is still off: the Instrument Tuning checks

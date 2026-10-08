@@ -18,8 +18,8 @@
  */
 
 import { normalizeAngle } from '@/services/analysis/angles'
-import { byEra, calendarDate } from '@/services/analysis/calibration-eras'
-import { aboveSpeedGate, channelValue } from '@/services/analysis/readings'
+import { byEra, dayOf } from '@/services/analysis/calibration-eras'
+import { aboveSpeedGate, channelValue } from '@/services/analysis/readable-rows'
 import { meanOf, meanOfSome, sampleStdDev } from '@/services/analysis/statistics'
 import type {
   CalibrationEra,
@@ -67,7 +67,7 @@ export const HEADING_OFFSET_CAVEAT =
   '`CTW = HDG + leeway`. Leeway is ≈0 on this boat only because it is computed from heel and ' +
   'there is no heel sensor, so this reads as the compass alone only while that stays true.'
 
-/** The fields this check reads. An `AnalysisReading` satisfies it. */
+/** The fields this check reads. An `ReadableRow` satisfies it. */
 export interface HeadingReadableRow {
   row_index: number
   /** Not **Frozen**, not **Low-Speed**, not in a **Maneuver Window** (ADR 0025). */
@@ -88,6 +88,12 @@ export interface HeadingReadableRace {
   rows: readonly HeadingReadableRow[]
 }
 
+/** Every bin's own start, which is the one list a Race's curve and an Era's are both laid over. */
+const BIN_STARTS_DEG: number[] = Array.from(
+  { length: HEADING_BIN_COUNT },
+  (_, index) => index * BIN_SIZE_DEG
+)
+
 /** An Era bin that has a figure, which is what a swing and a mean are taken over. */
 type MeasuredEraBin = EraHeadingBin & { mean_error_deg: number }
 
@@ -101,9 +107,18 @@ interface HeadingError {
 /**
  * The rows the check may read, with each one's error.
  *
- * Four gates, not one. **Countable** is the archive-wide rule (ADR 0025); `SOG_MIN_KNOTS` is this
- * analysis's own stricter speed gate; and `CTW` and `COG` must both be present, the first of which
- * Row Quality's Not Water-Referenced already implies and the second of which nothing else covers.
+ * Three gates. **Countable** is the archive-wide rule (ADR 0025); `SOG_MIN_KNOTS` is this analysis's
+ * own stricter speed gate; and `CTW` and `COG` must both be present, which nothing else covers —
+ * Row Quality's Dropout detector reads `COG`, but a null `COG` on a live feed is a case of its own.
+ *
+ * **Not Water-Referenced is deliberately not a gate here**, where the sibling Asymmetry check makes
+ * it one. The research spec translated the prior art's `STATUS` column into it for both checks, and
+ * ADR 0025 has since settled the rule: it says what the *wind* columns mean, and this check reads no
+ * wind column — only `CTW`, whose own presence is tested above, against a GPS course. The Asymmetry
+ * check excludes it because its one input is computed from `STW`, so a blank `STW` makes that figure
+ * fabricated; nothing of the sort is true of a heading. Measured on the archive, the two readings
+ * are the same rows anyway: none of the 2,514 rows this check reads is Not Water-Referenced, pinned
+ * in `__tests__/archive-instrument-tuning.test.ts`.
  */
 function headingErrors(rows: readonly HeadingReadableRow[]): HeadingError[] {
   const errors: HeadingError[] = []
@@ -137,8 +152,7 @@ function headingErrors(rows: readonly HeadingReadableRow[]): HeadingError[] {
  * (ADR 0034), and it cannot do that from a list that simply omits both.
  */
 function headingBins(errors: readonly HeadingError[]): HeadingBin[] {
-  return Array.from({ length: HEADING_BIN_COUNT }, (_, index) => {
-    const bin_start_deg = index * BIN_SIZE_DEG
+  return BIN_STARTS_DEG.map((bin_start_deg) => {
     const inBin = errors.filter(
       (error) =>
         error.heading_deg >= bin_start_deg && error.heading_deg < bin_start_deg + BIN_SIZE_DEG
@@ -184,7 +198,9 @@ export function raceHeadingOffset(race: HeadingReadableRace): RaceHeadingOffsetR
       // states its own weighting separately, and both are the same figure read two ways.
       mean_offset_deg: meanOfSome(degrees),
       std_dev_deg: sampleStdDev(degrees),
-      max_abs_error_deg: Math.max(...degrees.map(Math.abs)),
+      // Folded rather than spread: `Math.max(...rows)` is one argument per row, and a long enough
+      // race would overflow the call stack instead of returning a figure.
+      max_abs_error_deg: degrees.reduce((worst, error) => Math.max(worst, Math.abs(error)), 0),
       row_count: errors.length,
       headings_covered: covered.length,
       heading_coverage: covered.length / HEADING_BIN_COUNT,
@@ -195,15 +211,15 @@ export function raceHeadingOffset(race: HeadingReadableRace): RaceHeadingOffsetR
 }
 
 /** A bin's mean across the Races that had one, with each Race's own mean kept beside it. */
-function eraHeadingBin(bin: HeadingBin, races: readonly RaceHeadingOffset[]): EraHeadingBin {
+function eraHeadingBin(bin_start_deg: number, races: readonly RaceHeadingOffset[]): EraHeadingBin {
   const race_means = races.flatMap((race) => {
-    const mean = race.bins[bin.bin_start_deg / BIN_SIZE_DEG].mean_error_deg
+    const mean = race.bins[bin_start_deg / BIN_SIZE_DEG].mean_error_deg
     return mean === null ? [] : [{ race_id: race.race_id, mean_error_deg: mean }]
   })
 
   return {
-    bin_start_deg: bin.bin_start_deg,
-    bin_center_deg: bin.bin_center_deg,
+    bin_start_deg,
+    bin_center_deg: bin_start_deg + BIN_SIZE_DEG / 2,
     mean_error_deg: meanOf(race_means.map((race) => race.mean_error_deg)),
     race_count: race_means.length,
     race_means,
@@ -231,7 +247,7 @@ export function eraHeadingOffset(
   const races = inOrder.flatMap((result) => (result.ok ? [result.offset] : []))
   const excluded = inOrder.flatMap((result) => (result.ok ? [] : [result]))
 
-  const bins = headingBins([]).map((bin) => eraHeadingBin(bin, races))
+  const bins = BIN_STARTS_DEG.map((bin_start_deg) => eraHeadingBin(bin_start_deg, races))
   const measured = bins.filter((bin): bin is MeasuredEraBin => bin.mean_error_deg !== null)
 
   const highest = measured.reduce<MeasuredEraBin | null>(
@@ -279,7 +295,7 @@ export function headingOffsetByEra(
   eras: readonly CalibrationEra[],
   results: readonly RaceHeadingOffsetResult[]
 ): EraHeadingOffset[] {
-  return byEra(eras, results, (result) => calendarDate(result.window_start)).map(({ era, items }) =>
+  return byEra(eras, results, (result) => dayOf(result.window_start)).map(({ era, items }) =>
     eraHeadingOffset(era, items)
   )
 }

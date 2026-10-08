@@ -22,8 +22,14 @@ function touches(entry: CalibrationLogEntry, channel: CalibrationChannel): boole
     : entry.changes.some((change) => change.channel === channel)
 }
 
-/** The calendar date out of a naive stamp, which is the grain every Log entry is dated at. */
-export function calendarDate(stamp: string): string {
+/**
+ * The day out of a naive stamp, which is the grain every Log entry is dated at.
+ *
+ * Named for the day rather than for the calendar date, so it does not read as a second home for
+ * `lib/utils/calendarDate.ts`'s concept — that module validates and formats one, this one slices a
+ * day off a stamp the parser has already validated.
+ */
+export function dayOf(stamp: string): string {
   return stamp.slice(0, 10)
 }
 
@@ -44,20 +50,20 @@ export function calibrationEras(
   channel: CalibrationChannel
 ): CalibrationEra[] {
   const onChannel = log.filter((entry) => touches(entry, channel))
-  const boundaries = [...new Set(onChannel.map((entry) => calendarDate(entry.date)))].sort()
+  const boundaries = [...new Set(onChannel.map((entry) => dayOf(entry.date)))].sort()
 
   return [null, ...boundaries].map((from_date, index) => ({
     key: `${channel}:${from_date ?? 'opening'}`,
     channel,
     from_date,
     until_date: boundaries[index] ?? null,
-    opened_by: onChannel.filter((entry) => calendarDate(entry.date) === from_date),
+    opened_by: onChannel.filter((entry) => dayOf(entry.date) === from_date),
   }))
 }
 
 /** The Era a date falls in, or null where the Eras given do not cover it. */
 export function eraOf(eras: readonly CalibrationEra[], date: string): CalibrationEra | null {
-  const day = calendarDate(date)
+  const day = dayOf(date)
 
   return (
     eras.find(
@@ -81,10 +87,16 @@ export function byEra<Item>(
   items: readonly Item[],
   dateOf: (item: Item) => string
 ): { era: CalibrationEra; items: Item[] }[] {
-  return eras
-    .map((era) => ({
-      era,
-      items: items.filter((item) => eraOf(eras, dateOf(item))?.key === era.key),
-    }))
-    .filter(({ items }) => items.length > 0)
+  const grouped = new Map<string, Item[]>()
+
+  for (const item of items) {
+    const era = eraOf(eras, dateOf(item))
+    if (era === null) continue
+    grouped.set(era.key, [...(grouped.get(era.key) ?? []), item])
+  }
+
+  return eras.flatMap((era) => {
+    const its = grouped.get(era.key)
+    return its === undefined ? [] : [{ era, items: its }]
+  })
 }

@@ -39,7 +39,7 @@ export function meanOfSome(values: readonly number[]): number {
 export function sampleStdDev(values: readonly number[]): number | null {
   if (values.length < 2) return null
 
-  const mean = values.reduce((total, value) => total + value, 0) / values.length
+  const mean = meanOfSome(values)
   const squares = values.reduce((total, value) => total + (value - mean) ** 2, 0)
 
   return Math.sqrt(squares / (values.length - 1))

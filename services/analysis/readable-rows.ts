@@ -8,10 +8,14 @@
  *
  * Nothing here interprets a channel. Reading `CTW` as a heading or `AWA (calc)` as a wind angle is
  * the checks' own work, and so is the caveat each one has to carry.
+ *
+ * **Readable** names what is in hand to read, never permission to count it: `countable` rides along
+ * untouched, and a check that ignored it would be reading rows ADR 0025 excludes. Not a *reading*
+ * either — CONTEXT.md reserves that word for one channel, and this is a whole **Recording Row**.
  */
 
 import { sameRowOrder } from '@/services/analysis/maneuvers'
-import type { AnalysisReading, AnalysisRow, TranscriptionRow } from '@/types'
+import type { AnalysisRow, ReadableRow, TranscriptionRow } from '@/types'
 
 /**
  * The `SOG` an Instrument Tuning check reads a row above, in knots.
@@ -43,7 +47,7 @@ export function channelValue(text: string | null): number | null {
 }
 
 /** Whether the boat was moving fast enough for this row to feed an instrument estimate. */
-export function aboveSpeedGate(row: Pick<AnalysisReading, 'sog'>): boolean {
+export function aboveSpeedGate(row: Pick<ReadableRow, 'sog'>): boolean {
   const sog = channelValue(row.sog)
   return sog !== null && sog >= SOG_MIN_KNOTS
 }
@@ -56,10 +60,10 @@ export function aboveSpeedGate(row: Pick<AnalysisReading, 'sog'>): boolean {
  * result of this just as happily as it narrows an `AnalysisRow[]`. A misaligned join would hand one
  * row's heading to its neighbour's verdict, so it throws rather than lines them up by index.
  */
-export function analysisReadings(
+export function readableRows(
   rows: readonly TranscriptionRow[],
   analysis: readonly AnalysisRow[]
-): AnalysisReading[] {
+): ReadableRow[] {
   if (!sameRowOrder(rows, analysis)) {
     throw new Error('the Transcription and its Countable verdicts are not the same rows')
   }

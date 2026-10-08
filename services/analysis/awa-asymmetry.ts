@@ -21,8 +21,8 @@
  */
 
 import { awaToSigned } from '@/services/analysis/angles'
-import { byEra, calendarDate } from '@/services/analysis/calibration-eras'
-import { aboveSpeedGate, channelValue } from '@/services/analysis/readings'
+import { byEra, dayOf } from '@/services/analysis/calibration-eras'
+import { aboveSpeedGate, channelValue } from '@/services/analysis/readable-rows'
 import { meanOfSome } from '@/services/analysis/statistics'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
@@ -65,7 +65,7 @@ export const ASYMMETRY_CAVEAT =
   'may be the vane, `HDG` deviation, or qtVlm’s leeway/true-wind model; this column cannot ' +
   'separate the three, which is why it is not a Measured Offset and names no channel to adjust.'
 
-/** The fields this check reads. An `AnalysisReading` satisfies it. */
+/** The fields this check reads. An `ReadableRow` satisfies it. */
 export interface AsymmetryReadableRow {
   row_index: number
   row_time: string
@@ -155,7 +155,11 @@ function classify(rows: readonly AsymmetryReadableRow[]): ClassifiedRow[] {
  * Reaching runs are found and discarded, so that a beat interrupted by a reach is two segments.
  */
 export function findTackSegments(rows: readonly AsymmetryReadableRow[]): TackSegment[] {
-  const classified = classify(rows)
+  return segmentsOf(classify(rows))
+}
+
+/** The same search, over rows already classified — so a caller holding them classifies once. */
+function segmentsOf(classified: readonly ClassifiedRow[]): TackSegment[] {
   const segments: TackSegment[] = []
 
   const sameRun = (a: ClassifiedRow, b: ClassifiedRow): boolean =>
@@ -283,7 +287,7 @@ export function raceAwaAsymmetry(race: AsymmetryReadableRace): RaceAwaAsymmetryR
     return { ok: false, race_id, window_start, reason: 'too-few-rows', row_count: readable.length }
   }
 
-  const segments = findTackSegments(race.rows)
+  const segments = segmentsOf(readable)
   if (segments.length < 2) {
     return {
       ok: false,
@@ -393,7 +397,7 @@ export function awaAsymmetryByEra(
   eras: readonly CalibrationEra[],
   results: readonly RaceAwaAsymmetryResult[]
 ): EraAwaAsymmetry[] {
-  return byEra(eras, results, (result) => calendarDate(result.window_start)).map(({ era, items }) =>
+  return byEra(eras, results, (result) => dayOf(result.window_start)).map(({ era, items }) =>
     eraAwaAsymmetry(era, items)
   )
 }

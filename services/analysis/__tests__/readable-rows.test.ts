@@ -6,9 +6,9 @@ import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import {
   SOG_MIN_KNOTS,
   aboveSpeedGate,
-  analysisReadings,
+  readableRows,
   channelValue,
-} from '@/services/analysis/readings'
+} from '@/services/analysis/readable-rows'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
 import { LOW_SPEED_SOG_KNOTS, assessRowQuality } from '@/services/recordings/row-quality'
@@ -39,7 +39,7 @@ function recording(): Transcription {
 function readings() {
   const { rows } = recording()
   const quality = assessRowQuality(rows)
-  return analysisReadings(rows, analysisRows(quality, detectManeuvers(rows, quality)))
+  return readableRows(rows, analysisRows(quality, detectManeuvers(rows, quality)))
 }
 
 describe('joining a row’s channels to its Countable verdict', () => {
@@ -62,7 +62,7 @@ describe('joining a row’s channels to its Countable verdict', () => {
 
     // A misaligned join would hand one row's heading to its neighbour's verdict, which is a wrong
     // figure rather than a missing one.
-    expect(() => analysisReadings(rows.slice(1), verdicts)).toThrow(/not the same rows/)
+    expect(() => readableRows(rows.slice(1), verdicts)).toThrow(/not the same rows/)
   })
 
   it('survives being clipped to a Race Window with its channels attached', () => {
