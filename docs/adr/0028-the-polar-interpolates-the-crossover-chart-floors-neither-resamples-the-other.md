@@ -73,14 +73,14 @@ Two ways a query can fall outside a grid's covered domain, and both get the same
   value. This boat's chart reaches 30 kt while its Polar stops at 24 — that gap is structural, not a
   converter shortcoming, so a Sail Selection Chart cell at 25 or 30 kt shows a sail recommendation with no
   Target Speed to shade it by.
-- **Inside the Polar's manufactured filler rows.** `services/boat/polarSyntheticRows.ts` already
-  classifies rows as `measured`, `interpolated`, `ramp-filler`, `partial-ramp-filler`, or `no-data`.
-  Bilinear interpolation may only anchor on `measured` or `interpolated` rows; `ramp-filler`,
-  `partial-ramp-filler`, and `no-data` rows are never used as an endpoint, on either side of the TWA axis
-  a boat's file happens to pad. A query whose TWA falls outside the file's own trustworthy range
-  (`firstTrustworthyTwa` and its symmetric counterpart, derived the same way from `suppressedTwa`) reports
-  Target Speed as missing — reusing the same per-file classification the ~45° display-suppression rule
-  already computes, rather than a second hardcoded cutoff that could drift from it.
+- **Inside the Polar's manufactured filler rows.** *Superseded by ADR 0036 for the scoring path —
+  trust turned out to be a per-cell property, not a per-row one, and a filler-anchored result is now
+  flagged rather than reported missing.* As originally decided here: `services/boat/polarSyntheticRows.ts`
+  classifies rows as `measured`, `interpolated`, `ramp-filler`, `partial-ramp-filler`, or `no-data`, and
+  interpolation anchored only on `measured`/`interpolated` rows, reporting Target Speed as missing
+  outside the file's `firstTrustworthyTwa` boundary. ADR 0036 found this discarded real cells inside a
+  row the row-level walk had already given up on (six real cells at TWA 40, this boat's own certificate),
+  and replaced it with a per-cell bracket test whose result is shown and flagged, never withheld.
 
 No screen fabricates a plausible number in either case; a missing Target Speed is a real state a cell or
 row can be in, same as an Unknown Sea State bucket (ADR 0026).
