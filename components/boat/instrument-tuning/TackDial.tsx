@@ -39,6 +39,7 @@ import type {
   EraAwaAsymmetry,
   PairedPointOfSail,
   RaceAwaAsymmetry,
+  Tack,
   TackPair,
 } from '@/types'
 
@@ -451,13 +452,7 @@ function Dial({
           const on = entry.key === picked
 
           return (
-            <g
-              key={entry.key}
-              onClick={() => onPick(entry.key)}
-              style={{ cursor: 'pointer' }}
-              opacity={picked !== null && !on ? 0.3 : 1}
-              data-testid="tack-pair-dot"
-            >
+            <g key={entry.key} opacity={picked !== null && !on ? 0.3 : 1}>
               {on && (
                 <path
                   d={`M ${px} ${py} A ${radius} ${radius} 0 0 1 ${sx} ${sy}`}
@@ -476,9 +471,15 @@ function Dial({
                 stroke="var(--tack-port)"
                 strokeWidth={on ? 2.2 : 1.6}
               />
-              {/* A finger is wider than a 3.6px dot. */}
-              <circle cx={sx} cy={sy} r="11" fill="transparent" />
-              <circle cx={px} cy={py} r="11" fill="transparent" />
+              {/*
+                Each dot is its own target, rather than one handler on the pair.
+                A pair's two dots sit on opposite sides of the boat, so a group
+                spanning both has its centre on the centreline — over the dial's
+                own grid rays and nowhere near either dot. A tap aimed at a dot
+                landed on a grid line and did nothing.
+              */}
+              <Dot cx={sx} cy={sy} entry={entry} tack="starboard" onPick={onPick} />
+              <Dot cx={px} cy={py} entry={entry} tack="port" onPick={onPick} />
             </g>
           )
         })
@@ -490,6 +491,49 @@ function Dial({
         fill="var(--text-primary)"
       />
     </svg>
+  )
+}
+
+/**
+ * One tack's dot as a tap target: a transparent circle wider than the dot under it.
+ *
+ * A finger is wider than a 3.6px dot, and at 390px the dial's whole 340-unit viewBox is about 326
+ * pixels across. Keyboard-reachable too, because the dial has no arrow-key path of its own the way
+ * the two linear charts do — the pairs are scattered in two dimensions, so tab order through the
+ * dots is the honest equivalent.
+ */
+function Dot({
+  cx,
+  cy,
+  entry,
+  tack,
+  onPick,
+}: {
+  cx: number
+  cy: number
+  entry: DialPair
+  tack: Tack
+  onPick: (key: string) => void
+}): ReactElement {
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r="11"
+      fill="transparent"
+      role="button"
+      tabIndex={0}
+      aria-label={`${entry.pair.point_of_sail} Tack Pair at ${entry.pair.at.slice(11, 16)}, ${tack} tack`}
+      data-testid="tack-pair-dot"
+      data-tack={tack}
+      style={{ cursor: 'pointer' }}
+      onClick={() => onPick(entry.key)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onPick(entry.key)
+      }}
+    />
   )
 }
 

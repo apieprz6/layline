@@ -26,17 +26,16 @@ import { calibrationEras } from '@/services/analysis/calibration-eras'
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { awaAsymmetryByEra, eraAwaAsymmetry, raceAwaAsymmetry } from '@/services/analysis/awa-asymmetry'
 import { headingOffsetByEra, raceHeadingOffset } from '@/services/analysis/compass-deviation'
-import { detectManeuvers } from '@/services/analysis/maneuvers'
+import { detectManeuvers, type ManeuverAssessableRow } from '@/services/analysis/maneuvers'
 import { paddlewheelDivergence, type EraDivergence, type FitMethod } from '@/services/analysis/paddlewheel'
 import { readableRows } from '@/services/analysis/readable-rows'
-import type { RaceWindow } from '@/services/recordings/row-quality'
+import type { QualityAssessableRow, RaceWindow } from '@/services/recordings/row-quality'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import type {
+  AnalysisRow,
   CalibrationLogEntry,
   EraAwaAsymmetry,
   EraHeadingOffset,
-  ReadableRow,
-  TranscriptionRow,
 } from '@/types'
 
 /**
@@ -51,19 +50,32 @@ export type OfferedFitMethod = Extract<FitMethod, 'orthogonal' | 'sog-on-stw'>
 /** Both methods, in the order the toggle offers them: the default first. */
 export const OFFERED_FIT_METHODS: readonly OfferedFitMethod[] = ['orthogonal', 'sog-on-stw']
 
+/**
+ * The columns the three checks read off one row.
+ *
+ * Narrower than a `TranscriptionRow` on purpose, and the eight Row Quality reads plus `AWA (calc)`
+ * is exactly what the stored read selects (`services/races/recording-rows.ts`). So both a freshly
+ * parsed Transcription and one read back out of Postgres satisfy this, and neither has to be
+ * widened into the other to be measured.
+ */
+export interface TuningRow extends QualityAssessableRow, ManeuverAssessableRow {
+  /** `AWA (calc)`: the only apparent wind that exists in a Recording, and a calculation (ADR 0008). */
+  awa_calc: string | null
+}
+
 /** One Race, as this composition reads it. */
-export interface TuningRace {
+export interface TuningRace<Row extends TuningRow = TuningRow> {
   race_id: string
   /** Every row of the whole Transcription, in file order. **Not** clipped to the window. */
-  rows: readonly TranscriptionRow[]
+  rows: readonly Row[]
   window: RaceWindow
 }
 
 /** One Race's rows, assessed whole and then clipped — what all three checks read. */
-export interface TuningRaceRows {
+export interface TuningRaceRows<Row extends TuningRow = TuningRow> {
   race_id: string
   window_start: string
-  rows: ReadableRow[]
+  rows: (Row & AnalysisRow)[]
 }
 
 /**
@@ -120,7 +132,9 @@ export interface InstrumentTuningSeason {
  * `SOG` and the exclusion reason — so the expensive half of the pipeline runs once per Race rather
  * than once per check.
  */
-export function tuningRaceRows(race: TuningRace): TuningRaceRows {
+export function tuningRaceRows<Row extends TuningRow>(
+  race: TuningRace<Row>
+): TuningRaceRows<Row> {
   const quality = assessRowQuality(race.rows)
   const analysis = analysisRows(quality, detectManeuvers(race.rows, quality))
 
@@ -138,8 +152,8 @@ export function tuningRaceRows(race: TuningRace): TuningRaceRows {
  * the screen ships in and the correct failure ADR 0032 describes: until somebody records an act on
  * the boat there is one Era and, where the data steps, an unexplained shift in it.
  */
-export function instrumentTuningSeason(
-  races: readonly TuningRace[],
+export function instrumentTuningSeason<Row extends TuningRow>(
+  races: readonly TuningRace<Row>[],
   log: readonly CalibrationLogEntry[]
 ): InstrumentTuningSeason {
   const read = races.map(tuningRaceRows)
@@ -170,9 +184,9 @@ export function instrumentTuningSeason(
  * too — they are what its blank-`STW` coverage stat is made of, so handing over only the Countable
  * ones would lose it.
  */
-function speedRaces(
-  races: readonly TuningRace[],
-  read: readonly TuningRaceRows[]
+function speedRaces<Row extends TuningRow>(
+  races: readonly TuningRace<Row>[],
+  read: readonly TuningRaceRows<Row>[]
 ): Parameters<typeof paddlewheelDivergence>[0] {
   return read.map((race, index) => ({
     race_id: race.race_id,

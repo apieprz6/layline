@@ -84,6 +84,24 @@ export function raceLabel(labels: RaceLabels, race_id: string, sailed_at: string
   return labels[race_id] ?? shortDate(sailed_at)
 }
 
+/**
+ * The label for every Race the archive holds.
+ *
+ * An untitled Race is named by its day alone and nothing is generated for it. "Race on 4 Sep" would
+ * be Layline writing **Testimony** the sailor withheld, which the archive list already refuses to
+ * do (ADR 0010).
+ */
+export function raceLabelsFrom(
+  races: readonly { race_id: string; title: string | null; window_start: string }[]
+): RaceLabels {
+  return Object.fromEntries(
+    races.map((race) => [
+      race.race_id,
+      race.title === null ? shortDate(race.window_start) : `${shortDate(race.window_start)} · ${race.title}`,
+    ])
+  )
+}
+
 const COMPASS_POINTS = [
   'N',
   'NNE',

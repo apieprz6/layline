@@ -49,11 +49,22 @@ function renderDial(over: Partial<Parameters<typeof TackDial>[0]> = {}) {
 }
 
 describe('what the dial draws', () => {
-  it('puts a dot pair on the dial for every Tack Pair, and lists them', () => {
+  it('puts two dots on the dial for every Tack Pair — one per tack — and lists them', () => {
     renderDial()
 
-    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(4)
+    // Both dots pick the same pair. Each is its own target because the two sit on opposite sides
+    // of the boat, so one handler spanning them would put the tap point on the centreline.
+    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(8)
+    expect(screen.getAllByTestId('tack-pair-dot').filter((dot) => dot.dataset.tack === 'port')).toHaveLength(4)
     expect(screen.getByText('4 Tack Pairs')).toBeInTheDocument()
+  })
+
+  it('names each dot by its pair and its tack, so one is reachable without a mouse', () => {
+    renderDial()
+
+    expect(
+      screen.getByRole('button', { name: 'upwind Tack Pair at 19:12, port tack' })
+    ).toBeInTheDocument()
   })
 
   it('fills the gap between the two tacks as a wedge labelled with its width', () => {
@@ -105,7 +116,8 @@ describe('the three levels', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
 
-    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(2)
+    // Two pairs, four dots.
+    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(4)
   })
 
   it('draws the season behind a narrower level, so one Race is never read in isolation', async () => {

@@ -163,14 +163,15 @@ describeArchive('the Tack Dial over the owner’s season', () => {
     )
   }
 
-  it('draws a dot pair for all twenty Tack Pairs the season produced', () => {
+  it('draws both dots of all twenty Tack Pairs the season produced', () => {
     renderDial()
 
-    // 18 upwind pairs from 10 Races and 2 downwind from 2 — ADR 0034's own counts.
+    // 18 upwind pairs from 10 Races and 2 downwind from 2 — ADR 0034's own counts — and a dot per
+    // tack of each, which is what a sailor taps.
     const { season } = archive()
     expect(season.asymmetry.season.upwind?.pair_count).toBe(18)
     expect(season.asymmetry.season.downwind?.pair_count).toBe(2)
-    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(20)
+    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(40)
   })
 
   it('flags the downwind side as too few to lean on, and does not flag upwind', () => {
