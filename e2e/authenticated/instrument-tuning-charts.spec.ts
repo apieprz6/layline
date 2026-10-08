@@ -63,6 +63,32 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await expect(readout).toContainText('0°–10° · N')
   })
 
+  test('steps the selection with the arrow keys, on all three charts', async ({ page }) => {
+    await gotoHydrated(page, ROUTE)
+
+    // ADR 0034: "each chart responds to touch and to the arrow keys". The keyboard is also the only
+    // way to reach a nine-pixel bin precisely, so it is not a lesser path here — and a key handler
+    // on an un-hydrated node is as silent as a click on one.
+    const compass = page.getByTestId('compass-strip')
+    await compass.focus()
+    await compass.press('ArrowRight')
+    await expect(page.getByTestId('compass-chart').getByTestId('chart-readout')).toContainText(
+      '0°–10° · N'
+    )
+
+    const dial = page.getByTestId('tack-dial-svg')
+    await dial.focus()
+    await dial.press('ArrowRight')
+    await expect(page.getByTestId('tack-dial').getByTestId('chart-readout')).toContainText('wider')
+
+    const scatter = page.getByTestId('speed-scatter')
+    await scatter.focus()
+    await scatter.press('ArrowLeft')
+    await expect(
+      page.getByTestId('speed-check-chart').getByTestId('chart-readout')
+    ).toContainText('9–10 kt')
+  })
+
   test('toggles the STW chart between Scatter and Gap by speed, keeping the band', async ({
     page,
   }) => {

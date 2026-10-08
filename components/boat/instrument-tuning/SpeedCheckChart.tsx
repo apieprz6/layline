@@ -45,7 +45,7 @@ import CalibrationRail, { type RailRace } from './CalibrationRail'
 import {
   Big,
   CHART_SVG_STYLE,
-  CHART_WIDTH,
+  TUNING_CHART_WIDTH,
   Caption,
   Chips,
   Coverage,
@@ -60,7 +60,7 @@ import { raceLabel, races as racesPhrase, rows as rowsPhrase, signedKnots, type 
 
 type View = 'scatter' | 'gap'
 
-const SEASON = ''
+const SEASON = 'season'
 
 /** The speed axis never shrinks below this, so a light-air season is not drawn as a fast one. */
 const MIN_AXIS_KNOTS = 10
@@ -218,11 +218,11 @@ export default function SpeedCheckChart({
       </div>
 
       <Caption>
-        Dashed: the paddlewheel as configured — GPS speed equals paddlewheel speed. The solid line is
-        the fit, over the speeds it was fitted on and no wider.
+        Dashed: the paddlewheel as configured — GPS speed equals paddlewheel speed. Blue: this
+        Era’s fit, over the speeds it was fitted on and no wider.
         {race !== null &&
           (race.fit.fitted
-            ? ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)}’s own line.`
+            ? ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)}’s own line, against the Era’s.`
             : ` ${raceLabel(labels, race.race_id, race.sailed_at)} has no line of its own — ${REASON_WORDS[race.fit.reason]}; its rows still count in the season.`)}{' '}
         {METHOD_WORDS[method]} <BlankStw era={era} />
       </Caption>
@@ -236,6 +236,26 @@ export default function SpeedCheckChart({
 function lineOf(era: EraDivergence, race: RaceDivergence | null): FittedLine | null {
   const outcome = race === null ? era.fit : race.fit
   return outcome.fitted ? outcome.line : null
+}
+
+/**
+ * The fitted line's two ends in the gap view's own coordinates, or nothing.
+ *
+ * A list of nought or one, so the caller draws it without a null branch. Nothing where there is no
+ * line, and nothing where `lineGapAt` declines either end — which it does outside the range the fit
+ * was fitted on, and which no figure may stand in for.
+ */
+function gapEnds(
+  line: FittedLine | null
+): { from: { stw: number; gap: number }; to: { stw: number; gap: number } }[] {
+  if (line === null) return []
+
+  const [from, to] = line.ends
+  const atFrom = lineGapAt(line, from.stw)
+  const atTo = lineGapAt(line, to.stw)
+  if (atFrom === null || atTo === null) return []
+
+  return [{ from: { stw: from.stw, gap: atFrom }, to: { stw: to.stw, gap: atTo } }]
 }
 
 /** One band of the axis: the service's figure where it has one, and an honest gap where it does not. */
@@ -346,7 +366,11 @@ function BandDetail({
       </Big>
       <div>
         {here === null
-          ? `${race === null ? 'No Race in this Era' : 'This Race'} sailed this speed.`
+          ? // Two sentences and not one with a substitution in it: "No Race in this Era never
+            // sailed this speed" is a double negative that says the opposite of both.
+            race === null
+            ? 'No Race in this Era sailed this speed.'
+            : 'This Race never sailed this speed.'
           : `GPS speed sits ${Math.abs(here.mean_gap_knots).toFixed(2)} kt ${
               here.mean_gap_knots >= 0 ? 'above' : 'below'
             } the paddlewheel here, over ${rowsPhrase(here.rows)}${
@@ -390,13 +414,14 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
   const x = (knots: number): number => SCATTER_PAD + knots * perKnot
   const y = (knots: number): number => SCATTER_SIZE - SCATTER_PAD - knots * perKnot
 
-  const segment = (line: FittedLine): ReactElement => (
+  const segment = (line: FittedLine, stroke: string, key: string): ReactElement => (
     <line
+      key={key}
       x1={x(line.ends[0].stw)}
       y1={y(line.ends[0].sog)}
       x2={x(line.ends[1].stw)}
       y2={y(line.ends[1].sog)}
-      stroke={race === null ? 'var(--text-accent)' : 'var(--state-warning)'}
+      stroke={stroke}
       strokeWidth="2.2"
       data-testid="fitted-line"
     />
@@ -503,10 +528,14 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
         strokeDasharray="4 3"
         data-testid="one-to-one"
       />
-      {(() => {
-        const line = lineOf(era, race)
-        return line === null ? null : segment(line)
-      })()}
+      {/*
+        Both lines, where a Race is picked and has one. The Era's stays drawn behind the Race's own
+        in blue, because the question a picked Race asks is how far it sits from the season — and a
+        chart that replaced one line with the other answers a different question silently.
+      */}
+      {era.fit.fitted && segment(era.fit.line, 'var(--text-accent)', 'era')}
+      {race?.fit.fitted === true &&
+        segment(race.fit.line, 'var(--state-warning)', 'race')}
     </svg>
   )
 }
@@ -516,7 +545,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
   const mid = 75
   const perKnotGap = 40
   const left = 26
-  const column = (CHART_WIDTH - left - 4) / axisMax
+  const column = (TUNING_CHART_WIDTH - left - 4) / axisMax
   const clip = 1.6
 
   const x = (knots: number): number => left + knots * column
@@ -528,7 +557,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_WIDTH} ${height + 34}`}
+      viewBox={`0 0 ${TUNING_CHART_WIDTH} ${height + 34}`}
       role="img"
       tabIndex={0}
       aria-label="GPS speed minus paddlewheel speed, by boat speed. Tap or use the arrow keys to pick a 1 knot band."
@@ -560,7 +589,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
         <g key={gap}>
           <line
             x1={left}
-            x2={CHART_WIDTH - 4}
+            x2={TUNING_CHART_WIDTH - 4}
             y1={y(gap)}
             y2={y(gap)}
             stroke="var(--surface-divider)"
@@ -582,14 +611,14 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
       {/* 1:1 lies flat here, which is the whole point of this view. */}
       <line
         x1={left}
-        x2={CHART_WIDTH - 4}
+        x2={TUNING_CHART_WIDTH - 4}
         y1={mid}
         y2={mid}
         stroke="var(--text-primary)"
         strokeDasharray="4 3"
         data-testid="one-to-one"
       />
-      <text x={CHART_WIDTH - 6} y={mid + 11} fontSize="7.5" textAnchor="end" fill="var(--text-muted)">
+      <text x={TUNING_CHART_WIDTH - 6} y={mid + 11} fontSize="7.5" textAnchor="end" fill="var(--text-muted)">
         1:1 · as configured
       </text>
 
@@ -630,18 +659,24 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
         )
       )}
 
-      {/* The fit as a straight line against the flat 1:1, so the U the rows make around it shows. */}
-      {line !== null && (
+      {/*
+        The fit as a straight line against the flat 1:1, so the U the rows make around it shows.
+        Drawn from `lineGapAt` at its own two ends, and not drawn at all where either comes back
+        null — a `?? 0` here would put an end point on the 1:1 line, which is a claim that the fit
+        agrees with the paddlewheel exactly there.
+      */}
+      {gapEnds(line).map((ends) => (
         <line
-          x1={x(line.ends[0].stw)}
-          y1={y(lineGapAt(line, line.ends[0].stw) ?? 0)}
-          x2={x(line.ends[1].stw)}
-          y2={y(lineGapAt(line, line.ends[1].stw) ?? 0)}
+          key="fit"
+          x1={x(ends.from.stw)}
+          y1={y(ends.from.gap)}
+          x2={x(ends.to.stw)}
+          y2={y(ends.to.gap)}
           stroke={race === null ? 'var(--text-accent)' : 'var(--state-warning)'}
           strokeWidth="2"
           data-testid="fitted-line"
         />
-      )}
+      ))}
 
       {Array.from({ length: axisMax + 1 }, (_, knots) => (
         <text
@@ -656,7 +691,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
           {knots}
         </text>
       ))}
-      <text x={CHART_WIDTH - 4} y={height + 1} fontSize="7" textAnchor="end" fill="var(--text-muted)">
+      <text x={TUNING_CHART_WIDTH - 4} y={height + 1} fontSize="7" textAnchor="end" fill="var(--text-muted)">
         STW kt
       </text>
 

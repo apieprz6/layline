@@ -24,7 +24,7 @@
  */
 
 import type { EraDivergence } from '@/services/analysis/paddlewheel'
-import type { CoverageStatement, EraAwaAsymmetry, EraHeadingOffset } from '@/types'
+import type { AsymmetryFigure, CoverageStatement, EraHeadingOffset } from '@/types'
 
 /**
  * The share of a population a figure needs before it is `THIN` rather than `ANECDOTAL`.
@@ -55,8 +55,17 @@ export const ASYMMETRY_THIN_PAIRS = 5
  */
 export const ASYMMETRY_SOLID_PAIRS = 2 * ASYMMETRY_THIN_PAIRS
 
-/** The verdict a share earns, with the share's own zero case kept out of the arithmetic. */
+/**
+ * The verdict a share earns.
+ *
+ * An empty population is `ANECDOTAL` by decision rather than by `NaN` falling through two failed
+ * comparisons — which is where `0 / 0` would land it, correctly and for the wrong reason. Callers
+ * that can distinguish "nothing to divide" from "a share of nothing" say so in their own words
+ * before getting here; this is the floor under both.
+ */
 function fromShare(found: number, population: number, reason: string): CoverageStatement {
+  if (population <= 0) return { verdict: 'ANECDOTAL', reason }
+
   const share = found / population
 
   return {
@@ -96,10 +105,17 @@ function pairsPhrase(count: number, side: string): string {
  * pairs and two downwind ones cannot be interpreted at all. A point of sail that paired no tacks
  * counts as none, because that is what it is; the figure for it is absent, and absent is not a
  * reason to read the other side as though it stood alone.
+ *
+ * Takes the two figures rather than the whole Era, because the Tack Dial draws a Race as readily as
+ * an Era and the verdict beneath it has to be about whatever is on screen. Handed the Era while the
+ * dial showed one Race, it would have stated the season's pair counts under a single afternoon's.
  */
-export function asymmetryCoverage(era: EraAwaAsymmetry): CoverageStatement {
-  const upwind = era.upwind?.pair_count ?? 0
-  const downwind = era.downwind?.pair_count ?? 0
+export function asymmetryCoverage(figures: {
+  upwind: Pick<AsymmetryFigure, 'pair_count'> | null
+  downwind: Pick<AsymmetryFigure, 'pair_count'> | null
+}): CoverageStatement {
+  const upwind = figures.upwind?.pair_count ?? 0
+  const downwind = figures.downwind?.pair_count ?? 0
 
   const verdict =
     Math.min(upwind, downwind) >= ASYMMETRY_SOLID_PAIRS

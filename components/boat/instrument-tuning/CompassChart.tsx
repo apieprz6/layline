@@ -32,11 +32,11 @@ import { BIN_SIZE_DEG, MIN_ROWS_PER_BIN } from '@/services/analysis/compass-devi
 import { headingCoverage } from '@/services/analysis/coverage-verdict'
 import type { CalibrationLogEntry, EraHeadingBin, EraHeadingOffset, HeadingBin } from '@/types'
 
-import CalibrationRail, { type RailRace } from './CalibrationRail'
+import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
   Big,
   CHART_SVG_STYLE,
-  CHART_WIDTH,
+  TUNING_CHART_WIDTH,
   Caption,
   Chips,
   Coverage,
@@ -113,18 +113,6 @@ export default function CompassChart({
     })),
   ]
 
-  const railRaces: RailRace[] = [
-    ...era.races.map((race) => ({
-      race_id: race.race_id,
-      sailed_at: race.window_start,
-      measured: true,
-    })),
-    ...era.excluded.map((race) => ({
-      race_id: race.race_id,
-      sailed_at: race.window_start,
-      measured: false,
-    })),
-  ]
 
   const onKeyDown = (event: KeyboardEvent): void => {
     const step = arrowStep(event)
@@ -173,7 +161,7 @@ export default function CompassChart({
       <CalibrationRail
         channel="HDG"
         log={log}
-        races={railRaces}
+        races={railRacesFrom(era.races, era.excluded)}
         labels={labels}
         selectedRaceId={overlaidRace?.race_id ?? excludedRace?.race_id ?? null}
       />
@@ -245,7 +233,12 @@ function Summary({ era }: { era: EraHeadingOffset }): ReactElement {
         {era.mean_of_bins_deg === null
           ? ''
           : `, ${signedDegrees(era.mean_of_bins_deg)} weighting every heading equally`}
-        .
+        .{' '}
+        {/* What the curve could not be read at all. The coverage line beneath states how many
+            headings rest on two or more Races; this states how many rest on none, which is a
+            different fact and the one that says how much of the rose is simply blank. */}
+        {era.heading_bin_count - era.headings_covered > 0 &&
+          `${era.heading_bin_count - era.headings_covered} of ${era.heading_bin_count} headings were never sailed long enough to read.`}
       </div>
     </>
   )
@@ -329,10 +322,18 @@ interface ChartProps {
 
 /** Degrees beyond which a bar is clipped rather than rescaling the axis under the reader. */
 const CLIP_DEG = 27
+
+/**
+ * How far a hatched bin's mark extends, in degrees of the error axis.
+ *
+ * Inside `CLIP_DEG` on purpose: a hatch that filled the plot to its very edge would read as a bar
+ * at the maximum rather than as "nothing was measured here", which is the one thing it has to say.
+ */
+const HATCH_DEG = 22
 const GRID_DEG = [-20, -10, 10, 20]
 
 const AXIS_LEFT = 26
-const PLOT_WIDTH = CHART_WIDTH - AXIS_LEFT - 6
+const PLOT_WIDTH = TUNING_CHART_WIDTH - AXIS_LEFT - 6
 
 function Strip({
   bins,
@@ -366,7 +367,7 @@ function Strip({
 
   return (
     <svg
-      viewBox={`0 0 ${CHART_WIDTH} ${height + 34}`}
+      viewBox={`0 0 ${TUNING_CHART_WIDTH} ${height + 34}`}
       role="img"
       tabIndex={0}
       aria-label="Compass error by heading, as a strip. Tap or use the arrow keys to pick a heading."
@@ -398,7 +399,7 @@ function Strip({
         <g key={error}>
           <line
             x1={AXIS_LEFT}
-            x2={CHART_WIDTH - 6}
+            x2={TUNING_CHART_WIDTH - 6}
             y1={y(error)}
             y2={y(error)}
             stroke="var(--surface-divider)"
@@ -417,7 +418,7 @@ function Strip({
         </g>
       ))}
 
-      <line x1={AXIS_LEFT} x2={CHART_WIDTH - 6} y1={mid} y2={mid} stroke="var(--text-muted)" />
+      <line x1={AXIS_LEFT} x2={TUNING_CHART_WIDTH - 6} y1={mid} y2={mid} stroke="var(--text-muted)" />
       <text
         x={AXIS_LEFT - 4}
         y={mid + 3}
@@ -437,9 +438,9 @@ function Strip({
               key={at.bin_start_deg}
               data-testid="compass-absent-bin"
               x={x + 0.5}
-              y={y(22)}
+              y={y(HATCH_DEG)}
               width={column - 1}
-              height={y(-22) - y(22)}
+              height={y(-HATCH_DEG) - y(HATCH_DEG)}
               fill="url(#compass-strip-hatch)"
             />
           )
@@ -663,8 +664,8 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
             d={sector(
               index * binSize + half,
               half,
-              ZERO_RING - 22 * ROSE_PER_DEGREE,
-              ZERO_RING + 22 * ROSE_PER_DEGREE
+              ZERO_RING - HATCH_DEG * ROSE_PER_DEGREE,
+              ZERO_RING + HATCH_DEG * ROSE_PER_DEGREE
             )}
             fill="url(#compass-rose-hatch)"
           />

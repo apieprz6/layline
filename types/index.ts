@@ -2577,6 +2577,22 @@ export interface TackPair {
  * average: on this archive the two lean opposite ways, so their mean states the opposite of the
  * finding (ADR 0035).
  */
+/**
+ * The angle each tack held, as a magnitude.
+ *
+ * Both positive, unlike `TackSegment.held_angle_deg`'s signed convention, because this is what the
+ * **Tack Dial** draws: the dial puts starboard right and port left, so the side is the picture
+ * rather than the sign.
+ *
+ * `(starboard − port) / 2` is the **Apparent Wind Asymmetry**, by construction and at every level:
+ * the figure and the two angles behind it are one arithmetic, so a dial can never label its rays
+ * with a number that disagrees with where it drew them.
+ */
+export interface HeldAngles {
+  starboard: number
+  port: number
+}
+
 export interface AsymmetryFigure {
   point_of_sail: PairedPointOfSail
   /** Half the difference between the tacks' held angles. Positive: starboard reads wider. */
@@ -2585,17 +2601,8 @@ export interface AsymmetryFigure {
   wider_tack: Tack | null
   /** Twice the Asymmetry, which is the gap between the tacks themselves. */
   wider_by_deg: number
-  /**
-   * The angle each tack held, as a magnitude — what the **Tack Dial** draws a ray at.
-   *
-   * Both positive, unlike `TackSegment.held_angle_deg`'s signed convention, because the dial puts
-   * starboard right and port left and the side is the picture rather than the sign.
-   *
-   * `(starboard − port) / 2` is `asymmetry_deg`, by construction and at every level: the figure and
-   * the two angles behind it are one arithmetic, so a dial can never label its rays with a number
-   * that disagrees with where it drew them.
-   */
-  held_deg: { starboard: number; port: number }
+  /** The angle each tack held — what the **Tack Dial** draws a ray at. */
+  held_deg: HeldAngles
   pair_count: number
   /** Why this is not a Measured Offset and names no channel to adjust. */
   caveat: string
@@ -2609,7 +2616,7 @@ export interface EraAsymmetryFigure extends AsymmetryFigure {
     window_start: string
     asymmetry_deg: number
     /** This Race's own two rays, so a Race picked on the dial is drawn from its own figure. */
-    held_deg: { starboard: number; port: number }
+    held_deg: HeldAngles
     pair_count: number
   }[]
 }

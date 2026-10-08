@@ -6,7 +6,7 @@
  * of the finding — and nothing here may produce one.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TackDial from '@/components/boat/instrument-tuning/TackDial'
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
@@ -114,7 +114,7 @@ describe('the three levels', () => {
   it('offers one Race, and drops the pairs of every other', async () => {
     renderDial()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can · 2' }))
 
     // Two pairs, four dots.
     expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(4)
@@ -124,7 +124,7 @@ describe('the three levels', () => {
     const { container } = renderDial()
 
     const greyBefore = container.querySelectorAll('[stroke="var(--text-muted)"]').length
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can · 2' }))
 
     expect(container.querySelectorAll('[stroke="var(--text-muted)"]').length).toBeGreaterThan(
       greyBefore
@@ -219,11 +219,64 @@ describe('the figure, and the one figure there is never', () => {
   it('says the comparison cannot be made at all where one point of sail has no pairs', async () => {
     renderDial()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can · 2' }))
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent(
       'No downwind pairs here, so the check that separates a vane set off-centre from everything else cannot be made.'
     )
+  })
+
+  it('states coverage off the level on screen, not off the season behind it', async () => {
+    renderDial()
+
+    // The season's weaker side has one downwind pair. June has none at all, so a verdict read off
+    // the season while the dial drew June would describe pairs that are not on screen.
+    expect(screen.getByTestId('coverage-verdict')).toHaveTextContent(
+      '1 Tack Pair downwind, against 3 upwind'
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can · 2' }))
+
+    expect(screen.getByTestId('coverage-verdict')).toHaveTextContent(
+      'no Tack Pair downwind, against 2 upwind'
+    )
+  })
+
+  it('says neither way, rather than opposite ways, where a point of sail reads symmetric', () => {
+    const races = [
+      raceAsymmetry('race-june', '2026-06-03 19:00:00', [
+        // Both tacks held 40°: a measured symmetry, which leans no way at all. `Math.sign(0)` is 0
+        // and would have reported this as the opposite of any downwind lean whatsoever.
+        pair('upwind', 40, 40, '2026-06-03 19:12:00'),
+        pair('downwind', 150, 140, '2026-06-03 19:50:00'),
+      ]),
+    ]
+    renderDial({ season: asymmetryEra(races), eras: [asymmetryEra(races, { era: era('HDG', null) })] })
+
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent(
+      'Upwind the two tacks held the same angle, so there is nothing to compare the other point of sail’s lean against.'
+    )
+  })
+
+  it('steps through the pairs with the arrow keys, as the two linear charts do', () => {
+    renderDial()
+
+    fireEvent.keyDown(screen.getByTestId('tack-dial-svg'), { key: 'ArrowRight' })
+
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('starboard 36.0°')
+
+    fireEvent.keyDown(screen.getByTestId('tack-dial-svg'), { key: 'ArrowRight' })
+
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('starboard 34.0°')
+  })
+
+  it('offers a way back to the season from a picked pair, since a 3.6px dot is hard to find twice', async () => {
+    renderDial()
+
+    await userEvent.click(screen.getAllByTestId('tack-pair-dot')[0])
+    await userEvent.click(screen.getByRole('button', { name: 'back to the season' }))
+
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('Upwind · AWA < 50°')
   })
 
   it('flags a point of sail with too few pairs to lean on', () => {

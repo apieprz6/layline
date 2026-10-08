@@ -25,7 +25,7 @@
  * supplied (LAY-138 decision 7).
  */
 
-import { useState, type ReactElement } from 'react'
+import { useState, type KeyboardEvent, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 import {
   DOWNWIND_MIN_AWA_DEG,
@@ -34,8 +34,8 @@ import {
 } from '@/services/analysis/awa-asymmetry'
 import { ASYMMETRY_THIN_PAIRS, asymmetryCoverage } from '@/services/analysis/coverage-verdict'
 import type {
+  AsymmetryFigure,
   CalibrationLogEntry,
-  EraAsymmetryFigure,
   EraAwaAsymmetry,
   PairedPointOfSail,
   RaceAwaAsymmetry,
@@ -43,7 +43,7 @@ import type {
   TackPair,
 } from '@/types'
 
-import CalibrationRail, { type RailRace } from './CalibrationRail'
+import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
   Big,
   CHART_SVG_STYLE,
@@ -51,6 +51,7 @@ import {
   Chips,
   Coverage,
   Readout,
+  arrowStep,
   type ChipOption,
 } from './chart-furniture'
 import {
@@ -104,11 +105,16 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
   const excluded = season.excluded.find((missing) => missing.race_id === level) ?? null
   const era = eras.find((candidate) => candidate.era.key === level) ?? null
 
+  // What is on screen, as the two figures and the Races behind them. A Race and an Era both carry
+  // an `AsymmetryFigure`; only the Era counts Races, so the count travels beside the figures rather
+  // than inside them, and a Race is the one Race it is.
   const shown: EraAwaAsymmetry | null = level === SEASON ? season : era
-  const figures: Record<PairedPointOfSail, EraAsymmetryFigure | null> =
+  const figures: Record<PairedPointOfSail, AsymmetryFigure | null> =
     race !== null
-      ? { upwind: asRaceFigure(race, 'upwind'), downwind: asRaceFigure(race, 'downwind') }
+      ? { upwind: race.upwind, downwind: race.downwind }
       : { upwind: shown?.upwind ?? null, downwind: shown?.downwind ?? null }
+  const raceCount = (pointOfSail: PairedPointOfSail): number =>
+    race !== null ? 1 : (shown?.[pointOfSail]?.race_count ?? 0)
 
   const pairs =
     race !== null
@@ -134,7 +140,9 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
     })),
     ...[...season.races].reverse().map((measured) => ({
       id: measured.race_id,
-      label: raceLabel(labels, measured.race_id, measured.window_start),
+      // The pair count on the chip, because how much a Race rests on is the first thing to know
+      // about it here and two pairs reads very differently from twelve.
+      label: `${raceLabel(labels, measured.race_id, measured.window_start)} · ${measured.pairs.length}`,
     })),
     ...[...season.excluded].reverse().map((missing) => ({
       id: missing.race_id,
@@ -143,20 +151,23 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
     })),
   ]
 
-  const railRaces: RailRace[] = [
-    ...season.races.map((measured) => ({
-      race_id: measured.race_id,
-      sailed_at: measured.window_start,
-      measured: true,
-    })),
-    ...season.excluded.map((missing) => ({
-      race_id: missing.race_id,
-      sailed_at: missing.window_start,
-      measured: false,
-    })),
-  ]
 
-  const selected = everyPair.find((entry) => entry.key === picked) ?? null
+  const selected = pairs.find((entry) => entry.key === picked) ?? null
+
+  /**
+   * Left and right step through the pairs on screen, as they do through heading bins and speed
+   * bands on the two linear charts (ADR 0034: "each chart responds to touch and to the arrow
+   * keys"). The pairs are scattered in two dimensions, so the sequence stepped through is the one
+   * the list beneath the dial prints — time order.
+   */
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const step = arrowStep(event)
+    if (step === null || pairs.length === 0) return
+
+    const at = pairs.findIndex((entry) => entry.key === picked)
+    const next = (at === -1 ? (step > 0 ? -1 : 0) : at) + step
+    setPicked(pairs[((next % pairs.length) + pairs.length) % pairs.length].key)
+  }
 
   return (
     <div data-testid="tack-dial">
@@ -174,12 +185,13 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
       <CalibrationRail
         channel="AWA"
         log={log}
-        races={railRaces}
+        races={railRacesFrom(season.races, season.excluded)}
         labels={labels}
         selectedRaceId={race?.race_id ?? excluded?.race_id ?? null}
       />
 
       <Dial
+        onKeyDown={onKeyDown}
         pairs={pairs}
         figures={figures}
         // The season's own rays stay drawn in grey behind a narrower level, so one Race or one Era
@@ -193,7 +205,7 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
 
       <Readout>
         {selected !== null ? (
-          <PairDetail entry={selected} labels={labels} />
+          <PairDetail entry={selected} labels={labels} onClear={() => setPicked(null)} />
         ) : excluded !== null ? (
           <div>
             {raceLabel(labels, excluded.race_id, excluded.window_start)} paired no tacks —{' '}
@@ -202,12 +214,12 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
             apart.
           </div>
         ) : (
-          <Verdict figures={figures} />
+          <Verdict figures={figures} raceCount={raceCount} />
         )}
       </Readout>
 
       <div style={{ marginTop: spacing(2) }}>
-        <Coverage statement={asymmetryCoverage(shown ?? season)} />
+        <Coverage statement={asymmetryCoverage(figures)} />
       </div>
 
       <PairList
@@ -241,34 +253,6 @@ function dialPairs(season: EraAwaAsymmetry): DialPair[] {
       race,
     }))
   )
-}
-
-/**
- * One Race's figure in the shape an Era's comes in, so the dial draws both the same way.
- *
- * A Race is its own single contributor: `race_count` is one and `race_figures` holds itself. Not a
- * cast and not a second arithmetic — the figure is the service's own, re-labelled.
- */
-function asRaceFigure(
-  race: RaceAwaAsymmetry,
-  pointOfSail: PairedPointOfSail
-): EraAsymmetryFigure | null {
-  const figure = race[pointOfSail]
-  if (figure === null) return null
-
-  return {
-    ...figure,
-    race_count: 1,
-    race_figures: [
-      {
-        race_id: race.race_id,
-        window_start: race.window_start,
-        asymmetry_deg: figure.asymmetry_deg,
-        held_deg: figure.held_deg,
-        pair_count: figure.pair_count,
-      },
-    ],
-  }
 }
 
 /** The first recorded act across these Eras, for the chip that names the stretch before it. */
@@ -349,19 +333,23 @@ function Dial({
   ghost,
   picked,
   onPick,
+  onKeyDown,
 }: {
   pairs: readonly DialPair[]
-  figures: Record<PairedPointOfSail, EraAsymmetryFigure | null>
-  ghost: Record<PairedPointOfSail, EraAsymmetryFigure | null> | null
+  figures: Record<PairedPointOfSail, AsymmetryFigure | null>
+  ghost: Record<PairedPointOfSail, AsymmetryFigure | null> | null
   picked: string | null
   onPick: (key: string) => void
+  onKeyDown: (event: KeyboardEvent) => void
 }): ReactElement {
   return (
     <svg
       viewBox={`0 0 ${SIZE} ${SIZE}`}
       role="img"
-      aria-label="Tack dial: the apparent wind angle held on each tack, upwind above and downwind below, with port folded onto starboard."
+      tabIndex={0}
+      aria-label="Tack dial: the apparent wind angle held on each tack, upwind above and downwind below, with port folded onto starboard. Use the arrow keys to step through the Tack Pairs."
       data-testid="tack-dial-svg"
+      onKeyDown={onKeyDown}
       style={{ ...CHART_SVG_STYLE, maxWidth: 360, margin: '0 auto', cursor: 'default' }}
     >
       {/* Reaching is discarded, and drawn as discarded rather than left blank. */}
@@ -538,7 +526,7 @@ function Dot({
 }
 
 /** Port's average folded onto starboard, the gap between them filled, and the gap labelled. */
-function Wedge({ figure }: { figure: EraAsymmetryFigure }): ReactElement {
+function Wedge({ figure }: { figure: AsymmetryFigure }): ReactElement {
   const { starboard, port } = figure.held_deg
   const [x, y] = at((starboard + port) / 2, OUTER + 26, 1)
 
@@ -574,9 +562,12 @@ function Wedge({ figure }: { figure: EraAsymmetryFigure }): ReactElement {
 function SideFigure({
   label,
   figure,
+  raceCount,
 }: {
   label: string
-  figure: EraAsymmetryFigure | null
+  figure: AsymmetryFigure | null
+  /** Races behind the figure, which an Era counts and a single Race is one of. */
+  raceCount: number
 }): ReactElement {
   return (
     <div style={{ minWidth: 0 }}>
@@ -609,7 +600,7 @@ function SideFigure({
                   : 'var(--text-muted)',
             }}
           >
-            {tackPairs(figure.pair_count)} · {racesPhrase(figure.race_count)}
+            {tackPairs(figure.pair_count)} · {racesPhrase(raceCount)}
             {figure.pair_count < ASYMMETRY_THIN_PAIRS ? ' — too few to lean on' : ''}
           </div>
         </>
@@ -626,44 +617,95 @@ function SideFigure({
  */
 function Verdict({
   figures,
+  raceCount,
 }: {
-  figures: Record<PairedPointOfSail, EraAsymmetryFigure | null>
+  figures: Record<PairedPointOfSail, AsymmetryFigure | null>
+  raceCount: (pointOfSail: PairedPointOfSail) => number
 }): ReactElement {
   const { upwind, downwind } = figures
-
-  const closing =
-    upwind === null || downwind === null
-      ? `No ${upwind === null ? 'upwind' : 'downwind'} pairs here, so the check that separates a vane set off-centre from everything else cannot be made.`
-      : Math.sign(upwind.asymmetry_deg) !== Math.sign(downwind.asymmetry_deg)
-        ? 'Upwind and downwind lean opposite ways. A vane set off-centre leans the same way on both points of sail, so this is not, on its own, a vane offset.'
-        : 'Upwind and downwind lean the same way — what a vane set off-centre would do. The compass, or qtVlm’s true-wind model, could still produce it.'
 
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing(3) }}>
-        <SideFigure label={`Upwind · AWA < ${UPWIND_MAX_AWA_DEG}°`} figure={upwind} />
-        <SideFigure label={`Downwind · AWA > ${DOWNWIND_MIN_AWA_DEG}°`} figure={downwind} />
+        <SideFigure
+          label={`Upwind · AWA < ${UPWIND_MAX_AWA_DEG}°`}
+          figure={upwind}
+          raceCount={raceCount('upwind')}
+        />
+        <SideFigure
+          label={`Downwind · AWA > ${DOWNWIND_MIN_AWA_DEG}°`}
+          figure={downwind}
+          raceCount={raceCount('downwind')}
+        />
       </div>
-      <div style={{ marginTop: spacing(2) }}>{closing}</div>
+      <div style={{ marginTop: spacing(2) }}>{leaning(upwind, downwind)}</div>
     </>
   )
 }
 
-function PairDetail({ entry, labels }: { entry: DialPair; labels: RaceLabels }): ReactElement {
+/**
+ * Whether the two points of sail lean the same way, and what that does and does not imply.
+ *
+ * Three answers, not two. A side that read *exactly* symmetric leans neither way, so comparing it
+ * with `Math.sign` would call a 0.0° upwind figure "the opposite way" from any downwind one at all —
+ * reporting a disagreement between a measurement and a measurement of nothing.
+ */
+function leaning(upwind: AsymmetryFigure | null, downwind: AsymmetryFigure | null): string {
+  if (upwind === null || downwind === null) {
+    return `No ${upwind === null ? 'upwind' : 'downwind'} pairs here, so the check that separates a vane set off-centre from everything else cannot be made.`
+  }
+
+  if (upwind.wider_tack === null || downwind.wider_tack === null) {
+    const flat = upwind.wider_tack === null ? 'Upwind' : 'Downwind'
+    return `${flat} the two tacks held the same angle, so there is nothing to compare the other point of sail’s lean against.`
+  }
+
+  return upwind.wider_tack === downwind.wider_tack
+    ? 'Upwind and downwind lean the same way — what a vane set off-centre would do. The compass, or qtVlm’s true-wind model, could still produce it.'
+    : 'Upwind and downwind lean opposite ways. A vane set off-centre leans the same way on both points of sail, so this is not, on its own, a vane offset.'
+}
+
+function PairDetail({
+  entry,
+  labels,
+  onClear,
+}: {
+  entry: DialPair
+  labels: RaceLabels
+  onClear: () => void
+}): ReactElement {
   const starboard = Math.abs(entry.pair.starboard.held_angle_deg)
   const port = Math.abs(entry.pair.port.held_angle_deg)
   const wider = port > starboard ? 'port' : 'starboard'
 
   return (
     <>
-      <Big>
-        {entry.pair.point_of_sail} · {signedDegrees(entry.pair.asymmetry_deg)}
-      </Big>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <Big>
+          {entry.pair.point_of_sail} · {signedDegrees(entry.pair.asymmetry_deg)}
+        </Big>
+        {/* Tapping the dot again clears it, but a 3.6px dot is hard to find twice. */}
+        <button
+          type="button"
+          onClick={onClear}
+          style={{
+            flexShrink: 0,
+            border: 'none',
+            background: 'none',
+            color: 'var(--text-accent)',
+            fontSize: 11,
+            cursor: 'pointer',
+          }}
+        >
+          back to the season
+        </button>
+      </div>
       <div>
         {raceLabel(labels, entry.race.race_id, entry.race.window_start)} ·{' '}
         {entry.pair.at.slice(11, 16)} ·{' '}
-        {rowsPhrase(entry.pair.starboard.row_indexes.length + entry.pair.port.row_indexes.length)}{' '}
-        over {Math.round(entry.pair.gap_seconds)}s apart
+        {rowsPhrase(entry.pair.starboard.row_indexes.length)} on starboard and{' '}
+        {rowsPhrase(entry.pair.port.row_indexes.length)} on port,{' '}
+        {Math.round(entry.pair.gap_seconds)}s apart
       </div>
       <div style={{ fontFamily: 'var(--font-mono)' }}>
         starboard {starboard.toFixed(1)}° · port {port.toFixed(1)}° · {wider}{' '}

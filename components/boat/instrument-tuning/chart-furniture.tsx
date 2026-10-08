@@ -22,8 +22,15 @@ import type { CSSProperties, KeyboardEvent, MouseEvent, ReactElement, ReactNode 
 import { spacing } from '@/lib/utils/design'
 import type { CoverageStatement } from '@/types'
 
-/** The viewBox width every chart here is drawn in, so two of them line up on one screen. */
-export const CHART_WIDTH = 340
+/**
+ * The viewBox width every chart here is drawn in, so two of them line up on one screen.
+ *
+ * Named for this screen rather than `CHART_WIDTH`, because `components/race-flow/chart-geometry.ts`
+ * already exports a `CHART_WIDTH` of 360 and the two are not the same width — that one exists so a
+ * track map and a channel chart draw the same second at the same pixel, which these three charts
+ * have no reason to share. Two same-named constants with different values is a reader trap.
+ */
+export const TUNING_CHART_WIDTH = 340
 
 /**
  * The tap position in the SVG's own viewBox coordinates, or null where it cannot be located.

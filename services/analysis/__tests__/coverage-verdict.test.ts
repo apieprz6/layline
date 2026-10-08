@@ -143,6 +143,14 @@ describe('the `HDG` verdict, off the share of the rose resting on two or more Ra
     expect(headingCoverage(headingEra(0)).verdict).toBe('ANECDOTAL')
   })
 
+  it('reads a rose with no bins at all as ANECDOTAL by decision, not by NaN', () => {
+    // `0 / 0` lands on ANECDOTAL anyway, by failing both comparisons — which is the right answer
+    // arrived at the wrong way, and would stop being the right answer if either `>=` flipped.
+    const verdict = headingCoverage({ ...headingEra(0), heading_bin_count: 0 })
+
+    expect(verdict.verdict).toBe('ANECDOTAL')
+  })
+
   it('states the share it read in words, never as the verdict alone', () => {
     // ADR 0034: the word is always printed and the reason stands beside it. A verdict with no
     // reason is a grade, and this is not grading the compass.
@@ -161,6 +169,14 @@ describe('the `HDG` verdict, off the share of the rose resting on two or more Ra
 })
 
 describe('the `AWA` verdict, off the pair count on the weaker point of sail', () => {
+  it('reads whatever two figures it is handed, Era or Race', () => {
+    // Takes the figures and not the Era, because the Tack Dial draws one Race as readily as a
+    // season and the verdict beneath has to be about what is on screen.
+    const verdict = asymmetryCoverage({ upwind: { pair_count: 2 }, downwind: { pair_count: 0 } })
+
+    expect(verdict.reason).toBe('no Tack Pair downwind, against 2 upwind')
+  })
+
   it('reads the weaker side and not the better one', () => {
     // The archive's own shape: 18 upwind pairs and 2 downwind. An Asymmetry that cannot be
     // compared upwind to downwind cannot be interpreted, so 18 buys nothing.

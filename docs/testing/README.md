@@ -166,6 +166,13 @@ refuses a non-local Supabase URL, for the same reason `auth.setup.ts` does.
 A new browser spec that needs archive data should extend that fixture rather than add a second
 one. Two fixture Races in one local database are two things to recognise and delete.
 
+One consequence to know about: `archive` is a dependency of **both** `-auth` projects, not only of
+the spec that needs it, because Playwright dependencies are declared per project and a third
+authenticated project for one spec would cost more than it saves. So every authenticated spec runs
+with that one Race in the database. A spec that needs an *empty* archive therefore cannot live
+under `e2e/authenticated/` as things stand — give it its own project rather than making the
+fixture conditional, so the reason is in the config rather than in a flag.
+
 ## What is not automatable
 
 **The Google OAuth round trip.** Google blocks sign-in from automated browsers,

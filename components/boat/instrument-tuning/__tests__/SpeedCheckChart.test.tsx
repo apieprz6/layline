@@ -84,6 +84,23 @@ describe('the Scatter | Gap-by-speed toggle', () => {
     expect(screen.getByTestId('fitted-line')).toBeInTheDocument()
   })
 
+  it('keeps the Era’s line drawn behind a picked Race’s own, so the two can be compared', async () => {
+    renderChart()
+
+    expect(screen.getAllByTestId('fitted-line')).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+
+    // Two lines, not one replaced by the other: the question a picked Race asks is how far it sits
+    // from the season, and a chart with only the amber line answers a different one.
+    const lines = screen.getAllByTestId('fitted-line')
+    expect(lines).toHaveLength(2)
+    expect(lines.map((line) => line.getAttribute('stroke'))).toEqual([
+      'var(--text-accent)',
+      'var(--state-warning)',
+    ])
+  })
+
   it('carries the selected speed band across the toggle', async () => {
     renderChart()
 
@@ -164,6 +181,18 @@ describe('what a tapped band says', () => {
     expect(screen.getByTestId('chart-readout')).toHaveTextContent(
       'No Race in this Era sailed this speed.'
     )
+  })
+
+  it('says a picked Race never sailed a band, without a double negative', async () => {
+    renderChart()
+
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
+
+    const readout = screen.getByTestId('chart-readout')
+    // "No Race in this Era never sailed this speed" says the opposite of both halves of itself.
+    expect(readout).toHaveTextContent('This Race never sailed this speed.')
+    expect(readout).not.toHaveTextContent('No Race in this Era never')
   })
 
   it('hatches a band with no rows in the gap view', async () => {

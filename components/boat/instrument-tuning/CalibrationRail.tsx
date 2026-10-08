@@ -38,7 +38,7 @@ import { CALIBRATION_EVENT_LABEL } from '@/lib/boat/calibration'
 import { spacing } from '@/lib/utils/design'
 import type { CalibrationChannel, CalibrationLogEntry } from '@/types'
 
-import { CHART_WIDTH } from './chart-furniture'
+import { TUNING_CHART_WIDTH } from './chart-furniture'
 import { raceLabel, shortDate, type RaceLabels } from './chart-text'
 
 /** One Race on the rail: where it sits in the season and whether it produced a figure. */
@@ -53,6 +53,32 @@ export interface RailRace {
    * a gap: it was sailed, and the rail says so (ADR 0012, ADR 0032).
    */
   measured: boolean
+}
+
+/**
+ * Every Race a check read, measured or not, in the shape the rail draws.
+ *
+ * Here rather than in each chart because two of the three build it from exactly the same pair of
+ * lists — the Races that produced a figure and the ones carried through with their reason — and
+ * which of the two a Race came from *is* whether it was measured. Two copies of that mapping would
+ * be two chances to draw an excluded Race as a measured one.
+ */
+export function railRacesFrom(
+  measured: readonly { race_id: string; window_start: string }[],
+  excluded: readonly { race_id: string; window_start: string }[]
+): RailRace[] {
+  return [
+    ...measured.map((race) => ({
+      race_id: race.race_id,
+      sailed_at: race.window_start,
+      measured: true,
+    })),
+    ...excluded.map((race) => ({
+      race_id: race.race_id,
+      sailed_at: race.window_start,
+      measured: false,
+    })),
+  ]
 }
 
 interface CalibrationRailProps {
@@ -152,7 +178,7 @@ export default function CalibrationRail({
   const inOrder = [...races].sort((a, b) => a.sailed_at.localeCompare(b.sailed_at))
   const rules = rulesFor(log, channel)
 
-  const span = CHART_WIDTH - INSET * 2
+  const span = TUNING_CHART_WIDTH - INSET * 2
   const step = inOrder.length === 0 ? span : span / inOrder.length
   const tick = (index: number): number => INSET + (index + 0.5) * step
   /** The gap before the first Race sailed on or after this date — the boundary the act opens. */
@@ -162,7 +188,7 @@ export default function CalibrationRail({
   return (
     <div data-testid={`calibration-rail-${channel}`}>
       <svg
-        viewBox={`0 0 ${CHART_WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${TUNING_CHART_WIDTH} ${HEIGHT}`}
         width="100%"
         role="img"
         aria-label={
@@ -179,7 +205,7 @@ export default function CalibrationRail({
       >
         <line
           x1={INSET}
-          x2={CHART_WIDTH - INSET}
+          x2={TUNING_CHART_WIDTH - INSET}
           y1={BASELINE}
           y2={BASELINE}
           stroke="var(--surface-divider)"
@@ -201,7 +227,7 @@ export default function CalibrationRail({
                 opacity={borrowed ? 0.65 : 1}
               />
               <text
-                x={Math.min(Math.max(x, 20), CHART_WIDTH - 20)}
+                x={Math.min(Math.max(x, 20), TUNING_CHART_WIDTH - 20)}
                 y={BASELINE + 18}
                 fontSize="7.5"
                 textAnchor="middle"
