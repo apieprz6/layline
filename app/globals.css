@@ -84,6 +84,23 @@
   --sail-band-7: rgba(0, 122, 82, 0.34);
   --sail-band-8: rgba(196, 112, 0, 0.34);
 
+  /* Semantic — the Race Track Heatmap's percent-of-Target-Speed ramp (ADR 0033).
+     Seven bands, diverging about 100%: amber below, a NEUTRAL GRAY midpoint, blue above. Amber and
+     blue rather than the conventional red/blue because the same map rings Frozen rows in
+     --wind-storm and a red arm would collide with it.
+     🚨 This ramp is a RATIO and must never be reused for anything else — the wind bands above mean
+     an absolute speed, and the two are on the same screen. Each arm holds on its own as an ordinal
+     ramp against the sand surface — monotone OKLab lightness, adjacent ΔL ≥ 0.07, light end at
+     2.4:1 (amber) and 2.7:1 (blue) against #F0EDE6, measured. The light ends are darker than a
+     stock ramp's because #F0EDE6 is a pale surface to sit a hairline-wide ramp on. */
+  --track-below-3: #8A4D00;   /* below 85% of target */
+  --track-below-2: #C47000;   /* 85–95% */
+  --track-below-1: #D68A2E;   /* 95–98% */
+  --track-at:      #8F887E;   /* on target, 98–102% — neutral, never a hue */
+  --track-above-1: #5C93E0;   /* 102–105% */
+  --track-above-2: #0055BB;   /* 105–115% */
+  --track-above-3: #002277;   /* above 115% */
+
   /* Semantic — UI states */
   --state-success: #007A2F;
   --state-warning: #C47000;
@@ -382,6 +399,21 @@
   --sail-band-6: rgba(220, 0, 0, 0.50);
   --sail-band-7: rgba(240, 0, 0, 0.58);
   --sail-band-8: rgba(240, 0, 0, 0.66);
+
+  /* Race Track Heatmap — night vision. The diverging ramp cannot survive this theme and is not
+     worked around: tokenised honestly, both arms land on the same red lightness ramp, so 85% and
+     115% become the same colour and the brightest step is the midpoint. That is accepted (ADR
+     0033) with one obligation attached — the legend is theme-aware, and after dark it must say
+     that depth is distance from target in either direction rather than keep claiming a side. A
+     legend holding its daylight words after dark is the actual defect; the collapsed hue is not.
+     Symmetric by construction, because there is only one hue to be symmetric in. */
+  --track-below-3: #8E0000;
+  --track-below-2: #C00000;
+  --track-below-1: #E82626;
+  --track-at:      #FFB3B3;
+  --track-above-1: #E82626;
+  --track-above-2: #C00000;
+  --track-above-3: #8E0000;
 
   --state-success: #AA2222;
   --state-warning: #CC3300;
