@@ -37,6 +37,12 @@
  * and stored nowhere (ADR 0009). The line is explicit rather than implied by the reading order: a sailor
  * who can correct the sail plan needs to know why they cannot correct the wind speed beneath it.
  *
+ * Below that line, the **Race Track Heatmap** goes first (ADR 0033). It is the recording drawn — the
+ * boat's own trace, coloured by how each stretch compared with its target speed — so it belongs under
+ * the line with the other things Layline derives rather than above it with the things the sailor said.
+ * It opens that half of the page because what follows is the same numbers the map is made of, which
+ * reads as a summary of what was just seen rather than a preamble to it.
+ *
  * Delete is the one thing on the page that is a write, so it is the one thing the Role gates: it is
  * absent for a viewer rather than present and refused (ADR 0019). It sits last, under everything the
  * race says about itself, because a destructive action above the record it destroys is one that gets
@@ -61,6 +67,7 @@ import type {
 import CoverageReadout from './CoverageReadout'
 import RaceDeletePanel from './RaceDeletePanel'
 import RaceFindings from './RaceFindings'
+import RaceTrackSection from './RaceTrackSection'
 
 interface RaceDetailViewProps {
   race: RaceDetail
@@ -189,6 +196,10 @@ export default function RaceDetailView({
         </section>
 
         <TranscriptionBoundary />
+
+        {/* The map opens the half of the page that is the recording (ADR 0033). It is below the
+            line because a track is not Testimony — it is what the file said, drawn. */}
+        <RaceTrackSection track={race.track} />
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Coverage</h2>

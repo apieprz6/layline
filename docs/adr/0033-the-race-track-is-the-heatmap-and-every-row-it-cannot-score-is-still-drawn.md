@@ -179,6 +179,46 @@ LAY-150 (ADR 0036)**: trust is per-cell, and a Filler-Anchored row is coloured a
 left dotted and uncoloured — so the dotted sub-floor state this ADR shipped no longer exists as its own
 render state. See ADR 0036 for the per-cell rule and the Filler-Anchored marker that replaces it.
 
+## Amendment 1 — what building it settled (LAY-161)
+
+Four things this ADR deliberately left open, answered by the implementation rather than by a second
+decision ticket. Nothing above is reversed.
+
+**The scoreable count in the table above is out of date, and the reason is ADR 0036.** Measured by
+the shipped code over the same recording, Chicago–Waukegan draws 258 rows and scores **113** of
+them, 31 of those Filler-Anchored — not 64. The 64 was the single-scalar 52° floor's answer; trust
+is per-cell now, so a row sailed below that floor against real cells is scored and one anchored on
+filler is scored *and flagged*. The Frozen (82) and Low-Speed (23) columns reproduce exactly. The
+Maneuver Window column reads **13** rather than 20, because `notCountableReason` gives each row one
+reason in order and the prototype counted every row in a window including ones already counted
+elsewhere — the disjoint accounting is the one under which the counts beneath the legend add up to
+the race. All of it is pinned in `services/analysis/__tests__/archive-track-heatmap.test.ts`.
+
+**The Filler-Anchored marker is the segment stitched in its own band colour** — same hue, same
+weight, a dashed stroke. ADR 0036 left the pixels to whoever implemented it. A texture rather than
+a glyph because it costs no extra ink on a 1,700-segment track, and it survives night vision, where
+a second hue is not available to mark anything with. Its weakness is a single isolated filler row,
+where one dash reads much like a short solid segment; these rows arrive in runs (light air at a low
+angle), and zoom separates them.
+
+**The map opens the half of the page below the Transcription boundary, not the page.** This ADR's
+"first section" was written against the analysis screen's own section list, and the page the archive
+actually has opens with Testimony that ADR 0010 puts above a drawn line. A track is not something
+the sailor said — it is the recording, drawn — so it leads the half of the page that is the
+recording, above Coverage and the Row Quality notes, and the breakdown tiles follow it there.
+
+**An uncoloured track carries its reason.** Three different facts produce one, and grey that means
+"this race records no Polar Version" must not read as grey that means the boat was slow: `RaceTrack`
+carries `polar` / `no-polar-version` / `polar-unreadable`, and the legend says each in words. Nine
+of this archive's races name no Polar at all.
+
+One cost is worth naming. The browser test this ADR requires has nothing to open: there is no race
+in any local database, because the archive is hand-entered through the finished UI. So the camera is
+exercised against `app/dev/race-track`, a harness route that 404s unless the server was started with
+`LAYLINE_TRACK_HARNESS=1`, mounting the same component over the same drawing function with a
+synthetic race. It is a fixture page in the production tree, which is a real cost; the alternative
+was no coverage of the one thing only a browser can answer.
+
 ## Consequences
 
 - **`services/analysis/` needs a per-race, full-resolution, per-row read** — every row with its

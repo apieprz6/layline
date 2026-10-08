@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
+import { readRaceTrack } from '@/services/races/readRaceTrack'
 import { readRecordingRows } from '@/services/races/recording-rows'
 import { coverageRowsFrom, raceCoverage, windowFindings } from '@/services/recordings/coverage'
 import { raceWindowSeconds } from '@/services/recordings/race-window'
@@ -364,6 +365,10 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
     // day is a thing that happened — ADR 0009 keeps refusals to two, and this is neither of them.
     const bandNote = windBandFinding(boatSetup.band, boatSetup.logged_tws_mean)
 
+    // The map, drawn from the rows already in hand and the Polar the Race itself names. Derived at
+    // read and stored nowhere, like everything else below the Transcription boundary (ADR 0033).
+    const track = await readRaceTrack(rows, whole, race, race.polar_version_id)
+
     return {
       id: race.id,
       title: race.title,
@@ -378,6 +383,7 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
       },
       coverage,
       quality: inWindow,
+      track,
       findings: [
         ...windowFindings(coverage, inWindow),
         ...(bandNote === null ? [] : [bandNote]),

@@ -21,7 +21,7 @@
  */
 
 import { render, screen, within } from '@testing-library/react'
-import type { RaceAnnotations, RaceBoatSetup, RaceDetail } from '@/types'
+import type { RaceAnnotations, RaceBoatSetup, RaceDetail, RaceTrack } from '@/types'
 import RaceDetailView from '../RaceDetailView'
 
 jest.mock('next/navigation', () => ({
@@ -53,7 +53,42 @@ const NOTHING: RaceBoatSetup = {
   logged_tws_mean: null,
 }
 
-function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup = SETUP): RaceDetail {
+/**
+ * A short track, drawn: one scored leg and one the metrics may not read.
+ *
+ * Geometry rather than rows, which is what crosses to this page at all (ADR 0033) — so a fixture
+ * for it is a path string and a band, and the section's own suite is where the drawing is checked.
+ */
+const TRACK: RaceTrack = {
+  heatmap: {
+    width: 360,
+    height: 440,
+    metres_per_unit: 4,
+    segments: [
+      { points: '10.0,10.0 20.0,20.0', band: 'at', filler_anchored: false },
+      { points: '20.0,20.0 30.0,25.0', band: null, filler_anchored: false },
+    ],
+    bridges: [],
+    rings: [],
+    counts: {
+      rows: 3,
+      with_fix: 3,
+      scored: 1,
+      filler_anchored: 0,
+      frozen: 0,
+      low_speed: 1,
+      maneuver_window: 0,
+      without_target: 0,
+    },
+  },
+  scoring: 'polar',
+}
+
+function raceOf(
+  annotations: RaceAnnotations = EMPTY,
+  boatSetup: RaceBoatSetup = SETUP,
+  track: RaceTrack = TRACK
+): RaceDetail {
   return {
     id: 'race-1',
     title: 'Wednesday night',
@@ -83,6 +118,7 @@ function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup =
       dropout_channels: ['latitude', 'longitude'],
       rows: [],
     },
+    track,
     findings: [],
     annotations,
     boat_setup: boatSetup,

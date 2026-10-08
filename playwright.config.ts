@@ -100,5 +100,12 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,
+    // Opens `/dev/race-track`, which 404s everywhere else. ADR 0033 requires a browser test that
+    // asserts the map's own transform, and there is no race in any local database to open one on —
+    // the archive is hand-entered through the finished UI, so nothing seeds a recording. The
+    // harness mounts the real component over the real drawing function; see the route's own
+    // comment. A server reused via `reuseExistingServer` that was started without this will 404,
+    // which the spec reports as a missing harness rather than as a broken map.
+    env: { ...process.env, LAYLINE_TRACK_HARNESS: '1' },
   },
 })
