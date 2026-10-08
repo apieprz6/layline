@@ -55,13 +55,13 @@ describe('rowIntervalSeconds', () => {
       { row_time: '2026-07-01 19:02:30' },
     ])
 
-    expect(measured).toEqual([30, 120, 0])
+    expect(measured).toEqual([30, 120, null])
   })
 
   it('gives the last row no interval, rather than standing in a cadence for it', () => {
     // There is no following sample, so no span was measured. One row out of thousands is a cheaper
     // loss than a race figure built on an assumed clock.
-    expect(rowIntervalSeconds([{ row_time: '2026-07-01 19:00:00' }])).toEqual([0])
+    expect(rowIntervalSeconds([{ row_time: '2026-07-01 19:00:00' }])).toEqual([null])
   })
 
   it('gives a row the clock stepped backwards across no interval either', () => {
@@ -73,7 +73,18 @@ describe('rowIntervalSeconds', () => {
         { row_time: '2026-11-01 01:00:00' },
         { row_time: '2026-11-01 01:00:30' },
       ])
-    ).toEqual([0, 30, 0])
+    ).toEqual([null, 30, null])
+  })
+
+  it('reads two rows at the same stamp as a measured interval of nothing, not as none', () => {
+    // A zero is a different fact from a null, and the difference reaches the aggregate: the row
+    // weighs nothing in the sums and is still a row the figure accounted for.
+    expect(
+      rowIntervalSeconds([
+        { row_time: '2026-07-01 19:00:00' },
+        { row_time: '2026-07-01 19:00:00' },
+      ])
+    ).toEqual([0, null])
   })
 })
 
@@ -96,10 +107,10 @@ describe('computeRowEfficiency', () => {
       targets
     )
 
-    expect(scored.vmg_leg).toBe('downwind')
+    expect(scored.vmg_zone).toBe('downwind')
     expect(scored.vmg).toBeCloseTo(6 * Math.abs(Math.cos((120 * Math.PI) / 180)))
     // The only downwind row in the grid: 5 x |cos120| = 2.5.
-    expect(scored.target_vmg?.knots).toBeCloseTo(2.5)
+    expect(scored.target_vmg?.estimated_knots).toBeCloseTo(2.5)
     expect(scored.vmg_efficiency).toBeCloseTo(1.2)
   })
 
@@ -148,7 +159,7 @@ describe('computeRowEfficiency', () => {
     )
 
     expect(scored.target_speed).toBeNull()
-    expect(scored.vmg_leg).toBeNull()
+    expect(scored.vmg_zone).toBeNull()
     expect(scored.target_vmg).toBeNull()
   })
 })
@@ -247,6 +258,28 @@ describe('aggregateEfficiency', () => {
     expect(figure.rows).toBe(2)
     expect(figure.elapsed_seconds).toBe(60)
     expect(figure.polar_efficiency).toBeCloseTo(0.9)
+  })
+
+  it('accounts for every Countable row in exactly one of its three tallies', () => {
+    // A row that left the figure and is tallied nowhere is a silent omission, which is the one
+    // thing ADR 0025 asks a coverage count to prevent. Here: two rows summed, one off the
+    // certificate's axes, one last row with no interval, and one excluded as not Countable.
+    const mixed = [
+      steady[0],
+      row({ row_index: 2, row_time: '2026-07-01 19:00:30', sog: '9', tws: '26', twa: '60' }),
+      { ...steady[2], countable: false },
+      row({ row_index: 4, row_time: '2026-07-01 19:01:30', sog: '5.4', tws: '10', twa: '60' }),
+      row({ row_index: 5, row_time: '2026-07-01 19:02:00', sog: '5.4', tws: '10', twa: '60' }),
+    ]
+
+    const figure = aggregateEfficiency(mixed, targets)
+    const countable = mixed.filter((at) => at.countable).length
+
+    expect(countable).toBe(4)
+    expect(figure.rows).toBe(2)
+    expect(figure.rows_without_target).toBe(1)
+    expect(figure.rows_without_interval).toBe(1)
+    expect(figure.rows + figure.rows_without_target + figure.rows_without_interval).toBe(countable)
   })
 
   it('counts a row with no target separately, and in neither sum', () => {

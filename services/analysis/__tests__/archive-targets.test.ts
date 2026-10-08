@@ -91,6 +91,13 @@ describeOwn("the boat's own certificate, read per cell", () => {
     expect(realAt(45)).toBe(8)
   })
 
+  it('has no empty cell anywhere in it, so nothing it answers is missing for that reason', () => {
+    // Why the archive figures below are unaffected by the empty-cell rule, and worth asserting
+    // rather than assuming: a certificate tabulates a speed at every cell it has, and the
+    // `no-data` state belongs to library polars with untabulated columns.
+    expect(cells.flat()).not.toContain('no-data')
+  })
+
   it('finds this certificate has one interpolated row, which may still anchor a target', () => {
     // TWA 100 is the exact arithmetic mean of 90 and 110 in all nine columns — a generator's
     // smoothing, not the boat's own speed, and anchorable all the same (ADR 0028).

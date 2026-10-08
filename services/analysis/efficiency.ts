@@ -29,9 +29,9 @@
  * season figure adds these races' sums, it does not average their ratios.
  */
 
-import { sameRowOrder } from '@/services/analysis/maneuvers'
+import { sameRowOrder, zone } from '@/services/analysis/maneuvers'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
-import { vmgLegOf } from '@/services/analysis/polar-targets'
+import { vmgKnots } from '@/services/analysis/polar-targets'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type { AnalysisRow, EfficiencyAggregate, RowEfficiency } from '@/types'
 
@@ -88,11 +88,11 @@ function recorded(value: string | null): number | null {
 }
 
 /**
- * How long each row lasted, in seconds, measured and never assumed.
+ * How long each row lasted, in seconds, measured and never assumed. Null where it cannot be.
  *
  * A row is a sample at an instant, and what it describes is the boat from that instant until the
  * next sample contradicts it — so a row's interval is the gap to the row after it, which is the
- * step `describeRecording` already measures. Two rows get no interval and both are right to:
+ * step `describeRecording` already measures. Two rows get **null**, and both are right to:
  *
  *   - **The last row in hand.** There is no following sample, so no span was measured. Standing in
  *     the median cadence would be inventing one, and a single row out of thousands is a cheaper
@@ -101,18 +101,24 @@ function recorded(value: string | null): number | null {
  *     recorded twice and never converted away to hide it, so one step a season is −3,600 seconds.
  *     That is not a duration; a negative weight would subtract a real row's distance from the race.
  *
+ * Null rather than zero for both, because a **zero** is a different fact: two rows written at the
+ * same timestamp did measure an interval, and it was nothing. It weighs nothing in the sums and is
+ * still a row the figure accounted for, which is a distinction `aggregateEfficiency` has to report.
+ *
  * Measured over *every* row given, which must be every row in the window and not only the Countable
  * ones: an excluded row's own interval then falls out of the sums entirely, rather than being
  * credited to whichever neighbour happens to be Countable.
  */
-export function rowIntervalSeconds(rows: readonly Pick<ScorableRow, 'row_time'>[]): number[] {
+export function rowIntervalSeconds(
+  rows: readonly Pick<ScorableRow, 'row_time'>[]
+): (number | null)[] {
   const seconds = rows.map((row) => wallClockSeconds(row.row_time))
 
   return rows.map((_, index) => {
-    if (index + 1 >= rows.length) return 0
+    if (index + 1 >= rows.length) return null
 
     const step = seconds[index + 1] - seconds[index]
-    return step >= 0 ? step : 0
+    return step >= 0 ? step : null
   })
 }
 
@@ -134,11 +140,9 @@ export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): R
   const twa = recorded(row.twa)
 
   const target_speed = twa !== null && tws !== null ? targets.targetSpeed(twa, tws) : null
-  const vmg_leg = twa === null ? null : vmgLegOf(twa)
-  const target_vmg = vmg_leg !== null && tws !== null ? targets.targetVmg(vmg_leg, tws) : null
-
-  // `|cos|`, because downwind VMG is progress to leeward: the sign would only restate the leg.
-  const vmg = sog !== null && twa !== null ? sog * Math.abs(Math.cos((twa * Math.PI) / 180)) : null
+  const vmg_zone = twa === null ? null : zone(twa)
+  const target_vmg = vmg_zone !== null && tws !== null ? targets.targetVmg(vmg_zone, tws) : null
+  const vmg = sog !== null && twa !== null ? vmgKnots(sog, twa) : null
 
   return {
     row_index: row.row_index,
@@ -147,11 +151,13 @@ export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): R
       sog !== null && target_speed !== null && target_speed.knots > 0
         ? sog / target_speed.knots
         : null,
-    vmg_leg,
+    vmg_zone,
     vmg,
     target_vmg,
     vmg_efficiency:
-      vmg !== null && target_vmg !== null && target_vmg.knots > 0 ? vmg / target_vmg.knots : null,
+      vmg !== null && target_vmg !== null && target_vmg.estimated_knots > 0
+        ? vmg / target_vmg.estimated_knots
+        : null,
   }
 }
 
@@ -161,6 +167,10 @@ export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): R
  * Hand this **every** row in the window, Countable or not, with its verdict on it — the intervals
  * are measured over all of them and summed over the Countable ones, which is what keeps an excluded
  * row's time out of the figure instead of in a neighbour's weight.
+ *
+ * Every Countable row lands in exactly one of three tallies — `rows`, `rows_without_interval`,
+ * `rows_without_target` — so a screen can state the coverage behind the figure (ADR 0025) rather
+ * than leaving a row that dropped out unaccounted for anywhere.
  *
  * For a season, sum these aggregates' own sums rather than calling this across races: the rows of
  * two races are not one sequence, and differencing across the seam would weight the last row of one
@@ -175,17 +185,23 @@ export function aggregateEfficiency(
   const totals = {
     rows: 0,
     filler_anchored_rows: 0,
+    rows_without_interval: 0,
+    rows_without_target: 0,
     elapsed_seconds: 0,
     actual_distance_nm: 0,
     target_distance_nm: 0,
     actual_vmg_distance_nm: 0,
     target_vmg_distance_nm: 0,
-    rows_without_target: 0,
   }
 
   rows.forEach((row, index) => {
+    if (!row.countable) return
+
     const seconds = intervals[index]
-    if (!row.countable || seconds === 0) return
+    if (seconds === null) {
+      totals.rows_without_interval += 1
+      return
+    }
 
     const scored = computeRowEfficiency(row, targets)
     const sog = recorded(row.sog)
@@ -206,7 +222,7 @@ export function aggregateEfficiency(
     // silently divide distances the boat covered by targets for a different set of rows.
     if (scored.vmg !== null && scored.target_vmg !== null) {
       totals.actual_vmg_distance_nm += distanceNm(scored.vmg, seconds)
-      totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.knots, seconds)
+      totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.estimated_knots, seconds)
     }
   })
 

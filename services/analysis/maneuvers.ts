@@ -16,6 +16,7 @@ import type {
   RowManeuverWindow,
   TranscriptionManeuvers,
   TranscriptionQuality,
+  WindZone,
 } from '@/types'
 
 /**
@@ -60,8 +61,6 @@ export interface ManeuverAssessableRow {
   twa: string | null
 }
 
-type Zone = 'upwind' | 'downwind'
-
 /**
  * Which side of the beam a `TWA` is on, signed as the file wrote it.
  *
@@ -69,7 +68,7 @@ type Zone = 'upwind' | 'downwind'
  * upwind is a different search from the best VMG downwind, and a second copy of `> 90` would be a
  * second chance for the two to disagree about a boat on the beam.
  */
-export function zone(twa: number): Zone {
+export function zone(twa: number): WindZone {
   return Math.abs(twa) > ZONE_BOUNDARY_DEG ? 'downwind' : 'upwind'
 }
 

@@ -15,12 +15,16 @@
  * (Rule 402.2); the boat does not, and a race in 27 knots has no Target Speed rather than a
  * flattering guess at one.
  *
- * **Inside the axes there is always an answer, and sometimes a flag on it.** A certificate
+ * **Inside the axes a manufactured answer is still an answer, with a flag on it.** A certificate
  * tabulates angles no boat sails and fills them by ramping up from zero, so some cells inside the
  * grid are the file's own manufacture rather than a measurement. A bracket touching one of those
  * yields a **Filler-Anchored** Target Speed — computed, shown, flagged (ADR 0036). Withholding it
  * would overwrite something the boat really did with silence because the yardstick was weak, which
  * is the opposite of the rule everything else here follows.
+ *
+ * The one case inside the axes that is still missing is a bracket touching a cell the file left
+ * *empty*. That is not a weak yardstick but the absence of one, and a line drawn through a zero
+ * invents a target below anything the boat was measured at — see `everyCornerSpeaks` below.
  *
  * The grid is classified once, on construction, because a race is thousands of rows against one
  * Polar and `classifyPolarCells` walks the whole grid.
@@ -31,7 +35,7 @@
 
 import { zone } from '@/services/analysis/maneuvers'
 import { classifyPolarCells, isAnchorable } from '@/services/boat/polarSyntheticRows'
-import type { PolarCellOrigin, PolarPayload, TargetSpeed, TargetVmg, VmgLeg } from '@/types'
+import type { PolarCellOrigin, PolarPayload, TargetSpeed, TargetVmg, WindZone } from '@/types'
 
 /**
  * The standing caveat every **VMG Efficiency** figure carries, on every row (ADR 0036).
@@ -46,13 +50,18 @@ export const TARGET_VMG_CAVEAT =
   "Target VMG is estimated from the Polar's grid, not the certificate's own published optimum."
 
 /**
- * Which half of the Polar a `TWA`'s VMG target is searched over.
+ * **VMG** from a speed and an angle: the component of that speed along the leg being sailed.
  *
- * The same line a tack is told from a gybe by, and read from the same place, so the two cannot
- * disagree about a boat on the beam.
+ * A magnitude, because downwind VMG is progress to leeward and a sign would only restate which
+ * zone the boat is in — which `zone()` already says, and which a negative Target VMG would invert
+ * every efficiency built on it.
+ *
+ * Written once and exported, because the identical formula is both how a row's own VMG is derived
+ * (`efficiency.ts`) and what the Target VMG search below maximises. Two copies would be two
+ * chances to disagree about what VMG is, and `CONTEXT.md` has one definition of it.
  */
-export function vmgLegOf(twa: number): VmgLeg {
-  return zone(twa)
+export function vmgKnots(speed: number, twa: number): number {
+  return speed * Math.abs(Math.cos((twa * Math.PI) / 180))
 }
 
 /**
@@ -63,20 +72,20 @@ export function vmgLegOf(twa: number): VmgLeg {
  */
 export interface PolarTargets {
   /**
-   * **Target Speed** at this angle and wind speed, or null outside the Polar's axes.
+   * **Target Speed** at this angle and wind speed, or null where the Polar cannot answer.
    *
    * `twa` may be signed as the recording wrote it (ADR 0008); the Polar's axis is one side of the
    * boat, so the magnitude is what is looked up.
    */
   targetSpeed(twa: number, tws: number): TargetSpeed | null
   /**
-   * **Target VMG** on this leg at this wind speed, or null outside the Polar's TWS axis.
+   * **Target VMG** in this zone at this wind speed, or null where the Polar cannot answer.
    *
    * An estimate — see `TARGET_VMG_CAVEAT`, which belongs beside every figure built on this. The
    * angle the search landed on is deliberately not returned: Layline states no point beat or gybe
    * angle, from any Polar, under any construction (ADR 0036).
    */
-  targetVmg(leg: VmgLeg, tws: number): TargetVmg | null
+  targetVmg(zone: WindZone, tws: number): TargetVmg | null
 }
 
 /** Where a query sits on an axis: the two entries bracketing it, and how far between them. */
@@ -128,30 +137,50 @@ export function polarTargets(payload: PolarPayload): PolarTargets {
   const speedAcross = (row: number, tws: Bracket): number =>
     between(boat_speed[row][tws.low], boat_speed[row][tws.high], tws.fraction)
 
+  /**
+   * Whether every cell a bracket reads says *something*, which is what makes it interpolable.
+   *
+   * A `no-data` cell is the file's own statement that it has nothing at that angle and wind speed,
+   * and a line drawn through a nothing is not a weak target — it is a manufactured one, far below
+   * anything the boat was ever measured at, and it would read as a wildly high efficiency. So this
+   * is a third missing case alongside the two out-of-axis ones, and deliberately *not* the
+   * Filler-Anchored treatment: ADR 0036's argument is that a manufactured yardstick is a weak
+   * comparison point worth showing with a flag, and an absent one is no comparison point at all.
+   * The boat's own certificate has no such cell; a qtVlm library polar's unfilled columns are
+   * full of them.
+   */
+  const everyCornerSpeaks = (twa: Bracket, tws: Bracket): boolean =>
+    corners(twa, tws).every(([row, column]) => origins[row][column] !== 'no-data')
+
   const anchoredOnFiller = (twa: Bracket, tws: Bracket): boolean =>
     corners(twa, tws).some(([row, column]) => !isAnchorable(origins[row][column]))
 
   /**
-   * The best `boatspeed × |cos(TWA)|` over one leg's tabulated angles at one wind speed.
+   * The best `boatspeed × |cos(TWA)|` over one zone's tabulated angles at one wind speed.
    *
    * `realOnly` is the difference between ADR 0036's restricted search and its fallback. Each
    * candidate is one TWA row read across the wind-speed bracket, so "real" means both cells the
    * row's own interpolation touches are measured or interpolated — a row real at 10 knots and
-   * ramped at 8 cannot be trusted to answer at 9.
+   * ramped at 8 cannot be trusted to answer at 9. A row with an empty cell in its bracket is no
+   * candidate in either pass, for the reason above: it would offer a target of nearly nothing and
+   * win every search it entered.
    */
-  const bestOn = (leg: VmgLeg, tws: Bracket, realOnly: boolean): TargetVmg | null => {
+  const bestIn = (zone_: WindZone, tws: Bracket, realOnly: boolean): TargetVmg | null => {
     let best: TargetVmg | null = null
 
     for (const [row, twa] of twa_axis.entries()) {
-      if (vmgLegOf(twa) !== leg) continue
+      if (zone(twa) !== zone_) continue
 
-      const filler_anchored = anchoredOnFiller({ low: row, high: row, fraction: 0 }, tws)
+      const rowBracket: Bracket = { low: row, high: row, fraction: 0 }
+      if (!everyCornerSpeaks(rowBracket, tws)) continue
+
+      const filler_anchored = anchoredOnFiller(rowBracket, tws)
       if (realOnly && filler_anchored) continue
 
-      // `|cos|`, because downwind VMG is progress to leeward and the sign would only say which
-      // way the boat is pointing — which the leg already said.
-      const knots = speedAcross(row, tws) * Math.abs(Math.cos((twa * Math.PI) / 180))
-      if (best === null || knots > best.knots) best = { knots, filler_anchored }
+      const estimated_knots = vmgKnots(speedAcross(row, tws), twa)
+      if (best === null || estimated_knots > best.estimated_knots) {
+        best = { estimated_knots, filler_anchored }
+      }
     }
 
     return best
@@ -162,6 +191,7 @@ export function polarTargets(payload: PolarPayload): PolarTargets {
       const twaBracket = bracketOn(twa_axis, Math.abs(twa))
       const twsBracket = bracketOn(tws_axis, tws)
       if (twaBracket === null || twsBracket === null) return null
+      if (!everyCornerSpeaks(twaBracket, twsBracket)) return null
 
       return {
         knots: between(
@@ -173,19 +203,17 @@ export function polarTargets(payload: PolarPayload): PolarTargets {
       }
     },
 
-    targetVmg(leg, tws) {
+    targetVmg(zone_, tws) {
       const twsBracket = bracketOn(tws_axis, tws)
       if (twsBracket === null) return null
 
       // The search is restricted away from filler (ADR 0036) — but it must also never suppress a
       // figure for want of a trustworthy comparison point, which is the same ADR's other rule. So
-      // two passes over the leg: the real cells first, and the whole leg only if the real cells
-      // had nothing to say at this wind speed. On this boat the first pass always answers, because
+      // two passes over the zone: the real cells first, and the filler only if the real cells had
+      // nothing to say at this wind speed. On this boat the first pass always answers, because
       // every row from TWA 52 up is measured in every column; a library polar ramping from TWA 0
       // is what the second pass is for, and what it returns is flagged.
-      const real = bestOn(leg, twsBracket, true)
-
-      return real ?? bestOn(leg, twsBracket, false)
+      return bestIn(zone_, twsBracket, true) ?? bestIn(zone_, twsBracket, false)
     },
   }
 }

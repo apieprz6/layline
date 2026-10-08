@@ -50,8 +50,7 @@ describe('crossoverLookup', () => {
     // A Sail Definition's label is the only name a sail has in Layline (ADR 0023), and a bare
     // number names nothing.
     expect(chart.recommend(45, 18)).toEqual({
-      sail_number: 3,
-      label: 'Main + Jib 2 + Staysail',
+      definition: { number: 3, label: 'Main + Jib 2 + Staysail' },
       chart_twa: 45,
       chart_tws: 18,
     })
@@ -67,32 +66,32 @@ describe('crossoverLookup', () => {
       // The case ADR 0028 rejected nearest-neighbour over. The columns are thresholds, not
       // samples, and 24.6 is not yet 25.
       expect(chart.recommend(90, 24.6)?.chart_tws).toBe(24)
-      expect(chart.recommend(90, 24.6)?.sail_number).toBe(7)
+      expect(chart.recommend(90, 24.6)?.definition.number).toBe(7)
     })
 
     it('keeps a boat at 27.5 knots on the 25-knot recommendation', () => {
       // Nearest-neighbour would round to 30 and retire a sail two and a half knots early.
       expect(chart.recommend(90, 27.5)?.chart_tws).toBe(25)
-      expect(chart.recommend(90, 27.5)?.sail_number).toBe(8)
+      expect(chart.recommend(90, 27.5)?.definition.number).toBe(8)
     })
 
     it('crosses over the moment the column does, and not before', () => {
-      expect(chart.recommend(90, 24.999)?.sail_number).toBe(7)
-      expect(chart.recommend(90, 25)?.sail_number).toBe(8)
+      expect(chart.recommend(90, 24.999)?.definition.number).toBe(7)
+      expect(chart.recommend(90, 25)?.definition.number).toBe(8)
     })
 
-    it('returns a sail number and never a blend of two', () => {
+    it('names one Definition and never a blend of two', () => {
       // Halfway between the 12 and 14 knot columns at TWA 45, which name sails 2 and 2; halfway
-      // between 16 and 18, which name 4 and 3. Both answers are one of the chart's own integers.
-      expect(chart.recommend(45, 13)?.sail_number).toBe(2)
-      expect(chart.recommend(45, 17)?.sail_number).toBe(4)
+      // between 16 and 18, which name 4 and 3. Both answers are one of the chart's own entries.
+      expect(chart.recommend(45, 13)?.definition.number).toBe(2)
+      expect(chart.recommend(45, 17)?.definition.number).toBe(4)
     })
   })
 
   describe('flooring on the angle axis the same way', () => {
     it('reads a boat at 44 degrees off the 40-degree row', () => {
       expect(chart.recommend(44, 18)?.chart_twa).toBe(40)
-      expect(chart.recommend(44, 18)?.sail_number).toBe(5)
+      expect(chart.recommend(44, 18)?.definition.number).toBe(5)
     })
 
     it('reads a boat past the last tabulated angle off that angle', () => {
@@ -121,7 +120,7 @@ describe('crossoverLookup', () => {
       // answer at 35 knots. It is the Polar whose domain ends: it interpolates, and above its last
       // column there is no bracket to interpolate inside.
       expect(chart.recommend(90, 35)?.chart_tws).toBe(30)
-      expect(chart.recommend(90, 35)?.sail_number).toBe(9)
+      expect(chart.recommend(90, 35)?.definition.number).toBe(9)
     })
   })
 
@@ -173,7 +172,7 @@ describe('crossoverLookup', () => {
       sail_definitions: [{ number: 1, label: 'Main + Jib 1' }],
     })
 
-    expect(dangling.recommend(35, 4)?.label).toBe('Main + Jib 1')
+    expect(dangling.recommend(35, 4)?.definition.label).toBe('Main + Jib 1')
     expect(dangling.recommend(35, 10)).toBeNull()
   })
 })

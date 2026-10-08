@@ -1,4 +1,5 @@
-import { TARGET_VMG_CAVEAT, polarTargets, vmgLegOf } from '@/services/analysis/polar-targets'
+import { TARGET_VMG_CAVEAT, polarTargets } from '@/services/analysis/polar-targets'
+import { zone } from '@/services/analysis/maneuvers'
 import type { PolarPayload } from '@/types'
 
 /**
@@ -35,16 +36,19 @@ const GRID: PolarPayload = {
 
 const targets = polarTargets(GRID)
 
-describe('vmgLegOf', () => {
+describe('the zone a Target VMG search is confined to', () => {
+  // The same `zone` a tack is told from a gybe by, deliberately not a second copy of the 90° line:
+  // the best VMG upwind is a different search from the best VMG downwind, and the two must not
+  // disagree about a boat on the beam.
   it('reads the beam as upwind and anything past it as downwind', () => {
-    expect(vmgLegOf(40)).toBe('upwind')
-    expect(vmgLegOf(90)).toBe('upwind')
-    expect(vmgLegOf(91)).toBe('downwind')
+    expect(zone(40)).toBe('upwind')
+    expect(zone(90)).toBe('upwind')
+    expect(zone(91)).toBe('downwind')
   })
 
   it('ignores which tack the boat is on, since the Polar is one side of the boat', () => {
-    expect(vmgLegOf(-150)).toBe('downwind')
-    expect(vmgLegOf(-40)).toBe('upwind')
+    expect(zone(-150)).toBe('downwind')
+    expect(zone(-40)).toBe('upwind')
   })
 })
 
@@ -125,6 +129,41 @@ describe('targetSpeed', () => {
       expect(targets.targetSpeed(42, 10)?.filler_anchored).toBe(false)
     })
 
+    describe('a cell the file left empty, which is not filler but the absence of it', () => {
+      /**
+       * A qtVlm library polar's unfilled columns: the file tabulates TWS 4 and says nothing at 8.
+       * A line through a zero is not a weak yardstick — it is a target of 2 knots where the boat
+       * was measured at 4, which reads as 200% of polar.
+       */
+      const gappy = polarTargets({
+        twa_axis: [52, 90],
+        tws_axis: [4, 8],
+        boat_speed: [
+          [4, 0],
+          [5, 0],
+        ],
+        source: { format: 'qtvlm-pol', header_token: 'twa\\tws' },
+      })
+
+      it('reports missing rather than a figure flagged Filler-Anchored', () => {
+        expect(gappy.targetSpeed(52, 6)).toBeNull()
+        expect(gappy.targetSpeed(52, 8)).toBeNull()
+      })
+
+      it('still answers where the bracket reads cells that say something', () => {
+        expect(gappy.targetSpeed(52, 4)).toEqual({ knots: 4, filler_anchored: false })
+        expect(gappy.targetSpeed(70, 4)?.knots).toBeCloseTo(4 + (5 - 4) * (18 / 38))
+      })
+
+      it('keeps an empty cell out of the Target VMG search, which it would otherwise win', () => {
+        // A candidate whose bracket averages a real 4 knots with a nothing offers nearly no
+        // target, and the search maximises — so it would never win. But the row it sits in would
+        // be the only candidate at TWS 8, where it would answer 0.
+        expect(gappy.targetVmg('upwind', 8)).toBeNull()
+        expect(gappy.targetVmg('upwind', 4)).not.toBeNull()
+      })
+    })
+
     it('does not flag a figure for a filler cell it never read', () => {
       // An exact hit on both axes reads one cell. (40,12) is real, and the ramp cell at (40,4) in
       // the same row has nothing to do with it.
@@ -149,24 +188,26 @@ describe('targetVmg', () => {
     // any construction — proven to fail even on a grid built from a certificate's own optimum. The
     // shape is the enforcement, so a consumer cannot print one by accident.
     expect(Object.keys(targets.targetVmg('upwind', 8) ?? {}).sort()).toEqual([
+      'estimated_knots',
       'filler_anchored',
-      'knots',
     ])
     expect(Object.keys(targets.targetVmg('downwind', 8) ?? {}).sort()).toEqual([
+      'estimated_knots',
       'filler_anchored',
-      'knots',
     ])
   })
 
   it('maximises boat speed times the cosine of the angle, over the upwind rows', () => {
     // Real upwind rows at 12 knots: TWA 40 at 7 (7 x cos40 = 5.36) and TWA 90 at 8 (8 x cos90 = 0).
-    expect(targets.targetVmg('upwind', 12)?.knots).toBeCloseTo(7 * Math.cos((40 * Math.PI) / 180))
+    expect(targets.targetVmg('upwind', 12)?.estimated_knots).toBeCloseTo(
+      7 * Math.cos((40 * Math.PI) / 180)
+    )
   })
 
   it('reads downwind VMG as a magnitude, not a negative number', () => {
     // Only TWA 150 is downwind here: 6 x |cos150| = 5.196. A sign would restate the leg and
     // nothing else, and a negative Target VMG would invert every efficiency built on it.
-    expect(targets.targetVmg('downwind', 12)?.knots).toBeCloseTo(
+    expect(targets.targetVmg('downwind', 12)?.estimated_knots).toBeCloseTo(
       6 * Math.abs(Math.cos((150 * Math.PI) / 180))
     )
   })
@@ -186,7 +227,7 @@ describe('targetVmg', () => {
     })
 
     expect(ramped.targetVmg('upwind', 4)).toEqual({
-      knots: 3 * Math.cos((52 * Math.PI) / 180),
+      estimated_knots: 3 * Math.cos((52 * Math.PI) / 180),
       filler_anchored: false,
     })
   })
@@ -194,7 +235,9 @@ describe('targetVmg', () => {
   it('interpolates across the wind-speed axis like Target Speed does', () => {
     // TWA 40 at 10 knots is halfway from 5 to 7 = 6, and 6 x cos40 = 4.60 is the best the real
     // upwind rows can do there — TWA 45 reads 6.4 x cos45 = 4.53 and TWA 90 reads nothing.
-    expect(targets.targetVmg('upwind', 10)?.knots).toBeCloseTo(6 * Math.cos((40 * Math.PI) / 180))
+    expect(targets.targetVmg('upwind', 10)?.estimated_knots).toBeCloseTo(
+      6 * Math.cos((40 * Math.PI) / 180)
+    )
   })
 
   it('reports missing outside the wind-speed axis, never extrapolated', () => {
@@ -220,7 +263,7 @@ describe('targetVmg', () => {
       // collide, the flag is what gives way, not the number.
       const upwind = allRamp.targetVmg('upwind', 8)
 
-      expect(upwind?.knots).toBeCloseTo(4 * Math.cos((35 * Math.PI) / 180))
+      expect(upwind?.estimated_knots).toBeCloseTo(4 * Math.cos((35 * Math.PI) / 180))
       expect(upwind?.filler_anchored).toBe(true)
     })
 

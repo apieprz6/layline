@@ -1570,6 +1570,10 @@ export interface TargetSpeed {
    * At least one cell the interpolation read is the Polar's own manufactured filler rather than a
    * measurement — **Filler-Anchored**. One fabricated corner flags the whole bracket: a bracket
    * with three real corners is not a safer unflagged one.
+   *
+   * Filler is a *weak* comparison point, which is why the figure is shown with this on it. A cell
+   * the file left empty is no comparison point at all and gets no figure — see `TargetSpeed | null`
+   * at every lookup that returns one.
    */
   filler_anchored: boolean
 }
@@ -1586,14 +1590,28 @@ export interface TargetSpeed {
  * point beat or gybe angle, from any Polar, under any construction.
  */
 export interface TargetVmg {
-  /** Knots of VMG, as a magnitude — speed to windward upwind, to leeward downwind. */
-  knots: number
+  /**
+   * Knots of VMG, as a magnitude — speed to windward upwind, to leeward downwind.
+   *
+   * Named for the approximation rather than carrying a flag for it, because the caveat is
+   * standing: there is no construction of this figure from a `.pol` grid that is exact, so a
+   * consumer should not be able to read it as one without noticing. Print `TARGET_VMG_CAVEAT`
+   * beside anything built on it.
+   */
+  estimated_knots: number
   /** At least one cell the search read or interpolated through is filler. */
   filler_anchored: boolean
 }
 
-/** Which half of the Polar a VMG target is searched over. The boundary is `ZONE_BOUNDARY_DEG`. */
-export type VmgLeg = 'upwind' | 'downwind'
+/**
+ * Which side of the beam something is on — the only two points of sail Layline distinguishes.
+ *
+ * One type for two readers, because they draw the same line and must not disagree about a boat on
+ * the beam: a `TWA` flip is a tack or a gybe by which zone its two sides are in (`maneuvers.ts`),
+ * and **Target VMG** is a separate search in each (`polar-targets.ts`). The boundary is
+ * `ZONE_BOUNDARY_DEG`.
+ */
+export type WindZone = 'upwind' | 'downwind'
 
 /**
  * What a **Crossover Chart** recommends at one angle and wind speed, and which cell said so.
@@ -1603,10 +1621,14 @@ export type VmgLeg = 'upwind' | 'downwind'
  * why two rows a knot apart got the same answer.
  */
 export interface SailRecommendation {
-  /** The **Sail Definition** number the cell holds. */
-  sail_number: number
-  /** That Definition's own label — the chart's words, which are the only words a sail has. */
-  label: string
+  /**
+   * The **Sail Definition** the cell calls for, resolved against the chart's own list.
+   *
+   * The whole Definition rather than its number, because the number is the chart's identifier and
+   * not a name — a cell holding `5` names nothing without the list that says `5` is
+   * `Main reefed + Jib 3` (ADR 0023).
+   */
+  definition: CrossoverSailDefinition
   /** The chart's own TWA the floor landed on. */
   chart_twa: number
   /** The chart's own TWS the floor landed on. */
@@ -1622,12 +1644,15 @@ export interface SailRecommendation {
  */
 export interface RowEfficiency {
   row_index: number
-  /** Null where the row's own angle or wind speed falls outside the Polar's axes. */
+  /**
+   * Null where the row's own angle or wind speed falls outside the Polar's axes, and where the
+   * bracket inside them touches a cell the file left empty.
+   */
   target_speed: TargetSpeed | null
   /** **SOG** over **Target Speed** (ADR 0027). Null without a target or without an `SOG`. */
   polar_efficiency: number | null
   /** Which half of the Polar this row's VMG target was searched over. Null without a `TWA`. */
-  vmg_leg: VmgLeg | null
+  vmg_zone: WindZone | null
   /** `SOG` × |cos(TWA)|: progress toward the mark the leg is on. Always derived. */
   vmg: number | null
   /** Null outside the Polar's TWS axis, or where its real cells cannot answer on this leg. */
@@ -1653,6 +1678,15 @@ export interface EfficiencyAggregate {
   rows: number
   /** How many of those carried a **Filler-Anchored** target. Stated, never used to exclude. */
   filler_anchored_rows: number
+  /**
+   * **Countable** rows left out for want of a measured interval: the last row of the window, and
+   * any row the naive wall clock stepped backwards across.
+   *
+   * Reported so that `rows + rows_without_target + rows_without_interval` accounts for every
+   * Countable row the window holds. A row that left a figure and is tallied nowhere is a silent
+   * omission, which is the one thing ADR 0025 asks a coverage count to prevent.
+   */
+  rows_without_interval: number
   /** Measured seconds behind the figure — summed row intervals, never a cadence × row count. */
   elapsed_seconds: number
   /** Σ `SOG` × interval, in nautical miles. */

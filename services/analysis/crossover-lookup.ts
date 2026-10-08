@@ -26,12 +26,12 @@
  * and not a ceiling: this chart's 30-knot entry is "everything has collapsed to Reef + Jib 3", and
  * that is still the answer at 35. It is the Polar whose domain genuinely ends — it is interpolated,
  * and above its last column there is no bracket to interpolate inside. ADR 0028's out-of-range
- * bullet writes "above or below the Crossover Chart's TWS range"; the rule it decided one section
- * earlier, and the one `CONTEXT.md` and this ticket both state, is the floor — so the floor is what
- * this implements.
+ * bullet originally read "above or below the Crossover Chart's TWS range", contradicting the rule
+ * it decided one section earlier; that bullet is amended, in the ADR, to match the decision and
+ * `CONTEXT.md`.
  */
 
-import type { CrossoverChartPayload, SailRecommendation } from '@/types'
+import type { CrossoverChartPayload, CrossoverSailDefinition, SailRecommendation } from '@/types'
 
 /** One Crossover Chart, with its definitions resolved, ready to be asked about a row. */
 export interface CrossoverLookup {
@@ -61,9 +61,11 @@ export function crossoverLookup(payload: CrossoverChartPayload): CrossoverLookup
 
   // Resolved once rather than per row: a race is thousands of rows against one chart. Every cell
   // resolves to a definition or the payload would not have been stored (`crossoverPayload.ts`), so
-  // a miss here is a payload that was written before a rule existed — reported as missing rather
-  // than as a sail number with no name, because a bare number names nothing.
-  const labels = new Map(sail_definitions.map((sail) => [sail.number, sail.label]))
+  // a miss here is a payload written before a rule existed — reported as missing rather than as a
+  // number with no name, because a number on its own names nothing (ADR 0023).
+  const defined = new Map<number, CrossoverSailDefinition>(
+    sail_definitions.map((sail) => [sail.number, sail])
+  )
 
   return {
     recommend(twa, tws) {
@@ -71,13 +73,13 @@ export function crossoverLookup(payload: CrossoverChartPayload): CrossoverLookup
       const column = floorOn(tws_axis, tws)
       if (row === -1 || column === -1) return null
 
-      const sail_number = cells[row]?.[column]
-      if (sail_number === undefined) return null
+      const called = cells[row]?.[column]
+      if (called === undefined) return null
 
-      const label = labels.get(sail_number)
-      if (label === undefined) return null
+      const definition = defined.get(called)
+      if (definition === undefined) return null
 
-      return { sail_number, label, chart_twa: twa_axis[row], chart_tws: tws_axis[column] }
+      return { definition, chart_twa: twa_axis[row], chart_tws: tws_axis[column] }
     },
   }
 }
