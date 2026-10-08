@@ -141,6 +141,31 @@ Only local Supabase is reachable this way — `auth.setup.ts` refuses to run at 
 viewer fixture; add one the same way if a spec ever needs to assert what a signed-in non-admin
 sees, rather than reaching for it up front.
 
+## The one fixture Race, and why it is not seeding
+
+LAY-159 added a third and fourth project — `archive` and `archive-teardown` — that the two
+`-auth` projects also depend on. `e2e/archive.setup.ts` writes **one** synthetic Race into the
+local archive and the teardown removes it again.
+
+This is the exception that proves the rule, so it is worth being precise about. The owner's real
+season is never imported: it arrives one upload at a time through the finished UI, and what the
+analysis services say about it is asserted in Jest, over the owner's own recordings, by the
+suites that `services/recordings/__tests__/archive.ts` finds files for. What a browser answers
+and Jest cannot is whether a tap on a nine-pixel heading bin at 390px reaches a *hydrated*
+handler — the Instrument Tuning charts hit-test the tap position themselves (ADR 0034), which
+needs `getScreenCTM`, which jsdom does not implement. A hydrated page needs a Race in the
+database, and the local database has none.
+
+So the fixture is **one Race, synthetic, titled so nobody could read it as testimony**, built in
+`e2e/fixtures/synthetic-race.ts` to give each of the three checks something to measure rather
+than to sail plausibly. It carries four fixed ids, deletes those before inserting, and is deleted
+again by the teardown project — a developer's own local archive is never touched, and a crashed
+run leaves at most one obviously-named race behind. It writes through the service-role client and
+refuses a non-local Supabase URL, for the same reason `auth.setup.ts` does.
+
+A new browser spec that needs archive data should extend that fixture rather than add a second
+one. Two fixture Races in one local database are two things to recognise and delete.
+
 ## What is not automatable
 
 **The Google OAuth round trip.** Google blocks sign-in from automated browsers,
