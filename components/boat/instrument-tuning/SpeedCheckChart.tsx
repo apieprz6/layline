@@ -27,12 +27,12 @@
 import { useState, type KeyboardEvent, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 import { speedCoverage } from '@/services/analysis/coverage-verdict'
+import type { OfferedFitMethod } from '@/services/analysis/instrument-tuning'
 import {
   MIN_FIT_POINTS,
   MIN_SOG_SPREAD_KNOTS,
   lineGapAt,
   type EraDivergence,
-  type FitMethod,
   type FittedLine,
   type NoFitReason,
   type RaceDivergence,
@@ -59,14 +59,6 @@ import {
 import { raceLabel, races as racesPhrase, rows as rowsPhrase, signedKnots, type RaceLabels } from './chart-text'
 
 type View = 'scatter' | 'gap'
-
-/**
- * The two fit methods the screen offers.
- *
- * `stw-on-sog` exists in the service and is deliberately not here: three ways to fit one line is a
- * statistics lesson, and two is the point being made (ADR 0034).
- */
-export type OfferedFitMethod = Extract<FitMethod, 'orthogonal' | 'sog-on-stw'>
 
 const SEASON = ''
 
