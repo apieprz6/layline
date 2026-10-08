@@ -15,7 +15,7 @@
  */
 
 import { sameRowOrder } from '@/services/analysis/maneuvers'
-import type { AnalysisRow, ReadableRow, TranscriptionRow } from '@/types'
+import type { AnalysisRow, ReadableRow } from '@/types'
 
 /**
  * The `SOG` an Instrument Tuning check reads a row above, in knots.
@@ -59,11 +59,18 @@ export function aboveSpeedGate(row: Pick<ReadableRow, 'sog'>): boolean {
  * the whole Transcription, before any Race Window is applied — `analysisRowsWithin` narrows the
  * result of this just as happily as it narrows an `AnalysisRow[]`. A misaligned join would hand one
  * row's heading to its neighbour's verdict, so it throws rather than lines them up by index.
+ *
+ * Generic in the row it is handed, because a whole `TranscriptionRow` is not the only thing with
+ * verdicts to join: a stored Transcription arrives as `RecordedRow`, eleven of its twenty-one
+ * columns, and the **Race Track Heatmap** joins those. What must not exist twice is the refusal —
+ * a second copy of this guard is a second chance for a screen to line two row lists up by index
+ * and be subtly wrong forever with nothing failing anywhere. `ReadableRow` stays the name of the
+ * shape an Instrument Tuning check reads.
  */
-export function readableRows(
-  rows: readonly TranscriptionRow[],
+export function readableRows<Row extends { row_index: number }>(
+  rows: readonly Row[],
   analysis: readonly AnalysisRow[]
-): ReadableRow[] {
+): (Row & AnalysisRow)[] {
   if (!sameRowOrder(rows, analysis)) {
     throw new Error('the Transcription and its Countable verdicts are not the same rows')
   }

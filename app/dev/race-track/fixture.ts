@@ -40,11 +40,17 @@ export const HARNESS_POLAR: PolarPayload = {
 const LAT = 41.8528333
 const LON = -87.5568333
 
-/** 30 seconds a row, in the recording's own naive frame. Nothing here builds a `Date`. */
+/**
+ * 30 seconds a row, in the recording's own naive frame. Nothing here builds a `Date`.
+ *
+ * A Saturday afternoon, deliberately: Layline assumes no schedule, and a fixture starting at 19:00
+ * on a Wednesday would put the weeknight series into a file in the app tree as if it were the
+ * frame (AGENTS.md). Any stamp does for a harness.
+ */
 function stamp(index: number): string {
-  const total = 19 * 3600 + index * 30
+  const total = 14 * 3600 + 20 * 60 + index * 30
   const pad = (value: number): string => String(value).padStart(2, '0')
-  return `2026-06-03T${pad(Math.floor(total / 3600))}:${pad(
+  return `2026-07-11T${pad(Math.floor(total / 3600))}:${pad(
     Math.floor((total % 3600) / 60)
   )}:${pad(total % 60)}`
 }

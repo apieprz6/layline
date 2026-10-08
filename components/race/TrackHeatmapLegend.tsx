@@ -26,6 +26,8 @@ import { spacing } from '@/lib/utils/design'
 import { TRACK_BANDS, trackBandColour } from '@/services/analysis/track-heatmap'
 import type { RaceTrack, TrackHeatmapCounts } from '@/types'
 
+import { DROPOUT, FILLER_DASH, HAIRLINE, TRACK_STROKE } from './track-ink'
+
 export default function TrackHeatmapLegend({
   counts,
   scoring,
@@ -108,18 +110,16 @@ export default function TrackHeatmapLegend({
           color: 'var(--text-muted)',
         }}
       >
-        <SwatchRow
-          label={`Drawn, not scored — ${counts.rows - counts.scored} of ${counts.rows} rows. The boat was there; the row supports no claim.`}
-        >
+        <SwatchRow label="Drawn, not scored — the boat was there; the row supports no claim.">
           <svg width="26" height="10" aria-hidden>
             <line
               x1="1"
               y1="5"
               x2="25"
               y2="5"
-              stroke="var(--text-muted)"
-              strokeWidth="1"
-              opacity="0.5"
+              stroke={HAIRLINE.stroke}
+              strokeWidth={HAIRLINE.width}
+              opacity={HAIRLINE.opacity}
             />
           </svg>
         </SwatchRow>
@@ -135,8 +135,8 @@ export default function TrackHeatmapLegend({
                 x2="25"
                 y2="5"
                 stroke={trackBandColour('at')}
-                strokeWidth="3.2"
-                strokeDasharray="2.5 2"
+                strokeWidth={TRACK_STROKE}
+                strokeDasharray={FILLER_DASH}
               />
             </svg>
           </SwatchRow>
@@ -151,29 +151,23 @@ export default function TrackHeatmapLegend({
               y1="5"
               x2="25"
               y2="5"
-              stroke="var(--wind-storm)"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              opacity="0.5"
+              stroke={DROPOUT.stroke}
+              strokeWidth={DROPOUT.bridgeWidth}
+              strokeDasharray={DROPOUT.bridgeDash}
+              opacity={DROPOUT.bridgeOpacity}
             />
-            <circle
-              cx="8"
-              cy="5"
-              r="3.4"
-              fill="none"
-              stroke="var(--wind-storm)"
-              strokeWidth="1"
-              opacity="0.6"
-            />
-            <circle
-              cx="18"
-              cy="5"
-              r="3.4"
-              fill="none"
-              stroke="var(--wind-storm)"
-              strokeWidth="1"
-              opacity="0.6"
-            />
+            {[8, 18].map((cx) => (
+              <circle
+                key={cx}
+                cx={cx}
+                cy="5"
+                r={DROPOUT.ringRadius}
+                fill="none"
+                stroke={DROPOUT.stroke}
+                strokeWidth={DROPOUT.ringWidth}
+                opacity={DROPOUT.ringOpacity}
+              />
+            ))}
           </svg>
         </SwatchRow>
       </ul>
@@ -220,7 +214,14 @@ function countSentence(counts: TrackHeatmapCounts, scoring: RaceTrack['scoring']
         'coloured. The track is still what the recording says; the comparison is missing.'
     )
   } else {
-    sentences.push(`${rows - scored} of ${rows} rows are drawn but not scored.`)
+    // "Drawn but not scored" only where every row is in fact drawn, which is every race in this
+    // archive — a row that logged no position is in the count and in no part of the picture, and
+    // the sentence below says so rather than quietly including it here.
+    sentences.push(
+      noFix === 0
+        ? `${rows - scored} of ${rows} rows are drawn but not scored.`
+        : `${rows - scored} of ${rows} rows carry no percent of target.`
+    )
     sentences.push(
       `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
         `${without_target} are in range of nothing the Polar can answer.`

@@ -40,7 +40,9 @@ import {
 import { dropoutDuration, trackBandColour } from '@/services/analysis/track-heatmap'
 import { niceDistance, scaleBarLabel } from '@/services/recordings/track-projection'
 import { spacing } from '@/lib/utils/design'
-import type { RaceTrackHeatmap } from '@/types'
+import type { RaceTrackHeatmap, TrackBand } from '@/types'
+
+import { DROPOUT, FILLER_DASH, HAIRLINE, TRACK_STROKE } from './track-ink'
 
 const MIN_ZOOM = 1
 /** Chicago–Waukegan is ~25nm end to end: at 12× a 390px screen covers about a quarter-mile of it. */
@@ -96,7 +98,12 @@ export default function TrackHeatmapFrame({
   /** What the map is, for a reader who cannot see it. The section's own words, not a restatement. */
   label: string
 }): ReactElement {
-  const { width, height, metres_per_unit, segments, bridges, rings } = heatmap
+  const { width, height, metres_per_unit, segments, points, bridges, rings } = heatmap
+
+  // Partitioned once rather than walked twice: the unscored hairlines go down first, under the
+  // coloured track, so the measurement overlays the geometry rather than competing with it.
+  const unscored = segments.filter((segment) => segment.band === null)
+  const scored = segments.filter((segment) => segment.band !== null)
   const svg = useRef<SVGSVGElement | null>(null)
   const [view, setView] = useState<View>(HOME)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -169,7 +176,8 @@ export default function TrackHeatmapFrame({
       // gesture to be anchored.
       const { distance, zoom } = pinch.current
       if (distance === 0) return
-      const { x, y } = toBox(midpoint().x, midpoint().y)
+      const between = midpoint()
+      const { x, y } = toBox(between.x, between.y)
       setView((current) =>
         clamped(about(current, bounded((zoom * spread()) / distance), x, y), width, height)
       )
@@ -243,38 +251,54 @@ export default function TrackHeatmapFrame({
             {/* Drawn but not scored, first and underneath: a hairline the coloured track overlays
                 rather than competes with. The boat was there, so the line is continuous; it carries
                 no colour, so it makes no claim. Never the ramp's grey, which means on target. */}
-            {segments.map((segment, index) =>
-              segment.band === null ? (
-                <polyline
-                  key={`unscored-${index}`}
-                  points={segment.points}
-                  fill="none"
-                  stroke="var(--text-muted)"
-                  strokeWidth="1"
-                  opacity="0.5"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null
-            )}
+            {unscored.map((segment, index) => (
+              <polyline
+                key={`unscored-${index}`}
+                points={segment.points}
+                fill="none"
+                stroke={HAIRLINE.stroke}
+                strokeWidth={HAIRLINE.width}
+                opacity={HAIRLINE.opacity}
+                vectorEffect="non-scaling-stroke"
+                // The reason, carried to the DOM even though all of these draw alike: the state is
+                // discriminated all the way to the renderer (ADR 0033), and a hairline that cannot
+                // say why it is grey is the collapse that rule exists to prevent.
+                data-not-scored={segment.not_scored ?? undefined}
+              />
+            ))}
 
             {/* The measurement. A Filler-Anchored row is coloured by its own percent like any
                 other and stitched rather than solid, so it still reads differently from a fully
                 measured one (ADR 0036) — the doubt is on the number, not in place of it. */}
-            {segments.map((segment, index) =>
-              segment.band === null ? null : (
-                <polyline
-                  key={`scored-${index}`}
-                  points={segment.points}
-                  fill="none"
-                  stroke={trackBandColour(segment.band)}
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  strokeDasharray={segment.filler_anchored ? '2.5 2' : undefined}
-                  vectorEffect="non-scaling-stroke"
-                  data-filler-anchored={segment.filler_anchored ? 'true' : undefined}
-                />
-              )
-            )}
+            {scored.map((segment, index) => (
+              <polyline
+                key={`scored-${index}`}
+                points={segment.points}
+                fill="none"
+                stroke={trackBandColour(segment.band as TrackBand)}
+                strokeWidth={TRACK_STROKE}
+                strokeLinecap="round"
+                strokeDasharray={segment.filler_anchored ? FILLER_DASH : undefined}
+                vectorEffect="non-scaling-stroke"
+                data-filler-anchored={segment.filler_anchored ? 'true' : undefined}
+              />
+            ))}
+
+            {/* A fix with no neighbour to join. A run of one cannot be a polyline, and a boat that
+                surfaced for a single fix between two dropouts was somewhere — so it is plotted
+                rather than dropped, at the weight of the run it would have been part of. */}
+            {points.map((point, index) => (
+              <circle
+                key={`point-${index}`}
+                cx={point.x}
+                cy={point.y}
+                r={TRACK_STROKE / 2 / zoom}
+                fill={point.band === null ? HAIRLINE.stroke : trackBandColour(point.band)}
+                opacity={point.band === null ? HAIRLINE.opacity : 1}
+                data-not-scored={point.not_scored ?? undefined}
+                data-filler-anchored={point.filler_anchored ? 'true' : undefined}
+              />
+            ))}
 
             <DropoutBridges bridges={bridges} width={width} zoom={zoom} />
 
@@ -286,11 +310,11 @@ export default function TrackHeatmapFrame({
                 key={`frozen-${index}`}
                 cx={ring.cx}
                 cy={ring.cy}
-                r={3.4 / zoom}
+                r={DROPOUT.ringRadius / zoom}
                 fill="none"
-                stroke="var(--wind-storm)"
-                strokeWidth="1"
-                opacity="0.6"
+                stroke={DROPOUT.stroke}
+                strokeWidth={DROPOUT.ringWidth}
+                opacity={DROPOUT.ringOpacity}
                 vectorEffect="non-scaling-stroke"
               />
             ))}
@@ -363,7 +387,14 @@ export default function TrackHeatmapFrame({
 }
 
 /**
- * Only the gaps long enough to be worth labelling — a two-row dropout needs no annotation.
+ * Every gap bridged; only the ones with room for it labelled.
+ *
+ * The line is never conditional. A dropout where the boat barely moved still joins two fixes with
+ * water the recording never recorded between them, and leaving that as a bare gap is the thing ADR
+ * 0014's obligation is against — ringing alone, with no statement that the feed had died. What is
+ * conditional is the annotation: below about fourteen screen units there is nowhere to put it, and
+ * zooming in is what reveals it, since the threshold is measured on screen rather than in the
+ * frame's own units.
  *
  * The label is clamped inside the frame rather than centred on the gap. Before that it clipped to
  * `feed dead` with no duration at all, which is worse than no label: the duration is the entire
@@ -387,8 +418,6 @@ function DropoutBridges({
     <>
       {bridges.map((bridge, index) => {
         const span = Math.hypot(bridge.x2 - bridge.x1, bridge.y2 - bridge.y1) * zoom
-        if (span < 14) return null
-
         const label = `feed dead ${dropoutDuration(bridge.seconds)}`
         // 3.9 units per character at font size 7 in the mono face, near enough to keep it inside.
         const half = (label.length * 3.9) / 2 / zoom
@@ -396,31 +425,33 @@ function DropoutBridges({
         const x = Math.min(Math.max(wanted, half + 2), Math.max(width - half - 2, half + 2))
 
         return (
-          <g key={`bridge-${index}`}>
+          <g key={`bridge-${index}`} data-testid="track-bridge">
             <line
               x1={bridge.x1}
               y1={bridge.y1}
               x2={bridge.x2}
               y2={bridge.y2}
-              stroke="var(--wind-storm)"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              opacity="0.5"
+              stroke={DROPOUT.stroke}
+              strokeWidth={DROPOUT.bridgeWidth}
+              strokeDasharray={DROPOUT.bridgeDash}
+              opacity={DROPOUT.bridgeOpacity}
               vectorEffect="non-scaling-stroke"
             />
-            <text
-              x={x}
-              y={(bridge.y1 + bridge.y2) / 2 - halo}
-              textAnchor="middle"
-              fontSize={fontSize}
-              fontFamily="var(--font-mono)"
-              fill="var(--wind-storm)"
-              stroke="var(--surface-base)"
-              strokeWidth={halo}
-              paintOrder="stroke"
-            >
-              {label}
-            </text>
+            {span >= 14 && (
+              <text
+                x={x}
+                y={(bridge.y1 + bridge.y2) / 2 - halo}
+                textAnchor="middle"
+                fontSize={fontSize}
+                fontFamily="var(--font-mono)"
+                fill={DROPOUT.stroke}
+                stroke="var(--surface-base)"
+                strokeWidth={halo}
+                paintOrder="stroke"
+              >
+                {label}
+              </text>
+            )}
           </g>
         )
       })}

@@ -51,10 +51,22 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
     height: 440,
     metres_per_unit: 5,
     segments: [
-      { points: '10.0,10.0 40.0,40.0', band: 'below-2', filler_anchored: false },
-      { points: '40.0,40.0 80.0,90.0', band: 'above-2', filler_anchored: true },
-      { points: '80.0,90.0 120.0,140.0', band: null, filler_anchored: false },
+      {
+        points: '10.0,10.0 40.0,40.0',
+        band: 'below-2',
+        not_scored: null,
+        filler_anchored: false,
+      },
+      { points: '40.0,40.0 80.0,90.0', band: 'above-2', not_scored: null, filler_anchored: true },
+      {
+        points: '80.0,90.0 120.0,140.0',
+        band: null,
+        not_scored: 'maneuver_window',
+        filler_anchored: false,
+      },
     ],
+    // A fix with no neighbour to join, which is drawn as a point rather than dropped.
+    points: [{ x: 300, y: 320, band: 'below-3', not_scored: null, filler_anchored: false }],
     bridges: [{ x1: 120, y1: 140, x2: 300, y2: 320, seconds: 3436, rows: 2 }],
     rings: [
       { cx: 120, cy: 140 },
@@ -112,6 +124,30 @@ describe('the track, drawn', () => {
     expect(measured.getAttribute('stroke-dasharray')).toBeNull()
   })
 
+  it('carries the reason a leg is grey into the DOM, even though all of them draw alike', () => {
+    const { container } = render(<RaceTrackSection track={trackOf()} />)
+
+    // ADR 0033 wants the excluded reason discriminated all the way to the renderer. Three states
+    // share one hairline on purpose — geometry with no claim on it should not look like three
+    // different claims — but a hairline that cannot say why it is grey is the collapse the rule
+    // exists to prevent.
+    const hairline = legs(container).find(
+      (leg) => leg.getAttribute('stroke') === 'var(--text-muted)'
+    ) as SVGPolylineElement
+    expect(hairline).toHaveAttribute('data-not-scored', 'maneuver_window')
+  })
+
+  it('plots a fix no leg could reach, with its own reading on it', () => {
+    const { container } = render(<RaceTrackSection track={trackOf()} />)
+
+    // A run of one cannot be a polyline, and the boat was there. Chicago–Waukegan's window really
+    // holds two of these (see `archive-track-heatmap.test.ts`).
+    const point = container.querySelector(
+      '[data-testid="track-camera"] circle[fill="var(--track-below-3)"]'
+    )
+    expect(point).toHaveAttribute('cx', '300')
+  })
+
   it('names a token for every colour, so the night-vision theme stays in charge', () => {
     const { container } = render(<RaceTrackSection track={trackOf()} />)
 
@@ -122,15 +158,37 @@ describe('the track, drawn', () => {
   it('rings a frozen run and bridges it with its own duration', () => {
     const { container } = render(<RaceTrackSection track={trackOf()} />)
 
+    // By stroke: the lone-fix point is a circle in the same group, and a ring is the one with a
+    // stroke and no fill.
     const rings = [
-      ...container.querySelectorAll('[data-testid="track-camera"] circle'),
+      ...container.querySelectorAll(
+        '[data-testid="track-camera"] circle[stroke="var(--wind-storm)"]'
+      ),
     ]
     expect(rings).toHaveLength(2)
-    expect(rings[0].getAttribute('stroke')).toBe('var(--wind-storm)')
+    expect(rings[0]).toHaveAttribute('fill', 'none')
 
     // The label is the whole point of the bridge: "the recording stops here" and "the feed died
     // for 57 minutes across four miles of water" are different facts.
     expect(screen.getByText('feed dead 57m')).toBeInTheDocument()
+  })
+
+  it('bridges a gap too short to label, rather than leaving it bare', () => {
+    // The line is never conditional on there being room for the annotation. A dropout where the
+    // boat barely moved still joins two fixes across water the recording never recorded, and a
+    // bare gap is the thing ADR 0014's obligation is against; zooming in brings the label.
+    render(
+      <RaceTrackSection
+        track={trackOf({
+          heatmap: heatmapOf({
+            bridges: [{ x1: 100, y1: 100, x2: 104, y2: 102, seconds: 95, rows: 3 }],
+          }),
+        })}
+      />
+    )
+
+    expect(screen.getByTestId('track-bridge')).toBeInTheDocument()
+    expect(screen.queryByText(/feed dead/)).not.toBeInTheDocument()
   })
 
   it('keeps every stroke the width it was drawn at, however far the sailor zooms', () => {

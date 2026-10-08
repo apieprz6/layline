@@ -21,8 +21,9 @@
  */
 
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
-import { detectManeuvers, sameRowOrder } from '@/services/analysis/maneuvers'
+import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
+import { readableRows } from '@/services/analysis/readable-rows'
 import { raceTrackHeatmap, type TrackHeatmapRow } from '@/services/analysis/track-heatmap'
 import { readPolarVersion } from '@/services/boat/readPolarVersions'
 import type { RecordedRow } from '@/services/races/recording-rows'
@@ -32,9 +33,10 @@ import type { RaceTrack, TranscriptionQuality } from '@/types'
 /**
  * The rows the map draws, with their verdicts: the whole recording joined, then clipped.
  *
- * Joined by position after `sameRowOrder`, never by index alone, for the reason `readableRows`
- * refuses to: a misaligned join hands one row's position to another row's verdict, and the result
- * is a map that is subtly wrong forever with nothing failing anywhere.
+ * The join is `readableRows`, not a second one written here, because it carries the refusal to
+ * line two misaligned row lists up by index — and a second copy of that guard would be a second
+ * chance for this map to hand one row's position to another row's verdict and be subtly wrong
+ * forever with nothing failing anywhere.
  */
 function trackRows(
   rows: readonly RecordedRow[],
@@ -43,20 +45,7 @@ function trackRows(
 ): TrackHeatmapRow[] {
   const assessed = analysisRows(quality, detectManeuvers(rows, quality))
 
-  if (!sameRowOrder(rows, assessed)) {
-    throw new Error('the Transcription and its Countable verdicts are not the same rows')
-  }
-
-  const joined = assessed.map((row, index) => ({
-    ...row,
-    latitude: rows[index].latitude,
-    longitude: rows[index].longitude,
-    sog: rows[index].sog,
-    tws: rows[index].tws,
-    twa: rows[index].twa,
-  }))
-
-  return analysisRowsWithin(joined, window)
+  return analysisRowsWithin(readableRows(rows, assessed), window)
 }
 
 export async function readRaceTrack(

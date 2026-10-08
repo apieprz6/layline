@@ -170,6 +170,46 @@ describe('a race’s track, drawn', () => {
     expect(heatmap?.segments.map((segment) => segment.band)).toEqual([null, null, 'at', 'at'])
   })
 
+  it('tells the renderer *why* a leg carries no colour, rather than handing it a null', () => {
+    // ADR 0033's requirement of this boundary. Three of these draw the identical hairline on
+    // purpose; what they must not do is arrive indistinguishable, because then nothing downstream
+    // could ever say which it had — the collapse ADR 0009 exists to prevent.
+    const rows = [
+      row(0),
+      row(1, { low_speed: true }),
+      row(2, { maneuver: 'tack' }),
+      row(3, { tws: '40' }),
+      row(4),
+    ]
+
+    const heatmap = raceTrackHeatmap(rows, TARGETS)
+
+    expect(heatmap?.segments.map((segment) => segment.not_scored)).toEqual([
+      'low_speed',
+      'maneuver_window',
+      'no_target',
+      null,
+    ])
+  })
+
+  it('says a race with no Polar is a different fact from one the Polar cannot answer', () => {
+    const withoutPolar = raceTrackHeatmap([row(0), row(1)], null)
+    const offAxis = raceTrackHeatmap([row(0), row(1, { tws: '40' })], TARGETS)
+
+    expect(withoutPolar?.segments[0].not_scored).toBe('no_polar_version')
+    expect(offAxis?.segments[0].not_scored).toBe('no_target')
+  })
+
+  it('never lets an uncomputable percent paint itself as the fastest band', () => {
+    // A row whose own SOG is missing has no ratio. `trackBand` reads each band off its upper
+    // bound, and `NaN` fails every one of them — so without the finite check it would fall out of
+    // the last band and claim the boat was above 115% of target.
+    const heatmap = raceTrackHeatmap([row(0), row(1, { sog: null })], TARGETS)
+
+    expect(heatmap?.segments[0].band).toBeNull()
+    expect(heatmap?.segments[0].not_scored).toBe('no_target')
+  })
+
   it('refuses a flattering percentage on a row the boat spent parked', () => {
     // A Low-Speed row with an SOG far above its target would read as 300% of target if the gate
     // were ignored — which is the failure this rule exists for, and it looks like a measurement.
@@ -290,6 +330,51 @@ describe('a race’s track, drawn', () => {
     // The missing fix breaks the line: nothing joins the fixes either side of a position the file
     // never gave.
     expect(heatmap?.segments).toHaveLength(0)
+  })
+
+  it('plots a fix with no neighbour to join rather than dropping it', () => {
+    // A run of one cannot be a polyline. Without this the row would be in the counts and nowhere
+    // on the map, and "every recorded row is drawn" would be false exactly where it matters most —
+    // a feed that surfaced for a single fix between two dropouts.
+    const rows = [
+      row(0),
+      row(1, { frozen: true }),
+      row(2, { frozen: true }),
+      row(3, { frozen: true }),
+      row(4),
+      row(5, { frozen: true }),
+      row(6, { frozen: true }),
+      row(7, { frozen: true }),
+      row(8),
+      row(9),
+    ]
+
+    const heatmap = raceTrackHeatmap(rows, TARGETS)
+
+    // Two lone fixes: row 0, between the start of the window and a dropout, and row 4, between the
+    // two dropouts. Rows 8 and 9 have each other, so they are a leg.
+    expect(heatmap?.points).toHaveLength(2)
+    expect(heatmap?.segments).toHaveLength(1)
+    // And it is a point with its own reading on it, not an undifferentiated dot.
+    expect(heatmap?.points[0].band).toBe('at')
+    expect(heatmap?.points[0].not_scored).toBeNull()
+  })
+
+  it('plots a lone fix the metrics may not read without colouring it', () => {
+    const rows = [
+      row(0, { low_speed: true }),
+      row(1, { frozen: true }),
+      row(2, { frozen: true }),
+      row(3, { frozen: true }),
+      row(4),
+      row(5),
+    ]
+
+    const heatmap = raceTrackHeatmap(rows, TARGETS)
+
+    expect(heatmap?.points).toHaveLength(1)
+    expect(heatmap?.points[0].band).toBeNull()
+    expect(heatmap?.points[0].not_scored).toBe('low_speed')
   })
 })
 

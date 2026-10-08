@@ -65,9 +65,15 @@ const TRACK: RaceTrack = {
     height: 440,
     metres_per_unit: 4,
     segments: [
-      { points: '10.0,10.0 20.0,20.0', band: 'at', filler_anchored: false },
-      { points: '20.0,20.0 30.0,25.0', band: null, filler_anchored: false },
+      { points: '10.0,10.0 20.0,20.0', band: 'at', not_scored: null, filler_anchored: false },
+      {
+        points: '20.0,20.0 30.0,25.0',
+        band: null,
+        not_scored: 'low_speed',
+        filler_anchored: false,
+      },
     ],
+    points: [],
     bridges: [],
     rings: [],
     counts: {

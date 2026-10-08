@@ -56,11 +56,21 @@ test.describe('the race track, zoomed and panned at 390px', () => {
 
   test('zooms in on the + knob, and the scale bar re-reads its own distance', async ({ page }) => {
     const bar = page.getByTestId('track-scale-bar')
-    const metres = async (): Promise<number> =>
-      Number(/[\d.]+/.exec((await bar.textContent()) ?? '')?.[0])
+    /**
+     * The bar's stated distance in metres, and null where it is stating nautical miles.
+     *
+     * Unit-checked rather than just number-scraped: `1.0 nm` is a *longer* distance than `500 m`
+     * and a bare numeric comparison across the two would read the right behaviour as wrong (or,
+     * worse, the wrong behaviour as right).
+     */
+    const metres = async (): Promise<number | null> => {
+      const label = (await bar.textContent())?.trim() ?? ''
+      const match = /^([\d.]+) m$/.exec(label)
+      return match === null ? null : Number(match[1])
+    }
 
     const whole = await metres()
-    await expect(bar).toContainText('m')
+    expect(whole).not.toBeNull()
 
     await page.getByLabel('Zoom in').click()
     expect(await zoomOf(page)).toBeCloseTo(1.6, 2)
@@ -76,8 +86,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // and lying about it. Four times the zoom is a fraction of the water across the same bar.
     // 1-2-5 rounding is coarse enough that one step may land on the same label, so the claim is
     // made across four of them.
-    expect(await metres()).toBeLessThan(whole)
-    await expect(bar).toContainText('m')
+    expect(await metres()).toBeLessThan(whole as number)
 
     await page.getByLabel('Whole track').click()
     expect(await metres()).toBe(whole)

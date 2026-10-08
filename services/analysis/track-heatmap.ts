@@ -47,6 +47,8 @@ import type {
   RaceTrackHeatmap,
   TrackBand,
   TrackHeatmapCounts,
+  TrackNotScored,
+  TrackPoint,
   TrackRing,
   TrackSegment,
 } from '@/types'
@@ -117,12 +119,12 @@ export function trackBandColour(band: TrackBand): string {
 /** The box ADR 0033 fixes the frame at: stable at 390px whatever shape the track is. */
 export const TRACK_BOX: TrackBox = { width: 360, height: 440, pad: 12 }
 
-/** A projected point, rounded to the tenth of a unit the path strings carry. */
+/** Where a fix lands in the frame. */
 function at(projection: TrackProjection, lat: number, lon: number): { x: number; y: number } {
   return { x: projection.x(lon), y: projection.y(lat) }
 }
 
-/** `x,y` as a path string writes it. */
+/** `x,y` as a path string writes it, at the tenth of a unit a 360-unit frame can show. */
 function pathPoint(point: { x: number; y: number }): string {
   return `${point.x.toFixed(1)},${point.y.toFixed(1)}`
 }
@@ -135,35 +137,52 @@ function fixOf(row: TrackHeatmapRow): { lat: number; lon: number } | null {
 }
 
 /**
- * How a row is to be drawn: its band, or no band and the reason there is none.
+ * How a row is to be drawn: its band, or no band *and which fact that is*.
  *
- * `band: null` is three different facts, and all three draw the same hairline — but they are
- * counted apart, because "the boat was parked" and "the Polar cannot answer out here" are not the
- * same sentence under a legend.
+ * The reason travels as a discriminated state and never as a bare null, which is ADR 0033's own
+ * requirement of this boundary. Several of these draw the identical hairline today — the ADR
+ * decides that deliberately, since geometry with no claim on it should not look like four
+ * different claims — but "the boat was parked" and "the Polar cannot answer out here" are
+ * different facts, the legend states them apart in words, and a renderer that was handed one null
+ * for all of them could never say which it had.
  */
 interface RowPaint {
   band: TrackBand | null
+  /** Null exactly when `band` is set. */
+  not_scored: TrackNotScored | null
   /** At least one Polar cell this row's target interpolated from is the file's own filler. */
   filler_anchored: boolean
+}
+
+function unscored(reason: TrackNotScored): RowPaint {
+  return { band: null, not_scored: reason, filler_anchored: false }
 }
 
 function paintRow(row: TrackHeatmapRow, targets: PolarTargets | null): RowPaint {
   // ADR 0025's verdict first. A row the metrics may not read gets no colour here either, which is
   // the whole of "colour is spent only on the measurement".
-  if (!row.countable) return { band: null, filler_anchored: false }
-  if (targets === null) return { band: null, filler_anchored: false }
+  const excluded = notCountableReason(row)
+  if (excluded !== null) return unscored(excluded)
+
+  // Not the certificate's fault and not the row's: nobody recorded which Polar this race was
+  // sailed under, so there is nothing to be a percent of.
+  if (targets === null) return unscored('no_polar_version')
 
   // The one Target Speed lookup in the app, consumed rather than re-derived: a second reading of
   // the Polar would be a second chance for the map and the tiles below it to disagree about the
   // same race (ADR 0036).
   const scored = computeRowEfficiency(row, targets)
 
-  if (scored.target_speed === null || scored.polar_efficiency === null) {
-    return { band: null, filler_anchored: false }
+  // `Number.isFinite` rather than a null check alone: a ratio that arrived as `NaN` would fail
+  // every band's upper bound and fall out of `trackBand` as *the fastest band on the ramp*, which
+  // is the worst available answer to "we cannot compute this".
+  if (scored.target_speed === null || !Number.isFinite(scored.polar_efficiency)) {
+    return unscored('no_target')
   }
 
   return {
-    band: trackBand(scored.polar_efficiency),
+    band: trackBand(scored.polar_efficiency as number),
+    not_scored: null,
     filler_anchored: scored.target_speed.filler_anchored,
   }
 }
@@ -211,6 +230,7 @@ export function raceTrackHeatmap(
   if (projection === null) return null
 
   const segments: TrackSegment[] = []
+  const points: TrackPoint[] = []
   const rings: TrackRing[] = []
   const bridges: DropoutBridge[] = []
   const counts = emptyCounts(rows.length)
@@ -221,27 +241,46 @@ export function raceTrackHeatmap(
   let before: { x: number; y: number; seconds: number } | null = null
   /** Rows of the Dropout being crossed. Zero outside one. */
   let frozenRun = 0
+  /** The run in progress: how many fixes long, and the first of them, in case it is the only one. */
+  let runLength = 0
+  let runFirst: TrackPoint | null = null
+
+  /**
+   * End the run of joined fixes, plotting it as a point if it turned out to be one fix long.
+   *
+   * A run of one cannot be a polyline, so without this the row would be in the counts and nowhere
+   * on the map — and "every recorded row is drawn" would be false exactly where it matters most, on
+   * a feed that surfaced for a single fix between two dropouts.
+   */
+  const closeRun = (): void => {
+    if (runLength === 1 && runFirst !== null) points.push(runFirst)
+    runLength = 0
+    runFirst = null
+    previous = null
+  }
 
   rows.forEach((row, index) => {
-    const reason = notCountableReason(row)
-    if (reason !== null) counts[reason] += 1
+    const paint = paintRow(row, targets)
+
+    if (paint.not_scored === null) {
+      counts.scored += 1
+      if (paint.filler_anchored) counts.filler_anchored += 1
+    } else if (paint.not_scored === 'no_target') {
+      // In range of the recording and excluded by nothing, yet the Polar has no answer here: past
+      // an axis, or a bracket touching a cell the file left empty (ADR 0028). Missing is drawn as
+      // the absence of colour and never as a value.
+      counts.without_target += 1
+    } else if (paint.not_scored !== 'no_polar_version') {
+      // ADR 0025's three, counted under `notCountableReason`'s own names — one per row, in its
+      // order, so these add up the way every other figure in the app adds up.
+      counts[paint.not_scored] += 1
+    }
 
     const fix = fixes[index]
     const lat = fix.latitude
     const lon = fix.longitude
 
     if (lat !== null && lon !== null) counts.with_fix += 1
-
-    const paint = paintRow(row, targets)
-    if (paint.band !== null) {
-      counts.scored += 1
-      if (paint.filler_anchored) counts.filler_anchored += 1
-    } else if (row.countable && targets !== null) {
-      // In range of the recording and excluded by nothing, yet the Polar has no answer here: past
-      // an axis, or a bracket touching a cell the file left empty (ADR 0028). Missing is drawn as
-      // the absence of colour and never as a value.
-      counts.without_target += 1
-    }
 
     if (row.quality.frozen) {
       // A frozen row still has a position — it is the previous row's, verbatim — and ringing it is
@@ -252,14 +291,14 @@ export function raceTrackHeatmap(
         rings.push({ cx: ring.x, cy: ring.y })
       }
       frozenRun += 1
-      previous = null
+      closeRun()
       return
     }
 
     if (lat === null || lon === null) {
       // A missing fix is a break too, but it is not a Dropout and carries no duration claim: the
       // boat was somewhere and the file does not say where.
-      previous = null
+      closeRun()
       before = null
       frozenRun = 0
       return
@@ -283,23 +322,26 @@ export function raceTrackHeatmap(
       // Attributed to the row it *arrives at*, which is the row whose reading it is showing. One
       // segment per row transition rather than one polyline per run, because a heatmap needs the
       // colour to change where the boat's performance changed.
-      segments.push({
-        points: `${pathPoint(previous)} ${pathPoint(here)}`,
-        band: paint.band,
-        filler_anchored: paint.filler_anchored,
-      })
+      segments.push({ points: `${pathPoint(previous)} ${pathPoint(here)}`, ...paint })
     }
+
+    runLength += 1
+    if (runLength === 1) runFirst = { ...here, ...paint }
 
     previous = here
     before = { ...here, seconds }
     frozenRun = 0
   })
 
+  // The last run ends at the end of the window, which is a break like any other.
+  closeRun()
+
   return {
     width: box.width,
     height: box.height,
     metres_per_unit: projection.metresPerUnit,
     segments,
+    points,
     bridges,
     rings,
     counts,

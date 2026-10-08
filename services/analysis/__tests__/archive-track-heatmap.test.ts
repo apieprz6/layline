@@ -41,6 +41,7 @@ import { describeBoatSetup, ownPolar } from '@/services/analysis/__tests__/boat-
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
+import { readableRows } from '@/services/analysis/readable-rows'
 import {
   dropoutDuration,
   raceTrackHeatmap,
@@ -69,16 +70,10 @@ const targets = once(() => polarTargets(ownPolar()))
 function trackRows(filename: string): TrackHeatmapRow[] {
   const rows = transcribe(filename).transcription.rows
   const quality = assessRowQuality(rows)
-  const assessed = analysisRows(quality, detectManeuvers(rows, quality))
 
-  return assessed.map((row, index) => ({
-    ...row,
-    latitude: rows[index].latitude,
-    longitude: rows[index].longitude,
-    sog: rows[index].sog,
-    tws: rows[index].tws,
-    twa: rows[index].twa,
-  }))
+  // The same join `readRaceTrack` makes, through the same function, so what this suite measures is
+  // what a race page draws rather than a parallel assembly of it.
+  return readableRows(rows, analysisRows(quality, detectManeuvers(rows, quality)))
 }
 
 /** The whole recording drawn, which is the set the prototype's own table was measured over. */
@@ -215,6 +210,32 @@ describeSeason('every race in the archive', () => {
         tallied: scored + frozen + low_speed + maneuver_window + without_target,
       }).toEqual({ filename, tallied: rows })
     })
+  })
+
+  it('leaves no live fix undrawn: the legs and the runs account for all of them', () => {
+    // Every row in this archive carries a position, so each race's live fixes are its rows less
+    // its Frozen ones, and they are drawn as runs of joined legs — a run per dropout, plus one. A
+    // run of `n` fixes is `n − 1` legs, so `live − legs` *is* the number of runs, and that it
+    // equals `bridges + 1` is the arithmetic statement of "nothing fell off the track".
+    season().forEach(({ filename, heatmap }) => {
+      const { rows, frozen, with_fix } = heatmap.counts
+      expect(with_fix).toBe(rows)
+
+      const runs = rows - frozen - heatmap.segments.length
+      expect({ filename, runs }).toEqual({ filename, runs: heatmap.bridges.length + 1 })
+    })
+  })
+
+  it('plots the lone fixes this season really has rather than losing them', () => {
+    // Not a hypothetical. Chicago–Waukegan's window loses its feed seventeen times, and twice it
+    // comes back for exactly **one** fix before dying again. A run of one cannot be a polyline, so
+    // those two rows were counted and drawn nowhere until they were plotted as points — the only
+    // two rows in thirteen races where "every recorded row is drawn" was false.
+    const lone = season()
+      .filter(({ heatmap }) => heatmap.points.length > 0)
+      .map(({ filename, heatmap }) => ({ filename, points: heatmap.points.length }))
+
+    expect(lone).toEqual([{ filename: CHI_WAUK, points: 2 }])
   })
 
   it('never colours a row no metric may read', () => {

@@ -1745,19 +1745,38 @@ export type TrackBand =
   | 'above-3'
 
 /**
- * One leg of the track: the stretch between two consecutive fixes, carrying the state of the row
- * it arrives at.
+ * Why a drawn row carries no colour — the state, never a bare null.
  *
- * One segment per row transition rather than one polyline per run, because the colour has to
- * change where the boat's performance changed. No segment is emitted across a **Dropout** or a
- * missing fix, so a stall is visible as absence rather than as a straight line through water the
- * boat may never have crossed.
+ * ADR 0033 requires the excluded reason to survive to the renderer as a discriminated state,
+ * because collapsing them back into "not Countable" re-loses the distinction ADR 0009 exists to
+ * protect. Several of these are *drawn* identically on purpose: geometry with no claim on it
+ * should not look like four different claims. What they must not do is become indistinguishable
+ * before they reach the thing that draws and counts them.
+ *
+ * The first three are `NotCountableReason`'s own words, verbatim, so the map cannot disagree with
+ * the rest of the app about why a row was left out. They are spelled again here rather than
+ * imported, because that type belongs to the module that decides it and `/types` does not import
+ * from `services/`; what keeps the two from drifting is that `track-heatmap.ts` assigns a
+ * `NotCountableReason` straight into this type, so a fourth reason there stops compiling here.
+ *
+ * `frozen` never reaches a drawn segment — the track breaks around a **Dropout** — and arrives
+ * instead as a ring and a bridge.
  */
-export interface TrackSegment {
-  /** `x1,y1 x2,y2` in the frame's own units. */
-  points: string
+export type TrackNotScored =
+  | 'frozen'
+  | 'low_speed'
+  | 'maneuver_window'
+  /** In range and excluded by nothing, but the Polar cannot answer: off an axis, or over an empty cell. */
+  | 'no_target'
+  /** The race records no **Polar Version** at all, so there is nothing to be a percent of. */
+  | 'no_polar_version'
+
+/** What a row's own reading makes of it: a band, or the reason there is none. */
+export interface TrackPaint {
   /** Null for a row that carries no measurement, which is drawn as an uncoloured hairline. */
   band: TrackBand | null
+  /** Set exactly when `band` is null. */
+  not_scored: TrackNotScored | null
   /**
    * The row's **Target Speed** interpolated through at least one of the Polar's manufactured
    * filler cells (ADR 0036).
@@ -1767,6 +1786,33 @@ export interface TrackSegment {
    * flag to qualify.
    */
   filler_anchored: boolean
+}
+
+/**
+ * One leg of the track: the stretch between two consecutive fixes, carrying the state of the row
+ * it arrives at.
+ *
+ * One segment per row transition rather than one polyline per run, because the colour has to
+ * change where the boat's performance changed. No segment is emitted across a **Dropout** or a
+ * missing fix, so a stall is visible as absence rather than as a straight line through water the
+ * boat may never have crossed.
+ */
+export interface TrackSegment extends TrackPaint {
+  /** `x1,y1 x2,y2` in the frame's own units. */
+  points: string
+}
+
+/**
+ * A fix with no neighbour to join: one row of track between two breaks.
+ *
+ * A run of one cannot be a polyline, and a boat that surfaced for a single fix between two
+ * Dropouts was somewhere — so it is plotted as a point rather than dropped, which is what keeps
+ * "every recorded row is drawn" true at the edges. `TrackMap` plots the same case for the same
+ * reason.
+ */
+export interface TrackPoint extends TrackPaint {
+  x: number
+  y: number
 }
 
 /**
@@ -1839,6 +1885,8 @@ export interface RaceTrackHeatmap {
    */
   metres_per_unit: number
   segments: TrackSegment[]
+  /** The fixes no segment could reach: a run of one, between two breaks. Usually empty. */
+  points: TrackPoint[]
   bridges: DropoutBridge[]
   rings: TrackRing[]
   counts: TrackHeatmapCounts

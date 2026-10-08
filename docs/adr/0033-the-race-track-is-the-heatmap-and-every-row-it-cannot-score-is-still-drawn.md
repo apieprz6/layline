@@ -210,7 +210,27 @@ recording, above Coverage and the Row Quality notes, and the breakdown tiles fol
 **An uncoloured track carries its reason.** Three different facts produce one, and grey that means
 "this race records no Polar Version" must not read as grey that means the boat was slow: `RaceTrack`
 carries `polar` / `no-polar-version` / `polar-unreadable`, and the legend says each in words. Nine
-of this archive's races name no Polar at all.
+of this archive's races name no Polar at all. Per *segment*, the reason travels as a discriminated
+`TrackNotScored` — this ADR's "not as a boolean or a null percentage" — and reaches the DOM, even
+though several of those states are deliberately drawn as the same hairline.
+
+**A run of one fix is plotted, not dropped.** A heatmap needs a colour per row, so the track is
+segments between consecutive fixes — and a fix with no neighbour to join is in no segment at all.
+Chicago–Waukegan's window loses its feed seventeen times and twice comes back for exactly one fix
+before dying again, so until those two rows were drawn as points they were counted and drawn
+nowhere: the only two rows in thirteen races where this ADR's own "every recorded row is still
+drawn" was false. `TrackMap` already plotted the same case for the same reason.
+
+**One thing left as the prototype decided it, and flagged rather than quietly re-decided.** Two of
+the seven ramp steps are byte-identical to wind-band tokens — `--track-below-2` is `--wind-heavy`'s
+`#C47000` and `--track-above-2` is `--wind-medium`'s `#0055BB`. The *token* refusal this ADR makes is
+honoured and tested: the ramp holds its own seven values, so changing what 16–22 knots looks like
+cannot move what 85–95% of target looks like. But the reason the ADR gives for the refusal is
+perceptual — "one palette for two quantities makes the screen unreadable in the one place it matters
+most" — and at two steps out of seven the palettes do coincide, on a page that will carry both
+quantities. These are the hexes the prototype validated and the owner decided from, and the design
+system has one amber and one blue, so they stand; whoever adds a wind-banded chart to this page
+should look at the two together and say whether the ramp needs its own amber and blue.
 
 One cost is worth naming. The browser test this ADR requires has nothing to open: there is no race
 in any local database, because the archive is hand-entered through the finished UI. So the camera is
