@@ -207,14 +207,14 @@ describe('the Calibration Eras of one channel', () => {
     // Not zero Eras and not an absent answer: the boat is set to something, and every
     // figure measured belongs to that one stretch until somebody writes an act down.
     expect(calibrationEras([], 'STW')).toEqual([
-      { channel: 'STW', from: null, until: null, opened_by: [] },
+      { key: 'STW:opening', channel: 'STW', from_date: null, until_date: null, opened_by: [] },
     ])
   })
 
   it('splits at a Version that moved this channel’s figures', () => {
     const eras = calibrationEras(buildCalibrationLog([v1, v2], []), 'STW')
 
-    expect(eras.map((era) => [era.from, era.until])).toEqual([
+    expect(eras.map((era) => [era.from_date, era.until_date])).toEqual([
       [null, '2026-05-02'],
       ['2026-05-02', '2026-08-01'],
       ['2026-08-01', null],
@@ -232,7 +232,7 @@ describe('the Calibration Eras of one channel', () => {
 
     const eras = calibrationEras(buildCalibrationLog([], [cleaned]), 'STW')
 
-    expect(eras.map((era) => era.from)).toEqual([null, '2026-07-04'])
+    expect(eras.map((era) => era.from_date)).toEqual([null, '2026-07-04'])
     expect(eras[1].opened_by).toEqual([{ entry: 'event', date: '2026-07-04', event: cleaned }])
   })
 
@@ -259,7 +259,7 @@ describe('the Calibration Eras of one channel', () => {
 
     const eras = calibrationEras(buildCalibrationLog([v1, v2], [cleaned]), 'STW')
 
-    expect(eras.map((era) => era.from)).toEqual([null, '2026-05-02', '2026-08-01'])
+    expect(eras.map((era) => era.from_date)).toEqual([null, '2026-05-02', '2026-08-01'])
     expect(eras[2].opened_by.map((entry) => entry.entry)).toEqual(['version', 'event'])
   })
 
@@ -268,7 +268,13 @@ describe('the Calibration Eras of one channel', () => {
     // down. A Race sailed then is not in the same Era as one sailed after.
     const eras = calibrationEras(buildCalibrationLog([v1], []), 'STW')
 
-    expect(eras[0]).toEqual({ channel: 'STW', from: null, until: '2026-05-02', opened_by: [] })
+    expect(eras[0]).toEqual({
+      key: 'STW:opening',
+      channel: 'STW',
+      from_date: null,
+      until_date: '2026-05-02',
+      opened_by: [],
+    })
     expect(eras[1].opened_by).toHaveLength(1)
   })
 

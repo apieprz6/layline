@@ -169,14 +169,21 @@ export function calibrationEras(
   // sit in and no chart can mark, so they are grouped and the Era names both.
   const dates = [...new Set(acts.map((entry) => entry.date))].sort()
   const eras: CalibrationEra[] = [
-    { channel, from: null, until: dates[0] ?? null, opened_by: [] },
+    {
+      key: eraKey(channel, null),
+      channel,
+      from_date: null,
+      until_date: dates[0] ?? null,
+      opened_by: [],
+    },
   ]
 
   dates.forEach((date, index) => {
     eras.push({
+      key: eraKey(channel, date),
       channel,
-      from: date,
-      until: dates[index + 1] ?? null,
+      from_date: date,
+      until_date: dates[index + 1] ?? null,
       // In the Log's own order, which puts a Version above the Event of its date.
       opened_by: acts.filter((entry) => entry.date === date),
     })
@@ -186,7 +193,19 @@ export function calibrationEras(
 }
 
 /**
- * Whether something dated `date` falls in this Era: `from` inclusive, `until` exclusive.
+ * An Era's identity, so a chart can key a series on one.
+ *
+ * Here rather than inline in either producer because there are two of them
+ * (`services/analysis/calibration-eras.ts` is the other) and a key is only useful while both spell
+ * it the same way. One home for the format is the smaller half of that problem; the other half is
+ * that there are two producers at all, which is LAY-163's.
+ */
+export function eraKey(channel: CalibrationChannel, fromDate: string | null): string {
+  return `${channel}:${fromDate ?? 'opening'}`
+}
+
+/**
+ * Whether something dated `date` falls in this Era: `from_date` inclusive, `until_date` exclusive.
  *
  * Compared as text, which is why both a calendar date (`2026-08-01`) and a wall-clock stamp
  * (`2026-08-01 10:00:00`) answer correctly — a stamp sorts after the date it falls on and before
@@ -194,6 +213,6 @@ export function calibrationEras(
  * is a claim about a timezone nothing here made.
  */
 export function withinEra(date: string, era: CalibrationEra): boolean {
-  if (era.from !== null && date < era.from) return false
-  return era.until === null || date < era.until
+  if (era.from_date !== null && date < era.from_date) return false
+  return era.until_date === null || date < era.until_date
 }

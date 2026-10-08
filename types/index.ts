@@ -452,6 +452,27 @@ export type PolarRowOrigin =
   | 'measured'
 
 /**
+ * Where one *cell* of a Polar grid came from, read off the grid itself.
+ *
+ * The same signatures `PolarRowOrigin` reports, at the grain scoring needs (ADR 0036). A row is
+ * the right grain for hiding rows wholesale and the wrong grain for scoring one: on this boat's
+ * certificate the filler ramp clears at TWA 40 above 10 knots, at 45 in 6–8, and only at 52 in
+ * 4 — so a single row-level verdict either keeps filler or discards measurements.
+ *
+ * `partial-ramp-filler` has no per-cell spelling: a cell is on the ramp or it is not, and
+ * "partial" was only ever a statement about the columns of a row disagreeing.
+ */
+export type PolarCellOrigin =
+  /** Zero. The file's own statement that it has nothing at this angle and wind speed. */
+  | 'no-data'
+  /** This cell is its own multiple of the base row's, so it is on the file's ramp. */
+  | 'ramp-filler'
+  /** Its row is the exact mean of the rows either side, in every column. */
+  | 'interpolated'
+  /** Nothing about it says generated, so it is read as the boat's own speed. */
+  | 'measured'
+
+/**
  * Which angles a Polar grid may be displayed at, and why the rest are not.
  *
  * The suppression is a display rule and never a storage rule: the payload keeps every row the
@@ -1118,39 +1139,6 @@ export type CalibrationLogEntry =
     }
 
 /**
- * One **Calibration Era** of one **Calibration Channel**: the stretch over which a
- * **Measured Offset** for that channel means one thing.
- *
- * Bounded by the **Calibration Log**'s own entries for the channel and by nothing else —
- * never by a step in the data, because a boundary Layline invented would be Layline
- * asserting that a person did something to the boat (ADR 0027). Derived per channel, so
- * the `HDG` Eras and the `STW` Eras need not line up.
- *
- * Here rather than in one check's own module because every Instrument Tuning check reads
- * the same shape, and the projection that produces it belongs to the Log.
- */
-export interface CalibrationEra {
-  channel: CalibrationChannel
-  /**
-   * Calendar date the Era opens on, inclusive. Null for the stretch before the first
-   * entry touching this channel — the boat was set to *something* then, and nobody wrote
-   * down what, which is a different Era and not an absent one.
-   */
-  from: string | null
-  /** The date the next Era opens on, exclusive. Null for the Era still running. */
-  until: string | null
-  /**
-   * Every Log entry on the boundary date that touched this channel, so a chart can mark
-   * the act and name it. Empty for the opening Era.
-   *
-   * A list because two acts on one day are one boundary — a Version minted the same day
-   * an Event was performed is the ordinary case (`buildCalibrationLog` orders them), and
-   * naming only one of them would describe half of what happened.
-   */
-  opened_by: CalibrationLogEntry[]
-}
-
-/**
  * One qtVlm VDR export, as recorded. Every field but `date_order` is a fact about the
  * file, written once and never updated.
  */
@@ -1569,6 +1557,155 @@ export interface AnalysisRow {
 }
 
 /**
+ * A **Target Speed**: what the **Polar** says the boat could do at one angle and wind speed.
+ *
+ * Carries its own trust rather than being withheld for want of it (ADR 0036). A row the boat
+ * actually sailed is real however weak the grid cell it is compared against, so the doubt belongs
+ * on the number and never in place of it — the whole of what `filler_anchored` is for.
+ */
+export interface TargetSpeed {
+  /** Knots, bilinearly interpolated between the Polar's own axis values. */
+  knots: number
+  /**
+   * At least one cell the interpolation read is the Polar's own manufactured filler rather than a
+   * measurement — **Filler-Anchored**. One fabricated corner flags the whole bracket: a bracket
+   * with three real corners is not a safer unflagged one.
+   *
+   * Filler is a *weak* comparison point, which is why the figure is shown with this on it. A cell
+   * the file left empty is no comparison point at all and gets no figure — see `TargetSpeed | null`
+   * at every lookup that returns one.
+   */
+  filler_anchored: boolean
+}
+
+/**
+ * A **Target VMG**: an *estimate* of the best VMG the Polar can produce on one leg at one wind
+ * speed.
+ *
+ * Never the certificate's own published optimum, and the gap is not confined to the edges of the
+ * measured region: a rectangular TWA × TWS grid cannot hold an optimum that moves with wind speed,
+ * and this boat's own figures put several wind speeds' true peak closer to a neighbouring angle
+ * than the certificate's stated precision can distinguish (ADR 0036). So the caveat is standing,
+ * and the angle the search landed on is deliberately not part of this shape: Layline states no
+ * point beat or gybe angle, from any Polar, under any construction.
+ */
+export interface TargetVmg {
+  /**
+   * Knots of VMG, as a magnitude — speed to windward upwind, to leeward downwind.
+   *
+   * Named for the approximation rather than carrying a flag for it, because the caveat is
+   * standing: there is no construction of this figure from a `.pol` grid that is exact, so a
+   * consumer should not be able to read it as one without noticing. Print `TARGET_VMG_CAVEAT`
+   * beside anything built on it.
+   */
+  estimated_knots: number
+  /** At least one cell the search read or interpolated through is filler. */
+  filler_anchored: boolean
+}
+
+/**
+ * Which side of the beam something is on — the only two points of sail Layline distinguishes.
+ *
+ * One type for two readers, because they draw the same line and must not disagree about a boat on
+ * the beam: a `TWA` flip is a tack or a gybe by which zone its two sides are in (`maneuvers.ts`),
+ * and **Target VMG** is a separate search in each (`polar-targets.ts`). The boundary is
+ * `ZONE_BOUNDARY_DEG`.
+ */
+export type WindZone = 'upwind' | 'downwind'
+
+/**
+ * What a **Crossover Chart** recommends at one angle and wind speed, and which cell said so.
+ *
+ * The axis values are reported because the lookup floors rather than interpolating (ADR 0028): a
+ * boat at 24.6 knots is reading the 24-knot column, and a screen that cannot say so cannot explain
+ * why two rows a knot apart got the same answer.
+ */
+export interface SailRecommendation {
+  /**
+   * The **Sail Definition** the cell calls for, resolved against the chart's own list.
+   *
+   * The whole Definition rather than its number, because the number is the chart's identifier and
+   * not a name — a cell holding `5` names nothing without the list that says `5` is
+   * `Main reefed + Jib 3` (ADR 0023).
+   */
+  definition: CrossoverSailDefinition
+  /** The chart's own TWA the floor landed on. */
+  chart_twa: number
+  /** The chart's own TWS the floor landed on. */
+  chart_tws: number
+}
+
+/**
+ * One row scored against the **Polar**: ADR 0026's efficiency seam, filled in.
+ *
+ * Every figure may be null, and null always means the same thing — the row or the Polar could not
+ * answer, never that the answer was unflattering. A **Filler-Anchored** target is *not* one of
+ * those cases: it is computed, shown, and flagged.
+ */
+export interface RowEfficiency {
+  row_index: number
+  /**
+   * Null where the row's own angle or wind speed falls outside the Polar's axes, and where the
+   * bracket inside them touches a cell the file left empty.
+   */
+  target_speed: TargetSpeed | null
+  /** **SOG** over **Target Speed** (ADR 0027). Null without a target or without an `SOG`. */
+  polar_efficiency: number | null
+  /** Which half of the Polar this row's VMG target was searched over. Null without a `TWA`. */
+  vmg_zone: WindZone | null
+  /** `SOG` × |cos(TWA)|: progress toward the mark the leg is on. Always derived. */
+  vmg: number | null
+  /** Null outside the Polar's TWS axis, or where its real cells cannot answer on this leg. */
+  target_vmg: TargetVmg | null
+  /** **VMG** over **Target VMG**. Carries `TARGET_VMG_CAVEAT` wherever it is shown. */
+  vmg_efficiency: number | null
+}
+
+/**
+ * A **Polar Efficiency** and **VMG Efficiency** figure for a race or a season: a ratio of sums,
+ * never a mean of per-row percentages (ADR 0036).
+ *
+ * A Filler-Anchored row's target can read far too low and drive its own percentage arbitrarily
+ * high, and averaging percentages lets a handful of those dominate a number nobody can see the
+ * rows behind. Summing distances instead weights each row by how long it actually lasted, which is
+ * also the only honest weighting for an event-triggered logger.
+ *
+ * The sums travel alongside the ratio because sums survive re-aggregation and averages do not: a
+ * season figure is these rows' sums added to another race's, never these ratios averaged.
+ */
+export interface EfficiencyAggregate {
+  /** **Countable** rows that carried both a measured interval and a target. */
+  rows: number
+  /** How many of those carried a **Filler-Anchored** target. Stated, never used to exclude. */
+  filler_anchored_rows: number
+  /**
+   * **Countable** rows left out for want of a measured interval: the last row of the window, and
+   * any row the naive wall clock stepped backwards across.
+   *
+   * Reported so that `rows + rows_without_target + rows_without_interval` accounts for every
+   * Countable row the window holds. A row that left a figure and is tallied nowhere is a silent
+   * omission, which is the one thing ADR 0025 asks a coverage count to prevent.
+   */
+  rows_without_interval: number
+  /** Measured seconds behind the figure — summed row intervals, never a cadence × row count. */
+  elapsed_seconds: number
+  /** Σ `SOG` × interval, in nautical miles. */
+  actual_distance_nm: number
+  /** Σ **Target Speed** × interval, in nautical miles. */
+  target_distance_nm: number
+  /** The two above divided. Null where no row could be summed. */
+  polar_efficiency: number | null
+  /** Σ **VMG** × interval, over the rows that had a VMG target. */
+  actual_vmg_distance_nm: number
+  /** Σ **Target VMG** × interval, over those same rows. */
+  target_vmg_distance_nm: number
+  /** Those two divided. Null where no row could be summed. Carries `TARGET_VMG_CAVEAT`. */
+  vmg_efficiency: number | null
+  /** Countable rows with an interval but no **Target Speed** — out of the Polar's axes. */
+  rows_without_target: number
+}
+
+/**
  * A row with both of its halves: the Countable verdict, and the channels the verdict is about.
  *
  * Every Instrument Tuning check needs a figure and permission to use it at once, and neither half
@@ -1610,20 +1747,43 @@ export type Tack = 'starboard' | 'port'
 export type PairedPointOfSail = 'upwind' | 'downwind'
 
 /**
- * One **Calibration Era**: a stretch of one channel's life over which a figure means one thing.
+ * One **Calibration Era** of one **Calibration Channel**: a stretch of that channel's life over
+ * which a **Measured Offset** or an **Apparent Wind Asymmetry** means one thing.
  *
- * Bounded by what somebody recorded and never by a step in the data. `from_date` is null for the
- * stretch before the first recorded act, `until_date` for the Era still running.
+ * Bounded by the **Calibration Log**'s own entries for the channel and by nothing else — never by
+ * a step in the data, because a boundary Layline invented would be Layline asserting that a person
+ * did something to the boat (ADR 0027). Derived per channel, so the `HDG` Eras and the `STW` Eras
+ * need not line up.
+ *
+ * Here rather than in one check's own module because every Instrument Tuning check reads the same
+ * shape, and the projection that produces it belongs to the Log.
+ *
+ * LAY-156 and LAY-157 each declared this interface, on branches neither of which could see the
+ * other; they auto-merged into two declarations of one name, which TypeScript merges into a shape
+ * requiring both sets of fields and which therefore no producer satisfied. This is the survivor —
+ * the superset, since `key` is in it — and the two producers now agree on it. That there are still
+ * *two* producers is the part this did not fix: see LAY-163.
  */
 export interface CalibrationEra {
   /** Stable across renders, so a chart can key its series on an Era. */
   key: string
   channel: CalibrationChannel
-  /** Inclusive. Null means "everything before the first recorded act on this channel". */
+  /**
+   * Calendar date the Era opens on, inclusive. Null for the stretch before the first entry
+   * touching this channel — the boat was set to *something* then, and nobody wrote down what,
+   * which is a different Era and not an absent one.
+   */
   from_date: string | null
-  /** Exclusive. Null means "still running". */
+  /** The date the next Era opens on, exclusive. Null for the Era still running. */
   until_date: string | null
-  /** The Calibration Log entries on `from_date` that opened it. Empty on the first Era. */
+  /**
+   * Every Log entry on the boundary date that touched this channel, so a chart can mark the act
+   * and name it. Empty for the opening Era.
+   *
+   * A list because two acts on one day are one boundary — a Version minted the same day an Event
+   * was performed is the ordinary case (`buildCalibrationLog` orders them), and naming only one of
+   * them would describe half of what happened.
+   */
   opened_by: CalibrationLogEntry[]
 }
 

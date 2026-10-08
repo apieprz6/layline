@@ -70,7 +70,20 @@ Two ways a query can fall outside a grid's covered domain, and both get the same
   ORC-derived polar, though the axis itself is read from the file, not hardcoded to that number) or below
   its lowest; above or below the Crossover Chart's TWS range. A floor lookup with no floor, or an
   interpolation with nothing to interpolate between, produces **missing**, not a clamped or extrapolated
-  value. This boat's chart reaches 30 kt while its Polar stops at 24 — that gap is structural, not a
+  value.
+
+  > **Amended, LAY-154: "above the Crossover Chart's TWS range" is wrong, and only for the chart.**
+  > This bullet and the Decision section above it disagreed. The decision reads "finding the largest
+  > defined column at or below that TWS", which at 32 kt on this boat's chart is the 30 kt column —
+  > and the bullet calls the same query missing. The Decision is right, and a floor lookup above the
+  > top column *has* a floor: the chart's columns are thresholds, so its last one means "and
+  > anything above", which on this chart is "everything has collapsed to Reef + Jib 3". Reporting no
+  > recommendation at 32 kt would withhold the most conservative sail plan the boat owns at exactly
+  > the wind speed a sailor most wants it. The Polar is genuinely different and this amendment does
+  > not touch it: interpolation above the last column has no bracket, so there the answer really is
+  > missing. `CONTEXT.md`'s **Crossover Chart** entry and LAY-154's acceptance criteria both state
+  > the floor, and `services/analysis/crossover-lookup.ts` implements it. Missing for the chart
+  > remains exactly one case: a query *below* either of its axes. This boat's chart reaches 30 kt while its Polar stops at 24 — that gap is structural, not a
   converter shortcoming, so a Sail Selection Chart cell at 25 or 30 kt shows a sail recommendation with no
   Target Speed to shade it by.
 - **Inside the Polar's manufactured filler rows.** *Superseded by ADR 0036 for the scoring path —

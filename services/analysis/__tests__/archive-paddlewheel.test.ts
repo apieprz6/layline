@@ -258,8 +258,8 @@ describeArchive('the archive’s own Calibration Eras', () => {
 
     const eras = paddlewheelDivergence(archiveFilenames.map(race), log)
     expect(eras).toHaveLength(1)
-    expect(eras[0].era.from).toBeNull()
-    expect(eras[0].era.until).toBeNull()
+    expect(eras[0].era.from_date).toBeNull()
+    expect(eras[0].era.until_date).toBeNull()
     expect(eras[0].races).toHaveLength(13)
   })
 
@@ -279,7 +279,7 @@ describeArchive('the archive’s own Calibration Eras', () => {
       buildCalibrationLog([], [cleaned])
     )
 
-    expect(eras.map((era) => [era.era.from, era.races.length])).toEqual([
+    expect(eras.map((era) => [era.era.from_date, era.races.length])).toEqual([
       [null, 6],
       ['2026-07-04', 7],
     ])
