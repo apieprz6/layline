@@ -9,14 +9,14 @@
 
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 import {
+  MIN_FIT_POINTS,
   MIN_SOG_SPREAD_KNOTS,
-  MIN_VALID_POINTS,
   gapBySpeedBand,
   lineGapAt,
   paddlewheelDivergence,
   raceDivergence,
 } from '@/services/analysis/paddlewheel'
-import type { PaddlewheelRace, SpeedPairRow } from '@/services/analysis/paddlewheel'
+import type { FitMethod, PaddlewheelRace, SpeedPairRow } from '@/services/analysis/paddlewheel'
 import type { CalibrationEvent, Maneuver } from '@/types'
 
 /**
@@ -104,7 +104,7 @@ describe('one Race’s divergence', () => {
   it('draws no line through four points, and still shows all four', () => {
     const thin = raceDivergence(line('race-1', 1.05, 4))
 
-    expect(MIN_VALID_POINTS).toBe(5)
+    expect(MIN_FIT_POINTS).toBe(5)
     expect(thin.points).toHaveLength(4)
     expect(thin.fit).toEqual({ fitted: false, reason: 'too-few-points' })
   })
@@ -147,6 +147,8 @@ describe('a blank `STW` row', () => {
       row(3, '4.0', null),
       row(4, null, '0.4', 'low-speed'),
       row(5, null, '4.4', 'frozen'),
+      row(6, null, null),
+      row(7, '', '4.0'),
     ],
   }
 
@@ -157,13 +159,24 @@ describe('a blank `STW` row', () => {
     expect(divergence.points.some((point) => point.stw === 0)).toBe(false)
   })
 
+  it('is not a point at the origin when the cell is empty rather than absent', () => {
+    // `Number('')` is 0, and a zero here would be a reading of zero knots on a row where the
+    // paddlewheel reported nothing — the one thing this check must never draw.
+    const divergence = raceDivergence(race)
+
+    expect(divergence.points.map((point) => point.row_index)).not.toContain(7)
+  })
+
   it('is counted as its own coverage stat rather than dropped', () => {
     const { coverage } = raceDivergence(race)
 
-    expect(coverage.countable).toBe(3)
+    expect(coverage.countable).toBe(5)
     expect(coverage.points).toBe(1)
-    expect(coverage.blank_stw).toBe(1)
+    // Rows 2, 6 and 7: absent, absent on both channels, and an empty cell. All three are rows the
+    // paddlewheel said nothing on, which is what this stat states.
+    expect(coverage.blank_stw).toBe(3)
     expect(coverage.blank_sog).toBe(1)
+    expect(coverage.points + coverage.blank_stw + coverage.blank_sog).toBe(coverage.countable)
   })
 
   it('says where the blank rows that were not Countable went', () => {
@@ -198,7 +211,7 @@ describe('the fit method the slope depends on', () => {
     ],
   }
 
-  function slopeUnder(method: 'orthogonal' | 'sog-on-stw' | 'stw-on-sog'): number {
+  function slopeUnder(method: FitMethod): number {
     const { fit } = raceDivergence(noisy, method)
     if (!fit.fitted) throw new Error(`expected a line under ${method}`)
     const [from, to] = fit.line.ends
@@ -430,6 +443,19 @@ describe('the gap by speed band', () => {
     })
     // Row by row it would read 0.15 kt, and the three rows of the long Race would have said so.
     expect(band.mean_gap_knots).toBeCloseTo(0.3, 6)
+  })
+
+  it('is the axis the Era was asked for, and `STW` where it was asked for nothing', () => {
+    const race: PaddlewheelRace = {
+      race_id: 'race-1',
+      sailed_at: '2026-06-03 19:00:00',
+      rows: [row(1, '3.8', '4.4')],
+    }
+
+    expect(paddlewheelDivergence([race], NO_LOG)[0].gap_by_speed[0].band).toBe(3)
+    expect(
+      paddlewheelDivergence([race], NO_LOG, { band_axis: 'sog' })[0].gap_by_speed[0].band
+    ).toBe(4)
   })
 
   it('bands by the recorded `SOG` instead, where that is the axis asked for', () => {

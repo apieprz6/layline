@@ -28,15 +28,18 @@
  */
 
 import { calibrationEras, withinEra } from '@/lib/boat/calibrationLog'
+import { notCountableReason } from '@/services/analysis/countable'
 import type { AnalysisRow, CalibrationEra, CalibrationLogEntry, TranscriptionChannels } from '@/types'
 
 /**
  * Rows a fit needs before it may draw a line.
  *
  * ADR 0027 takes this from the compass check's own `MIN_VALID_POINTS`, which LAY-145 names and has
- * not yet been ported; when that module lands the two belong in one place rather than two.
+ * not yet been ported; when that module lands the two belong in one place rather than two. Spelled
+ * without `Valid`, which is on **Countable**'s own `Avoid` list (CONTEXT.md): the rows reaching
+ * this gate are already Countable, and the gate asks a narrower question than that word would.
  */
-export const MIN_VALID_POINTS = 5
+export const MIN_FIT_POINTS = 5
 
 /**
  * Knots of `SOG` a population must span before a line through it points anywhere.
@@ -92,7 +95,7 @@ export interface FittedLine {
 export type NoFitReason =
   /** No Countable row carried both speeds. */
   | 'no-points'
-  /** Fewer than `MIN_VALID_POINTS`. */
+  /** Fewer than `MIN_FIT_POINTS`. */
   | 'too-few-points'
   /** Less than `MIN_SOG_SPREAD_KNOTS` of `SOG` between the slowest row and the fastest. */
   | 'narrow-spread'
@@ -116,9 +119,15 @@ export interface BlankStwCoverage {
   countable: number
   /** Countable rows carrying both speeds: the rows the scatter draws and the fit reads. */
   points: number
-  /** Countable rows with a `SOG` and no `STW` — the stat, and never a point at zero. */
+  /**
+   * Countable rows the paddlewheel said nothing on — the stat the screen states as "the
+   * paddlewheel had no reading for X% of this population", and never a point at zero.
+   *
+   * Read before `blank_sog`, so a row both channels went quiet on is counted here: this is the
+   * published figure, and a row with no `STW` belongs in it however the GPS behaved.
+   */
   blank_stw: number
-  /** Countable rows with no `SOG`, which have no y-value either. Counted so the rows add up. */
+  /** Countable rows with an `STW` and no `SOG`, which have no y-value. So the rows add up. */
   blank_sog: number
   /**
    * Rows with no `STW` that were not Countable, by the first of ADR 0025's three reasons to hold —
@@ -207,22 +216,48 @@ export interface EraDivergence {
   races_with_a_line: number
 }
 
-/** A recorded figure as a coordinate, or absent. `NaN` never leaves this function. */
+/**
+ * A recorded figure as a coordinate, or absent.
+ *
+ * Three ways to be absent and all of them read as absent: the channel said nothing, it wrote an
+ * empty cell — which `Number` reads as zero, and a zero here would be a point at the origin on a
+ * row where nothing was measured — or it wrote something that is not a number at all. The last
+ * cannot reach this from a Transcription, the parser having refused any file whose figures
+ * Postgres `numeric` would hand back changed; where it somehow does, it is counted as a blank
+ * rather than plotted. `NaN` never leaves this function.
+ */
 function recorded(value: string | null): number | null {
-  if (value === null) return null
+  if (value === null || value.trim() === '') return null
 
   const figure = Number(value)
   return Number.isFinite(figure) ? figure : null
 }
 
+/**
+ * The rows a fit reads and what each one is worth, which always travel together.
+ *
+ * Parallel arrays rather than a weight per point, because a Race's rows are weighted by a fact
+ * about the Race and not about the row (`1 / its Countable row count`), and writing that onto each
+ * point would invite reading it as the row's own.
+ */
+interface WeightedPoints {
+  points: readonly SpeedPoint[]
+  weights: readonly number[]
+}
+
+/** Total weight, or zero. The one guard every figure below needs before it divides. */
+function totalWeight({ weights }: WeightedPoints): number {
+  return weights.reduce((sum, weight) => sum + weight, 0)
+}
+
 /** Weighted first and second moments of the points, or null where there is nothing to weigh. */
 function moments(
-  points: readonly LinePoint[],
-  weights: readonly number[]
+  population: WeightedPoints
 ): { mx: number; my: number; sxx: number; syy: number; sxy: number } | null {
-  const total = weights.reduce((sum, weight) => sum + weight, 0)
+  const total = totalWeight(population)
   if (total <= 0) return null
 
+  const { points, weights } = population
   let mx = 0
   let my = 0
   for (const [at, point] of points.entries()) {
@@ -254,12 +289,9 @@ function moments(
  * the perpendicular distance, which is the only one of the three that treats both as noisy. The
  * slope and intercept are computed here and go no further — what comes back is a shape.
  */
-function fitLine(
-  points: readonly LinePoint[],
-  weights: readonly number[],
-  method: FitMethod
-): FittedLine | null {
-  const found = moments(points, weights)
+function fitLine(population: WeightedPoints, method: FitMethod): FittedLine | null {
+  const { points } = population
+  const found = moments(population)
   if (found === null) return null
 
   const { mx, my, sxx, syy, sxy } = found
@@ -291,80 +323,29 @@ function fitLine(
 }
 
 /** The line, or which gate stopped it. The gates are read in the order a population fails them. */
-function fitWithGates(
-  points: readonly SpeedPoint[],
-  weights: readonly number[],
-  method: FitMethod,
-  spread: number | null
-): FitOutcome {
+function fitWithGates(population: WeightedPoints, method: FitMethod): FitOutcome {
+  const { points } = population
   if (points.length === 0) return { fitted: false, reason: 'no-points' }
-  if (points.length < MIN_VALID_POINTS) return { fitted: false, reason: 'too-few-points' }
+  if (points.length < MIN_FIT_POINTS) return { fitted: false, reason: 'too-few-points' }
+
+  const spread = sogSpread(points)
   if (spread === null || spread < MIN_SOG_SPREAD_KNOTS) {
     return { fitted: false, reason: 'narrow-spread' }
   }
 
-  const line = fitLine(points, weights, method)
+  const line = fitLine(population, method)
   return line === null ? { fitted: false, reason: 'flat' } : { fitted: true, line }
 }
 
-/** Which of ADR 0025's three reasons took this row, read in that order. One row, one reason. */
-function excludedBy(row: SpeedPairRow): 'frozen' | 'low_speed' | 'maneuver_window' | null {
-  if (row.countable) return null
-  if (row.quality.frozen) return 'frozen'
-  if (row.quality.low_speed) return 'low_speed'
-  return 'maneuver_window'
-}
-
 /** The weighted mean of `SOG − STW`: the gap from 1:1, reading no fit at all. */
-function knotGap(points: readonly SpeedPoint[], weights: readonly number[]): number | null {
-  const total = weights.reduce((sum, weight) => sum + weight, 0)
+function knotGap(population: WeightedPoints): number | null {
+  const total = totalWeight(population)
   if (total <= 0) return null
 
+  const { points, weights } = population
   let gap = 0
   for (const [at, point] of points.entries()) gap += weights[at] * (point.sog - point.stw)
   return gap / total
-}
-
-/** Every Countable row that can be a point, and the count of every row that cannot. */
-function readRows(rows: readonly SpeedPairRow[]): {
-  points: SpeedPoint[]
-  coverage: BlankStwCoverage
-} {
-  const points: SpeedPoint[] = []
-  const coverage: BlankStwCoverage = {
-    rows: rows.length,
-    countable: 0,
-    points: 0,
-    blank_stw: 0,
-    blank_sog: 0,
-    excluded_blank_stw: { frozen: 0, low_speed: 0, maneuver_window: 0 },
-  }
-
-  for (const row of rows) {
-    const stw = recorded(row.stw)
-    const sog = recorded(row.sog)
-    const excluded = excludedBy(row)
-
-    if (excluded !== null) {
-      if (stw === null) coverage.excluded_blank_stw[excluded] += 1
-      continue
-    }
-
-    coverage.countable += 1
-    if (sog === null) {
-      coverage.blank_sog += 1
-      continue
-    }
-    if (stw === null) {
-      coverage.blank_stw += 1
-      continue
-    }
-
-    coverage.points += 1
-    points.push({ row_index: row.row_index, stw, sog })
-  }
-
-  return { points, coverage }
 }
 
 /** Knots of `SOG` between the slowest point and the fastest, or null with no points. */
@@ -373,6 +354,53 @@ function sogSpread(points: readonly SpeedPoint[]): number | null {
 
   const speeds = points.map((point) => point.sog)
   return Math.max(...speeds) - Math.min(...speeds)
+}
+
+/** Nothing read yet, over this many rows. The shape every tally below starts from. */
+function noCoverage(rows: number): BlankStwCoverage {
+  return {
+    rows,
+    countable: 0,
+    points: 0,
+    blank_stw: 0,
+    blank_sog: 0,
+    excluded_blank_stw: { frozen: 0, low_speed: 0, maneuver_window: 0 },
+  }
+}
+
+/** Every Countable row that can be a point, and the count of every row that cannot. */
+function readRows(rows: readonly SpeedPairRow[]): {
+  points: SpeedPoint[]
+  coverage: BlankStwCoverage
+} {
+  const points: SpeedPoint[] = []
+  const coverage = noCoverage(rows.length)
+
+  for (const row of rows) {
+    const stw = recorded(row.stw)
+    const sog = recorded(row.sog)
+
+    if (!row.countable) {
+      const reason = notCountableReason(row)
+      if (stw === null && reason !== null) coverage.excluded_blank_stw[reason] += 1
+      continue
+    }
+
+    coverage.countable += 1
+    if (stw === null) {
+      coverage.blank_stw += 1
+      continue
+    }
+    if (sog === null) {
+      coverage.blank_sog += 1
+      continue
+    }
+
+    coverage.points += 1
+    points.push({ row_index: row.row_index, stw, sog })
+  }
+
+  return { points, coverage }
 }
 
 /**
@@ -386,17 +414,16 @@ export function raceDivergence(
   method: FitMethod = 'orthogonal'
 ): RaceDivergence {
   const { points, coverage } = readRows(race.rows)
-  const weights = points.map(() => 1)
-  const spread = sogSpread(points)
+  const population: WeightedPoints = { points, weights: points.map(() => 1) }
 
   return {
     race_id: race.race_id,
     sailed_at: race.sailed_at,
     points,
     coverage,
-    sog_spread_knots: spread,
-    measured_offset_knots: knotGap(points, weights),
-    fit: fitWithGates(points, weights, method, spread),
+    sog_spread_knots: sogSpread(points),
+    measured_offset_knots: knotGap(population),
+    fit: fitWithGates(population, method),
   }
 }
 
@@ -449,6 +476,12 @@ export function gapBySpeedBand(
     }))
 }
 
+/** Oldest first, which is the order a season reads in. Ties keep the order they arrived in. */
+function bySailedAt(left: PaddlewheelRace, right: PaddlewheelRace): number {
+  if (left.sailed_at === right.sailed_at) return 0
+  return left.sailed_at < right.sailed_at ? -1 : 1
+}
+
 /** Two coverage tallies added, which is what an Era's own is made of. */
 function addCoverage(into: BlankStwCoverage, from: BlankStwCoverage): BlankStwCoverage {
   return {
@@ -485,18 +518,12 @@ function addCoverage(into: BlankStwCoverage, from: BlankStwCoverage): BlankStwCo
 function eraDivergence(
   era: CalibrationEra,
   races: readonly RaceDivergence[],
-  method: FitMethod
+  method: FitMethod,
+  axis: BandAxis
 ): EraDivergence {
   const points: SpeedPoint[] = []
   const weights: number[] = []
-  let coverage: BlankStwCoverage = {
-    rows: 0,
-    countable: 0,
-    points: 0,
-    blank_stw: 0,
-    blank_sog: 0,
-    excluded_blank_stw: { frozen: 0, low_speed: 0, maneuver_window: 0 },
-  }
+  let coverage = noCoverage(0)
 
   for (const race of races) {
     coverage = addCoverage(coverage, race.coverage)
@@ -506,13 +533,15 @@ function eraDivergence(
     }
   }
 
+  const population: WeightedPoints = { points, weights }
+
   return {
     era,
     races: [...races],
     coverage,
-    measured_offset_knots: knotGap(points, weights),
-    fit: fitWithGates(points, weights, method, sogSpread(points)),
-    gap_by_speed: gapBySpeedBand(races),
+    measured_offset_knots: knotGap(population),
+    fit: fitWithGates(population, method),
+    gap_by_speed: gapBySpeedBand(races, axis),
     races_with_points: races.filter((race) => race.points.length > 0).length,
     races_with_a_line: races.filter((race) => race.fit.fitted).length,
   }
@@ -529,18 +558,25 @@ function eraDivergence(
 export function paddlewheelDivergence(
   races: readonly PaddlewheelRace[],
   log: readonly CalibrationLogEntry[],
-  options: { method?: FitMethod } = {}
+  options: {
+    method?: FitMethod
+    /**
+     * Which channel the Era's `gap_by_speed` bands are cut on. Defaults to the scatter's own x,
+     * and is the caller's to state because the figure at the top end moves with it (ADR 0034).
+     */
+    band_axis?: BandAxis
+  } = {}
 ): EraDivergence[] {
   const method = options.method ?? 'orthogonal'
-  const read = [...races]
-    .sort((left, right) => (left.sailed_at === right.sailed_at ? 0 : left.sailed_at < right.sailed_at ? -1 : 1))
-    .map((race) => raceDivergence(race, method))
+  const axis = options.band_axis ?? 'stw'
+  const read = [...races].sort(bySailedAt).map((race) => raceDivergence(race, method))
 
   return calibrationEras(log, 'STW').map((era) =>
     eraDivergence(
       era,
       read.filter((race) => withinEra(race.sailed_at, era)),
-      method
+      method,
+      axis
     )
   )
 }

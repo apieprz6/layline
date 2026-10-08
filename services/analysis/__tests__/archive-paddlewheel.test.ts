@@ -31,11 +31,11 @@ import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import {
   MIN_SOG_SPREAD_KNOTS,
-  gapBySpeedBand,
   lineGapAt,
   paddlewheelDivergence,
 } from '@/services/analysis/paddlewheel'
 import type {
+  BandAxis,
   EraDivergence,
   FitMethod,
   PaddlewheelRace,
@@ -77,12 +77,8 @@ function race(filename: string): PaddlewheelRace {
 }
 
 /** The whole archive as one season, with nothing recorded against the `STW` channel. */
-function season(method?: FitMethod): EraDivergence {
-  const eras = paddlewheelDivergence(
-    archiveFilenames.map(race),
-    buildCalibrationLog([], []),
-    method ? { method } : {}
-  )
+function season(options: { method?: FitMethod; band_axis?: BandAxis } = {}): EraDivergence {
+  const eras = paddlewheelDivergence(archiveFilenames.map(race), buildCalibrationLog([], []), options)
 
   expect(eras).toHaveLength(1)
   return eras[0]
@@ -119,17 +115,17 @@ describeArchive('the archive, read as paddlewheel divergence', () => {
     // `STW` says the paddlewheel over-reads at speed and regressing the other way says it
     // under-reads. The orthogonal fit, which is the only one of the three that treats both
     // channels as the measurements they are, sits between them and is the default.
-    expect(slopeOf(season('sog-on-stw'))).toBeCloseTo(0.94, 2)
-    expect(slopeOf(season('orthogonal'))).toBeCloseTo(0.98, 2)
-    expect(slopeOf(season('stw-on-sog'))).toBeCloseTo(1.02, 2)
-    expect(slopeOf(season())).toBeCloseTo(slopeOf(season('orthogonal')), 12)
+    expect(slopeOf(season({ method: 'sog-on-stw' }))).toBeCloseTo(0.94, 2)
+    expect(slopeOf(season({ method: 'orthogonal' }))).toBeCloseTo(0.98, 2)
+    expect(slopeOf(season({ method: 'stw-on-sog' }))).toBeCloseTo(1.02, 2)
+    expect(slopeOf(season())).toBeCloseTo(slopeOf(season({ method: 'orthogonal' })), 12)
   })
 
   it('reports one `R²` and one Measured Offset, whichever way the line was fitted', () => {
     // `R²` is a property of the points and the gap is their mean: the method moves the line
     // through them and can move neither of these.
     const figures = (['orthogonal', 'sog-on-stw', 'stw-on-sog'] as const).map((method) => {
-      const era = season(method)
+      const era = season({ method })
       return {
         r_squared: era.fit.fitted ? era.fit.line.r_squared : null,
         gap: era.measured_offset_knots,
@@ -174,7 +170,7 @@ describeArchive('the U the archive’s rows make around the line', () => {
   /** The mean gap per band, by recorded `SOG`, which is the banding ADR 0034's figures are on. */
   function bySog(): Map<number, number> {
     return new Map(
-      gapBySpeedBand(season().races, 'sog').map((band) => [band.band, band.mean_gap_knots])
+      season({ band_axis: 'sog' }).gap_by_speed.map((band) => [band.band, band.mean_gap_knots])
     )
   }
 
@@ -214,9 +210,7 @@ describeArchive('the U the archive’s rows make around the line', () => {
     // represent a U, and the fitted line is not one either.
     const era = season()
     if (!era.fit.fitted) throw new Error('the archive carried no line')
-    const rows = new Map(
-      gapBySpeedBand(era.races, 'sog').map((band) => [band.band, band.mean_gap_knots])
-    )
+    const rows = bySog()
 
     const line = lineGapAt(era.fit.line, 8.5)
     expect(line).not.toBeNull()
