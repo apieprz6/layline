@@ -110,7 +110,9 @@ export function calibrationEras(
  * was swung.
  *
  * Compared as `YYYY-MM-DD` text, which sorts chronologically, and never as a `Date`: an offset is a
- * claim about a timezone nothing here made. Both sides are in the **Recording**'s own frame.
+ * claim about a timezone nothing here made. Both sides are in the **Recording**'s own frame, and
+ * `dayOf` slices the day off the text rather than converting it — so a stamp arriving with a `Z` or
+ * a `+06:00` would be read at the day it is *written* at, which is one more reason none does.
  */
 export function withinEra(date: string, era: CalibrationEra): boolean {
   const day = dayOf(date)

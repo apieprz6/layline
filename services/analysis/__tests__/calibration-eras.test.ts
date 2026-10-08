@@ -9,6 +9,7 @@
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 import { byEra, calibrationEras, eraOf, withinEra } from '@/services/analysis/calibration-eras'
 import type {
+  CalibrationEra,
   CalibrationEvent,
   CalibrationLogEntry,
   InstrumentCalibrationPayload,
@@ -139,9 +140,10 @@ describe('cutting one channel’s Eras out of the Calibration Log', () => {
     )
     const eras = calibrationEras(log, 'HDG')
 
-    // One act on the instrument, not three Eras an hour apart — and the Era says what opened it.
+    // One act on the instrument, not three Eras an hour apart — and the Era says what opened it,
+    // in the Log's own order, which puts the Version above the Events of its date.
     expect(eras).toHaveLength(2)
-    expect(eras[1].opened_by).toHaveLength(3)
+    expect(eras[1].opened_by.map((entry) => entry.entry)).toEqual(['version', 'event', 'event'])
   })
 
   it('bounds every Era with a day, whatever grain the entry it read was dated at', () => {
@@ -179,7 +181,11 @@ describe('placing a date in an Era, which is one predicate', () => {
 
   /**
    * Every probe worth asking, with the Era index each belongs in: either side of both boundaries,
-   * the boundary days themselves, and the same instants written three ways.
+   * both boundary days themselves, each at both ends of its day, and one wall clock written with
+   * a space and with a `T`, which the Era reads the same because the day is sliced off the text.
+   *
+   * No probe carries a UTC offset. A stamp that did would be read at the day its text starts with
+   * and not converted to the **Recording**'s own frame, which is why nothing passes one.
    */
   const probes: [string, number][] = [
     ['2026-05-01', 0],
@@ -190,10 +196,24 @@ describe('placing a date in an Era, which is one predicate', () => {
     ['2026-08-01', 2],
     ['2026-08-01 00:00:00', 2],
     ['2026-08-01 10:00:00', 2],
-    ['2026-08-01T10:00:00Z', 2],
+    ['2026-08-01T10:00:00', 2],
     ['2026-08-01 23:59:59', 2],
     ['2026-09-30 18:00:00', 2],
   ]
+
+  /**
+   * The containment test LAY-156 shipped, written out here as the reference the survivor is
+   * measured against: the whole stamp compared as text, rather than sliced to a day first.
+   *
+   * In the suite and not in the module because nothing should call it — it is the predicate that
+   * was *replaced*. The two were assumed equivalent when one replaced the other, and the test
+   * below is where that stops being an assumption. They agree only because every bound this
+   * builder emits is a bare `YYYY-MM-DD`; drop that and this is the test that notices.
+   */
+  function asWholeStampText(date: string, era: CalibrationEra): boolean {
+    if (era.from_date !== null && date < era.from_date) return false
+    return era.until_date === null || date < era.until_date
+  }
 
   it('puts a boundary day in the Era it opened, not the one it closed', () => {
     for (const [date, index] of probes) {
@@ -207,10 +227,42 @@ describe('placing a date in an Era, which is one predicate', () => {
     }
   })
 
-  it('answers `eraOf` and `withinEra` the same way, because there is one rule', () => {
-    // LAY-156 and LAY-157 each wrote a containment test — one comparing the whole stamp as text,
-    // one slicing it to a day first — and they were assumed equivalent rather than checked. They
-    // are now the same function, and this is the assertion that says so.
+  it('agrees with the whole-stamp text compare it replaced, Era by Era and probe by probe', () => {
+    for (const [date] of probes) {
+      for (const era of eras) {
+        expect([date, era.key, withinEra(date, era)]).toEqual([
+          date,
+          era.key,
+          asWholeStampText(date, era),
+        ])
+      }
+    }
+  })
+
+  it('agrees only because no bound carries a clock time, and none of these does', () => {
+    // Where the two rules part company, which is the thing the test above would otherwise be
+    // asserting by coincidence. Against a bound of `2026-08-01 14:30:00`, a Race at 23:00 that
+    // day is *after* the boundary read as whole text and *before* it read at the day — two
+    // answers about which instrument configuration the Race was sailed under.
+    const stamped: CalibrationEra = {
+      key: 'STW:stamped',
+      channel: 'STW',
+      from_date: '2026-08-01 14:30:00',
+      until_date: null,
+      opened_by: [],
+    }
+
+    expect(asWholeStampText('2026-08-01 23:00:00', stamped)).toBe(true)
+    expect(withinEra('2026-08-01 23:00:00', stamped)).toBe(false)
+
+    // So the equivalence is a consequence of `calibrationEras` cutting on days, and holds only
+    // for as long as it does. Every bound it emits is a bare `YYYY-MM-DD`, or absent.
+    const bounds = eras.flatMap((era) => [era.from_date, era.until_date])
+
+    expect(bounds.every((bound) => bound === null || /^\d{4}-\d{2}-\d{2}$/.test(bound))).toBe(true)
+  })
+
+  it('is the rule `eraOf` reports, so an Era cannot answer one caller and not the other', () => {
     for (const [date, index] of probes) {
       expect(eraOf(eras, date)).toBe(eras[index])
     }

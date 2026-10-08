@@ -18,6 +18,10 @@ import type {
  * now" is answered by the current Version and never by reading back through this.
  *
  * Pure: it reads two arrays and returns a third, mutating neither.
+ *
+ * The **Calibration Eras** this Log implies are cut in `services/analysis/calibration-eras.ts`,
+ * which states why they live there and not here: this module assembles the record, and reading
+ * that record as a partition of the season is an analysis nothing in `lib/boat/` asks for.
  */
 
 /** The two figures a channel may carry, in the order the form asks for them. */
@@ -133,7 +137,3 @@ export function buildCalibrationLog(
 
   return entries.sort(byDateDescending)
 }
-
-// The **Calibration Eras** this Log implies are cut in `services/analysis/calibration-eras.ts`,
-// which states why they live there rather than here. This module assembles the record; reading it
-// as a partition of the season is an analysis, and nothing in `lib/boat/` needs one.
