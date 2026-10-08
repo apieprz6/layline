@@ -93,6 +93,26 @@ describe('the buckets inside one dimension', () => {
     expect(bucket('Main + Jib 1')).toBeEnabled()
   })
 
+  it('tells a bucket the boat never raced from one this narrowing emptied', async () => {
+    // ADR 0029's own reason for drawing an empty bucket at all: a sailor has to be able to tell
+    // "this boat has a sail it has never raced" from "the other chips you tapped emptied this
+    // one", and a bare `0` says neither.
+    const { user } = renderRail({ buckets: { sea: ['calm'] }, range: null })
+
+    await user.click(chip('wind'))
+    // Storm: no row in the archive is in it, and none ever was.
+    expect(bucket('storm')).toHaveAccessibleName(/no rows anywhere in the archive/)
+    // Heavy: two rows in the archive, both of them in the unannotated July race.
+    expect(bucket('heavy')).toHaveAccessibleName(/no rows under this narrowing, 2 in the archive/)
+  })
+
+  it('says how many rows a bucket holds when it holds any', async () => {
+    const { user } = renderRail()
+
+    await user.click(chip('sea'))
+    expect(bucket('calm')).toHaveAccessibleName('Calm (0–1 ft) — 2 rows')
+  })
+
   it('keeps a selected bucket operable even once its count has fallen to nothing', async () => {
     const { user } = renderRail({ buckets: { sail: ['Reef + Jib 2'] }, range: null })
 
@@ -130,6 +150,18 @@ describe('the buckets inside one dimension', () => {
     expect(screen.getByTestId('filter-popover')).toHaveTextContent(
       /every bucket, including the rows with nothing recorded/i
     )
+  })
+
+  it('keeps saying so on every other dimension while a day range is set on when', async () => {
+    // The note used to read the filter's single `range` field, which belongs to one dimension —
+    // so a range on `when` silently removed the note from all six popovers.
+    const { user } = renderRail({ buckets: {}, range: { from: '2026-06-01', to: '2026-07-31' } })
+
+    await user.click(chip('sea'))
+    expect(screen.getByTestId('filter-popover')).toHaveTextContent(/every bucket, including/i)
+
+    await user.click(chip('when'))
+    expect(screen.getByTestId('filter-popover')).not.toHaveTextContent(/every bucket, including/i)
   })
 
   it('prints the footnote that says time of day is a clock and not sunrise', async () => {

@@ -6,11 +6,7 @@
  * (ADR 0029).
  */
 
-import {
-  coverageLedger,
-  gapSentence,
-  ledgerHeadline,
-} from '@/services/analysis/coverage-ledger'
+import { coverageLedger, gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
 import {
   EMPTY_FILTER,
   NOT_RECORDED,

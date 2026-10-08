@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import CoverageLedgerPanel from '@/components/analysis/CoverageLedgerPanel'
-import type { RecordedRowsState } from '@/services/analysis/filter'
-import type { CoverageLedger } from '@/types'
+import type { CoverageLedger, RecordedRowsState } from '@/types'
 
 function ledger(over: Partial<CoverageLedger> = {}): CoverageLedger {
   return {

@@ -2,9 +2,9 @@
 
 import type { ReactElement } from 'react'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf, gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
-import type { RecordedRowsState } from '@/services/analysis/filter'
-import type { CoverageLedger } from '@/types'
+import { gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
+import { countOf } from '@/services/analysis/figures'
+import type { CoverageLedger, RecordedRowsState } from '@/types'
 
 interface CoverageLedgerPanelProps {
   ledger: CoverageLedger
@@ -71,8 +71,12 @@ export default function CoverageLedgerPanel({
         )}
       </div>
 
-      {/* Stated beside the matched count rather than instead of it: matching and counting are
-          independent questions, and a row excluded by ADR 0025 still matched the filter. */}
+      {/* A line ADR 0029 does not itself ask for, added because ADR 0025 does: a screen states
+          the coverage behind its figure, and the figure above is over Countable rows while the
+          headline is over matched ones. Stated beside the matched count rather than instead of it,
+          because matching and counting are independent questions (ADR 0026) — a row excluded by
+          ADR 0025 still matched the filter, and a ledger that quietly reported only the countable
+          rows would make the Not recorded share below it a share of a different number. */}
       <div style={{ color: 'var(--text-muted)' }}>
         {countOf(ledger.countable_rows)} of those may be read by a figure
         {excluded > 0 && `; ${countOf(excluded)} are frozen, low-speed or mid-maneuver`}.

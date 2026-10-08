@@ -1,16 +1,14 @@
 import Link from 'next/link'
 import { Suspense, type ReactElement } from 'react'
 import PolarPerformanceContent from '@/components/analysis/PolarPerformanceContent'
+import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
 import PolarPerformanceSkeleton from '@/components/analysis/PolarPerformanceSkeleton'
 import EmptyState from '@/components/common/EmptyState'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { spacing } from '@/lib/utils/design'
-import {
-  POLAR_PERFORMANCE_DIMENSIONS,
-  analysisDimensions,
-  filterFromSearchParams,
-} from '@/services/analysis/filter'
+import { filterFromSearchParams } from '@/services/analysis/filter-url'
+import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 
 export const dynamic = 'force-dynamic'
@@ -72,11 +70,7 @@ async function PolarPerformanceScreen({ params }: { params: SearchParams }): Pro
   if (archive === null) {
     return (
       <Screen>
-        <EmptyState
-          mark="⚠️"
-          title="The archive could not be read"
-          detail="Nothing is wrong with the races themselves. Try again in a moment."
-        />
+        <ArchiveUnreadable />
       </Screen>
     )
   }

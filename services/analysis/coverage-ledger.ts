@@ -19,6 +19,7 @@
  * lives beside the arithmetic and is tested with it.
  */
 
+import { countOf } from '@/services/analysis/figures'
 import { NOT_RECORDED, bucketOf, matchesFilter } from '@/services/analysis/filter'
 import type {
   AnalysisDimension,
@@ -103,11 +104,6 @@ export function coverageLedger(
     countable_rows: matched.filter((row) => row.countable).length,
     gaps,
   }
-}
-
-/** A count with thousands separators, which is what makes 3251 read as a number of rows. */
-export function countOf(value: number): string {
-  return value.toLocaleString('en-US')
 }
 
 /** `3,251 rows · 13 of 13 races` — the ledger's first line. */

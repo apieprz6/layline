@@ -18,6 +18,7 @@ import {
   fillerAnchoredShare,
   getPolarPerformanceData,
   recentRaceRows,
+  vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import type { MatchableRow } from '@/types'
 
@@ -151,6 +152,30 @@ describe('a Filler-Anchored figure is shown and flagged, never withheld', () => 
 
   it('has no share to report where no row was summed', () => {
     expect(fillerAnchoredShare(getPolarPerformanceData([], EMPTY_FILTER, DIMENSIONS).overall)).toBeNull()
+    expect(
+      vmgFillerAnchoredShare(getPolarPerformanceData([], EMPTY_FILTER, DIMENSIONS).overall)
+    ).toBeNull()
+  })
+
+  it('sizes VMG’s doubt over VMG’s own rows, not Target Speed’s', () => {
+    // A row with a Target Speed and no Target VMG is real — rare, but real. Here both scored rows
+    // carry a Target Speed and only one carries a Target VMG, and that one rests on filler: the
+    // Polar figure is 1 in 2 filler-anchored, the VMG figure is 1 in 1.
+    const noVmgTarget = scored({})
+    noVmgTarget.efficiency = { ...noVmgTarget.efficiency, target_vmg: null, vmg_efficiency: null }
+
+    const onFiller = scored({ filler: true })
+    onFiller.efficiency = {
+      ...onFiller.efficiency,
+      target_vmg: { estimated_knots: 6, filler_anchored: true },
+    }
+
+    const { overall } = getPolarPerformanceData([noVmgTarget, onFiller], EMPTY_FILTER, DIMENSIONS)
+
+    expect(overall.rows).toBe(2)
+    expect(overall.vmg_rows).toBe(1)
+    expect(fillerAnchoredShare(overall)).toBeCloseTo(0.5)
+    expect(vmgFillerAnchoredShare(overall)).toBe(1)
   })
 })
 

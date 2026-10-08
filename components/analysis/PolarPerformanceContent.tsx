@@ -1,26 +1,25 @@
 'use client'
 
-import { useState, type CSSProperties, type ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import AnalysisFilterRail from '@/components/analysis/AnalysisFilterRail'
+import { NOTE_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
 import CoverageLedgerPanel from '@/components/analysis/CoverageLedgerPanel'
-import { efficiencyPercent, sharePercent } from '@/components/analysis/figures'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf } from '@/services/analysis/coverage-ledger'
-import {
-  EMPTY_FILTER,
-  filterToSearchParams,
-  recordedRowsState,
-  setRecordedRows,
-} from '@/services/analysis/filter'
+import { countOf, efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { filterToSearchParams } from '@/services/analysis/filter-url'
+import { EMPTY_FILTER, recordedRowsState, setRecordedRows } from '@/services/analysis/filter'
 import type { PolarPerformanceBand } from '@/services/analysis/polar-performance'
-import { fillerAnchoredShare, getPolarPerformanceData } from '@/services/analysis/polar-performance'
+import {
+  fillerAnchoredShare,
+  getPolarPerformanceData,
+  vmgFillerAnchoredShare,
+} from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
-import type { AnalysisArchiveRace } from '@/services/analysis/readArchive'
 import type {
+  AnalysisArchiveRace,
   AnalysisDimensionSpec,
   AnalysisFilter,
-  EfficiencyAggregate,
   MatchableRow,
 } from '@/types'
 
@@ -94,14 +93,17 @@ export default function PolarPerformanceContent({
       <div style={{ display: 'flex', gap: spacing(2) }}>
         <Figure
           label="Polar efficiency"
-          aggregate={data.overall}
           ratio={data.overall.polar_efficiency}
+          filler={fillerAnchoredShare(data.overall)}
           testId="polar-efficiency"
         />
         <Figure
           label="VMG efficiency"
-          aggregate={data.overall}
           ratio={data.overall.vmg_efficiency}
+          // Its own share, over its own rows. The two figures are summed over different subsets —
+          // a row can carry a **Target Speed** and no **Target VMG** — so one share serving both
+          // would print a caveat about rows that are not in the number beside it.
+          filler={vmgFillerAnchoredShare(data.overall)}
           testId="vmg-efficiency"
         />
       </div>
@@ -121,31 +123,13 @@ export default function PolarPerformanceContent({
           type="button"
           data-testid="clear-filter"
           onClick={() => change(EMPTY_FILTER)}
-          style={{
-            alignSelf: 'flex-start',
-            background: 'none',
-            border: '1px solid var(--surface-border)',
-            borderRadius: radius('full'),
-            padding: '6px 13px',
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-body)',
-          }}
+          style={{ ...PILL_STYLE, alignSelf: 'flex-start', background: 'none', fontWeight: 600 }}
         >
           Back to the whole archive
         </button>
       )}
     </div>
   )
-}
-
-const NOTE_STYLE: CSSProperties = {
-  margin: 0,
-  fontSize: 'var(--text-xs)',
-  lineHeight: 1.5,
-  color: 'var(--text-muted)',
 }
 
 /**
@@ -161,17 +145,17 @@ const NOTE_STYLE: CSSProperties = {
  */
 function Figure({
   label,
-  aggregate,
   ratio,
+  filler,
   testId,
 }: {
   label: string
-  aggregate: EfficiencyAggregate
   ratio: number | null
+  /** How much of *this* figure's own rows rest on the Polar's filler. Null where none was summed. */
+  filler: number | null
   testId: string
 }): ReactElement {
   const percent = efficiencyPercent(ratio)
-  const filler = fillerAnchoredShare(aggregate)
 
   return (
     <div
@@ -227,12 +211,19 @@ function Figure({
 }
 
 /**
- * The same figure, one wind band at a time.
+ * The same figure, one wind band at a time — ADR 0026's "binned efficiency grid", binned on the
+ * one axis the Polar itself has.
  *
  * Wind speed and not point of sail, because wind speed is one of the **Polar**'s own two axes: a
- * band is a column of the grid the boat is measured against. Every band in the vocabulary has a
- * row, empty or not — a band that vanished would not say whether the boat has never sailed in it
- * or the narrowing emptied it (ADR 0014).
+ * band is a column of the grid the boat is measured against, so a band that reads low is a
+ * question about the boat in that wind rather than an artefact of how the rows were sliced. Every
+ * band in the vocabulary has a row, empty or not — a band that vanished would not say whether the
+ * boat has never sailed in it or the narrowing emptied it (ADR 0014).
+ *
+ * Each band carries its own **Filler-Anchored** mark, for ADR 0036's reason rather than for
+ * consistency's sake: filler is per *cell*, so one band of the grid can rest on the certificate's
+ * ramp while the figure over every band does not, and a flag only on the total would hide exactly
+ * the band whose comparison point is weakest.
  */
 function BandTable({ bands }: { bands: readonly PolarPerformanceBand[] }): ReactElement {
   return (
@@ -283,7 +274,18 @@ function BandTable({ bands }: { bands: readonly PolarPerformanceBand[] }): React
               {percent === null ? (
                 <em style={{ color: 'var(--text-muted)' }}>no scorable row</em>
               ) : (
-                `${percent} · ${countOf(band.efficiency.rows)} rows`
+                <>
+                  {percent} · {countOf(band.efficiency.rows)} rows
+                  {band.efficiency.filler_anchored_rows > 0 && (
+                    <em
+                      data-testid="band-filler-anchored"
+                      style={{ color: 'var(--state-warning)', fontFamily: 'var(--font-body)' }}
+                    >
+                      {' '}
+                      · {sharePercent(fillerAnchoredShare(band.efficiency) ?? 0)} filler
+                    </em>
+                  )}
+                </>
               )}
             </span>
           </div>

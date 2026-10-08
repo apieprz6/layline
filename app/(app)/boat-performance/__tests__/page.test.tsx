@@ -110,7 +110,9 @@ describe('the Overall tab', () => {
 
     await renderOverall()
 
-    // "No races" over a failed read would be Layline claiming the sailor has sailed nothing.
-    expect(screen.getByText('The season could not be read')).toBeInTheDocument()
+    // "No races" over a failed read would be Layline claiming the sailor has sailed nothing — and
+    // it is the same sentence the detail screen shows, from the same component, so the two cannot
+    // drift into disagreeing about what happened.
+    expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
   })
 })

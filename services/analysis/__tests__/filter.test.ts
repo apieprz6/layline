@@ -15,8 +15,6 @@ import {
   bucketCounts,
   bucketOf,
   clearDimension,
-  filterFromSearchParams,
-  filterToSearchParams,
   isNarrowed,
   matchedRows,
   matchesFilter,
@@ -26,6 +24,10 @@ import {
   summariseDimension,
   toggleBucket,
 } from '@/services/analysis/filter'
+import {
+  filterFromSearchParams,
+  filterToSearchParams,
+} from '@/services/analysis/filter-url'
 import type { AnalysisDimension, AnalysisFilter, MatchableRow, RowSail } from '@/types'
 
 const VOCABULARY = {
@@ -93,6 +95,13 @@ describe('the dimension registry', () => {
     }
   })
 
+  it('leaves it last where a row cannot lack a value, so it heads nothing it cannot hold', () => {
+    for (const id of ['wind', 'pos', 'time', 'when'] as const) {
+      const dimension = DIMENSIONS.find((each) => each.id === id)
+      expect(dimension?.buckets.at(-1)?.id).toBe(NOT_RECORDED)
+    }
+  })
+
   it('renders every sail the vocabulary defines, plus Note only and Not recorded', () => {
     const sail = DIMENSIONS.find((each) => each.id === 'sail')
     expect(sail?.buckets.map((each) => each.id)).toEqual([
@@ -102,13 +111,12 @@ describe('the dimension registry', () => {
       'Main + Jib 2',
       'Reef + Jib 2',
     ])
-    expect(sail?.derived).toBe(true)
+    expect(sail?.buckets.length).toBe(5)
   })
 
   it('derives the when buckets from the archive and offers the Race range below them', () => {
     const when = DIMENSIONS.find((each) => each.id === 'when')
-    expect(when?.buckets.map((each) => each.label)).toEqual(['Not recorded', 'Jun 2026', 'Jul 2026'])
-    expect(when?.derived).toBe(true)
+    expect(when?.buckets.map((each) => each.label)).toEqual(['Jun 2026', 'Jul 2026', 'Not recorded'])
     expect(when?.continuous).toBe(true)
   })
 
@@ -121,7 +129,7 @@ describe('the dimension registry', () => {
       'Storm (23+ kt)',
       'Not recorded',
     ])
-    expect(wind?.derived).toBe(false)
+    expect(wind?.continuous).toBe(false)
   })
 
   it('leaves out a dimension the screen does not offer', () => {
@@ -329,24 +337,21 @@ describe('what each chip would do: the per-bucket counts', () => {
 
   it('counts rows and the races they came from, per bucket', () => {
     const counts = bucketCounts(rows, EMPTY_FILTER, DIMENSIONS, 'wind')
-    expect(counts.get('medium')).toEqual({ rows: 2, races: 2 })
-    expect(counts.get('light')).toEqual({ rows: 1, races: 1 })
-    expect(counts.get('storm')).toEqual({ rows: 0, races: 0 })
+    expect(counts.get('medium')).toBe(2)
+    expect(counts.get('light')).toBe(1)
+    expect(counts.get('storm')).toBe(0)
   })
 
   it('counts the Not recorded bucket like any other, so the ledger and the chip agree', () => {
-    expect(bucketCounts(rows, EMPTY_FILTER, DIMENSIONS, 'sea').get(NOT_RECORDED)).toEqual({
-      rows: 1,
-      races: 1,
-    })
+    expect(bucketCounts(rows, EMPTY_FILTER, DIMENSIONS, 'sea').get(NOT_RECORDED)).toBe(1)
   })
 
   it('applies every other dimension but not its own, so the number predicts the tap', () => {
     // Narrowed to Calm: Medium holds one row, not two. And the wind chips must not read their own
     // narrowing back to themselves, or every unselected band would say zero.
     const counts = bucketCounts(rows, narrowed({ sea: ['calm'], wind: ['light'] }), DIMENSIONS, 'wind')
-    expect(counts.get('medium')).toEqual({ rows: 1, races: 1 })
-    expect(counts.get('light')).toEqual({ rows: 1, races: 1 })
+    expect(counts.get('medium')).toBe(1)
+    expect(counts.get('light')).toBe(1)
   })
 
   it('has an entry for every bucket in the vocabulary, including ones the boat never raced', () => {
@@ -354,7 +359,7 @@ describe('what each chip would do: the per-bucket counts', () => {
     expect([...counts.keys()].sort()).toEqual(
       [NOT_RECORDED, NOTE_ONLY, 'Main + Jib 1', 'Main + Jib 2', 'Reef + Jib 2'].sort()
     )
-    expect(counts.get('Reef + Jib 2')).toEqual({ rows: 0, races: 0 })
+    expect(counts.get('Reef + Jib 2')).toBe(0)
   })
 })
 
@@ -476,7 +481,7 @@ describe('what must hold over any row set, not just a hand-picked one', () => {
   it('puts every row in exactly one bucket of every dimension, with none left over', () => {
     for (const dimension of DIMENSIONS) {
       const counts = bucketCounts(spread, EMPTY_FILTER, DIMENSIONS, dimension.id)
-      const total = [...counts.values()].reduce((sum, count) => sum + count.rows, 0)
+      const total = [...counts.values()].reduce((sum, count) => sum + count, 0)
       // Every row accounted for means no row can be silently dropped by a narrowing it did not
       // fail — which is the one thing an absence-handling filter has to get right.
       expect(total).toBe(spread.length)

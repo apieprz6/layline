@@ -8,8 +8,7 @@
  * Not a `.test.ts`, so Jest collects the suites and not this.
  */
 
-import type { AnalysisArchiveRace } from '@/services/analysis/readArchive'
-import type { MatchableRow, RowSail } from '@/types'
+import type { AnalysisArchiveRace, MatchableRow, RowSail } from '@/types'
 
 export const VOCABULARY = {
   /** `Reef + Jib 2` is in the chart and in no race — the disabled chip ADR 0014 asks for. */

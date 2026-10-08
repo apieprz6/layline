@@ -5,6 +5,9 @@
  * Polar performance, the **Sail Selection Screen**, the Instrument Tuning screen — each declaring
  * which dimensions it offers, so a new dimension is added once.
  *
+ * The URL codec is next door, in `filter-url.ts`: a codec changes when the URL's shape changes
+ * and this module when a dimension does.
+ *
  * ## Free of server-only imports, on purpose
  *
  * ADR 0029 moved aggregation into the browser: a tap must never wait on a navigation, so matching
@@ -39,7 +42,7 @@
  *     up. So the bucket says `06:00–20:00` in as many words.
  */
 
-import { seaStateLabel, SEA_STATES } from '@/services/races/annotations'
+import { SEA_STATES } from '@/services/races/annotations'
 import { wallClockDay } from '@/services/recordings/wall-clock'
 import type {
   AnalysisBucket,
@@ -48,6 +51,7 @@ import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
   MatchableRow,
+  RecordedRowsState,
 } from '@/types'
 
 /** A row whose value for this dimension nobody wrote down. In every dimension (ADR 0029). */
@@ -62,6 +66,22 @@ export const NOT_RECORDED = 'not-recorded'
  */
 export const NOTE_ONLY = 'note-only'
 
+/**
+ * The one dimension `AnalysisFilter.range` belongs to.
+ *
+ * Named once rather than compared inline in five places. It is deliberately *not*
+ * `AnalysisDimensionSpec.continuous`, though today they pick out the same dimension: `continuous`
+ * is a fact about the **popover** (it draws the Races below its chips), and this is a fact about
+ * the **filter's shape** (there is one `range` field, so exactly one dimension can own it). A
+ * second continuous dimension would need a second field, and these two would stop agreeing.
+ */
+export const RANGE_DIMENSION: AnalysisDimension = 'when'
+
+/** Whether this dimension is the one a day range narrows. */
+function ownsDayRange(dimension: AnalysisDimension): boolean {
+  return dimension === RANGE_DIMENSION
+}
+
 /** Where day begins on the fixed clock the `time` dimension reads. */
 export const DAY_FROM_HOUR = 6
 /** Where night begins on it. */
@@ -70,7 +90,7 @@ export const NIGHT_FROM_HOUR = 20
 /** `|TWA|` at or below this is upwind. */
 export const UPWIND_TO_DEG = 70
 /** `|TWA|` at or above this is downwind; between the two is a reach. */
-export const DOWNWIND_FROM_HEIGHT_DEG = 135
+export const DOWNWIND_FROM_DEG = 135
 
 /**
  * The four bands `AGENTS.md` defines, read at the knot each one opens on.
@@ -170,7 +190,6 @@ export function analysisDimensions(
     wind: {
       id: 'wind',
       label: 'Wind speed',
-      derived: false,
       continuous: false,
       absence_possible: true,
       buckets: [...WIND_BANDS.map(plain), notRecorded()],
@@ -178,13 +197,12 @@ export function analysisDimensions(
     pos: {
       id: 'pos',
       label: 'Point of sail',
-      derived: false,
       continuous: false,
       absence_possible: true,
       buckets: [
         {
           ...plain(POINTS_OF_SAIL[0]),
-          footnote: `Read off |TWA|: upwind to ${UPWIND_TO_DEG}°, downwind from ${DOWNWIND_FROM_HEIGHT_DEG}°.`,
+          footnote: `Read off |TWA|: upwind to ${UPWIND_TO_DEG}°, downwind from ${DOWNWIND_FROM_DEG}°.`,
         },
         ...POINTS_OF_SAIL.slice(1).map(plain),
         notRecorded(),
@@ -193,7 +211,6 @@ export function analysisDimensions(
     sail: {
       id: 'sail',
       label: 'Sail used',
-      derived: true,
       continuous: false,
       absence_possible: true,
       buckets: [
@@ -213,7 +230,6 @@ export function analysisDimensions(
     sea: {
       id: 'sea',
       label: 'Sea state',
-      derived: false,
       continuous: false,
       absence_possible: true,
       buckets: [
@@ -224,7 +240,6 @@ export function analysisDimensions(
     time: {
       id: 'time',
       label: 'Time of day',
-      derived: false,
       continuous: false,
       absence_possible: false,
       buckets: [
@@ -242,12 +257,11 @@ export function analysisDimensions(
     when: {
       id: 'when',
       label: 'When',
-      derived: true,
       continuous: true,
       absence_possible: false,
       buckets: [
-        notRecorded(ALWAYS_RECORDED),
         ...vocabulary.months.map((id) => plain({ id, label: monthLabel(id) })),
+        notRecorded(ALWAYS_RECORDED),
       ],
     },
   }
@@ -266,19 +280,27 @@ export function bucketOf(row: MatchableRow, dimension: AnalysisDimension): strin
   switch (dimension) {
     case 'wind': {
       if (row.tws === null) return NOT_RECORDED
-      // Last band whose opening knot the row is at or above. The list is ascending and opens at 0,
-      // so a non-negative reading always finds one.
-      const band = [...WIND_BANDS].reverse().find((each) => row.tws !== null && row.tws >= each.from_kt)
-      return band?.id ?? WIND_BANDS[0].id
+
+      // The last band whose opening knot the row is at or above. A plain loop and not a reversed
+      // `find`, because this is the inner loop of every chip count — six dimensions over every
+      // row in the archive, on every tap — and a reversed copy per row per pass is thousands of
+      // arrays allocated to answer a comparison.
+      let band = WIND_BANDS[0]
+      for (const each of WIND_BANDS) if (row.tws >= each.from_kt) band = each
+      return band.id
     }
     case 'pos': {
       if (row.twa === null) return NOT_RECORDED
       const off = Math.abs(row.twa)
       if (off <= UPWIND_TO_DEG) return 'upwind'
-      return off >= DOWNWIND_FROM_HEIGHT_DEG ? 'downwind' : 'reach'
+      return off >= DOWNWIND_FROM_DEG ? 'downwind' : 'reach'
     }
     case 'sail':
-      return row.sail.recorded === 'definition' ? row.sail.label : row.sail.recorded
+      // Mapped, not passed through. `RowSail.recorded` happens to spell its two record states the
+      // same way the bucket ids do, and leaning on that would make the reader that builds a row
+      // (`readArchive.ts`) a second, silent owner of this vocabulary.
+      if (row.sail.recorded === 'definition') return row.sail.label
+      return row.sail.recorded === 'note-only' ? NOTE_ONLY : NOT_RECORDED
     case 'sea':
       return row.sea_state ?? NOT_RECORDED
     case 'time': {
@@ -303,7 +325,10 @@ export function selectedBuckets(
 
 /** Whether the sailor has narrowed this dimension at all — the chip's own lit/unlit state. */
 export function isNarrowed(filter: AnalysisFilter, dimension: AnalysisDimension): boolean {
-  return selectedBuckets(filter, dimension).length > 0 || (dimension === 'when' && filter.range !== null)
+  return (
+    selectedBuckets(filter, dimension).length > 0 ||
+    (ownsDayRange(dimension) && filter.range !== null)
+  )
 }
 
 /**
@@ -342,12 +367,12 @@ export function toggleBucket(
     : [...current, bucketId]
 
   const narrowedFilter = withBuckets(filter, dimension, next)
-  return dimension === 'when' ? { ...narrowedFilter, range: null } : narrowedFilter
+  return ownsDayRange(dimension) ? { ...narrowedFilter, range: null } : narrowedFilter
 }
 
 /** The `when` dimension's continuous control: an explicit span of days. */
 export function setDayRange(filter: AnalysisFilter, range: AnalysisDayRange | null): AnalysisFilter {
-  return { ...withBuckets(filter, 'when', []), range }
+  return { ...withBuckets(filter, RANGE_DIMENSION, []), range }
 }
 
 /** One dimension back to untouched. */
@@ -356,12 +381,7 @@ export function clearDimension(
   dimension: AnalysisDimension
 ): AnalysisFilter {
   const cleared = withBuckets(filter, dimension, [])
-  return dimension === 'when' ? { ...cleared, range: null } : cleared
-}
-
-/** The whole archive again. */
-export function clearFilter(): AnalysisFilter {
-  return EMPTY_FILTER
+  return ownsDayRange(dimension) ? { ...cleared, range: null } : cleared
 }
 
 /**
@@ -386,7 +406,7 @@ export function matchesFilter(
     const picked = selectedBuckets(filter, dimension.id)
     if (picked.length > 0 && !picked.includes(bucketOf(row, dimension.id))) return false
 
-    if (dimension.id === 'when' && filter.range !== null) {
+    if (ownsDayRange(dimension.id) && filter.range !== null) {
       if (row.day < filter.range.from || row.day > filter.range.to) return false
     }
   }
@@ -403,32 +423,27 @@ export function matchedRows(
   return rows.filter((row) => matchesFilter(row, filter, dimensions))
 }
 
-/** How many rows one bucket holds, and how many **Races** they come from. */
-export interface BucketCount {
-  rows: number
-  races: number
-}
-
 /**
- * Every bucket of one dimension with the count tapping it would produce.
+ * Every bucket of one dimension with the row count tapping it would produce.
  *
  * Keyed by bucket id, with an entry for **every** bucket in the vocabulary — a zero is a count and
- * not a missing key, because the chip that renders it has to say "never raced" rather than vanish.
+ * not a missing key, because the chip that renders it has to show it is empty rather than vanish
+ * (ADR 0014).
+ *
+ * Rows and not races. The chip has room for one number, the **Coverage Ledger** below it is where
+ * the race count is stated, and a per-bucket race count would mean a `Set` per bucket rebuilt on
+ * every popover open for a figure nothing shows.
  */
 export function bucketCounts(
   rows: readonly MatchableRow[],
   filter: AnalysisFilter,
   dimensions: readonly AnalysisDimensionSpec[],
   dimension: AnalysisDimension
-): Map<string, BucketCount> {
+): Map<string, number> {
   const spec = dimensions.find((each) => each.id === dimension)
-  const counts = new Map<string, BucketCount>()
-  const races = new Map<string, Set<string>>()
+  const counts = new Map<string, number>()
 
-  for (const bucket of spec?.buckets ?? []) {
-    counts.set(bucket.id, { rows: 0, races: 0 })
-    races.set(bucket.id, new Set())
-  }
+  for (const bucket of spec?.buckets ?? []) counts.set(bucket.id, 0)
 
   for (const row of rows) {
     if (!matchesFilter(row, filter, dimensions, [dimension])) continue
@@ -440,11 +455,8 @@ export function bucketCounts(
     // chart's (ADR 0023), and a chip this screen could not label is worse than one it omits.
     if (count === undefined) continue
 
-    count.rows += 1
-    races.get(id)?.add(row.race_id)
+    counts.set(id, count + 1)
   }
-
-  for (const [id, count] of counts) count.races = races.get(id)?.size ?? 0
 
   return counts
 }
@@ -454,7 +466,7 @@ export function summariseDimension(
   filter: AnalysisFilter,
   dimension: AnalysisDimensionSpec
 ): string {
-  if (dimension.id === 'when' && filter.range !== null) {
+  if (ownsDayRange(dimension.id) && filter.range !== null) {
     return `${wallClockDay(`${filter.range.from}T00:00:00`)} → ${wallClockDay(`${filter.range.to}T00:00:00`)}`
   }
 
@@ -467,15 +479,6 @@ export function summariseDimension(
 
   return labels.length <= 2 ? labels.join(', ') : `${labels.length} of ${dimension.buckets.length}`
 }
-
-/**
- * Whether the rows nobody annotated are in, out, or some of each.
- *
- * **Derived, never held.** Two controls act on one piece of state — this switch and each
- * dimension's own **Not recorded** chip — so if the switch were its own boolean the two could
- * disagree and the ledger would lie.
- */
-export type RecordedRowsState = 'included' | 'excluded' | 'mixed'
 
 /**
  * The dimensions the switch acts on: those with a record bucket a row can actually land in.
@@ -552,84 +555,3 @@ export function setRecordedRows(
 
   return next
 }
-
-// ---------------------------------------------------------------------------
-// The URL
-// ---------------------------------------------------------------------------
-// ADR 0029: the filter is client state mirrored into `searchParams` with `replaceState`, and first
-// paint still reads `searchParams` on the server — so both directions of this live here, in the
-// isomorphic module, and are called from both sides.
-//
-// One param per selected bucket rather than one comma-joined param per dimension. A bucket id can
-// be a **Sail Definition**'s own words (ADR 0023), and a separator inside an id is a bug waiting
-// for the first sail somebody names with a comma; `getAll` has no such edge.
-
-/** `YYYY-MM-DD`, which is the only shape a day bound may take. */
-const DAY = /^\d{4}-\d{2}-\d{2}$/
-
-/** Every selected bucket, as the URL carries them. Empty where nothing is narrowed. */
-export function filterToSearchParams(
-  filter: AnalysisFilter,
-  dimensions: readonly AnalysisDimensionSpec[]
-): URLSearchParams {
-  const params = new URLSearchParams()
-
-  for (const dimension of dimensions) {
-    for (const id of selectedBuckets(filter, dimension.id)) params.append(dimension.id, id)
-  }
-
-  if (filter.range !== null) {
-    params.set('from', filter.range.from)
-    params.set('to', filter.range.to)
-  }
-
-  return params
-}
-
-/** One `searchParams` entry as a list, however Next handed it over. */
-function asList(raw: string | string[] | undefined): string[] {
-  if (raw === undefined) return []
-  return Array.isArray(raw) ? raw : [raw]
-}
-
-const one = (raw: string | string[] | undefined): string | null => asList(raw)[0] ?? null
-
-/**
- * A filter out of a query string, sanitised.
- *
- * A bucket id the vocabulary does not hold is **dropped, never honoured** — a stale link, a
- * hand-typed param or a season the archive has grown past should narrow to something real or to
- * nothing, never to an empty screen with no explanation. Same instinct as `amendSection()`.
- *
- * A half-written or back-to-front range is dropped whole for the same reason: guessing the missing
- * end would be Layline choosing which races a shared link was about.
- */
-export function filterFromSearchParams(
-  params: Record<string, string | string[] | undefined>,
-  dimensions: readonly AnalysisDimensionSpec[]
-): AnalysisFilter {
-  const buckets: AnalysisFilter['buckets'] = {}
-
-  for (const dimension of dimensions) {
-    const known = dimension.buckets.map((bucket) => bucket.id)
-    const picked = asList(params[dimension.id]).filter((id) => known.includes(id))
-    if (picked.length > 0) buckets[dimension.id] = picked
-  }
-
-  const from = one(params.from)
-  const to = one(params.to)
-  const rangeOffered = dimensions.some((dimension) => dimension.continuous)
-  const range =
-    rangeOffered && from !== null && to !== null && DAY.test(from) && DAY.test(to) && from <= to
-      ? { from, to }
-      : null
-
-  // Mutually exclusive, and the range loses: a link carrying both was not written by this app, and
-  // the chips are the thing a sailor can see they picked.
-  if (range !== null) delete buckets.when
-
-  return { buckets, range }
-}
-
-/** Re-exported so a renderer can print a Sea State's own word without a second lookup table. */
-export { seaStateLabel }

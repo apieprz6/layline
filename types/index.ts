@@ -1674,10 +1674,20 @@ export interface RowEfficiency {
  * season figure is these rows' sums added to another race's, never these ratios averaged.
  */
 export interface EfficiencyAggregate {
-  /** **Countable** rows that carried both a measured interval and a target. */
+  /** **Countable** rows that carried both a measured interval and a **Target Speed**. */
   rows: number
   /** How many of those carried a **Filler-Anchored** target. Stated, never used to exclude. */
   filler_anchored_rows: number
+  /**
+   * Rows behind the **VMG** sums, which are a *different* subset of the same rows.
+   *
+   * A row with a Target Speed and no **Target VMG** is rare — the TWS axis answers both — but it
+   * is real, and the two figures must each be able to say what they rest on. One tally serving
+   * both would attach the VMG figure's caveat to rows that are not in it.
+   */
+  vmg_rows: number
+  /** How many of *those* rested on filler. Target VMG has its own trust (`TargetVmg`). */
+  vmg_filler_anchored_rows: number
   /**
    * **Countable** rows left out for want of a measured interval: the last row of the window, and
    * any row the naive wall clock stepped backwards across.
@@ -1762,14 +1772,6 @@ export interface AnalysisDimensionSpec {
   label: string
   /** Every entry in the vocabulary, always — an empty one renders disabled, never absent. */
   buckets: AnalysisBucket[]
-  /**
-   * Whether the vocabulary is derived from the archive rather than fixed.
-   *
-   * Worth stating because a derived list changes shape as the archive grows, which is why `when`
-   * cannot be a plain chip row and why a stale URL's bucket id has to be dropped rather than
-   * honoured.
-   */
-  derived: boolean
   /**
    * Whether the popover offers the **Races themselves** below its chips, as a tap-first-tap-last
    * range.
@@ -1872,6 +1874,35 @@ export interface MatchableRow {
   /** This row scored against the **Polar** its own Race was sailed under (ADR 0012). */
   efficiency: RowEfficiency
 }
+
+/**
+ * One **Race**, as the `when` popover's Race list and the Overall tab's teaser name it.
+ *
+ * Central rather than beside the reader that builds it, because it crosses two boundaries: it is
+ * `AnalysisFilterRail`'s props and the row order the teaser's recent-N window is taken in. Keeping
+ * it here is also what stops a `'use client'` file naming `services/analysis/readArchive.ts` — a
+ * module whose own import graph reaches `lib/supabase/server` — in an import the build only erases
+ * because it happens to be a type.
+ */
+export interface AnalysisArchiveRace {
+  id: string
+  /** Null where the sailor gave none. An untitled race is normal (ADR 0010). */
+  title: string | null
+  /** The Race Window's own start day, `YYYY-MM-DD`, in the Recording's naive frame. */
+  day: string
+  /** How many of this Race's rows are in the row set — the figure the Race list prints. */
+  rows: number
+}
+
+/**
+ * Whether the rows nobody annotated are in, out, or some of each.
+ *
+ * The **Coverage Ledger** switch's three states. **Derived, never held**: two controls act on one
+ * piece of state — this switch and each dimension's own **Not recorded** chip — so if the switch
+ * were its own boolean the two could disagree and the ledger would lie (ADR 0029). Read by
+ * `recordedRowsState` in `services/analysis/filter.ts` and rendered by `CoverageLedgerPanel`.
+ */
+export type RecordedRowsState = 'included' | 'excluded' | 'mixed'
 
 /** One dimension's line in a **Coverage Ledger**: how much of the match rests on no annotation. */
 export interface CoverageLedgerGap {

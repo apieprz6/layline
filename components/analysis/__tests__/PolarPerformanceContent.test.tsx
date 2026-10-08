@@ -104,6 +104,36 @@ describe('a Filler-Anchored figure is shown and flagged', () => {
   it('says nothing about filler when no row rests on any', () => {
     renderScreen()
     expect(screen.queryByTestId('polar-efficiency-filler-anchored')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('vmg-efficiency-filler-anchored')).not.toBeInTheDocument()
+  })
+
+  it('sizes each figure’s doubt over its own rows, not over the other figure’s', () => {
+    // The row with no Target VMG is in the Polar figure and not in the VMG one, so the two
+    // denominators differ: 1 of 2 against 1 of 1. A shared share would describe rows that are not
+    // in the number it sits beside.
+    const noVmgTarget = matchableRow({ sog: 6 })
+    noVmgTarget.efficiency = { ...noVmgTarget.efficiency, target_vmg: null, vmg_efficiency: null }
+
+    renderScreen(EMPTY_FILTER, [noVmgTarget, filler])
+
+    expect(screen.getByTestId('polar-efficiency-filler-anchored')).toHaveTextContent('50%')
+    expect(screen.getByTestId('vmg-efficiency-filler-anchored')).toHaveTextContent('100%')
+  })
+
+  it('flags the band that rests on filler, not only the total', () => {
+    // Filler is per *cell*, so one column of the grid can be the certificate's ramp while the
+    // whole-archive figure is not (ADR 0036). A flag only on the total would hide it.
+    renderScreen(EMPTY_FILTER, [matchableRow({ sog: 6 }), { ...filler, tws: 18 }])
+
+    const heavy = screen
+      .getAllByTestId('band-row')
+      .find((row) => row.dataset.bucket === 'heavy') as HTMLElement
+    const medium = screen
+      .getAllByTestId('band-row')
+      .find((row) => row.dataset.bucket === 'medium') as HTMLElement
+
+    expect(within(heavy).getByTestId('band-filler-anchored')).toHaveTextContent('100% filler')
+    expect(within(medium).queryByTestId('band-filler-anchored')).not.toBeInTheDocument()
   })
 })
 

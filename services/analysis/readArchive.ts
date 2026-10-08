@@ -50,18 +50,13 @@ import type { RecordedRow } from '@/services/races/recording-rows'
 import { readRecordingRows } from '@/services/races/recording-rows'
 import { assessRowQuality } from '@/services/recordings/row-quality'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
-import type { MatchableRow, RaceAnnotations, RowEfficiency, RowSail } from '@/types'
-
-/** One Race, as the `when` popover's Race list and the Overall tab's teaser name it. */
-export interface AnalysisArchiveRace {
-  id: string
-  /** Null where the sailor gave none. An untitled race is normal (ADR 0010). */
-  title: string | null
-  /** The Race Window's own start day, `YYYY-MM-DD`, in the Recording's naive frame. */
-  day: string
-  /** How many of this Race's rows are in the row set — the figure the Race list prints. */
-  rows: number
-}
+import type {
+  AnalysisArchiveRace,
+  MatchableRow,
+  RaceAnnotations,
+  RowEfficiency,
+  RowSail,
+} from '@/types'
 
 /** Everything an analysis screen is shipped. */
 export interface AnalysisArchive {
@@ -182,10 +177,7 @@ async function raceRows(
     countable: row.countable,
     interval_seconds: intervals[index],
     sog: channelValue(row.sog),
-    efficiency:
-      targets === null
-        ? NO_EFFICIENCY(row.row_index)
-        : computeRowEfficiency({ ...row, countable: row.countable }, targets),
+    efficiency: targets === null ? NO_EFFICIENCY(row.row_index) : computeRowEfficiency(row, targets),
   }))
 }
 

@@ -179,6 +179,8 @@ export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate
   const totals = {
     rows: 0,
     filler_anchored_rows: 0,
+    vmg_rows: 0,
+    vmg_filler_anchored_rows: 0,
     rows_without_interval: 0,
     rows_without_target: 0,
     elapsed_seconds: 0,
@@ -214,8 +216,12 @@ export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate
     // is rare — the TWS axis answers both — but counting it in one sum and not the other would
     // silently divide distances the boat covered by targets for a different set of rows.
     if (scored.vmg !== null && scored.target_vmg !== null) {
+      totals.vmg_rows += 1
       totals.actual_vmg_distance_nm += distanceNm(scored.vmg, seconds)
       totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.estimated_knots, seconds)
+      // Target VMG's own trust, not the Target Speed bracket's: the search reads a whole zone of
+      // the grid at one wind speed and can land on filler where the point lookup did not.
+      if (scored.target_vmg.filler_anchored) totals.vmg_filler_anchored_rows += 1
     }
   }
 

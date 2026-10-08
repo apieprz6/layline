@@ -6,6 +6,8 @@ function aggregate(over: Partial<EfficiencyAggregate> = {}): EfficiencyAggregate
   return {
     rows: 812,
     filler_anchored_rows: 0,
+    vmg_rows: 812,
+    vmg_filler_anchored_rows: 0,
     rows_without_interval: 5,
     rows_without_target: 61,
     elapsed_seconds: 60_000,
@@ -50,8 +52,13 @@ describe('the Overall tab’s hero card', () => {
   it('states its own coverage, so the figure has rows behind it', () => {
     render(<PolarPerformanceTeaser races={5} efficiency={aggregate()} />)
 
+    // "Scored", not "countable": `EfficiencyAggregate.rows` counts the Countable rows that carried
+    // *both* an interval and a target, and 66 more here carried one or the other.
     expect(screen.getByTestId('polar-performance-teaser')).toHaveTextContent(
-      '812 countable rows across 5 races'
+      '812 rows scored across 5 races'
+    )
+    expect(screen.getByTestId('polar-performance-teaser').textContent).not.toMatch(
+      /countable rows/
     )
   })
 

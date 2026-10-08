@@ -1,4 +1,5 @@
 import { Suspense, type ReactElement } from 'react'
+import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
 import PolarPerformanceTeaser, { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
 import BoatPerformanceContent from '@/components/boat/BoatPerformanceContent'
 import BoatPerformanceSkeleton from '@/components/boat/BoatPerformanceSkeleton'
@@ -80,15 +81,7 @@ async function RaceArchiveScreen({
 async function OverallTab(): Promise<ReactElement> {
   const archive = await readAnalysisArchive()
 
-  if (archive === null) {
-    return (
-      <EmptyState
-        mark="⚠️"
-        title="The season could not be read"
-        detail="Nothing is wrong with the races themselves. Try again in a moment."
-      />
-    )
-  }
+  if (archive === null) return <ArchiveUnreadable />
 
   if (archive.races.length === 0) {
     return (

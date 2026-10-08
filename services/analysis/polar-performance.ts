@@ -93,7 +93,7 @@ export function getPolarPerformanceData(
 }
 
 /**
- * How much of a figure rests on the **Polar**'s own filler, or null where no row was summed.
+ * How much of **Polar Efficiency** rests on the Polar's own filler, or null where no row was summed.
  *
  * A share and not a boolean, because a flag that fired on one row in three thousand would say the
  * same thing as a flag over a figure built entirely out of ramp cells. ADR 0036's rule is that the
@@ -101,6 +101,20 @@ export function getPolarPerformanceData(
  */
 export function fillerAnchoredShare(aggregate: EfficiencyAggregate): number | null {
   return aggregate.rows === 0 ? null : aggregate.filler_anchored_rows / aggregate.rows
+}
+
+/**
+ * The same, for **VMG Efficiency**, over **its own** rows.
+ *
+ * A separate function rather than a second reading of the one above, because the two figures are
+ * over different subsets: a row can carry a **Target Speed** and no **Target VMG**. Sharing the
+ * denominator would print a caveat about rows that are not in the number it sits beside — which is
+ * worse than no caveat, because it reads as having been checked.
+ */
+export function vmgFillerAnchoredShare(aggregate: EfficiencyAggregate): number | null {
+  return aggregate.vmg_rows === 0
+    ? null
+    : aggregate.vmg_filler_anchored_rows / aggregate.vmg_rows
 }
 
 /**

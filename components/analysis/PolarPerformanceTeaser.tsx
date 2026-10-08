@@ -1,9 +1,8 @@
 import Link from 'next/link'
 import type { ReactElement } from 'react'
-import { efficiencyPercent, sharePercent } from '@/components/analysis/figures'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf } from '@/services/analysis/coverage-ledger'
+import { countOf, efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
 import type { EfficiencyAggregate } from '@/types'
 
@@ -83,9 +82,11 @@ export default function PolarPerformanceTeaser({
       )}
 
       {/* The teaser states its own coverage, like every other card that headlines a figure: a
-          number with no rows behind it cannot be argued with. */}
+          number with no rows behind it cannot be argued with. "Scored" and not "countable" —
+          `EfficiencyAggregate.rows` is the Countable rows that carried *both* a measured interval
+          and a Target Speed, which is fewer, and the detail screen is where that is broken out. */}
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        {countOf(efficiency.rows)} countable rows across {races} race{races === 1 ? '' : 's'}
+        {countOf(efficiency.rows)} rows scored across {races} race{races === 1 ? '' : 's'}
         {filler !== null && filler > 0 && `, ${sharePercent(filler)} of them filler-anchored`}. Tap
         for the whole archive, filterable.
       </span>

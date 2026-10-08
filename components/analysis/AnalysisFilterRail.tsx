@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, type CSSProperties, type ReactElement } from 'react'
+import { NOTE_STYLE, PILL_COUNT_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import type { AnalysisArchiveRace } from '@/services/analysis/readArchive'
 import {
+  EMPTY_FILTER,
   bucketCounts,
   clearDimension,
   isNarrowed,
@@ -14,6 +15,7 @@ import {
   toggleBucket,
 } from '@/services/analysis/filter'
 import type {
+  AnalysisArchiveRace,
   AnalysisBucket,
   AnalysisDimension,
   AnalysisDimensionSpec,
@@ -86,8 +88,9 @@ export default function AnalysisFilterRail({
               aria-expanded={open === dimension.id}
               onClick={() => setOpen(open === dimension.id ? null : dimension.id)}
               style={{
-                ...CHIP_STYLE,
-                border: `1px solid ${narrowed ? 'var(--blue-500)' : 'var(--surface-border)'}`,
+                ...PILL_STYLE,
+                flexShrink: 0,
+                borderColor: narrowed ? 'var(--blue-500)' : 'var(--surface-border)',
                 background: narrowed ? 'var(--blue-muted)' : 'var(--surface-raised)',
                 color: narrowed ? 'var(--text-accent)' : 'var(--text-secondary)',
                 fontWeight: narrowed ? 600 : 500,
@@ -116,19 +119,6 @@ export default function AnalysisFilterRail({
   )
 }
 
-const CHIP_STYLE: CSSProperties = {
-  flexShrink: 0,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '7px 11px',
-  borderRadius: radius('full'),
-  fontSize: 'var(--text-xs)',
-  cursor: 'pointer',
-  fontFamily: 'var(--font-body)',
-  whiteSpace: 'nowrap',
-}
-
 function Chevron(): ReactElement {
   return (
     <svg
@@ -151,14 +141,20 @@ function Chevron(): ReactElement {
  *
  * Every bucket in the vocabulary renders, and an empty one renders **disabled rather than absent**
  * (ADR 0014, ADR 0029): this boat owns three sails it has never raced, and a chip that vanished
- * would leave a sailor unable to tell "never sailed" from "filtered away".
+ * would leave a sailor unable to tell "never sailed" from "filtered away". A chip also says *which*
+ * kind of empty it is — see `BucketChip`, which is where the ADR's own distinction is actually
+ * made, because a bare `0` draws the same for both.
  *
  * Every chip carries its row count, computed with every *other* dimension applied but **not its
  * own** — so the number predicts what tapping it does rather than describing what is already on
  * screen.
  *
- * Inline under the rail rather than floated over it. A floating popover at 390px either covers the
- * figures or needs collision maths; pushing the content down costs one scroll and covers nothing.
+ * **Inline under the rail rather than floated over it, which departs from ADR 0029 on purpose.**
+ * That ADR asks for two things of one popover — "nothing else moves, and the chart is never
+ * covered" — and at 390px a popover tall enough to hold thirteen Races cannot have both. Of the
+ * two, *never covering* is the one carrying the argument: it is the reason the rail beat the
+ * mockup's disclosure panel, which was rejected for eating the chart. So the content below moves
+ * down, nothing is obscured, and a tap still costs no navigation.
  */
 function BucketPopover({
   dimension,
@@ -178,6 +174,9 @@ function BucketPopover({
   onClose: () => void
 }): ReactElement {
   const counts = bucketCounts(rows, filter, dimensions, dimension.id)
+  // The same counts with nothing narrowed, so a chip can say whether it is empty today or empty
+  // always. Two passes over the rows rather than one, which is what honesty costs here.
+  const archiveCounts = bucketCounts(rows, EMPTY_FILTER, dimensions, dimension.id)
   const picked = selectedBuckets(filter, dimension.id)
   const footnotes = dimension.buckets.flatMap((bucket) =>
     bucket.footnote === null ? [] : [bucket.footnote]
@@ -215,7 +214,7 @@ function BucketPopover({
         </span>
       </div>
 
-      {picked.length === 0 && filter.range === null && (
+      {!isNarrowed(filter, dimension.id) && (
         // Said out loud, because an untouched dimension lights no chip and a sailor could read that
         // as nothing being selected rather than everything being in. ADR 0026's default, in words.
         <p style={{ ...NOTE_STYLE, margin: 0 }}>
@@ -228,7 +227,8 @@ function BucketPopover({
           <BucketChip
             key={bucket.id}
             bucket={bucket}
-            rows={counts.get(bucket.id)?.rows ?? 0}
+            rows={counts.get(bucket.id) ?? 0}
+            inArchive={archiveCounts.get(bucket.id) ?? 0}
             selected={picked.includes(bucket.id)}
             onToggle={() => onChange(toggleBucket(filter, dimension.id, bucket.id))}
           />
@@ -257,12 +257,6 @@ const LINK_STYLE: CSSProperties = {
   fontFamily: 'var(--font-body)',
 }
 
-const NOTE_STYLE: CSSProperties = {
-  fontSize: 'var(--text-xs)',
-  lineHeight: 1.45,
-  color: 'var(--text-muted)',
-}
-
 /**
  * One bucket, with the count tapping it would produce.
  *
@@ -274,17 +268,30 @@ const NOTE_STYLE: CSSProperties = {
 function BucketChip({
   bucket,
   rows,
+  inArchive,
   selected,
   onToggle,
 }: {
   bucket: AnalysisBucket
   rows: number
+  /** The same count with **no** dimension narrowed — what tells "never" from "not right now". */
+  inArchive: number
   selected: boolean
   onToggle: () => void
 }): ReactElement {
   // Empty and unselected is disabled; empty and selected is not, or a narrowing could not be
   // undone from the chip that made it.
   const unavailable = rows === 0 && !selected
+  const neverRaced = inArchive === 0
+
+  // The distinction ADR 0029 wants and a bare `0` cannot make: "this boat has a sail it has never
+  // raced" reads nothing like "the other chips you tapped left this one empty", and a sailor has
+  // to be able to tell whether tapping it would ever have shown anything.
+  const emptiness = neverRaced
+    ? 'no rows anywhere in the archive'
+    : rows === 0
+      ? `no rows under this narrowing, ${inArchive} in the archive`
+      : `${rows} row${rows === 1 ? '' : 's'}`
 
   return (
     <button
@@ -294,16 +301,13 @@ function BucketChip({
       aria-pressed={selected}
       disabled={unavailable}
       onClick={onToggle}
+      aria-label={`${bucket.label} — ${emptiness}`}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
-        padding: '7px 11px',
-        borderRadius: radius('full'),
-        // Longhand throughout: mixing `border` with `borderStyle` makes React warn, and the two
-        // disagree on re-render in whichever order they were written.
-        borderWidth: 1,
-        borderStyle: bucket.about_the_record && !selected ? 'dashed' : 'solid',
+        ...PILL_STYLE,
+        // Dotted where the bucket is empty in the whole archive, dashed where it is a statement
+        // about the record, solid otherwise. Three borders because they are three different facts
+        // and ADR 0029 asks a sailor to be able to tell them apart.
+        borderStyle: neverRaced ? 'dotted' : bucket.about_the_record && !selected ? 'dashed' : 'solid',
         borderColor: selected ? 'var(--blue-500)' : 'var(--surface-border)',
         background: selected
           ? 'var(--blue-500)'
@@ -316,15 +320,12 @@ function BucketChip({
         fontStyle: bucket.about_the_record ? 'italic' : 'normal',
         fontSize: 'var(--text-sm)',
         fontWeight: selected ? 600 : 500,
-        fontFamily: 'var(--font-body)',
         cursor: unavailable ? 'not-allowed' : 'pointer',
         opacity: unavailable ? 0.45 : 1,
       }}
     >
       {bucket.label}
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', opacity: 0.75 }}>
-        {rows}
-      </span>
+      <span style={PILL_COUNT_STYLE}>{rows}</span>
     </button>
   )
 }
@@ -335,6 +336,13 @@ function BucketChip({
  * A continuous dimension gets a continuous control, and the Races are what a sailor actually
  * remembers — "the St Joe race", not "4 September" (ADR 0029). The month chips above are the
  * shortcut, not the vocabulary, which is why they and this are mutually exclusive in the filter.
+ *
+ * A tap selects the race's **day**, not the race, and the consequence is worth stating: two races
+ * sailed on one day cannot be told apart here, and picking either picks both. `when` narrows on a
+ * row's own date — that is what a row has — so a race-grained range would need row-to-race
+ * membership in the filter instead of a span, and would stop being the thing a URL can carry as
+ * two dates. This archive has thirteen races on thirteen days; if a day ever holds two, this is
+ * the control that has to grow, not the filter's shape.
  */
 function RaceRange({
   filter,
