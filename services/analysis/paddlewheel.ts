@@ -27,7 +27,7 @@
  * Those rows are counted and reported instead, never dropped and never plotted at the origin.
  */
 
-import { calibrationEras, withinEra } from '@/lib/boat/calibrationLog'
+import { calibrationEras, withinEra } from '@/services/analysis/calibration-eras'
 import { notCountableReason } from '@/services/analysis/countable'
 import type { AnalysisRow, CalibrationEra, CalibrationLogEntry, TranscriptionChannels } from '@/types'
 

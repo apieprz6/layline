@@ -26,7 +26,8 @@
  * description on the Countable rows, and this suite follows ADR 0034.
  */
 
-import { buildCalibrationLog, calibrationEras } from '@/lib/boat/calibrationLog'
+import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
+import { calibrationEras } from '@/services/analysis/calibration-eras'
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import {
