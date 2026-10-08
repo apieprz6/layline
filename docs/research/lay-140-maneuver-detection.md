@@ -41,6 +41,30 @@ both live files in a sibling repo, not frozen fixtures. The relative shape is pr
 document are the current ground truth, reproduced directly against the code and archive as they exist
 today, and should be treated as superseding the ADR's cached ones.
 
+> **Correction, LAY-153.** The paragraph above is wrong about the window-cost figures, and the error
+> is this document's, not the ADR's. Building the engine reproduced **ADR 0009's 263 and 415** exactly
+> on the same archive, along with every row of the sweep table below — but only by counting a row
+> inside a window as inside a window. This document's 229/367 are those same spans *minus* the rows
+> where the prior art's single `STATUS` column let Low-Speed take precedence and drop the maneuver
+> label: 34 rows at (1,1), 48 at (1,3). The 34 is precisely the "34 rows across 5 recordings" ADR 0009
+> identifies as the bug, so the stdlib port reproduced the defect this document's own **Row Quality
+> independence** section tells the implementation not to inherit. Nothing drifted upstream, and
+> nothing here supersedes the ADR.
+>
+> The **93 flips** and the **56/28/9** split are unaffected — the bug cannot touch flip detection —
+> and are reproduced exactly. The ADR's "94" remains the one figure neither this document nor the
+> implementation can account for; it was a manual tally. The recovery statistics are reproduced to
+> the row for tacks and within one event of 26 for gybes (92% rather than 88% by row 3), which does
+> not move the conclusion.
+>
+> `services/analysis/__tests__/archive-maneuvers.test.ts` is the live record, and pins the flip
+> counts, the nine roundings' angles, 415 clip-first, 424 detect-then-filter, the 48 rows carrying
+> both facts, the 2,698 Countable rows and the recovery percentages. It does **not** pin the (1,1)
+> figures or the sweep table: the span is a constant, not a parameter, so reproducing those meant
+> varying it from scratch code during this investigation rather than from a test. Treat the
+> reconciliation above as the finding and the test as the guard; read it before trusting a count in
+> this document.
+
 ---
 
 ## Q1 — Window span: how wide, and should it be symmetric?
