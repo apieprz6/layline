@@ -7,9 +7,10 @@
  */
 
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
-import { byEra, calibrationEras, eraOf } from '@/services/analysis/calibration-eras'
+import { byEra, calibrationEras, eraOf, withinEra } from '@/services/analysis/calibration-eras'
 import type {
   CalibrationEvent,
+  CalibrationLogEntry,
   InstrumentCalibrationPayload,
   InstrumentCalibrationVersion,
 } from '@/types'
@@ -65,12 +66,13 @@ const AUTOCOMPENSATION = event('2026-07-04', ['HDG'], 'autocompensation')
 
 describe('cutting one channel’s Eras out of the Calibration Log', () => {
   it('is one unbounded Era where nothing was ever recorded', () => {
-    const eras = calibrationEras([], 'HDG')
-
-    // Not zero Eras: a season nobody wrote a calibration down for is still a season under some
-    // configuration, and every figure in it belongs to that one.
-    expect(eras).toHaveLength(1)
-    expect(eras[0]).toMatchObject({ from_date: null, until_date: null, opened_by: [] })
+    // Not zero Eras and not an absent answer: a season nobody wrote a calibration down for is
+    // still a season under some configuration, and every figure in it belongs to that one. This
+    // is the state the Instrument Tuning screen ships in, so the whole shape is pinned — the key
+    // included, since a chart keys a series on it.
+    expect(calibrationEras([], 'HDG')).toEqual([
+      { key: 'HDG:opening', channel: 'HDG', from_date: null, until_date: null, opened_by: [] },
+    ])
   })
 
   it('opens an Era on each recorded act, and keeps the stretch before the first one', () => {
@@ -80,7 +82,25 @@ describe('cutting one channel’s Eras out of the Calibration Log', () => {
       [null, '2026-07-04'],
       ['2026-07-04', null],
     ])
-    expect(eras[1].opened_by.map((entry) => entry.entry)).toEqual(['event'])
+    // The Era says what opened it, in full, so a chart can mark the act and name it.
+    expect(eras[1].opened_by).toEqual([
+      { entry: 'event', date: '2026-07-04', event: AUTOCOMPENSATION },
+    ])
+  })
+
+  it('counts the first Version as a boundary, leaving the unrecorded stretch its own Era', () => {
+    // Before it, the figures in the box were whatever they were and nobody wrote them down. A
+    // Race sailed then is not in the same Era as one sailed after.
+    const eras = calibrationEras(buildCalibrationLog([version(1, '2026-05-02', BASE)], []), 'STW')
+
+    expect(eras[0]).toEqual({
+      key: 'STW:opening',
+      channel: 'STW',
+      from_date: null,
+      until_date: '2026-05-02',
+      opened_by: [],
+    })
+    expect(eras[1].opened_by).toHaveLength(1)
   })
 
   it('ignores an act on another channel, because Eras are per channel', () => {
@@ -105,10 +125,10 @@ describe('cutting one channel’s Eras out of the Calibration Log', () => {
     // The first Version states every figure, including `HDG`'s, so it is a boundary; the second
     // touched `AWA` alone and is not; the third re-typed the compass offset, which resets the
     // baseline a residual is measured against just as an autocompensation does.
-    expect(calibrationEras(log, 'HDG').map((era) => era.from_date)).toEqual([
-      null,
-      '2026-05-01',
-      '2026-07-01',
+    expect(calibrationEras(log, 'HDG').map((era) => [era.from_date, era.until_date])).toEqual([
+      [null, '2026-05-01'],
+      ['2026-05-01', '2026-07-01'],
+      ['2026-07-01', null],
     ])
   })
 
@@ -123,21 +143,93 @@ describe('cutting one channel’s Eras out of the Calibration Log', () => {
     expect(eras).toHaveLength(2)
     expect(eras[1].opened_by).toHaveLength(3)
   })
+
+  it('bounds every Era with a day, whatever grain the entry it read was dated at', () => {
+    // The Log dates entries at a day today (`occurred_on`, `effective_from`), so this is the
+    // normalisation holding rather than a case the UI can produce. It is pinned because the
+    // predicate below rests on it: comparing a Race's wall-clock stamp as text against a bound
+    // gives the same answer as comparing the days *only* while the bound is a bare `YYYY-MM-DD`.
+    // A bound that kept an entry's clock time would put a Race sailed that morning in the Era
+    // before the act, which is the configuration it was not sailed under.
+    const timed: CalibrationLogEntry[] = [
+      { entry: 'event', date: '2026-08-01 14:30:00', event: event('2026-08-01', ['STW']) },
+    ]
+    const eras = calibrationEras(timed, 'STW')
+
+    expect(eras.map((era) => [era.from_date, era.until_date])).toEqual([
+      [null, '2026-08-01'],
+      ['2026-08-01', null],
+    ])
+    expect(withinEra('2026-08-01 09:00:00', eras[1])).toBe(true)
+  })
 })
 
-describe('placing a date in an Era', () => {
-  const eras = calibrationEras(buildCalibrationLog([], [AUTOCOMPENSATION]), 'HDG')
+describe('placing a date in an Era, which is one predicate', () => {
+  /** Three Eras: the unrecorded stretch, the paddlewheel as first recorded, and as rescaled. */
+  const eras = calibrationEras(
+    buildCalibrationLog(
+      [
+        version(1, '2026-05-02', BASE),
+        version(2, '2026-08-01', { ...BASE, STW: { multiplier: 1.04, offset: 0 } }),
+      ],
+      []
+    ),
+    'STW'
+  )
 
-  it('puts the day of the act in the Era it opened, not the one it closed', () => {
-    expect(eraOf(eras, '2026-07-04 19:00:00')?.from_date).toBe('2026-07-04')
-    expect(eraOf(eras, '2026-07-03 19:00:00')?.from_date).toBe(null)
+  /**
+   * Every probe worth asking, with the Era index each belongs in: either side of both boundaries,
+   * the boundary days themselves, and the same instants written three ways.
+   */
+  const probes: [string, number][] = [
+    ['2026-05-01', 0],
+    ['2026-05-01 23:59:59', 0],
+    ['2026-05-02', 1],
+    ['2026-05-02 00:00:00', 1],
+    ['2026-07-31 23:59:59', 1],
+    ['2026-08-01', 2],
+    ['2026-08-01 00:00:00', 2],
+    ['2026-08-01 10:00:00', 2],
+    ['2026-08-01T10:00:00Z', 2],
+    ['2026-08-01 23:59:59', 2],
+    ['2026-09-30 18:00:00', 2],
+  ]
+
+  it('puts a boundary day in the Era it opened, not the one it closed', () => {
+    for (const [date, index] of probes) {
+      expect([date, eras.findIndex((era) => withinEra(date, era))]).toEqual([date, index])
+    }
+  })
+
+  it('places every date in exactly one Era, so no figure can be pooled across a boundary', () => {
+    for (const [date] of probes) {
+      expect(eras.filter((era) => withinEra(date, era))).toHaveLength(1)
+    }
+  })
+
+  it('answers `eraOf` and `withinEra` the same way, because there is one rule', () => {
+    // LAY-156 and LAY-157 each wrote a containment test — one comparing the whole stamp as text,
+    // one slicing it to a day first — and they were assumed equivalent rather than checked. They
+    // are now the same function, and this is the assertion that says so.
+    for (const [date, index] of probes) {
+      expect(eraOf(eras, date)).toBe(eras[index])
+    }
   })
 
   it('reads a naive stamp at the grain the Log is dated at', () => {
     // A Race Window is a time; a Calibration Event is a day. The time of day cannot decide which
     // side of a boundary a Race falls on, because nobody recorded the hour the compass was swung.
-    expect(eraOf(eras, '2026-07-04 00:00:00')?.from_date).toBe('2026-07-04')
-    expect(eraOf(eras, '2026-07-04 23:59:59')?.from_date).toBe('2026-07-04')
+    const swung = calibrationEras(buildCalibrationLog([], [AUTOCOMPENSATION]), 'HDG')
+
+    expect(eraOf(swung, '2026-07-04 00:00:00')?.from_date).toBe('2026-07-04')
+    expect(eraOf(swung, '2026-07-04 23:59:59')?.from_date).toBe('2026-07-04')
+    expect(eraOf(swung, '2026-07-03 23:59:59')?.from_date).toBe(null)
+  })
+
+  it('is null for a date the Eras given do not cover', () => {
+    // Cannot happen for Eras from `calibrationEras` — they cover the whole timeline between them
+    // — so it is asked of a hand-cut Era, which is what a caller slicing a range would hold.
+    expect(eraOf([eras[1]], '2026-09-01')).toBeNull()
   })
 })
 

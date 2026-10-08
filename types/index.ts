@@ -1755,14 +1755,15 @@ export type PairedPointOfSail = 'upwind' | 'downwind'
  * did something to the boat (ADR 0027). Derived per channel, so the `HDG` Eras and the `STW` Eras
  * need not line up.
  *
- * Here rather than in one check's own module because every Instrument Tuning check reads the same
- * shape, and the projection that produces it belongs to the Log.
+ * Here rather than in its producer's own module because every Instrument Tuning check reads the
+ * same shape. The producer is `services/analysis/calibration-eras.ts`, which is the only one and
+ * says why it lives there.
  *
  * LAY-156 and LAY-157 each declared this interface, on branches neither of which could see the
  * other; they auto-merged into two declarations of one name, which TypeScript merges into a shape
- * requiring both sets of fields and which therefore no producer satisfied. This is the survivor —
- * the superset, since `key` is in it — and the two producers now agree on it. That there are still
- * *two* producers is the part this did not fix: see LAY-163.
+ * requiring both sets of fields and which therefore no producer satisfied. This is the survivor,
+ * the superset, since `key` is in it. There were two builders behind it for the same reason, which
+ * LAY-163 collapsed into the one above.
  */
 export interface CalibrationEra {
   /** Stable across renders, so a chart can key its series on an Era. */
