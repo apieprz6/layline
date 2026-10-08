@@ -62,11 +62,14 @@ export function analysisRows(
  * The bounds question is `insideRaceWindow`'s, not this function's. That predicate exists because
  * several callers ask it, and a copy of `>=`/`<=` here would be one more chance to disagree about
  * the row on the gun.
+ *
+ * Generic in the row, so an `AnalysisRow` joined to anything — its channels, for the Instrument
+ * Tuning checks — comes back out with that still attached rather than narrowed away.
  */
-export function analysisRowsWithin(
-  rows: readonly AnalysisRow[],
+export function analysisRowsWithin<Row extends Pick<AnalysisRow, 'row_time'>>(
+  rows: readonly Row[],
   window: RaceWindow
-): AnalysisRow[] {
+): Row[] {
   const seconds = raceWindowSeconds(window)
 
   return rows.filter((row) => insideRaceWindow(wallClockSeconds(row.row_time), seconds))
