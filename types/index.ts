@@ -1464,6 +1464,77 @@ export interface TranscriptionQuality {
   rows: RowQuality[]
 }
 
+/**
+ * What the boat was doing across a `TWA` sign flip.
+ *
+ * A **rounding** is a flip whose two sides sit on opposite sides of the beam — a change of point
+ * of sail, which is neither of the other two and must never be counted as either: its speed loss
+ * is a different phenomenon from a tack's or a gybe's (LAY-140).
+ */
+export type Maneuver = 'tack' | 'gybe' | 'rounding'
+
+/** One `TWA` sign flip, classified. */
+export interface ManeuverFlip {
+  /** The row after the flip — the first row on the new side. */
+  row_index: number
+  row_time: string
+  maneuver: Maneuver
+  /** The `TWA` either side of the flip, verbatim, which is what the classification read. */
+  twa_before: string
+  twa_after: string
+}
+
+/**
+ * Which **Maneuver Window** a row sits inside, if any.
+ *
+ * Its own record rather than a field on `RowQuality`, because the two are separate axes: a row
+ * can be Low-Speed and mid-tack at once, and the prior art's single `STATUS` column is what lost
+ * 34 rows their maneuver marker to that collision (ADR 0009).
+ */
+export interface RowManeuverWindow {
+  row_index: number
+  row_time: string
+  /**
+   * The Maneuver whose Window covers this row, named by what the boat was doing at its flip —
+   * never a claim that *this* row is the flip. Null outside every Window, and always null on a
+   * **Frozen** row.
+   */
+  maneuver_window: Maneuver | null
+}
+
+/** Maneuvers over a set of rows, with the rules that produced them. Computed, never stored. */
+export interface TranscriptionManeuvers {
+  /** Bumped whenever a rule or a constant below changes. */
+  detector_version: string
+  /** Rows a Maneuver Window reaches before the flip. */
+  window_before: number
+  /** Rows a Maneuver Window reaches after the flip, which is the recovery and so the longer. */
+  window_after: number
+  /** `|TWA|` above this is downwind, at or below it upwind, read on each side of a flip. */
+  zone_boundary_deg: number
+  /** Every flip found, in row order. */
+  flips: ManeuverFlip[]
+  /** One entry per row it was given, in that order. */
+  rows: RowManeuverWindow[]
+}
+
+/**
+ * A row as every performance metric reads it: its Row Quality and its Maneuver Window side by
+ * side, never collapsed into one field, and the one verdict composed from them.
+ */
+export interface AnalysisRow {
+  row_index: number
+  row_time: string
+  quality: RowQuality
+  /** The Maneuver whose Window covers this row, or null outside every one. */
+  maneuver_window: Maneuver | null
+  /**
+   * Not **Frozen**, not **Low-Speed**, and not inside a **Maneuver Window** (ADR 0025). A row
+   * that is not Countable never enters a performance number; it may still be drawn.
+   */
+  countable: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Uploading a race, and what a race states afterwards
 // ---------------------------------------------------------------------------
