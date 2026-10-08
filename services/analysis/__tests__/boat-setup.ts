@@ -9,6 +9,13 @@
  * owner's machine.
  *
  * Not a `.test.ts`, so Jest collects the suites and not this.
+ *
+ * 🚨 **Call `ownPolar`/`ownCrossoverChart` from inside a test body, never from a `describe`
+ * callback.** Jest executes a `describe.skip` body at collection time — only the `it`s inside it
+ * are skipped — so a read at describe scope runs on a machine without these files and takes the
+ * whole suite down with it instead of skipping. `describeBoatSetup` cannot protect what runs
+ * before its tests do. A memoised accessor evaluated on first use is the pattern that works; see
+ * `archive-targets.test.ts`.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -28,9 +35,13 @@ function findBoatSetup(): string | null {
   const named = process.env.LAYLINE_BOAT_SETUP_DIR
   if (named) {
     // Someone who set this asked for these suites to run. Skipping a typo'd path would report all
-    // green for the one claim they were trying to check.
-    if (!existsSync(named)) {
-      throw new Error(`LAYLINE_BOAT_SETUP_DIR is set to ${named}, which does not exist`)
+    // green for the one claim they were trying to check — so the files are required to be there,
+    // and the complaint names the one that is not.
+    if (!existsSync(join(named, POLAR_FILE))) {
+      throw new Error(
+        `LAYLINE_BOAT_SETUP_DIR is set to ${named}, which holds no ${POLAR_FILE}. Point it at a ` +
+          'checkout of Handsome-Pete, or unset it to let the search find one beside this repo.'
+      )
     }
     return named
   }
@@ -61,7 +72,18 @@ if (root === null) {
 export const describeBoatSetup = root === null ? describe.skip : describe
 
 function contentsOf(relative: string): string {
-  return readFileSync(join(root as string, relative), 'utf8')
+  // Reached only by a suite that read these files outside a test body — see the warning at the
+  // top. Said in words, because the alternative is a `TypeError` about a null `path` argument
+  // pointing at a `readFileSync` call that is not where the mistake is.
+  if (root === null) {
+    throw new Error(
+      `the owner's Boat Setup files were not found, so ${relative} cannot be read. A suite that ` +
+        'reads them must do so inside a test body, so that `describeBoatSetup` can skip it: a ' +
+        'describe callback runs even when the describe is skipped.'
+    )
+  }
+
+  return readFileSync(join(root, relative), 'utf8')
 }
 
 /** The boat's own 2026 ORC certificate, as a payload. A refusal throws. */

@@ -62,7 +62,20 @@ if (archiveFilenames.length === 0) {
 export const describeArchive = archiveFilenames.length > 0 ? describe : describe.skip
 
 export function archiveBytes(filename: string): Buffer {
-  return readFileSync(join(archive as string, filename))
+  // Reached only by a suite that read a recording outside a test body. Jest executes a
+  // `describe.skip` callback and skips only the `it`s inside it, so `describeArchive` cannot
+  // protect a read at describe scope — and the cast below would otherwise surface as a `TypeError`
+  // about a null `path`, pointing at this line rather than at the mistake. Every suite here is
+  // safe today because they read through `archiveFilenames`, which is empty when the archive is
+  // absent; a suite naming one file directly needs a lazy accessor (see `boat-setup.ts`).
+  if (archive === null) {
+    throw new Error(
+      `the owner's recordings were not found, so ${filename} cannot be read. A suite that reads ` +
+        'them must do so inside a test body, so that `describeArchive` can skip it.'
+    )
+  }
+
+  return readFileSync(join(archive, filename))
 }
 
 /**
