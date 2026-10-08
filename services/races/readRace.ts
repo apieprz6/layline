@@ -110,8 +110,13 @@ interface SeaStateEntryRow {
  * `crossover_sail_definitions` rows in a second request rather than embedded through the composite
  * foreign key: PostgREST will not follow a two-column key, and the alternative — resolving through
  * the artifact's current pointer — is exactly the read-time resolution ADR 0012 forbids.
+ *
+ * Exported for `services/analysis/readArchive.ts`, which resolves the same two lists onto the rows
+ * of every Race at once. A second copy there would be a second answer to what a sail's words are —
+ * including a second chance to render a Definition number bare, which the refusal at the bottom of
+ * this function exists to prevent.
  */
-async function readAnnotations(
+export async function readRaceAnnotations(
   supabase: Awaited<ReturnType<typeof createClient>>,
   raceId: string,
   chartVersionId: string | null
@@ -197,7 +202,7 @@ async function readAnnotations(
  * the oldest races in this archive predate every Boat Setup artifact the boat has, and nothing backdates
  * v1 onto them (ADR 0008).
  *
- * Two reads rather than an embed, for the same reason `readAnnotations` does two: every one of these
+ * Two reads rather than an embed, for the same reason `readRaceAnnotations` does two: every one of these
  * pointers is half of a composite key with a constant `kind` tag column, and PostgREST will not follow a
  * two-column key.
  *
@@ -334,7 +339,7 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
 
   // All-or-nothing, like the Transcription: a page that could not read the Testimony would otherwise
   // state that none was given.
-  const annotations = await readAnnotations(supabase, race.id, race.crossover_chart_version_id)
+  const annotations = await readRaceAnnotations(supabase, race.id, race.crossover_chart_version_id)
   if (!annotations) return null
 
   try {

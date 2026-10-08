@@ -1717,6 +1717,196 @@ export interface EfficiencyAggregate {
 export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
 
 // ---------------------------------------------------------------------------
+// The Analysis Filter and its Coverage Ledger (ADR 0026, ADR 0029)
+// ---------------------------------------------------------------------------
+// Three screens share one filter, so these shapes are central rather than beside the one
+// aggregation function that happens to be written first. The per-screen aggregates are not —
+// `services/analysis/polar-performance.ts` types its own, per `AGENTS.md`.
+//
+// Two properties run through all of it. A dimension nobody has touched is an **empty selection**,
+// never a pre-selected list of every bucket: that is what makes ADR 0026's "**Not recorded** is on
+// by default" fall out without an untouched filter having to enumerate anything, and what lets a
+// vocabulary grow without stale URLs meaning something different. And a bucket id is **opaque** to
+// everything here — a wind band's name, a Sail Definition's own words, a `YYYY-MM` month — because
+// what a bucket is differs per dimension and only `services/analysis/filter.ts` knows.
+
+/**
+ * The six dimensions an **Analysis Filter** can offer, named as `CONTEXT.md` names them.
+ *
+ * Every screen declares which of these it offers, and a dimension whose values are the chart's own
+ * answer is left out (ADR 0029): the Polar performance screen offers all six, the **Sail Selection
+ * Screen** five, the Instrument Tuning screen two.
+ */
+export type AnalysisDimension = 'wind' | 'pos' | 'sail' | 'sea' | 'time' | 'when'
+
+/** One selectable value of one dimension. */
+export interface AnalysisBucket {
+  /** What the URL and a row's resolved value are both written as. Unique within its dimension. */
+  id: string
+  label: string
+  /**
+   * Whether this bucket describes the **record** rather than the water — **Not recorded**, and
+   * "Note only" on the sail dimension.
+   *
+   * The **Coverage Ledger**'s one switch acts on exactly these, across every dimension at once
+   * (ADR 0029), which is why the fact is on the bucket rather than inferred from its id.
+   */
+  about_the_record: boolean
+  /** A sentence the popover prints under this dimension's chips, or null. */
+  footnote: string | null
+}
+
+/** One dimension with its vocabulary, as a screen's rail renders it. */
+export interface AnalysisDimensionSpec {
+  id: AnalysisDimension
+  label: string
+  /** Every entry in the vocabulary, always — an empty one renders disabled, never absent. */
+  buckets: AnalysisBucket[]
+  /**
+   * Whether the vocabulary is derived from the archive rather than fixed.
+   *
+   * Worth stating because a derived list changes shape as the archive grows, which is why `when`
+   * cannot be a plain chip row and why a stale URL's bucket id has to be dropped rather than
+   * honoured.
+   */
+  derived: boolean
+  /**
+   * Whether the popover offers the **Races themselves** below its chips, as a tap-first-tap-last
+   * range.
+   *
+   * True of `when` alone: a continuous dimension gets a continuous control, and the Races are what
+   * a sailor remembers ("the St Joe race", not "4 September"). See ADR 0029.
+   */
+  continuous: boolean
+  /**
+   * Whether a row can lack a value for this dimension **at all**.
+   *
+   * False for the two dimensions read off a row's own timestamp: every **Recording Row** has a
+   * time, so their **Not recorded** bucket is structurally empty and renders disabled — ADR 0014's
+   * treatment, with a footnote saying why it can never fill rather than leaving a sailor to
+   * wonder.
+   *
+   * It exists because the **Coverage Ledger**'s switch enumerates: excluding the unrecorded rows
+   * means selecting every real value on each dimension that has a record bucket (ADR 0029), and
+   * doing that to a dimension whose record bucket can never hold a row would light every chip on
+   * it and add every one to the URL to narrow away nothing.
+   */
+  absence_possible: boolean
+}
+
+/** An inclusive span of days, `YYYY-MM-DD`, in the **Recording**'s own naive frame. */
+export interface AnalysisDayRange {
+  from: string
+  to: string
+}
+
+/**
+ * What a sailor has narrowed to: ADR 0026's dimension-agnostic record of selected bucket ids.
+ *
+ * A dimension absent from `buckets`, or present with an empty list, is **not narrowed** — every
+ * bucket of it matches, **Not recorded** included.
+ *
+ * `range` is ADR 0029's addition to ADR 0026's shape, and it is the `when` dimension's only: a
+ * span of days the month chips cannot express. Mutually exclusive with `when`'s own buckets,
+ * because they are two ways of saying one thing and honouring both would make the narrower of them
+ * silently win.
+ */
+export interface AnalysisFilter {
+  buckets: Partial<Record<AnalysisDimension, readonly string[]>>
+  range: AnalysisDayRange | null
+}
+
+/**
+ * What the record says about the sail on one row: three states, not one value and two absences.
+ *
+ * ADR 0029's reading of ADR 0023. A **Sail Configuration** may name a **Sail Definition**, or name
+ * none and carry only a note — the boat flew something the **Crossover Chart** has no word for,
+ * which is the vocabulary running out and not a data defect — or be missing altogether. The last
+ * two are both statements about the record, which is why both ride with the Coverage Ledger's
+ * switch.
+ */
+export type RowSail =
+  | { recorded: 'definition'; label: string }
+  | { recorded: 'note-only' }
+  | { recorded: 'not-recorded' }
+
+/**
+ * A **Recording Row** as an **Analysis Filter** matches it and a screen's aggregation reads it.
+ *
+ * ADR 0026's matched-row type: its `raceId`, the resolved values every dimension is bucketed from,
+ * its **Countable** status, and the efficiency seam's output. ADR 0029 adds the two fields that
+ * make the sums re-computable in the browser — `interval_seconds` and `sog` — and that is the one
+ * thing about this shape worth stating twice:
+ *
+ * **The interval is measured on the server, over the race's whole window, and shipped.** A filter
+ * removes rows from the middle of a recording, so the gap to the *next matched* row is not a
+ * duration anything happened over; and the rows of two races are not one sequence, so differencing
+ * across the archive would weight one race's last row by the gap to the next race's first. Both
+ * mistakes are impossible if each row already carries its own measured span.
+ *
+ * Every resolved value is a number or null rather than text, because the bucketing reads it as a
+ * number and a `null` here means the row recorded nothing — which is what **Not recorded** is.
+ */
+export interface MatchableRow {
+  race_id: string
+  /** This row's index in its own Transcription, which with `race_id` identifies it. */
+  row_index: number
+  /** The row's own day, `YYYY-MM-DD`, in the Recording's naive frame. Bucketed by `when`. */
+  day: string
+  /** Seconds past midnight in that same frame. Bucketed by `time`. */
+  day_seconds: number
+  /** Knots of true wind as the row recorded them, or null. Bucketed by `wind`. */
+  tws: number | null
+  /** Signed **TWA**, −180..180, positive = starboard, or null. Bucketed by `pos`. */
+  twa: number | null
+  /** The **Sea State** in force on this row, or null where the Race carries no annotation. */
+  sea_state: SeaState | null
+  /** What the record says about the sail. Bucketed by `sail`. */
+  sail: RowSail
+  /** Not **Frozen**, not **Low-Speed**, not inside a **Maneuver Window** (ADR 0025). */
+  countable: boolean
+  /** How long this row lasted, in seconds, measured over its own race's window. Null where none. */
+  interval_seconds: number | null
+  /** Knots over the ground: the efficiency numerator (ADR 0027). Null where the row has none. */
+  sog: number | null
+  /** This row scored against the **Polar** its own Race was sailed under (ADR 0012). */
+  efficiency: RowEfficiency
+}
+
+/** One dimension's line in a **Coverage Ledger**: how much of the match rests on no annotation. */
+export interface CoverageLedgerGap {
+  dimension: AnalysisDimension
+  /** The dimension's own label, so a renderer need not carry the registry to print a sentence. */
+  label: string
+  /** Matched rows whose value for this dimension was never recorded. */
+  rows: number
+  /** Those rows as a fraction of the matched rows, or null where nothing matched. */
+  share: number | null
+}
+
+/**
+ * The permanent line under an **Analysis Filter**: what is matched, and what it rests on.
+ *
+ * Always computed and always shown, never only on narrowing (ADR 0029). Half this archive carries
+ * no **Sea State** and no **Sail Configuration**, and a figure that appeared only when something
+ * looked wrong would leave a sailor reasoning about numbers without knowing what they rest on.
+ *
+ * The totals travel beside the matched counts because "3,251 rows" says nothing on its own: what a
+ * sailor reads is *how much of the archive* they are looking at.
+ */
+export interface CoverageLedger {
+  matched_rows: number
+  total_rows: number
+  /** Races at least one matched row comes from — grouped from matched rows, never filtered at. */
+  matched_races: number
+  total_races: number
+  /** Matched rows that are **Countable**, which is what every figure on the screen is over. */
+  countable_rows: number
+  /** One line per dimension that has rows with nothing recorded. Empty when none has. */
+  gaps: CoverageLedgerGap[]
+}
+
+// ---------------------------------------------------------------------------
 // What the archive says is still off: the Instrument Tuning checks
 // ---------------------------------------------------------------------------
 // Three things these shapes are careful about, all of them from ADR 0032/0034/0035 and

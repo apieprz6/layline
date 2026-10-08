@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, type ReactElement } from 'react'
+import { useState, type ReactElement, type ReactNode } from 'react'
 import EmptyState from '@/components/common/EmptyState'
 import SectionTabs, { tabPanelId } from '@/components/common/SectionTabs'
 import { spacing } from '@/lib/utils/design'
@@ -21,10 +21,18 @@ interface BoatPerformanceContentProps {
   races: RaceListEntry[]
   /** An admin, who may add one. Everyone signed in reads the same list (ADR 0019). */
   canWrite: boolean
+  /**
+   * The Overall tab's own content, rendered on the server and passed in.
+   *
+   * A node rather than data, because what fills this tab is a read across the whole archive —
+   * thousands of rows, scored — and the Races tab must not wait on it. The page wraps it in its
+   * own `<Suspense>`, so the archive list paints and the season figures stream in behind it.
+   */
+  overall: ReactNode
 }
 
 /**
- * **Boat performance**: the archive on the Races tab, and Overall still waiting for its engine.
+ * **Boat performance**: the archive on the Races tab, the season's figures on Overall.
  *
  * The list states a **duration** and never a row count. A duration can be held against a sailor's
  * memory of the afternoon; "6,337 rows" cannot be held against anything, and counts a dead feed's
@@ -34,12 +42,13 @@ interface BoatPerformanceContentProps {
  * A race with no title shows its window and says so. An untitled race is normal (ADR 0010), and
  * generating "Race on Sep 4" here would be Layline writing Testimony the sailor withheld.
  *
- * **Overall** is empty because the engine that would fill it does not exist — Wind Data's Model
- * Forecast tab exactly, and not a loading state (ADR 0016).
+ * **Overall** is no longer the empty state ADR 0016 called for: LAY-155 gave it its first real
+ * card, the Polar performance teaser, which tap through to the filterable detail screen.
  */
 export default function BoatPerformanceContent({
   races,
   canWrite,
+  overall,
 }: BoatPerformanceContentProps): ReactElement {
   const [activeTab, setActiveTab] = useState<Tab>('races')
 
@@ -133,11 +142,7 @@ export default function BoatPerformanceContent({
             )}
           </div>
         ) : (
-          <EmptyState
-            mark="📈"
-            title="Season figures coming soon"
-            detail="Counts and sums across the whole archive will be summarised here."
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>{overall}</div>
         )}
       </div>
     </div>
