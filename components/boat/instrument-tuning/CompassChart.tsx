@@ -35,8 +35,13 @@ import type { CalibrationLogEntry, EraHeadingBin, EraHeadingOffset, HeadingBin }
 import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
   Big,
+  CHART_FONT,
   CHART_SVG_STYLE,
+  LINEAR,
+  LINEAR_PLOT_WIDTH,
+  TUNING_CHART_HEIGHT,
   TUNING_CHART_WIDTH,
+  TUNING_VIEW_BOX,
   Caption,
   Chips,
   Coverage,
@@ -332,8 +337,16 @@ const CLIP_DEG = 27
 const HATCH_DEG = 22
 const GRID_DEG = [-20, -10, 10, 20]
 
-const AXIS_LEFT = 26
-const PLOT_WIDTH = TUNING_CHART_WIDTH - AXIS_LEFT - 6
+/**
+ * Pixels per degree of error on the strip's vertical axis.
+ *
+ * `LINEAR.halfHeight / CLIP_DEG`, so the clip is exactly the edge of the plot: a curve is never cut
+ * off by a scale that happened not to reach it, and the one place a bar stops short of the axis is
+ * `CLIP_DEG` itself, which is the honest boundary. On the shared box this is 3.6 against the old
+ * 2.2, so a `+12.7°` bin is half again as tall as it was and the swing is legible without counting
+ * gridlines.
+ */
+const STRIP_PER_DEGREE = LINEAR.halfHeight / CLIP_DEG
 
 function Strip({
   bins,
@@ -343,14 +356,11 @@ function Strip({
   previousBins,
   raceBins,
 }: ChartProps): ReactElement {
-  const height = 150
-  const mid = 70
-  const perDegree = 2.2
-  const column = PLOT_WIDTH / bins.length
+  const column = LINEAR_PLOT_WIDTH / bins.length
 
   const y = (error: number): number =>
-    mid - Math.max(-CLIP_DEG, Math.min(CLIP_DEG, error)) * perDegree
-  const centre = (index: number): number => AXIS_LEFT + index * column + column / 2
+    LINEAR.zeroY - Math.max(-CLIP_DEG, Math.min(CLIP_DEG, error)) * STRIP_PER_DEGREE
+  const centre = (index: number): number => LINEAR.axisLeft + index * column + column / 2
 
   /** A curve as a path, lifted at every bin with no figure. Never bridged across a gap. */
   const path = (curve: Curve): string =>
@@ -367,7 +377,7 @@ function Strip({
 
   return (
     <svg
-      viewBox={`0 0 ${TUNING_CHART_WIDTH} ${height + 34}`}
+      viewBox={TUNING_VIEW_BOX}
       role="img"
       tabIndex={0}
       aria-label="Compass error by heading, as a strip. Tap or use the arrow keys to pick a heading."
@@ -377,7 +387,7 @@ function Strip({
         const tapped = svgPoint(event)
         if (tapped === null) return
 
-        const index = Math.floor((tapped.x - AXIS_LEFT) / column)
+        const index = Math.floor((tapped.x - LINEAR.axisLeft) / column)
         onPick(index >= 0 && index < bins.length ? index : null)
       }}
       style={CHART_SVG_STYLE}
@@ -386,10 +396,10 @@ function Strip({
 
       {bin !== null && (
         <rect
-          x={AXIS_LEFT + bin * column}
+          x={LINEAR.axisLeft + bin * column}
           y={0}
           width={column}
-          height={height + 22}
+          height={LINEAR.evidenceY + LINEAR.evidenceHeight}
           fill="var(--state-warning)"
           opacity="0.14"
         />
@@ -398,17 +408,17 @@ function Strip({
       {GRID_DEG.map((error) => (
         <g key={error}>
           <line
-            x1={AXIS_LEFT}
-            x2={TUNING_CHART_WIDTH - 6}
+            x1={LINEAR.axisLeft}
+            x2={TUNING_CHART_WIDTH - LINEAR.axisRight}
             y1={y(error)}
             y2={y(error)}
             stroke="var(--surface-divider)"
             strokeDasharray="2 3"
           />
           <text
-            x={AXIS_LEFT - 4}
+            x={LINEAR.axisLeft - 5}
             y={y(error) + 3}
-            fontSize="7.5"
+            fontSize={CHART_FONT.tick}
             textAnchor="end"
             fill="var(--text-muted)"
             fontFamily="var(--font-mono)"
@@ -418,11 +428,17 @@ function Strip({
         </g>
       ))}
 
-      <line x1={AXIS_LEFT} x2={TUNING_CHART_WIDTH - 6} y1={mid} y2={mid} stroke="var(--text-muted)" />
+      <line
+        x1={LINEAR.axisLeft}
+        x2={TUNING_CHART_WIDTH - LINEAR.axisRight}
+        y1={LINEAR.zeroY}
+        y2={LINEAR.zeroY}
+        stroke="var(--text-muted)"
+      />
       <text
-        x={AXIS_LEFT - 4}
-        y={mid + 3}
-        fontSize="7.5"
+        x={LINEAR.axisLeft - 5}
+        y={LINEAR.zeroY + 3}
+        fontSize={CHART_FONT.tick}
         textAnchor="end"
         fill="var(--text-muted)"
         fontFamily="var(--font-mono)"
@@ -431,7 +447,7 @@ function Strip({
       </text>
 
       {bins.map((at, index) => {
-        const x = AXIS_LEFT + index * column
+        const x = LINEAR.axisLeft + index * column
         if (at.mean_error_deg === null) {
           return (
             <rect
@@ -451,9 +467,9 @@ function Strip({
           <rect
             key={at.bin_start_deg}
             x={x + 1}
-            y={Math.min(y(at.mean_error_deg), mid)}
+            y={Math.min(y(at.mean_error_deg), LINEAR.zeroY)}
             width={Math.max(0.5, column - 2)}
-            height={Math.max(1, Math.abs(y(at.mean_error_deg) - mid))}
+            height={Math.max(1, Math.abs(y(at.mean_error_deg) - LINEAR.zeroY))}
             fill={thin ? 'var(--surface-raised)' : 'var(--text-accent)'}
             stroke="var(--text-accent)"
             strokeWidth="0.8"
@@ -485,9 +501,9 @@ function Strip({
       {[0, 90, 180, 270, 360].map((heading) => (
         <text
           key={heading}
-          x={AXIS_LEFT + (heading / 360) * PLOT_WIDTH}
-          y={height - 6}
-          fontSize="8.5"
+          x={LINEAR.axisLeft + (heading / 360) * LINEAR_PLOT_WIDTH}
+          y={LINEAR.columnLabelY}
+          fontSize={CHART_FONT.label}
           textAnchor="middle"
           fill="var(--text-muted)"
           fontFamily="var(--font-mono)"
@@ -498,23 +514,29 @@ function Strip({
 
       {/* The evidence row: how many Races each heading rests on, which is the coverage verdict's
           own input drawn where the curve is read rather than stated once underneath. */}
-      <text x={AXIS_LEFT - 4} y={height + 14} fontSize="7" textAnchor="end" fill="var(--text-muted)">
+      <text
+        x={LINEAR.axisLeft - 5}
+        y={LINEAR.evidenceY + LINEAR.evidenceHeight - 4}
+        fontSize={CHART_FONT.micro}
+        textAnchor="end"
+        fill="var(--text-muted)"
+      >
         races
       </text>
       {bins.map((at, index) => (
         <g key={`evidence-${at.bin_start_deg}`}>
           <rect
-            x={AXIS_LEFT + index * column + 0.5}
-            y={height + 4}
+            x={LINEAR.axisLeft + index * column + 0.5}
+            y={LINEAR.evidenceY}
             width={column - 1}
-            height={14}
+            height={LINEAR.evidenceHeight}
             fill={at.race_count === 0 ? 'url(#compass-strip-hatch)' : 'var(--text-primary)'}
             opacity={at.race_count === 0 ? 1 : Math.min(0.6, 0.08 + 0.12 * at.race_count)}
           />
           <text
             x={centre(index)}
-            y={height + 14}
-            fontSize="6.5"
+            y={LINEAR.evidenceY + LINEAR.evidenceHeight - 4}
+            fontSize={CHART_FONT.micro}
             textAnchor="middle"
             fill="var(--text-primary)"
             fontFamily="var(--font-mono)"
@@ -527,24 +549,52 @@ function Strip({
   )
 }
 
-const ROSE_SIZE = 320
-const ROSE_CENTRE = ROSE_SIZE / 2
+const ROSE_CENTRE_X = TUNING_CHART_WIDTH / 2
+const ROSE_CENTRE_Y = TUNING_CHART_HEIGHT / 2
+
+/**
+ * Where the cardinal labels sit, and so the outermost thing the rose draws.
+ *
+ * The box's own half-height less room for a label, because the height is what constrains a circle
+ * in a 340×300 box. The labels used to be placed at `polar(heading, 30)` — a radius that moved with
+ * the error scale and, at 390px, put `E` and `W` past the edge of the viewBox, where they were
+ * simply cut off.
+ */
+const ROSE_LABEL_RING = ROSE_CENTRE_Y - CHART_FONT.label - 3
+
+/** The furthest the curve itself may reach: inside the labels, with the ring between them. */
+const ROSE_MAX_RADIUS = ROSE_LABEL_RING - CHART_FONT.label - 2
+
 /** The zero ring's radius: outside reads high, inside reads low. */
-const ZERO_RING = 88
-const ROSE_PER_DEGREE = 2.4
+const ZERO_RING = 78
+
+/**
+ * Pixels per degree of error, radially.
+ *
+ * Sized so `CLIP_DEG` lands exactly on `ROSE_MAX_RADIUS`, which is what keeps the drawing inside
+ * its own box at every value the scale admits rather than only at the values this archive happens
+ * to hold.
+ */
+const ROSE_PER_DEGREE = (ROSE_MAX_RADIUS - ZERO_RING) / CLIP_DEG
 
 function polar(headingDeg: number, errorDeg: number): [number, number] {
   const radius = ZERO_RING + Math.max(-CLIP_DEG, Math.min(CLIP_DEG, errorDeg)) * ROSE_PER_DEGREE
   // Clockwise from north, which is how a compass is numbered and not how `atan2` is.
   const angle = ((headingDeg - 90) * Math.PI) / 180
-  return [ROSE_CENTRE + radius * Math.cos(angle), ROSE_CENTRE + radius * Math.sin(angle)]
+  return [ROSE_CENTRE_X + radius * Math.cos(angle), ROSE_CENTRE_Y + radius * Math.sin(angle)]
+}
+
+/** A point at a fixed radius from the centre, for the furniture that does not move with the data. */
+function atRing(headingDeg: number, radius: number): [number, number] {
+  const angle = ((headingDeg - 90) * Math.PI) / 180
+  return [ROSE_CENTRE_X + radius * Math.cos(angle), ROSE_CENTRE_Y + radius * Math.sin(angle)]
 }
 
 function sector(centreDeg: number, halfWidthDeg: number, inner: number, outer: number): string {
   const from = ((centreDeg - halfWidthDeg - 90) * Math.PI) / 180
   const to = ((centreDeg + halfWidthDeg - 90) * Math.PI) / 180
   const at = (radius: number, angle: number): string =>
-    `${ROSE_CENTRE + radius * Math.cos(angle)} ${ROSE_CENTRE + radius * Math.sin(angle)}`
+    `${ROSE_CENTRE_X + radius * Math.cos(angle)} ${ROSE_CENTRE_Y + radius * Math.sin(angle)}`
 
   return [
     `M ${at(inner, from)}`,
@@ -615,7 +665,7 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
 
   return (
     <svg
-      viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`}
+      viewBox={TUNING_VIEW_BOX}
       role="img"
       tabIndex={0}
       aria-label="Compass error by heading, on a rose. Tap or use the arrow keys to pick a heading."
@@ -625,23 +675,23 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
         const tapped = svgPoint(event)
         if (tapped === null) return
 
-        const dx = tapped.x - ROSE_CENTRE
-        const dy = tapped.y - ROSE_CENTRE
+        const dx = tapped.x - ROSE_CENTRE_X
+        const dy = tapped.y - ROSE_CENTRE_Y
         // The middle of the rose clears the selection: it is the one place no heading claims.
         if (Math.hypot(dx, dy) < 24) return onPick(null)
 
         const heading = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360
         onPick(Math.floor(heading / binSize))
       }}
-      style={{ ...CHART_SVG_STYLE, maxWidth: 340, margin: '0 auto' }}
+      style={CHART_SVG_STYLE}
     >
       <HatchDef id="compass-rose-hatch" />
 
       {GRID_DEG.map((error) => (
         <circle
           key={error}
-          cx={ROSE_CENTRE}
-          cy={ROSE_CENTRE}
+          cx={ROSE_CENTRE_X}
+          cy={ROSE_CENTRE_Y}
           r={ZERO_RING + error * ROSE_PER_DEGREE}
           fill="none"
           stroke="var(--surface-divider)"
@@ -649,8 +699,8 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
         />
       ))}
       <circle
-        cx={ROSE_CENTRE}
-        cy={ROSE_CENTRE}
+        cx={ROSE_CENTRE_X}
+        cy={ROSE_CENTRE_Y}
         r={ZERO_RING}
         fill="none"
         stroke="var(--text-muted)"
@@ -686,14 +736,14 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
       )}
 
       {[0, 90, 180, 270].map((heading) => {
-        const [x, y] = polar(heading, 30)
+        const [x, y] = atRing(heading, ROSE_LABEL_RING)
         return (
           <text
             key={heading}
             x={x}
             y={y + 3}
             textAnchor="middle"
-            fontSize="10"
+            fontSize={CHART_FONT.label}
             fontFamily="var(--font-mono)"
             fill="var(--text-muted)"
           >
@@ -702,18 +752,18 @@ function Rose({ bins, bin, onPick, onKeyDown, previousBins, raceBins }: ChartPro
         )
       })}
       <text
-        x={ROSE_CENTRE + 3}
-        y={ROSE_CENTRE - ZERO_RING - 10 * ROSE_PER_DEGREE + 3}
-        fontSize="7.5"
+        x={ROSE_CENTRE_X + 3}
+        y={ROSE_CENTRE_Y - ZERO_RING - 10 * ROSE_PER_DEGREE + 3}
+        fontSize={CHART_FONT.tick}
         fill="var(--text-muted)"
         fontFamily="var(--font-mono)"
       >
         +10°
       </text>
       <text
-        x={ROSE_CENTRE + 3}
-        y={ROSE_CENTRE - ZERO_RING + 3}
-        fontSize="7.5"
+        x={ROSE_CENTRE_X + 3}
+        y={ROSE_CENTRE_Y - ZERO_RING + 3}
+        fontSize={CHART_FONT.tick}
         fill="var(--text-muted)"
         fontFamily="var(--font-mono)"
       >

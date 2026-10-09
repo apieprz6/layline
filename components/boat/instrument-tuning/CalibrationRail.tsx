@@ -38,7 +38,7 @@ import { CALIBRATION_EVENT_LABEL } from '@/lib/boat/calibration'
 import { spacing } from '@/lib/utils/design'
 import type { CalibrationChannel, CalibrationLogEntry } from '@/types'
 
-import { TUNING_CHART_WIDTH } from './chart-furniture'
+import { CHART_FONT, TUNING_CHART_WIDTH } from './chart-furniture'
 import { raceLabel, shortDate, type RaceLabels } from './chart-text'
 
 /** One Race on the rail: where it sits in the season and whether it produced a figure. */
@@ -229,7 +229,7 @@ export default function CalibrationRail({
               <text
                 x={Math.min(Math.max(x, 20), TUNING_CHART_WIDTH - 20)}
                 y={BASELINE + 18}
-                fontSize="7.5"
+                fontSize={CHART_FONT.micro}
                 textAnchor="middle"
                 fontFamily="var(--font-mono)"
                 fill={borrowed ? 'var(--text-muted)' : 'var(--text-secondary)'}

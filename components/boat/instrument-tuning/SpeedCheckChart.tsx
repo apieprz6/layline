@@ -44,8 +44,13 @@ import type { CalibrationLogEntry } from '@/types'
 import CalibrationRail, { type RailRace } from './CalibrationRail'
 import {
   Big,
+  CHART_FONT,
   CHART_SVG_STYLE,
+  LINEAR,
+  LINEAR_PLOT_WIDTH,
+  TUNING_CHART_HEIGHT,
   TUNING_CHART_WIDTH,
+  TUNING_VIEW_BOX,
   Caption,
   Chips,
   Coverage,
@@ -401,8 +406,20 @@ interface ChartProps {
   onKeyDown: (event: KeyboardEvent) => void
 }
 
-const SCATTER_SIZE = 300
-const SCATTER_PAD = 26
+/**
+ * The scatter's plot is **square**, and that is not decoration.
+ *
+ * `SOG` and `STW` are the same quantity on the two axes, so one knot has to be the same number of
+ * pixels on each: it is what puts the dashed 1:1 line at 45°, and a 45° line is the shape the eye
+ * reads "the two instruments agree" off. In a 340x300 box the height is what binds, so the plot is
+ * as wide as it is tall and the slack goes into the right-hand margin rather than into stretching
+ * a knot.
+ */
+const SCATTER_PLOT = TUNING_CHART_HEIGHT - 10 - 26
+const SCATTER_LEFT = 30
+const SCATTER_TOP = 10
+/** The baseline, which the x-axis labels sit under. */
+const SCATTER_BOTTOM = SCATTER_TOP + SCATTER_PLOT
 
 /** Every Race's points, so the season stays visible behind a picked Race rather than vanishing. */
 function allPoints(era: EraDivergence): { race_id: string; points: readonly SpeedPoint[] }[] {
@@ -410,9 +427,9 @@ function allPoints(era: EraDivergence): { race_id: string; points: readonly Spee
 }
 
 function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): ReactElement {
-  const perKnot = (SCATTER_SIZE - SCATTER_PAD - 8) / axisMax
-  const x = (knots: number): number => SCATTER_PAD + knots * perKnot
-  const y = (knots: number): number => SCATTER_SIZE - SCATTER_PAD - knots * perKnot
+  const perKnot = SCATTER_PLOT / axisMax
+  const x = (knots: number): number => SCATTER_LEFT + knots * perKnot
+  const y = (knots: number): number => SCATTER_BOTTOM - knots * perKnot
 
   const segment = (line: FittedLine, stroke: string, key: string): ReactElement => (
     <line
@@ -431,7 +448,7 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
 
   return (
     <svg
-      viewBox={`0 0 ${SCATTER_SIZE} ${SCATTER_SIZE}`}
+      viewBox={TUNING_VIEW_BOX}
       role="img"
       tabIndex={0}
       aria-label="GPS speed against paddlewheel speed. Tap or use the arrow keys to pick a 1 knot band."
@@ -441,10 +458,10 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
         const tapped = svgPoint(event)
         if (tapped === null) return
 
-        const picked = Math.floor((tapped.x - SCATTER_PAD) / perKnot)
+        const picked = Math.floor((tapped.x - SCATTER_LEFT) / perKnot)
         onPick(picked >= 0 && picked < axisMax ? picked : null)
       }}
-      style={{ ...CHART_SVG_STYLE, maxWidth: 340, margin: '0 auto' }}
+      style={CHART_SVG_STYLE}
     >
       {band !== null && (
         <rect
@@ -469,8 +486,8 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
           <line x1={x(0)} x2={x(axisMax)} y1={y(knots)} y2={y(knots)} stroke="var(--surface-divider)" />
           <text
             x={x(knots)}
-            y={SCATTER_SIZE - 10}
-            fontSize="8"
+            y={SCATTER_BOTTOM + 12}
+            fontSize={CHART_FONT.tick}
             textAnchor="middle"
             fill="var(--text-muted)"
             fontFamily="var(--font-mono)"
@@ -478,10 +495,10 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
             {knots}
           </text>
           <text
-            x={12}
+            x={SCATTER_LEFT - 5}
             y={y(knots) + 3}
-            fontSize="8"
-            textAnchor="middle"
+            fontSize={CHART_FONT.tick}
+            textAnchor="end"
             fill="var(--text-muted)"
             fontFamily="var(--font-mono)"
           >
@@ -489,10 +506,21 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
           </text>
         </g>
       ))}
-      <text x={SCATTER_SIZE - 8} y={SCATTER_SIZE - 18} fontSize="8" textAnchor="end" fill="var(--text-muted)">
+      <text
+        x={TUNING_CHART_WIDTH - 4}
+        y={SCATTER_BOTTOM + 12}
+        fontSize={CHART_FONT.label}
+        textAnchor="end"
+        fill="var(--text-muted)"
+      >
         STW kt
       </text>
-      <text x={SCATTER_PAD + 4} y={14} fontSize="8" fill="var(--text-muted)">
+      <text
+        x={SCATTER_LEFT + 4}
+        y={SCATTER_TOP + CHART_FONT.label}
+        fontSize={CHART_FONT.label}
+        fill="var(--text-muted)"
+      >
         SOG kt
       </text>
 
@@ -540,16 +568,18 @@ function Scatter({ era, race, band, axisMax, onPick, onKeyDown }: ChartProps): R
   )
 }
 
-function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps): ReactElement {
-  const height = 150
-  const mid = 75
-  const perKnotGap = 40
-  const left = 26
-  const column = (TUNING_CHART_WIDTH - left - 4) / axisMax
-  const clip = 1.6
+/** Knots of gap from 1:1 beyond which the view clips rather than rescaling under the reader. */
+const GAP_CLIP_KNOTS = 1.6
 
-  const x = (knots: number): number => left + knots * column
-  const y = (gap: number): number => mid - Math.max(-clip, Math.min(clip, gap)) * perKnotGap
+function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps): ReactElement {
+  const column = LINEAR_PLOT_WIDTH / axisMax
+  // The same half-height the compass strip uses, so the two linear charts on this screen draw
+  // their zero lines at the same place and read as one instrument.
+  const perKnotGap = LINEAR.halfHeight / GAP_CLIP_KNOTS
+
+  const x = (knots: number): number => LINEAR.axisLeft + knots * column
+  const y = (gap: number): number =>
+    LINEAR.zeroY - Math.max(-GAP_CLIP_KNOTS, Math.min(GAP_CLIP_KNOTS, gap)) * perKnotGap
 
   const line = lineOf(era, race)
   const shown = race === null ? era.races : [race]
@@ -557,7 +587,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
 
   return (
     <svg
-      viewBox={`0 0 ${TUNING_CHART_WIDTH} ${height + 34}`}
+      viewBox={TUNING_VIEW_BOX}
       role="img"
       tabIndex={0}
       aria-label="GPS speed minus paddlewheel speed, by boat speed. Tap or use the arrow keys to pick a 1 knot band."
@@ -567,7 +597,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
         const tapped = svgPoint(event)
         if (tapped === null) return
 
-        const picked = Math.floor((tapped.x - left) / column)
+        const picked = Math.floor((tapped.x - LINEAR.axisLeft) / column)
         onPick(picked >= 0 && picked < axisMax ? picked : null)
       }}
       style={CHART_SVG_STYLE}
@@ -579,7 +609,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
           x={x(band)}
           y={0}
           width={column}
-          height={height + 22}
+          height={LINEAR.evidenceY + LINEAR.evidenceHeight}
           fill="var(--state-warning)"
           opacity="0.14"
         />
@@ -588,17 +618,17 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
       {[-1, -0.5, 0.5, 1].map((gap) => (
         <g key={gap}>
           <line
-            x1={left}
-            x2={TUNING_CHART_WIDTH - 4}
+            x1={LINEAR.axisLeft}
+            x2={TUNING_CHART_WIDTH - LINEAR.axisRight}
             y1={y(gap)}
             y2={y(gap)}
             stroke="var(--surface-divider)"
             strokeDasharray="2 3"
           />
           <text
-            x={left - 4}
+            x={LINEAR.axisLeft - 5}
             y={y(gap) + 3}
-            fontSize="7.5"
+            fontSize={CHART_FONT.tick}
             textAnchor="end"
             fill="var(--text-muted)"
             fontFamily="var(--font-mono)"
@@ -610,15 +640,21 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
 
       {/* 1:1 lies flat here, which is the whole point of this view. */}
       <line
-        x1={left}
-        x2={TUNING_CHART_WIDTH - 4}
-        y1={mid}
-        y2={mid}
+        x1={LINEAR.axisLeft}
+        x2={TUNING_CHART_WIDTH - LINEAR.axisRight}
+        y1={LINEAR.zeroY}
+        y2={LINEAR.zeroY}
         stroke="var(--text-primary)"
         strokeDasharray="4 3"
         data-testid="one-to-one"
       />
-      <text x={TUNING_CHART_WIDTH - 6} y={mid + 11} fontSize="7.5" textAnchor="end" fill="var(--text-muted)">
+      <text
+        x={TUNING_CHART_WIDTH - LINEAR.axisRight}
+        y={LINEAR.zeroY + 12}
+        fontSize={CHART_FONT.note}
+        textAnchor="end"
+        fill="var(--text-muted)"
+      >
         1:1 · as configured
       </text>
 
@@ -641,9 +677,9 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
             key={at.band}
             data-testid="speed-absent-band"
             x={x(at.band) + 1}
-            y={y(clip)}
+            y={y(GAP_CLIP_KNOTS)}
             width={Math.max(0.5, column - 2)}
-            height={y(-clip) - y(clip)}
+            height={y(-GAP_CLIP_KNOTS) - y(GAP_CLIP_KNOTS)}
             fill="url(#speed-gap-hatch)"
           />
         ) : (
@@ -682,8 +718,8 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
         <text
           key={knots}
           x={x(knots)}
-          y={height - 4}
-          fontSize="7.5"
+          y={LINEAR.columnLabelY}
+          fontSize={CHART_FONT.tick}
           textAnchor="middle"
           fill="var(--text-muted)"
           fontFamily="var(--font-mono)"
@@ -691,27 +727,39 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
           {knots}
         </text>
       ))}
-      <text x={TUNING_CHART_WIDTH - 4} y={height + 1} fontSize="7" textAnchor="end" fill="var(--text-muted)">
+      <text
+        x={TUNING_CHART_WIDTH - LINEAR.axisRight}
+        y={LINEAR.columnLabelY + 12}
+        fontSize={CHART_FONT.label}
+        textAnchor="end"
+        fill="var(--text-muted)"
+      >
         STW kt
       </text>
 
-      <text x={left - 4} y={height + 15} fontSize="7" textAnchor="end" fill="var(--text-muted)">
+      <text
+        x={LINEAR.axisLeft - 5}
+        y={LINEAR.evidenceY + LINEAR.evidenceHeight - 4}
+        fontSize={CHART_FONT.micro}
+        textAnchor="end"
+        fill="var(--text-muted)"
+      >
         rows
       </text>
       {bands.map((at) => (
         <g key={`rows-${at.band}`}>
           <rect
             x={x(at.band) + 1}
-            y={height + 5}
+            y={LINEAR.evidenceY}
             width={Math.max(0.5, column - 2)}
-            height={14}
+            height={LINEAR.evidenceHeight}
             fill={at.gap === null ? 'url(#speed-gap-hatch)' : 'var(--text-primary)'}
             opacity={at.gap === null ? 1 : 0.08 + 0.5 * Math.min(1, at.gap.rows / busiest)}
           />
           <text
             x={x(at.band) + column / 2}
-            y={height + 15}
-            fontSize="7"
+            y={LINEAR.evidenceY + LINEAR.evidenceHeight - 4}
+            fontSize={CHART_FONT.micro}
             textAnchor="middle"
             fill="var(--text-primary)"
             fontFamily="var(--font-mono)"

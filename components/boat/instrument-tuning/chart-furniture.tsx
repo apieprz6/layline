@@ -23,7 +23,19 @@ import { spacing } from '@/lib/utils/design'
 import type { CoverageStatement } from '@/types'
 
 /**
- * The viewBox width every chart here is drawn in, so two of them line up on one screen.
+ * The one viewBox every chart on this screen is drawn in.
+ *
+ * **One box, so there is one scale.** Each chart is laid out `width: 100%` inside the same column,
+ * so its viewBox width alone decides how far its own units are magnified on the way to the screen.
+ * Four different widths — 340 for the strip, 320 for the rose, 300 for the scatter — meant four
+ * zoom levels: at 390px the scatter's contents came out 13% larger than the strip's, and a `7.5`
+ * label was 7.1px on one chart and 8.6px on another. Nothing in the data justified either, and
+ * three charts a sailor flips between have to read as one instrument.
+ *
+ * The height is shared too, which costs the two linear charts some empty space and buys three
+ * things: the page does not resize under the finger that just toggled Strip to Rose, a polar chart
+ * stays a circle, and a degree of compass error is the same number of pixels as a degree of
+ * apparent wind.
  *
  * Named for this screen rather than `CHART_WIDTH`, because `components/race-flow/chart-geometry.ts`
  * already exports a `CHART_WIDTH` of 360 and the two are not the same width — that one exists so a
@@ -31,6 +43,58 @@ import type { CoverageStatement } from '@/types'
  * have no reason to share. Two same-named constants with different values is a reader trap.
  */
 export const TUNING_CHART_WIDTH = 340
+
+/** Tall enough for a circle with its labels outside it, which is what sets the floor. */
+export const TUNING_CHART_HEIGHT = 300
+
+/** `0 0 340 300`, for every chart on this screen. */
+export const TUNING_VIEW_BOX = `0 0 ${TUNING_CHART_WIDTH} ${TUNING_CHART_HEIGHT}`
+
+/**
+ * The type scale, in viewBox units — which, because every chart shares one viewBox, is also one
+ * type scale in pixels.
+ *
+ * Four sizes and no others. Picking a number per label is how the old charts ended up with `7`,
+ * `7.5`, `8`, `8.5` and `10` across five views of three measurements, none of the differences
+ * meaning anything. At 390px these render at roughly 8.6, 7.6, 6.7 and 7.6 CSS pixels.
+ */
+export const CHART_FONT = {
+  /** Cardinal points and axis names — what you read to orient yourself on the chart. */
+  label: 9,
+  /** A number on an axis. */
+  tick: 8,
+  /** A count that has to fit inside a 9-unit column, in the evidence row under a chart. */
+  micro: 7,
+  /** A note written on the plot itself: "reaching · not used", "1:1 · as configured". */
+  note: 8,
+} as const
+
+/**
+ * The layout the two linear charts share: the compass strip, and boat speed's gap by speed.
+ *
+ * Shared rather than chosen twice, for the reason `race-flow/chart-geometry.ts` shares its insets:
+ * two charts with their own padding draw their baselines at two different heights, and the stack
+ * stops reading as one screen. Both of these are a signed quantity against a zero line, over a
+ * row of evenly-spaced columns, with a count per column beneath — so they are the same layout
+ * twice and not two layouts.
+ */
+export const LINEAR = {
+  /** Room on the left for the value labels on the zero-line axis. */
+  axisLeft: 28,
+  axisRight: 8,
+  /** The zero line, which both charts read above and below. */
+  zeroY: 112,
+  /** Half the plot's height: how far above and below the zero line a series may be drawn. */
+  halfHeight: 98,
+  /** Where the column names sit — headings on one chart, boat speeds on the other. */
+  columnLabelY: 236,
+  /** The evidence row beneath the plot: how much each column rests on. */
+  evidenceY: 250,
+  evidenceHeight: 16,
+} as const
+
+/** The pixels one linear chart's columns span, and so what one column is worth. */
+export const LINEAR_PLOT_WIDTH = TUNING_CHART_WIDTH - LINEAR.axisLeft - LINEAR.axisRight
 
 /**
  * The tap position in the SVG's own viewBox coordinates, or null where it cannot be located.

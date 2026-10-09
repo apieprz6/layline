@@ -46,11 +46,15 @@ import type {
 import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
   Big,
+  CHART_FONT,
   CHART_SVG_STYLE,
   Caption,
   Chips,
   Coverage,
   Readout,
+  TUNING_CHART_WIDTH,
+  TUNING_CHART_HEIGHT,
+  TUNING_VIEW_BOX,
   arrowStep,
   type ChipOption,
 } from './chart-furniture'
@@ -273,15 +277,30 @@ function reasonWords(excluded: Extract<EraAwaAsymmetry['excluded'][number], obje
 
 /* ----------------------------------------------------------------------- the dial */
 
-const SIZE = 340
-const CENTRE = SIZE / 2
-const INNER = 62
-const OUTER = 150
+const CENTRE_X = TUNING_CHART_WIDTH / 2
+const CENTRE_Y = TUNING_CHART_HEIGHT / 2
+
+/**
+ * Every radius the dial draws at, measured inward from the box rather than outward from the boat.
+ *
+ * Outward was how the old dial clipped itself: an outer ring of 150 in a 340-box put "upwind" at
+ * `y = 6` and "downwind" at `y = 340`, which is the bottom edge, so the word was cut in half. These
+ * are derived from the shared box's own half-height so the furthest thing drawn is inside it by
+ * construction — at any viewBox the screen later settles on.
+ */
+const LABEL_RING = CENTRE_Y - CHART_FONT.label - 3
+/** The angle labels — 30°, 50°, 110°, 150° — just outside the rays. */
+const ANGLE_RING = LABEL_RING - CHART_FONT.label - 1
+/** How far a ray reaches, and where the Δ pill that labels a wedge sits against. */
+const RAY = ANGLE_RING - 10
+const OUTER = RAY - 8
+/** The hole in the middle: dots are spread from here outwards so none lands on the boat. */
+const INNER = 48
 
 /** A point at an apparent wind angle, `side` 1 for starboard and −1 for port. */
 function at(awaDeg: number, radius: number, side: 1 | -1): [number, number] {
   const angle = (awaDeg * Math.PI) / 180
-  return [CENTRE + side * radius * Math.sin(angle), CENTRE - radius * Math.cos(angle)]
+  return [CENTRE_X + side * radius * Math.sin(angle), CENTRE_Y - radius * Math.cos(angle)]
 }
 
 function sector(fromDeg: number, toDeg: number, inner: number, outer: number, side: 1 | -1): string {
@@ -311,8 +330,8 @@ function Ray({
   width?: number
   dash?: string
 }): ReactElement {
-  const [x1, y1] = at(awa, 22, side)
-  const [x2, y2] = at(awa, OUTER + 8, side)
+  const [x1, y1] = at(awa, 20, side)
+  const [x2, y2] = at(awa, RAY, side)
   return (
     <line
       x1={x1}
@@ -344,34 +363,41 @@ function Dial({
 }): ReactElement {
   return (
     <svg
-      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      viewBox={TUNING_VIEW_BOX}
       role="img"
       tabIndex={0}
       aria-label="Tack dial: the apparent wind angle held on each tack, upwind above and downwind below, with port folded onto starboard. Use the arrow keys to step through the Tack Pairs."
       data-testid="tack-dial-svg"
       onKeyDown={onKeyDown}
-      style={{ ...CHART_SVG_STYLE, maxWidth: 360, margin: '0 auto', cursor: 'default' }}
+      style={{ ...CHART_SVG_STYLE, cursor: 'default' }}
     >
       {/* Reaching is discarded, and drawn as discarded rather than left blank. */}
       {([1, -1] as const).map((side) => (
         <path
           key={side}
-          d={sector(UPWIND_MAX_AWA_DEG, DOWNWIND_MIN_AWA_DEG, 24, OUTER + 8, side)}
+          d={sector(UPWIND_MAX_AWA_DEG, DOWNWIND_MIN_AWA_DEG, 22, RAY, side)}
           fill="var(--surface-elevated)"
         />
       ))}
-      <text x={CENTRE + 118} y={CENTRE + 3} fontSize="7.5" textAnchor="middle" fill="var(--text-muted)">
-        reaching · not used
-      </text>
-      <text x={CENTRE - 118} y={CENTRE + 3} fontSize="7.5" textAnchor="middle" fill="var(--text-muted)">
-        reaching · not used
-      </text>
+      {/* Centred in the reaching sector on each side, which is the one place no ray can run. */}
+      {([1, -1] as const).map((side) => (
+        <text
+          key={`reaching-${side}`}
+          x={CENTRE_X + side * (OUTER * 0.66)}
+          y={CENTRE_Y + 3}
+          fontSize={CHART_FONT.note}
+          textAnchor="middle"
+          fill="var(--text-muted)"
+        >
+          reaching · not used
+        </text>
+      ))}
 
       {[INNER, (INNER + OUTER) / 2, OUTER].map((radius) => (
         <circle
           key={radius}
-          cx={CENTRE}
-          cy={CENTRE}
+          cx={CENTRE_X}
+          cy={CENTRE_Y}
           r={radius}
           fill="none"
           stroke="var(--surface-divider)"
@@ -382,14 +408,19 @@ function Dial({
           <Ray key={`${awa}-${side}`} awa={awa} side={side} stroke="var(--surface-divider)" width={1} />
         ))
       )}
+      {/*
+        On the port side, and only there. Port is folded onto starboard, so every wedge and every
+        Δ label is drawn to the right — leaving the angle scale on the left is what keeps the two
+        off each other at 390px, where the pill and the 50° label were landing on the same pixels.
+      */}
       {[30, UPWIND_MAX_AWA_DEG, DOWNWIND_MIN_AWA_DEG, 150].map((awa) => {
-        const [x, y] = at(awa, OUTER + 14, 1)
+        const [x, y] = at(awa, ANGLE_RING, -1)
         return (
           <text
             key={awa}
             x={x}
             y={y + 3}
-            fontSize="7.5"
+            fontSize={CHART_FONT.tick}
             textAnchor="middle"
             fill="var(--text-muted)"
             fontFamily="var(--font-mono)"
@@ -399,16 +430,35 @@ function Dial({
         )
       })}
 
-      <text x={SIZE - 4} y={12} fontSize="8.5" fill="var(--tack-starboard)" fontWeight="700" textAnchor="end">
+      <text
+        x={TUNING_CHART_WIDTH - 4}
+        y={CHART_FONT.label + 2}
+        fontSize={CHART_FONT.label}
+        fill="var(--tack-starboard)"
+        fontWeight="700"
+        textAnchor="end"
+      >
         STARBOARD →
       </text>
-      <text x={4} y={12} fontSize="8.5" fill="var(--tack-port)" fontWeight="700">
+      <text x={4} y={CHART_FONT.label + 2} fontSize={CHART_FONT.label} fill="var(--tack-port)" fontWeight="700">
         ← PORT
       </text>
-      <text x={CENTRE} y={CENTRE - OUTER - 14} fontSize="8" textAnchor="middle" fill="var(--text-muted)">
+      <text
+        x={CENTRE_X}
+        y={CENTRE_Y - LABEL_RING + CHART_FONT.label}
+        fontSize={CHART_FONT.note}
+        textAnchor="middle"
+        fill="var(--text-muted)"
+      >
         upwind
       </text>
-      <text x={CENTRE} y={CENTRE + OUTER + 20} fontSize="8" textAnchor="middle" fill="var(--text-muted)">
+      <text
+        x={CENTRE_X}
+        y={CENTRE_Y + LABEL_RING}
+        fontSize={CHART_FONT.note}
+        textAnchor="middle"
+        fill="var(--text-muted)"
+      >
         downwind
       </text>
 
@@ -475,7 +525,7 @@ function Dial({
 
       {/* The boat, bow up, so the dial is read the way the instrument is. */}
       <path
-        d={`M ${CENTRE} ${CENTRE - 16} C ${CENTRE + 7} ${CENTRE - 6} ${CENTRE + 7} ${CENTRE + 8} ${CENTRE + 5} ${CENTRE + 14} L ${CENTRE - 5} ${CENTRE + 14} C ${CENTRE - 7} ${CENTRE + 8} ${CENTRE - 7} ${CENTRE - 6} ${CENTRE} ${CENTRE - 16} Z`}
+        d={`M ${CENTRE_X} ${CENTRE_Y - 16} C ${CENTRE_X + 7} ${CENTRE_Y - 6} ${CENTRE_X + 7} ${CENTRE_Y + 8} ${CENTRE_X + 5} ${CENTRE_Y + 14} L ${CENTRE_X - 5} ${CENTRE_Y + 14} C ${CENTRE_X - 7} ${CENTRE_Y + 8} ${CENTRE_X - 7} ${CENTRE_Y - 6} ${CENTRE_X} ${CENTRE_Y - 16} Z`}
         fill="var(--text-primary)"
       />
     </svg>
@@ -485,7 +535,7 @@ function Dial({
 /**
  * One tack's dot as a tap target: a transparent circle wider than the dot under it.
  *
- * A finger is wider than a 3.6px dot, and at 390px the dial's whole 340-unit viewBox is about 326
+ * A finger is wider than a 3.6px dot, and at 390px the dial's whole 340-unit viewBox is about 324
  * pixels across. Keyboard-reachable too, because the dial has no arrow-key path of its own the way
  * the two linear charts do — the pairs are scattered in two dimensions, so tab order through the
  * dots is the honest equivalent.
@@ -528,12 +578,12 @@ function Dot({
 /** Port's average folded onto starboard, the gap between them filled, and the gap labelled. */
 function Wedge({ figure }: { figure: AsymmetryFigure }): ReactElement {
   const { starboard, port } = figure.held_deg
-  const [x, y] = at((starboard + port) / 2, OUTER + 26, 1)
+  const [x, y] = at((starboard + port) / 2, RAY - 2, 1)
 
   return (
     <>
       <path
-        d={sector(Math.min(starboard, port), Math.max(starboard, port), 24, OUTER + 8, 1)}
+        d={sector(Math.min(starboard, port), Math.max(starboard, port), 22, RAY, 1)}
         fill="var(--state-warning)"
         opacity="0.28"
         data-testid={`asymmetry-wedge-${figure.point_of_sail}`}
@@ -545,7 +595,7 @@ function Wedge({ figure }: { figure: AsymmetryFigure }): ReactElement {
       <text
         x={x}
         y={y + 2.5}
-        fontSize="8.5"
+        fontSize={CHART_FONT.tick}
         fontWeight="700"
         textAnchor="middle"
         fill="var(--text-inverse)"

@@ -35,11 +35,12 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await expect(readout).toContainText('The error swings')
 
     // The first 10° bin. Measured off the rendered box rather than hard-coded, because the SVG is
-    // fixed-viewBox and fluid-width: 26 units of axis gutter and 8.5 units per bin, in a 340-unit
-    // viewBox, put the middle of bin 0 at 30/340 of whatever width it was laid out at.
+    // fixed-viewBox and fluid-width: `LINEAR.axisLeft` is 28 units of gutter and a bin is
+    // 304 / 36 ≈ 8.4 units, so the middle of bin 0 sits at 32/340 of whatever width it was laid
+    // out at.
     const box = await strip.boundingBox()
     expect(box).not.toBeNull()
-    await strip.click({ position: { x: box!.width * (30 / 340), y: box!.height * 0.4 } })
+    await strip.click({ position: { x: box!.width * (32 / 340), y: box!.height * 0.35 } })
 
     await expect(readout).toContainText('0°–10° · N')
   })
@@ -50,7 +51,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     const strip = page.getByTestId('compass-strip')
     const box = await strip.boundingBox()
     expect(box).not.toBeNull()
-    await strip.click({ position: { x: box!.width * (30 / 340), y: box!.height * 0.4 } })
+    await strip.click({ position: { x: box!.width * (32 / 340), y: box!.height * 0.35 } })
 
     const readout = page.getByTestId('compass-chart').getByTestId('chart-readout')
     await expect(readout).toContainText('0°–10° · N')
@@ -98,11 +99,12 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     const scatter = page.getByTestId('speed-scatter')
     await expect(scatter).toBeVisible()
 
-    // The 4–5 kt band. 26 units of gutter and (300 − 34)/10 units per knot in a 300-unit viewBox.
+    // The 4–5 kt band: 30 units of gutter and a 264-unit square plot over a 10 kt axis, so 26.4
+    // units per knot, in the shared 340-unit viewBox.
     const box = await scatter.boundingBox()
     expect(box).not.toBeNull()
     await scatter.click({
-      position: { x: box!.width * ((26 + 4.5 * 26.6) / 300), y: box!.height * 0.5 },
+      position: { x: box!.width * ((30 + 4.5 * 26.4) / 340), y: box!.height * 0.5 },
     })
 
     const readout = chart.getByTestId('chart-readout')
