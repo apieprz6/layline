@@ -37,7 +37,8 @@
  * rather than implied by the reading order: a sailor who can correct the sail plan needs to know why
  * they cannot correct the wind speed beneath it. *Why* they cannot is one tap down, in an `Explainer`
  * — the fact is the heading, and the paragraph arguing it was five lines everybody scrolled past,
- * which loses an explanation as thoroughly as never writing it.
+ * which loses an explanation as thoroughly as never writing it. That explanation is drawn only for
+ * whoever may amend, for the same reason the amend chips are: a viewer has no contrast to explain.
  *
  * Below that line, the **Race Track Heatmap** goes first (ADR 0033). It is the recording drawn — the
  * boat's own trace, coloured by how each stretch compared with its target speed — so it belongs under
@@ -198,7 +199,7 @@ export default function RaceDetailView({
           <BoatSetupFacts setup={race.boat_setup} />
         </section>
 
-        <TranscriptionBoundary />
+        <TranscriptionBoundary canAmend={canAmend} />
 
         {/* The map opens the half of the page that is the recording (ADR 0033). It is below the
             line because a track is not Testimony — it is what the file said, drawn. */}
@@ -574,8 +575,15 @@ function AmendChip({
  * Coverage, Gap Seconds and Row Quality sit below rather than above because they are measurements of the
  * recording and not claims about the race — which is also why an amended window changes all three without
  * anything recomputing them: they are worked out from the rows the next time the page is read.
+ *
+ * **The line is drawn for everybody; the explanation is only for whoever can amend.** ADR 0010 asks for
+ * this line because "a sailor who can correct the sail plan needs to know why they cannot correct the
+ * wind speed beneath it" — and that is a contrast only an amender has. A viewer can amend nothing on
+ * this page, so "why can't I correct anything below here?" answers a question they never asked and
+ * implies an affordance they do not have. They still get the line and the heading, because which half
+ * of the page is Testimony and which is the recording is a fact about the archive and not about them.
  */
-function TranscriptionBoundary(): ReactElement {
+function TranscriptionBoundary({ canAmend }: { canAmend: boolean }): ReactElement {
   return (
     <div
       data-testid="transcription-boundary"
@@ -588,15 +596,19 @@ function TranscriptionBoundary(): ReactElement {
       }}
     >
       <h2 style={{ ...SECTION_HEADING, color: 'var(--text-primary)' }}>
-        Below this line: the recording — not editable
+        {/* The suffix travels with the explanation. On its own, in front of a reader who can edit
+            nothing anywhere on the page, "not editable" is a distinction without a difference. */}
+        Below this line: the recording{canAmend ? ' — not editable' : ''}
       </h2>
-      <Explainer summary="Why can’t I correct anything below here?" testId="transcription-why">
-        Above the line is what the sailor said, and every bit of it can be amended. Below it is what
-        the file said and what Layline works out from it — the track, Coverage, Gap Seconds and the
-        Row Quality notes. None of that is editable by any path: the recording is kept exactly as it
-        was transcribed, and the figures are derived from it each time this page is read, so amending
-        the window above changes them with nothing to recompute.
-      </Explainer>
+      {canAmend && (
+        <Explainer summary="Why can’t I correct anything below here?" testId="transcription-why">
+          Above the line is what the sailor said, and every bit of it can be amended. Below it is
+          what the file said and what Layline works out from it — the track, Coverage, Gap Seconds
+          and the Row Quality notes. None of that is editable by any path: the recording is kept
+          exactly as it was transcribed, and the figures are derived from it each time this page is
+          read, so amending the window above changes them with nothing to recompute.
+        </Explainer>
+      )}
     </div>
   )
 }

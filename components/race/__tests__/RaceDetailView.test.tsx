@@ -20,7 +20,7 @@
  * screen than no button, and `deleteRace` refuses a viewer regardless.
  */
 
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import type {
   RaceAnnotations,
   RaceBoatSetup,
@@ -514,13 +514,14 @@ describe('the line between what the sailor said and what the file said', () => {
   it('draws the line for a viewer too, because it is a fact about the archive', () => {
     renderRace(raceOf())
 
-    // The fact is on the line itself — a sailor who can correct the sail plan has to see that the
-    // recording beneath it is not theirs to correct.
-    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(/not editable/)
+    // Which half of the page is Testimony and which is the recording is a fact about the archive,
+    // not about who is reading it.
+    const boundary = screen.getByTestId('transcription-boundary')
+    expect(within(boundary).getByText('Below this line: the recording')).toBeInTheDocument()
   })
 
   it('keeps the argument for the line one tap down rather than five lines in the way', () => {
-    renderRace(raceOf())
+    renderRace(raceOf(), true)
 
     // ADR 0010 wants the boundary stated, and it is — in the heading. *Why* it is there is a
     // paragraph every reader scrolled past on every visit, which loses an explanation as
@@ -530,5 +531,21 @@ describe('the line between what the sailor said and what the file said', () => {
     expect(why).not.toHaveAttribute('open')
     expect(why).toHaveTextContent(/Above the line is what the sailor said/)
     expect(why).toHaveTextContent(/kept exactly as it was transcribed/)
+  })
+
+  it('explains the line to whoever can amend, and to nobody else', () => {
+    // The explanation answers "why can't I correct this?", and that is a question only somebody
+    // who can correct *something* has. A viewer may amend nothing on this page, so the disclosure
+    // would answer a question they never asked and imply an affordance they do not have — the same
+    // reason the amend chips are absent for them rather than present and refused (ADR 0019).
+    renderRace(raceOf())
+    expect(screen.queryByTestId('transcription-why')).not.toBeInTheDocument()
+    expect(screen.getByTestId('transcription-boundary')).not.toHaveTextContent(/not editable/)
+
+    cleanup()
+
+    renderRace(raceOf(), true)
+    expect(screen.getByTestId('transcription-why')).toBeInTheDocument()
+    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(/not editable/)
   })
 })
