@@ -15,11 +15,16 @@
  * ## What this costs, and the thing to revisit
  *
  * It reads every row of every Race's Transcription: on the owner's archive that is around 35,000
- * rows, paged a thousand at a time, because Row Quality and Maneuvers must be assessed over the
- * whole recording before the Race Window is applied (ADR 0009) and because the scatter draws a dot
- * per Countable row. That is the honest cost of the screen as specified, not an oversight — and it
- * is what ADR 0026's analysis query layer exists to make cheaper when it lands. Until then the page
- * is `force-dynamic` and uncached, which is slow rather than wrong.
+ * rows, because Row Quality and Maneuvers must be assessed over the whole recording before the Race
+ * Window is applied (ADR 0009) and because the scatter draws a dot per Countable row. That is the
+ * honest cost of the screen as specified, not an oversight.
+ *
+ * What is *not* an honest cost is waiting for each of those reads in turn. Every request here goes
+ * out in one wave, and `readRecordingPages` fans a recording's own pages out in the same way — so
+ * the whole archive is roughly one round trip deep rather than one per page per Race. LAY-155
+ * measured the serial shape of this at 9.12 s against a hosted database, essentially all of it
+ * latency. The page stays `force-dynamic` and uncached, because every figure on it is derived at
+ * read and a cache would survive a gate moving (ADR 0009).
  */
 
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
@@ -93,10 +98,28 @@ export async function readInstrumentTuning(): Promise<InstrumentTuningRead> {
   // An empty archive is not a failure. It is the state the screen ships in, and the screen says so.
   if (!races || races.length === 0) return { ok: false, reason: 'no-races' }
 
+  // Every Race's Transcription and the Calibration Log in **one wave**, not one after another.
+  // None of these reads depends on another's answer: the Races are already in hand, a recording's
+  // page count is arithmetic over its own `row_count` (`readRecordingPages`), and the Log hangs off
+  // a different artifact entirely. LAY-155 measured the serial version of this shape at 9.12 s on
+  // a preview deployment — thirty-nine round trips at ~230 ms each, none of it computation — and
+  // this read is larger, since it needs whole Transcriptions rather than in-window rows.
+  const [transcriptions, log] = await Promise.all([
+    Promise.all(
+      races.map((race) =>
+        readRecordingRows(supabase, race.recordings.id, race.recordings.row_count)
+      )
+    ),
+    readCalibrationLog(supabase),
+  ])
+
+  if (log === null) return { ok: false, reason: 'unreadable' }
+
   const read: { race_id: string; rows: RecordedRow[]; window: RaceWindowOf }[] = []
 
-  for (const race of races) {
-    const rows = await readRecordingRows(supabase, race.recordings.id, race.recordings.row_count)
+  // `Promise.all` keeps the order of its inputs, so this is still oldest Race first.
+  for (const [index, rows] of transcriptions.entries()) {
+    const race = races[index]
 
     if (rows === null) {
       console.error(
@@ -112,9 +135,6 @@ export async function readInstrumentTuning(): Promise<InstrumentTuningRead> {
       window: { window_start: race.window_start, window_finish: race.window_finish },
     })
   }
-
-  const log = await readCalibrationLog(supabase)
-  if (log === null) return { ok: false, reason: 'unreadable' }
 
   return {
     ok: true,

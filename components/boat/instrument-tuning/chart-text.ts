@@ -9,6 +9,8 @@
  * and print the same figures.
  */
 
+import { countOf } from '@/services/analysis/figures'
+
 /**
  * A signed figure with its sign always drawn, using a true minus rather than a hyphen.
  *
@@ -131,17 +133,23 @@ export function compassPoint(headingDeg: number): string {
   return COMPASS_POINTS[Math.round(headingDeg / 22.5) % 16]
 }
 
-/** `3 rows` / `1 row`, so a count never reads as a plural of one. */
+/**
+ * `3 rows` / `1 row` / `2,514 rows`, so a count never reads as a plural of one.
+ *
+ * Separated through `countOf`, the same renderer the Coverage Ledger and the Polar performance
+ * cards use (`services/analysis/figures.ts`): a sailor reading two analysis screens has to be able
+ * to see that their numbers agree, and two call sites formatting their own way is how that breaks.
+ */
 export function rows(count: number): string {
-  return `${count} row${count === 1 ? '' : 's'}`
+  return `${countOf(count)} row${count === 1 ? '' : 's'}`
 }
 
 /** `3 Races` / `1 Race`. Capitalised, because a **Race** is one of the domain's own words. */
 export function races(count: number): string {
-  return `${count} Race${count === 1 ? '' : 's'}`
+  return `${countOf(count)} Race${count === 1 ? '' : 's'}`
 }
 
 /** `3 Tack Pairs` / `1 Tack Pair` / `no Tack Pair`. */
 export function tackPairs(count: number): string {
-  return count === 0 ? 'no Tack Pair' : `${count} Tack Pair${count === 1 ? '' : 's'}`
+  return count === 0 ? 'no Tack Pair' : `${countOf(count)} Tack Pair${count === 1 ? '' : 's'}`
 }
