@@ -86,6 +86,7 @@ const COUNTS: RaceTrackHeatmap['counts'] = {
   frozen: 82,
   low_speed: 23,
   maneuver_window: 13,
+  annotations_not_placed: 0,
   overlays: {
     target_speed: { scored: 113, flagged: 31, without_value: 27 },
     target_vmg: { scored: 110, flagged: 31, without_value: 30 },
@@ -112,6 +113,11 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
     rings: [
       { cx: 120, cy: 140 },
       { cx: 120, cy: 140 },
+    ],
+    // What the sailor said, where they said it happened: a sail change and a sea state.
+    annotations: [
+      { x: 40, y: 40, lane: 'sail', label: 'Main + A2', at: '2026-06-20T16:04:30', gap_seconds: 0 },
+      { x: 80, y: 90, lane: 'sea', label: 'Moderate', at: '2026-06-20T16:05:00', gap_seconds: 95 },
     ],
     counts: COUNTS,
     ...over,
@@ -191,6 +197,58 @@ describe('the track, drawn', () => {
       '[data-testid="track-camera"] circle[fill="var(--track-below-3)"]'
     )
     expect(point).toHaveAttribute('cx', '300')
+  })
+
+  it('draws what the sailor said, in a treatment no overlay’s scale uses', () => {
+    const { container } = render(<RaceTrackSection track={trackOf()} />)
+
+    // Testimony is neither measured nor computed, and on a screen where six scales spend every hue
+    // the design system has, the only honest way to say "a different kind of thing" is to stop
+    // using hue for it (ADR 0008's Provenance, ADR 0037).
+    const sail = screen.getByTestId('track-testimony-sail')
+    expect(sail).toBeInTheDocument()
+    expect(sail.querySelector('circle')).toHaveAttribute('fill', 'var(--surface-raised)')
+    expect(sail).toHaveTextContent('S')
+    expect(sail).toHaveTextContent('Main + A2')
+
+    // The amend flow's own two glyphs, because it is the same Testimony on both screens.
+    expect(screen.getByTestId('track-testimony-sea')).toHaveTextContent('~')
+
+    // And it is drawn *over* the measurement: a sail change hidden under a 5.4-unit track tells
+    // nobody anything.
+    const camera = container.querySelector('[data-testid="track-camera"]')
+    const children = [...(camera?.children ?? [])]
+    const lastLeg = children.findIndex((node) => node.tagName === 'polyline')
+    const firstMarker = children.findIndex(
+      (node) => node.getAttribute('data-testid') === 'track-testimony-sail'
+    )
+    expect(firstMarker).toBeGreaterThan(lastLeg)
+  })
+
+  it('says in the legend that the markers are Testimony, with the count', () => {
+    render(<RaceTrackSection track={trackOf()} />)
+
+    expect(screen.getByText(/What the sailor said — 2 sail or sea-state notes/)).toBeInTheDocument()
+    expect(screen.getByText(/Testimony, not a measurement/)).toBeInTheDocument()
+  })
+
+  it('says when an annotation was given about a time the track cannot place', () => {
+    render(
+      <RaceTrackSection
+        track={trackOf({
+          heatmap: heatmapOf({ counts: { ...COUNTS, annotations_not_placed: 1 } }),
+        })}
+      />
+    )
+
+    expect(screen.getByText(/1 more were given about a time no fix of this window is near/)).toBeInTheDocument()
+  })
+
+  it('draws no Testimony row where nobody wrote anything down', () => {
+    render(<RaceTrackSection track={trackOf({ heatmap: heatmapOf({ annotations: [] }) })} />)
+
+    expect(screen.queryByTestId('track-testimony-sail')).not.toBeInTheDocument()
+    expect(screen.queryByText(/What the sailor said/)).not.toBeInTheDocument()
   })
 
   it('names a token for every colour, so the night-vision theme stays in charge', () => {
@@ -362,11 +420,14 @@ describe('switching what the track is coloured by', () => {
 })
 
 describe('reading one stretch out', () => {
-  it('asks to be tapped before it says anything', () => {
+  it('says nothing, and asks for a tap on the map’s own line, until there is something to say', () => {
     render(<RaceTrackSection track={trackOf()} />)
 
-    expect(screen.getByTestId('track-readout-empty')).toHaveTextContent(/Tap a stretch/)
+    // The readout is a card *over* the map now, so there is no empty state to fill the page with:
+    // the invitation lives on the frame's own line, and the card appears when a stretch is tapped.
+    expect(screen.queryByTestId('track-readout')).not.toBeInTheDocument()
     expect(screen.queryByTestId('track-selection')).not.toBeInTheDocument()
+    expect(screen.getByTestId('track-zoom-readout')).toHaveTextContent(/tap a stretch to read it/)
   })
 })
 

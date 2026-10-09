@@ -25,7 +25,6 @@ import type { RaceTrack, RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@
 
 import TrackHeatmapFrame from './TrackHeatmapFrame'
 import TrackHeatmapLegend from './TrackHeatmapLegend'
-import TrackReadout from './TrackReadout'
 
 /** What the map is, for a reader who cannot see it. */
 const LABEL =
@@ -86,18 +85,23 @@ export default function TrackHeatmap({
         })}
       </div>
 
+      {/* The readout lives inside the frame, over the map: the frame is the only thing that knows
+          where the camera has put the selection, and so where a card can sit without covering it. */}
       <TrackHeatmapFrame
         heatmap={heatmap}
         label={LABEL}
         overlay={overlay}
-        hasPolar={hasPolar}
-        selected={selected?.row_index ?? null}
+        scoring={scoring}
+        selected={selected}
         onSelect={setSelected}
       />
 
-      <TrackReadout row={selected} overlay={overlay} scoring={scoring} />
-
-      <TrackHeatmapLegend overlay={overlay} counts={heatmap.counts} scoring={scoring} />
+      <TrackHeatmapLegend
+        overlay={overlay}
+        counts={heatmap.counts}
+        scoring={scoring}
+        annotations={heatmap.annotations.length}
+      />
     </div>
   )
 }

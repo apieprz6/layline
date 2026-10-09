@@ -121,12 +121,21 @@ the rules refuse, because the rules are not on that side; what it gains is an in
 readout a tap needs, neither of which is a decision. The projection still never crosses — it carries
 closures and cannot be serialised at all.
 
-### A tap reads one stretch out, with provenance
+### A tap reads one stretch out, on the map, with provenance
 
 A tap selects the nearest leg *in the track's own coordinates*, so the reach is the same patch of
 water at every zoom, and nothing beyond it: selecting a stretch a thumb-width away would be the map
 answering a question nobody asked. It is read on pointer-up from a pointer that did not travel, so a
 pan never selects and a tap works at every zoom, including the one where the page owns the scroll.
+
+**The readout floats over the frame, and moves out of its own way.** It was a panel under the map
+first, and that was wrong for the only viewport that matters: at 390px the map is 440 units tall, so
+the answer to a tap landed below the fold and the sailor had to scroll away from the thing they were
+pointing at in order to read about it. A readout you have to go and find is not a readout. So the
+card sits inside the frame, in the half the selection is *not* in — measured through the camera, since
+what matters is where the stretch is on screen after a pan — and it keeps clear of the zoom knobs. It
+opens with the overlay's headline and the four figures a sailor reads beside any of them, expands to
+the rest, and can be dismissed, because a card over a map must be closable.
 
 The readout states the row's own clock, every channel, both targets and both percentages — and three
 things that are the point of it:
@@ -138,6 +147,29 @@ things that are the point of it:
   Polar off its axis, or no Polar recorded at all. Four facts that a dash would flatten into one
   shrug.
 - **A Filler-Anchored figure is shown flagged, not withheld** (ADR 0036).
+
+### Testimony is drawn on the track, in a treatment no scale uses
+
+A **Sail Configuration** and a **Sea State** go on the map at the place on the water they were given
+about, with the amend flow's own two glyphs — `S` for a sail, `~` for the water — so it is one
+vocabulary across both screens. On a map an annotation is a *place*, which is the whole point of
+drawing it: "the kite went up at the windward mark" is a thing a sailor can see on a track and cannot
+see on a clock.
+
+It is deliberately not a hue. An annotation is **Testimony** — neither measured nor computed
+(CONTEXT.md's **Provenance**) — and on a screen whose six scales already spend every hue the design
+system has, the only honest way to say "a different kind of thing" is to stop using hue for it: a disc
+in the page's own surface, outlined and glyphed in the text colour, drawn over the measurement rather
+than under it.
+
+**An annotation is placed at the nearest fix in time, and only within two minutes of it.** The rows
+are event-triggered and unevenly spaced, so the nearest fix to a sail change can be a minute away —
+the gap therefore travels with the placed marker, because "here" and "near here" are different claims
+and only the second is one the track supports. Past two minutes nothing is drawn: a sail change
+recorded after the finish is real Testimony about a moment the track does not cover, and putting it on
+the last fix would invent a place for it. Those are counted, and the legend says they exist. A
+**Frozen** row *is* a candidate, unlike everywhere else in this map: its position is a copy of a real
+fix, and the sailor's claim is about the water rather than about the instruments.
 
 ### The frame is fluid, and the ink is thick enough to read
 
@@ -167,6 +199,9 @@ exists for.
 - **The two ratio chips are not offered at all on a race with no Polar Version** — nine of this
   archive's races. A chip that painted a uniformly grey track would invite "no comparison recorded"
   to be read as "slow everywhere".
+- **A sail change given during a dropout is placed**, which is the one case where this map reads a
+  Frozen row's position as meaningful. It is Testimony about the water, not a measurement, so the rule
+  that excludes those rows from every overlay does not apply to it.
 - **Still open**: the readout is reachable only by pointer. A keyboard or screen-reader path to the
   same figures — stepping the selection row by row — is not built, and that is a gap rather than a
   decision.

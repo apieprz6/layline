@@ -46,6 +46,7 @@ import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
   AnalysisRow,
   DropoutBridge,
+  TrackAnnotation,
   RaceTrackHeatmap,
   TrackHeatmapCounts,
   TrackOverlay,
@@ -81,6 +82,29 @@ export interface TrackHeatmapRow extends AnalysisRow {
 
 /** The box ADR 0033 fixes the frame's *shape* at. The element is fluid; the projection is not. */
 export const TRACK_BOX: TrackBox = { width: 360, height: 440, pad: 12 }
+
+/**
+ * One piece of **Testimony** to place on the track: what the sailor said, and when about.
+ *
+ * The module's own port, like `TrackHeatmapRow` — it asks for a stamp and a label, and knows
+ * nothing about **Sail Definitions** or the **Sea State** vocabulary, which belong to the Race.
+ */
+export interface TrackAnnotationInput {
+  at: string
+  lane: 'sail' | 'sea'
+  label: string
+}
+
+/**
+ * How far an annotation's own stamp may sit from the nearest fix before the track stops claiming
+ * to know where it happened.
+ *
+ * Two minutes, which is generous against this archive's median in-window cadence of 75 seconds and
+ * strict enough that a sail change recorded after the finish is not drawn on the last fix as if it
+ * happened there. Past it the annotation is counted rather than placed, and the page lists it
+ * above the Transcription boundary either way.
+ */
+const PLACEABLE_SECONDS = 120
 
 /** Where a fix lands in the frame. */
 function at(projection: TrackProjection, lat: number, lon: number): { x: number; y: number } {
@@ -140,6 +164,7 @@ function emptyCounts(rows: number): TrackHeatmapCounts {
     frozen: 0,
     low_speed: 0,
     maneuver_window: 0,
+    annotations_not_placed: 0,
     overlays: {
       target_speed: emptyOverlayCounts(),
       target_vmg: emptyOverlayCounts(),
@@ -189,7 +214,10 @@ function tally(counts: TrackHeatmapCounts, facts: TrackRowFacts, hasPolar: boole
 export function raceTrackHeatmap(
   rows: readonly TrackHeatmapRow[],
   targets: PolarTargets | null,
-  box: TrackBox = TRACK_BOX
+  {
+    box = TRACK_BOX,
+    annotations = [],
+  }: { box?: TrackBox; annotations?: readonly TrackAnnotationInput[] } = {}
 ): RaceTrackHeatmap | null {
   const fixes = rows.map((row) => {
     const fix = fixOf(row)
@@ -304,6 +332,9 @@ export function raceTrackHeatmap(
   // The last run ends at the end of the window, which is a break like any other.
   closeRun()
 
+  const placed = placeAnnotations(annotations, rows, fixes, projection)
+  counts.annotations_not_placed = annotations.length - placed.length
+
   return {
     width: box.width,
     height: box.height,
@@ -312,8 +343,61 @@ export function raceTrackHeatmap(
     points,
     bridges,
     rings,
+    annotations: placed,
     counts,
   }
+}
+
+/**
+ * Testimony, put where it was given about: the nearest fix in *time* to each annotation's stamp.
+ *
+ * Nearest by time rather than by row index, because the rows are event-triggered and unevenly
+ * spaced — and only where that fix is within `PLACEABLE_SECONDS`, since drawing a sail change on
+ * the nearest fix half an hour away would be the map inventing a place for it. The gap travels
+ * with the ones that are placed, so a screen can say "near here" where that is the honest word.
+ *
+ * A **Frozen** row is a candidate here, unlike everywhere else in this module: its position is a
+ * copy, but it is a copy of a real fix, and the sailor's claim is about the water rather than about
+ * the instruments. The alternative — refusing to place an annotation given during a dropout — would
+ * drop Testimony for a reason that has nothing to do with it.
+ */
+function placeAnnotations(
+  annotations: readonly TrackAnnotationInput[],
+  rows: readonly TrackHeatmapRow[],
+  fixes: readonly { latitude: number | null; longitude: number | null }[],
+  projection: TrackProjection
+): TrackAnnotation[] {
+  const placed: TrackAnnotation[] = []
+
+  for (const annotation of annotations) {
+    const stamp = wallClockSeconds(annotation.at)
+    let nearestIndex = -1
+    let nearestGap = Infinity
+
+    for (let index = 0; index < rows.length; index += 1) {
+      if (fixes[index].latitude === null || fixes[index].longitude === null) continue
+      const gap = Math.abs(wallClockSeconds(rows[index].row_time) - stamp)
+      if (gap < nearestGap) {
+        nearestGap = gap
+        nearestIndex = index
+      }
+    }
+
+    if (nearestIndex === -1 || nearestGap > PLACEABLE_SECONDS) continue
+
+    const fix = fixes[nearestIndex]
+    const where = at(projection, fix.latitude as number, fix.longitude as number)
+    placed.push({
+      x: where.x,
+      y: where.y,
+      lane: annotation.lane,
+      label: annotation.label,
+      at: annotation.at,
+      gap_seconds: nearestGap,
+    })
+  }
+
+  return placed
 }
 
 /**

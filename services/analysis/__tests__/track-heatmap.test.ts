@@ -293,9 +293,7 @@ describe('a race’s track, drawn', () => {
 
   it('draws the frame it was asked for, not the shape of the track', () => {
     const heatmap = raceTrackHeatmap([row(0), row(1)], TARGETS, {
-      width: 200,
-      height: 100,
-      pad: 4,
+      box: { width: 200, height: 100, pad: 4 },
     })
 
     expect(heatmap?.width).toBe(200)
@@ -365,6 +363,64 @@ describe('a race’s track, drawn', () => {
     expect(heatmap?.points).toHaveLength(1)
     expect(overlayPaint('target_speed', heatmap!.points[0].row, true).band).toBeNull()
     expect(overlayPaint('target_speed', heatmap!.points[0].row, true).not_scored).toBe('low_speed')
+  })
+})
+
+describe('Testimony on the map', () => {
+  /** A 30-second cadence, so a stamp `n` rows in is `n × 30` seconds after the first row. */
+  const rows = [row(0), row(1), row(2), row(3), row(4)]
+
+  it('puts what the sailor said at the nearest fix in time, and keeps the gap', () => {
+    // On a map an annotation is a *place*, which is the point of drawing it: "the kite went up at
+    // the windward mark" is visible on a track and invisible on a clock.
+    const heatmap = raceTrackHeatmap(rows, TARGETS, {
+      annotations: [
+        { at: stamp(2), lane: 'sail', label: 'Main + A2' },
+        // 19:01:50 sits between row 3 (19:01:30) and row 4 (19:02:00), and nearer the later one.
+        { at: '2026-06-03T19:01:50', lane: 'sea', label: 'Moderate' },
+      ],
+    })
+
+    expect(heatmap?.annotations).toHaveLength(2)
+    expect(heatmap?.annotations[0]).toMatchObject({ lane: 'sail', label: 'Main + A2', gap_seconds: 0 })
+    // The gap travels rather than being discarded: the rows are event-triggered, so "here" and
+    // "near here" are different claims and the track only supports the second one.
+    expect(heatmap?.annotations[1]).toMatchObject({ lane: 'sea', gap_seconds: 10 })
+  })
+
+  it('refuses to place one given about a time no fix of this window is near', () => {
+    // A sail change recorded half an hour after the finish is real Testimony about a moment the
+    // track does not cover, and drawing it on the last fix would invent a place for it.
+    const heatmap = raceTrackHeatmap(rows, TARGETS, {
+      annotations: [
+        { at: stamp(2), lane: 'sail', label: 'Main + Jib 1' },
+        { at: '2026-06-03T21:00:00', lane: 'sail', label: 'Main + A2' },
+      ],
+    })
+
+    expect(heatmap?.annotations).toHaveLength(1)
+    // Counted, so the screen can say they exist rather than silently dropping them.
+    expect(heatmap?.counts.annotations_not_placed).toBe(1)
+  })
+
+  it('places one given during a dropout, because the claim is about the water', () => {
+    // A Frozen row's position is a copy — of a real fix. The sailor's claim is about what they did
+    // there, and refusing it would drop Testimony for a reason that has nothing to do with it.
+    const frozen = [row(0), row(1, { frozen: true }), row(2, { frozen: true }), row(3)]
+
+    const heatmap = raceTrackHeatmap(frozen, TARGETS, {
+      annotations: [{ at: stamp(1), lane: 'sail', label: 'Main + A2' }],
+    })
+
+    expect(heatmap?.annotations).toHaveLength(1)
+    expect(heatmap?.counts.annotations_not_placed).toBe(0)
+  })
+
+  it('draws nothing where nobody wrote anything down', () => {
+    const heatmap = raceTrackHeatmap(rows, TARGETS)
+
+    expect(heatmap?.annotations).toEqual([])
+    expect(heatmap?.counts.annotations_not_placed).toBe(0)
   })
 })
 

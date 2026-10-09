@@ -27,16 +27,19 @@ import { spacing } from '@/lib/utils/design'
 import { TRACK_SCALES, isRatioOverlay, overlayColour } from '@/services/analysis/track-overlays'
 import type { RaceTrack, TrackHeatmapCounts, TrackOverlay } from '@/types'
 
-import { DROPOUT, FILLER_DASH, HAIRLINE, TRACK_STROKE } from './track-ink'
+import { DROPOUT, FILLER_DASH, HAIRLINE, TESTIMONY, TRACK_STROKE, testimonyGlyph } from './track-ink'
 
 export default function TrackHeatmapLegend({
   overlay,
   counts,
   scoring,
+  /** How many pieces of Testimony the map placed, which is what draws that row of the legend. */
+  annotations,
 }: {
   overlay: TrackOverlay
   counts: TrackHeatmapCounts
   scoring: RaceTrack['scoring']
+  annotations: number
 }): ReactElement {
   const { theme } = useTheme()
   const afterDark = theme === 'nightvision'
@@ -140,6 +143,44 @@ export default function TrackHeatmapLegend({
                 strokeWidth={TRACK_STROKE}
                 strokeDasharray={FILLER_DASH}
               />
+            </svg>
+          </SwatchRow>
+        )}
+
+        {annotations > 0 && (
+          <SwatchRow
+            label={`What the sailor said — ${annotations} sail or sea-state ${
+              annotations === 1 ? 'note' : 'notes'
+            }, at the place on the water they were given about. Testimony, not a measurement.${
+              counts.annotations_not_placed > 0
+                ? ` ${counts.annotations_not_placed} more were given about a time no fix of this window is near, so the track does not claim to place ${counts.annotations_not_placed === 1 ? 'it' : 'them'}.`
+                : ''
+            }`}
+          >
+            <svg width="26" height="14" aria-hidden>
+              {(['sail', 'sea'] as const).map((lane, index) => (
+                <g key={lane}>
+                  <circle
+                    cx={7 + index * 12}
+                    cy="7"
+                    r={TESTIMONY.radius - 1}
+                    fill={TESTIMONY.fill}
+                    stroke={TESTIMONY.stroke}
+                    strokeWidth={TESTIMONY.width}
+                  />
+                  <text
+                    x={7 + index * 12}
+                    y="10"
+                    textAnchor="middle"
+                    fontSize="8"
+                    fontWeight="700"
+                    fontFamily="var(--font-mono)"
+                    fill={TESTIMONY.glyph}
+                  >
+                    {testimonyGlyph(lane)}
+                  </text>
+                </g>
+              ))}
             </svg>
           </SwatchRow>
         )}

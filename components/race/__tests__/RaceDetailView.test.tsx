@@ -103,12 +103,14 @@ const TRACK: RaceTrack = {
     points: [],
     bridges: [],
     rings: [],
+    annotations: [],
     counts: {
       rows: 3,
       with_fix: 3,
       frozen: 0,
       low_speed: 1,
       maneuver_window: 0,
+      annotations_not_placed: 0,
       overlays: {
         target_speed: { scored: 1, flagged: 0, without_value: 0 },
         target_vmg: { scored: 1, flagged: 0, without_value: 0 },

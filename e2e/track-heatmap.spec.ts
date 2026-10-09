@@ -153,7 +153,10 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // a `getBoundingClientRect` that jsdom reports as zero, so a Jest version of it would be
     // measuring nothing. Which is also why the camera assertion above is an attribute and not a
     // click (ADR 0033).
-    await expect(page.getByTestId('track-readout-empty')).toContainText('Tap a stretch')
+    // Nothing is said until there is something to say: the readout is a card *over* the map, so
+    // there is no empty state taking up the page.
+    await expect(page.getByTestId('track-readout')).toHaveCount(0)
+    await expect(page.getByTestId('track-zoom-readout')).toContainText('tap a stretch to read it')
 
     // Aimed at a leg the map actually drew, read off its own `points` attribute and converted
     // through the `viewBox` — rather than at a spot on the frame that looked about right. A
@@ -164,6 +167,14 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     const readout = page.getByTestId('track-readout')
     await expect(readout).toBeVisible()
     await expect(readout).toContainText('of target speed')
+    // Over the map, not under it: the whole point of the card is that the answer to a tap is where
+    // the sailor is already looking, at a viewport where a panel below the frame is past the fold.
+    const frame = await page.locator('svg[role="img"]').boundingBox()
+    const card = await readout.boundingBox()
+    expect(card?.y).toBeGreaterThanOrEqual((frame?.y ?? 0) - 1)
+    expect((card?.y ?? 0) + (card?.height ?? 0)).toBeLessThanOrEqual(
+      (frame?.y ?? 0) + (frame?.height ?? 0) + 1
+    )
     // The stretch being read is marked on the map as well as read out, so the sailor can see which
     // one they got.
     await expect(page.getByTestId('track-selection')).toBeAttached()
@@ -172,7 +183,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // frame's bottom-left corner is water on any track the fixture draws.
     const box = await page.locator('svg[role="img"]').boundingBox()
     await page.mouse.click((box?.x ?? 0) + 14, (box?.y ?? 0) + (box?.height ?? 0) - 90)
-    await expect(page.getByTestId('track-readout-empty')).toBeVisible()
+    await expect(page.getByTestId('track-readout')).toHaveCount(0)
     await expect(page.getByTestId('track-selection')).toHaveCount(0)
   })
 
@@ -192,7 +203,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     await page.mouse.move(centre.x - 40, centre.y - 30, { steps: 6 })
     await page.mouse.up()
 
-    await expect(page.getByTestId('track-readout-empty')).toBeVisible()
+    await expect(page.getByTestId('track-readout')).toHaveCount(0)
   })
 
   test('repaints the track when the overlay changes, without moving the camera', async ({

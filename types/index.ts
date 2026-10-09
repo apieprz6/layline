@@ -1910,6 +1910,35 @@ export interface TrackRing {
 }
 
 /**
+ * One piece of **Testimony**, at the place on the water it was given about.
+ *
+ * A sail change and a sea state are what the *sailor* said, not what the instruments recorded —
+ * neither measured nor computed (CONTEXT.md's **Provenance**), so they are drawn in a treatment no
+ * band of any overlay uses. On a map an annotation is a *place*, which is the whole point of
+ * drawing them here: "the kite went up at the windward mark" is a thing a sailor can see on a
+ * track and cannot see on a clock. The amend flow's `TrackMap` places them the same way, with the
+ * same two glyphs.
+ */
+export interface TrackAnnotation {
+  x: number
+  y: number
+  /** Which kind of Testimony: a **Sail Configuration** or a **Sea State**. */
+  lane: 'sail' | 'sea'
+  /** The sailor's own words, short enough for a map. */
+  label: string
+  /** The stamp it was given about, in the recording's own naive frame. */
+  at: string
+  /**
+   * Seconds between that stamp and the fix this is drawn at.
+   *
+   * Carried rather than discarded because it is the difference between "here" and "near here": the
+   * recording is event-triggered, so the nearest fix to a 19:42 sail change can be a minute away,
+   * and a screen that cannot say so is placing Testimony more precisely than the track supports.
+   */
+  gap_seconds: number
+}
+
+/**
  * What the track is made of, by reason, so the proportion is stated and never inferred.
  *
  * A quarter of one of this archive's races is scoreable, and any design that draws only what it
@@ -1929,6 +1958,14 @@ export interface TrackHeatmapCounts {
   frozen: number
   low_speed: number
   maneuver_window: number
+  /**
+   * Annotations the track could not place: ones given about a time no fix of this window is near.
+   *
+   * Stated so the screen can say they exist rather than silently dropping them — the page lists
+   * every annotation above the Transcription boundary regardless, and a sail change recorded after
+   * the finish is real Testimony about a moment the track does not cover.
+   */
+  annotations_not_placed: number
   /**
    * What each overlay could and could not colour, since they do not agree.
    *
@@ -1973,6 +2010,8 @@ export interface RaceTrackHeatmap {
   points: TrackPoint[]
   bridges: DropoutBridge[]
   rings: TrackRing[]
+  /** What the sailor said, where they said it happened. Empty where nobody wrote anything down. */
+  annotations: TrackAnnotation[]
   counts: TrackHeatmapCounts
 }
 

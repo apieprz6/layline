@@ -24,11 +24,16 @@ import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { readableRows } from '@/services/analysis/readable-rows'
-import { raceTrackHeatmap, type TrackHeatmapRow } from '@/services/analysis/track-heatmap'
+import {
+  raceTrackHeatmap,
+  type TrackAnnotationInput,
+  type TrackHeatmapRow,
+} from '@/services/analysis/track-heatmap'
 import { readPolarVersion } from '@/services/boat/readPolarVersions'
 import type { RecordedRow } from '@/services/races/recording-rows'
 import type { RaceWindow } from '@/services/recordings/row-quality'
-import type { RaceTrack, TranscriptionQuality } from '@/types'
+import { noteText, sailWithNote, seaStateLabel } from '@/services/races/annotations'
+import type { RaceAnnotations, RaceTrack, TranscriptionQuality } from '@/types'
 
 /**
  * The rows the map draws, with their verdicts: the whole recording joined, then clipped.
@@ -48,19 +53,47 @@ function trackRows(
   return analysisRowsWithin(readableRows(rows, assessed), window)
 }
 
+/**
+ * The Race's **Testimony**, as the map places it: one entry per thing the sailor said.
+ *
+ * In the words the Race itself holds — a **Sail Configuration**'s label comes from the **Crossover
+ * Chart Version** the Race points at, already resolved (ADR 0012, ADR 0023), and this never looks
+ * one up. An entry remembered only in a note reads as the note, because that is what was said.
+ *
+ * Both lists may be empty, and that is the ordinary state of this archive's older races. The page
+ * says so in words above the Transcription boundary; the map simply has nothing to draw.
+ */
+function testimony(annotations: RaceAnnotations): TrackAnnotationInput[] {
+  return [
+    ...annotations.sails.map((entry) => ({
+      at: entry.at,
+      lane: 'sail' as const,
+      label: entry.label === null ? noteText(entry.note) : sailWithNote(entry.label, noteText(entry.note)),
+    })),
+    ...annotations.sea_state.map((entry) => ({
+      at: entry.at,
+      lane: 'sea' as const,
+      label: seaStateLabel(entry.sea_state),
+    })),
+  ]
+}
+
 export async function readRaceTrack(
   rows: readonly RecordedRow[],
   quality: TranscriptionQuality,
   window: RaceWindow,
   /** The **Polar Version** the Race holds. Null is a legitimate answer, and nine races give it. */
-  polarVersionId: string | null
+  polarVersionId: string | null,
+  /** What the sailor said, to be drawn where they said it happened. */
+  annotations: RaceAnnotations
 ): Promise<RaceTrack> {
   const drawable = trackRows(rows, quality, window)
+  const placed = { annotations: testimony(annotations) }
 
   if (polarVersionId === null) {
     // Every row still drawn, none of them coloured. The track is where the boat went, which is
     // true whether or not anything exists to compare it against (ADR 0012).
-    return { heatmap: raceTrackHeatmap(drawable, null), scoring: 'no-polar-version' }
+    return { heatmap: raceTrackHeatmap(drawable, null, placed), scoring: 'no-polar-version' }
   }
 
   const polar = await readPolarVersion(polarVersionId)
@@ -71,11 +104,11 @@ export async function readRaceTrack(
     // sentence from "no Polar was recorded" — which is why `scoring` carries three states and not
     // a boolean.
     console.error(`Race: the Polar Version ${polarVersionId} this race names could not be read`)
-    return { heatmap: raceTrackHeatmap(drawable, null), scoring: 'polar-unreadable' }
+    return { heatmap: raceTrackHeatmap(drawable, null, placed), scoring: 'polar-unreadable' }
   }
 
   return {
-    heatmap: raceTrackHeatmap(drawable, polarTargets(polar.payload)),
+    heatmap: raceTrackHeatmap(drawable, polarTargets(polar.payload), placed),
     scoring: 'polar',
   }
 }

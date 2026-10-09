@@ -46,9 +46,18 @@ import { dropoutDuration } from '@/services/analysis/track-heatmap'
 import { overlayColour, overlayPaint } from '@/services/analysis/track-overlays'
 import { niceDistance, scaleBarLabel } from '@/services/recordings/track-projection'
 import { spacing } from '@/lib/utils/design'
-import type { RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@/types'
+import type { RaceTrack, RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@/types'
 
-import { DROPOUT, FILLER_DASH, HAIRLINE, SELECTION, TRACK_STROKE } from './track-ink'
+import TrackReadout from './TrackReadout'
+import {
+  DROPOUT,
+  FILLER_DASH,
+  HAIRLINE,
+  SELECTION,
+  TESTIMONY,
+  TRACK_STROKE,
+  testimonyGlyph,
+} from './track-ink'
 
 const MIN_ZOOM = 1
 /** Chicago–Waukegan is ~25nm end to end: at 12× a 390px screen covers about a quarter-mile of it. */
@@ -132,7 +141,7 @@ export default function TrackHeatmapFrame({
   heatmap,
   label,
   overlay,
-  hasPolar,
+  scoring,
   selected,
   onSelect,
 }: {
@@ -140,13 +149,14 @@ export default function TrackHeatmapFrame({
   /** What the map is, for a reader who cannot see it. The section's own words, not a restatement. */
   label: string
   overlay: TrackOverlay
-  /** Whether the race records a **Polar Version**, which the two ratio overlays need. */
-  hasPolar: boolean
-  /** The `row_index` of the stretch being read out, or null. */
-  selected: number | null
+  /** What the race was scored against, which the two ratio overlays and the readout both need. */
+  scoring: RaceTrack['scoring']
+  /** The stretch being read out, or null. */
+  selected: TrackRowFacts | null
   onSelect: (row: TrackRowFacts | null) => void
 }): ReactElement {
-  const { width, height, metres_per_unit, segments, points, bridges, rings } = heatmap
+  const hasPolar = scoring === 'polar'
+  const { width, height, metres_per_unit, segments, points, bridges, rings, annotations } = heatmap
   const svg = useRef<SVGSVGElement | null>(null)
   const [view, setView] = useState<View>(HOME)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -330,7 +340,21 @@ export default function TrackHeatmapFrame({
   // coloured track, so the measurement overlays the geometry rather than competing with it.
   const unscored = painted.filter(({ paint }) => paint.band === null)
   const scored = painted.filter(({ paint }) => paint.band !== null)
-  const chosen = segments.find(({ row }) => row.row_index === selected)
+  const chosen = segments.find(({ row }) => row.row_index === selected?.row_index)
+  const chosenPoint = points.find(({ row }) => row.row_index === selected?.row_index)
+
+  /**
+   * Which half of the frame the selected stretch is in, so the readout can sit in the other one.
+   *
+   * Through the camera, not in the track's own coordinates: what matters is where the stretch is on
+   * screen *now*, after a pan has moved it, since that is what the card would cover.
+   */
+  const anchor = chosen
+    ? { x: (chosen.x1 + chosen.x2) / 2, y: (chosen.y1 + chosen.y2) / 2 }
+    : chosenPoint
+      ? { x: chosenPoint.x, y: chosenPoint.y }
+      : null
+  const selectionInTopHalf = anchor !== null && anchor.y * zoom + view.ty < height / 2
 
   return (
     // Fluid, and *not* capped at the box's own 360 units: the `viewBox` holds the projection true
@@ -443,6 +467,48 @@ export default function TrackHeatmapFrame({
 
             <DropoutBridges bridges={bridges} width={width} zoom={zoom} />
 
+            {/* What the sailor said, where they said it happened. Last of the ink inside the
+                camera, so Testimony sits over the measurement rather than under it: on a map an
+                annotation is a *place*, and a sail change hidden beneath a fat track tells nobody
+                anything. */}
+            {annotations.map((annotation, index) => (
+              <g key={`testimony-${index}`} data-testid={`track-testimony-${annotation.lane}`}>
+                <circle
+                  cx={annotation.x}
+                  cy={annotation.y}
+                  r={TESTIMONY.radius / zoom}
+                  fill={TESTIMONY.fill}
+                  stroke={TESTIMONY.stroke}
+                  strokeWidth={TESTIMONY.width}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x={annotation.x}
+                  y={annotation.y + 3 / zoom}
+                  textAnchor="middle"
+                  fontSize={9 / zoom}
+                  fontWeight="700"
+                  fontFamily="var(--font-mono)"
+                  fill={TESTIMONY.glyph}
+                >
+                  {testimonyGlyph(annotation.lane)}
+                </text>
+                <text
+                  x={annotation.x}
+                  y={annotation.y - 10 / zoom}
+                  textAnchor="middle"
+                  fontSize={8 / zoom}
+                  fontFamily="var(--font-mono)"
+                  fill="var(--text-secondary)"
+                  stroke="var(--surface-base)"
+                  strokeWidth={2.4 / zoom}
+                  paintOrder="stroke"
+                >
+                  {annotation.label}
+                </text>
+              </g>
+            ))}
+
             {/* ADR 0014 makes ringing Frozen rows an obligation of every map in Layline, and the
                 track is already drawn broken into and out of them. The bridge above is the rest of
                 that obligation: on a long dropout the rings stack into one pixel. */}
@@ -509,6 +575,20 @@ export default function TrackHeatmapFrame({
           ⤢
         </Knob>
       </div>
+
+      {/* The answer to a tap, over the map rather than under it: at 390px a card below the frame
+          lands past the fold, and a readout the sailor has to scroll to find is not a readout. It
+          sits in the half the selection is not in, so the stretch stays visible while it is
+          described. */}
+      {selected !== null && (
+        <TrackReadout
+          row={selected}
+          overlay={overlay}
+          scoring={scoring}
+          onDismiss={() => onSelect(null)}
+          selectionInTopHalf={selectionInTopHalf}
+        />
+      )}
 
       <p
         data-testid="track-zoom-readout"

@@ -32,7 +32,7 @@ import { spacing } from '@/lib/utils/design'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { raceTrackHeatmap } from '@/services/analysis/track-heatmap'
 
-import { HARNESS_POLAR, harnessRows } from './fixture'
+import { HARNESS_POLAR, HARNESS_TESTIMONY, harnessRows } from './fixture'
 
 /** So the env guard is read per request rather than baked into a build. */
 export const dynamic = 'force-dynamic'
@@ -40,7 +40,9 @@ export const dynamic = 'force-dynamic'
 export default function RaceTrackHarnessPage(): ReactElement {
   if (process.env.LAYLINE_TRACK_HARNESS !== '1') notFound()
 
-  const heatmap = raceTrackHeatmap(harnessRows(), polarTargets(HARNESS_POLAR))
+  const heatmap = raceTrackHeatmap(harnessRows(), polarTargets(HARNESS_POLAR), {
+    annotations: HARNESS_TESTIMONY,
+  })
 
   return (
     // The same column the race page gives this section — `maxWidth: 720` and a `spacing(4)` gutter

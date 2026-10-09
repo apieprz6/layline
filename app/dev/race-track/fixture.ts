@@ -13,7 +13,7 @@
  * browser has a track to zoom.
  */
 
-import type { TrackHeatmapRow } from '@/services/analysis/track-heatmap'
+import type { TrackAnnotationInput, TrackHeatmapRow } from '@/services/analysis/track-heatmap'
 import type { PolarPayload } from '@/types'
 
 /**
@@ -108,6 +108,18 @@ function courseOf(leg: Leg): string {
   const degrees = (Math.atan2(leg.east, leg.north) * 180) / Math.PI
   return String(Math.round((degrees + 360) % 360))
 }
+
+/**
+ * What the sailor said, in the stamps this fixture's rows carry.
+ *
+ * Two sail changes and a sea state, placed on the beat and at the top mark, so the harness shows
+ * Testimony sitting over the measurement — which is the thing only a browser can judge.
+ */
+export const HARNESS_TESTIMONY: TrackAnnotationInput[] = [
+  { at: stamp(2), lane: 'sail', label: 'Main + Jib 1', },
+  { at: stamp(26), lane: 'sea', label: 'Moderate' },
+  { at: stamp(48), lane: 'sail', label: 'Main + A2' },
+]
 
 export function harnessRows(): TrackHeatmapRow[] {
   const rows: TrackHeatmapRow[] = []

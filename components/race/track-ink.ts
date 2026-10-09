@@ -43,6 +43,30 @@ export const FILLER_DASH = '4.5 2.5'
  */
 export const SELECTION = { stroke: 'var(--text-accent)', width: 12, opacity: 0.35 } as const
 
+/**
+ * **Testimony** on the map: a sail change, a sea state.
+ *
+ * Deliberately *not* a hue from any overlay's scale. An annotation is neither measured nor computed
+ * — it is what the sailor said — and on a screen where six scales already spend every hue the
+ * design system has, the only honest way to say "this is a different kind of thing" is to stop
+ * using hue for it: a disc in the page's own surface, outlined and glyphed in the text colour.
+ *
+ * The glyphs are the amend flow's (`components/race-flow/chart-geometry.ts`): `S` for a sail, `~`
+ * for the water. Same vocabulary on both screens, because it is the same Testimony.
+ */
+export const TESTIMONY = {
+  radius: 7,
+  fill: 'var(--surface-raised)',
+  stroke: 'var(--text-primary)',
+  width: 1.2,
+  glyph: 'var(--text-primary)',
+} as const
+
+/** One character, because a marker is a few pixels across on a 390px phone. */
+export function testimonyGlyph(lane: 'sail' | 'sea'): string {
+  return lane === 'sail' ? 'S' : '~'
+}
+
 /** A **Dropout**: the ring on the repeated fix, and the dashed bridge across the gap. */
 export const DROPOUT = {
   stroke: 'var(--wind-storm)',
