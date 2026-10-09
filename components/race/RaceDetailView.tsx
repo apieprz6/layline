@@ -96,13 +96,27 @@ export default function RaceDetailView({
 }: RaceDetailViewProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
+      {/*
+       * One column on a phone, which is the viewport this page was designed for; a *layout* on
+       * anything wider.
+       *
+       * It was capped at 720px at every width, which on a desktop left the page as a narrow strip
+       * hugging one edge of the screen and on an ultrawide left most of the glass empty. Nothing
+       * else in the app does that — the dashboard and the analysis screens fill the width and
+       * respond — so this stops too. The outer bound is readability rather than a column: past
+       * ~1700px the prose below starts running to line lengths nobody tracks across, and on an
+       * ultrawide a block that wide pinned to one edge reads as lopsided rather than as full, so
+       * past the cap it centres. This is the one screen in the app that does: the dashboard and
+       * the analysis screens are grids of cards, which fill any width without a line of prose
+       * getting longer.
+       */}
       <div
+        className="max-w-[1700px] 2xl:mx-auto"
         style={{
           display: 'flex',
           flexDirection: 'column',
           gap: spacing(4),
           padding: spacing(4),
-          maxWidth: 720,
         }}
       >
         <Link
@@ -156,6 +170,15 @@ export default function RaceDetailView({
           </p>
         </header>
 
+        {/*
+         * The Testimony, side by side once there is room for it.
+         *
+         * Three short sections — a couple of sail changes, a sea state, five pointers — that on a
+         * phone are three stacked blocks and on a desktop are three columns of one band. Stacked at
+         * 1400px they pushed the recording below the fold for no reason: none of them is long
+         * enough to need a column of its own.
+         */}
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <SectionHeading amend={canAmend ? <AmendChip raceId={race.id} section="sails" /> : null}>
             Sails
@@ -198,13 +221,33 @@ export default function RaceDetailView({
           </SectionHeading>
           <BoatSetupFacts setup={race.boat_setup} />
         </section>
+        </div>
 
         <TranscriptionBoundary canAmend={canAmend} />
 
-        {/* The map opens the half of the page that is the recording (ADR 0033). It is below the
-            line because a track is not Testimony — it is what the file said, drawn. */}
-        <RaceTrackSection track={race.track} />
+        {/*
+         * Everything below the line, and the split happens *under* it rather than across it.
+         *
+         * The map is the recording drawn, so it belongs on this side — and on a wide screen the
+         * figures derived from the same rows read better beside it than a scroll away. Putting the
+         * two columns below the boundary rather than either side of it keeps ADR 0010's line
+         * exactly what it is: one rule across the whole page, with Testimony above and nothing but
+         * the recording beneath.
+         *
+         * The map's column is bounded because the frame's *shape* is fixed (ADR 0033): a fluid
+         * portrait box 1,000px wide would be 1,200px tall, so width past about 620 buys height
+         * nobody wants rather than detail.
+         */}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)] xl:items-start xl:gap-8">
+          {/* The map opens the half of the page that is the recording (ADR 0033). It is below the
+              line because a track is not Testimony — it is what the file said, drawn. */}
+          <RaceTrackSection track={race.track} />
 
+          {/* Capped at a measure, not at the column: every one of these is a label on the left and
+              a figure on the right, and across 800px of desktop the two stop reading as a pair. */}
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: spacing(4), maxWidth: 560 }}
+          >
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Coverage</h2>
           <CoverageReadout coverage={race.coverage} />
@@ -241,6 +284,8 @@ export default function RaceDetailView({
             deleteRace={deleteRace}
           />
         )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -281,7 +326,15 @@ function BoatSetupFacts({ setup }: { setup: RaceBoatSetup }): ReactElement {
   return (
     <dl
       data-testid="boat-setup-facts"
-      style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: spacing(1) }}
+      // The same measure its heading is capped to, so the Version a race names sits beside the
+      // artifact it names rather than at the far edge of a desktop column.
+      style={{
+        margin: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: spacing(1),
+        maxWidth: 360,
+      }}
     >
       <VersionFact
         label="Polar"
@@ -425,6 +478,11 @@ function SectionHeading({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: spacing(2),
+        // The chip belongs in this heading's gutter, and a gutter is only a gutter at a width the
+        // eye can cross: in a 560px desktop column, `space-between` alone left "SAILS" and its
+        // Amend chip at opposite ends of a gap with nothing in it. Capped at the width the pattern
+        // was designed against, so it reads the same at every size.
+        maxWidth: 360,
       }}
     >
       <h2 style={SECTION_HEADING}>{children}</h2>

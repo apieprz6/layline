@@ -357,12 +357,29 @@ export default function TrackHeatmapFrame({
   const selectionInTopHalf = anchor !== null && anchor.y * zoom + view.ty < height / 2
 
   return (
-    // Fluid, and *not* capped at the box's own 360 units: the `viewBox` holds the projection true
-    // whatever room the element gets, so the track takes the whole width of the column it is in
-    // rather than sitting at half the width of a desktop one. The box being *stable* is a claim
-    // about its aspect ratio — it does not reshape to the track's extent — never about its size in
-    // CSS pixels. `TrackMap` is fluid for the same reason.
-    <div style={{ position: 'relative' }}>
+    <div>
+      {/*
+       * Fluid, and *not* capped at the box's own 360 units: the `viewBox` holds the projection true
+       * whatever room the element gets, so the track takes the width of the column it is in rather
+       * than sitting at half the width of a desktop one. The box being *stable* is a claim about
+       * its aspect ratio — it does not reshape to the track's extent — never about its size in CSS
+       * pixels.
+       *
+       * Bounded by *height* rather than by width, which is the honest bound for a shape this
+       * product fixed for a 390px phone: a portrait frame given 620px of desktop column would be
+       * 758px tall, past the usable height of most windows, so the sailor would be scrolling to
+       * see the end of a map whose scale bar is pinned to a corner they cannot see. `aspect-ratio`
+       * with a `max-height` lets the browser derive the width from whichever constraint binds, so
+       * the frame is as big as the glass allows and never taller.
+       */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: `${width} / ${height}`,
+          maxHeight: '78vh',
+        }}
+      >
       <svg
         ref={svg}
         viewBox={`0 0 ${width} ${height}`}
@@ -374,10 +391,10 @@ export default function TrackHeatmapFrame({
         onPointerCancel={onPointerUp}
         style={{
           display: 'block',
+          // The box above owns the size; this fills it. Its own `viewBox` is what keeps the
+          // projection true at whatever that size turns out to be.
           width: '100%',
-          height: 'auto',
-          // The stable frame: the box never changes shape, only its contents move inside it.
-          aspectRatio: `${width} / ${height}`,
+          height: '100%',
           touchAction: zoomed ? 'none' : 'pan-y',
           cursor: zoomed ? 'grab' : 'pointer',
           // Without this a drag across the map selects the dropout labels instead of panning, and
@@ -621,6 +638,8 @@ export default function TrackHeatmapFrame({
           selectionInTopHalf={selectionInTopHalf}
         />
       )}
+
+      </div>
 
       <p
         data-testid="track-zoom-readout"

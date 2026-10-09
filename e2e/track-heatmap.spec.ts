@@ -40,6 +40,12 @@ async function panOf(page: Page): Promise<[number, number]> {
  */
 async function middleOfATrackLeg(page: Page): Promise<{ x: number; y: number }> {
   const svg = page.locator('svg[role="img"]')
+  // Scrolled to first, because `page.mouse` clicks a *viewport* coordinate and does not scroll the
+  // way a locator click does. On the race page the map sits below the Testimony, so a point near
+  // the bottom of the track is off-screen until the map is: without this the click lands on
+  // nothing and the failure reads as a broken hit test rather than as a test that never aimed at
+  // the page.
+  await svg.scrollIntoViewIfNeeded()
   const box = await svg.boundingBox()
   const viewBox = (await svg.getAttribute('viewBox'))?.split(' ').map(Number) ?? []
   const points = await page
@@ -181,7 +187,9 @@ test.describe('the race track, zoomed and panned at 390px', () => {
 
     // A tap on open water is a question with no answer, and clearing is the honest one. The
     // frame's bottom-left corner is water on any track the fixture draws.
-    const box = await page.locator('svg[role="img"]').boundingBox()
+    const svg = page.locator('svg[role="img"]')
+    await svg.scrollIntoViewIfNeeded()
+    const box = await svg.boundingBox()
     await page.mouse.click((box?.x ?? 0) + 14, (box?.y ?? 0) + (box?.height ?? 0) - 90)
     await expect(page.getByTestId('track-readout')).toHaveCount(0)
     await expect(page.getByTestId('track-selection')).toHaveCount(0)
@@ -192,7 +200,9 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // would end by selecting whatever stretch the finger happened to lift over.
     await page.getByLabel('Zoom in').click()
 
-    const box = await page.locator('svg[role="img"]').boundingBox()
+    const svg = page.locator('svg[role="img"]')
+    await svg.scrollIntoViewIfNeeded()
+    const box = await svg.boundingBox()
     const centre = {
       x: (box?.x ?? 0) + (box?.width ?? 0) / 2,
       y: (box?.y ?? 0) + (box?.height ?? 0) / 2,

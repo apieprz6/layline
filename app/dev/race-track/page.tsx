@@ -1,5 +1,5 @@
 /**
- * TEST HARNESS — the **Race Track Heatmap** on a synthetic race, for the browser suite only.
+ * TEST HARNESS — one race's page, on a synthetic race, for the browser suite only.
  *
  * Off unless `LAYLINE_TRACK_HARNESS=1`, which `playwright.config.ts` sets on the server it starts.
  * A request without it gets the same 404 as any other unknown path, so this is unreachable in a
@@ -10,7 +10,8 @@
  * ADR 0033 requires a browser test that asserts the map's own transform rather than a click: in
  * this environment `next dev` never hydrates, and a Playwright click on an un-hydrated node
  * *succeeds*, so "the zoom button was pressed" proves nothing. The gesture therefore has to be
- * exercised in a real browser against a real hydrated map.
+ * exercised in a real browser against a real hydrated map — and the page's own layout has to be
+ * seen at a desktop width, which is the other thing no amount of jsdom will answer.
  *
  * It cannot be exercised on the race page itself. There is no race in any local database and there
  * will not be one: the archive is hand-entered through the finished UI, so nothing seeds a
@@ -19,16 +20,17 @@
  *
  * ## Why it is not a second renderer
  *
- * It mounts `RaceTrackSection` — the same component the race page mounts — over geometry from
- * `raceTrackHeatmap`, the same function `readRaceTrack` calls, scored through the same
- * `polarTargets`. The only thing that is a fixture is the rows. Nothing about the drawing, the
- * banding or the camera is reimplemented here, so there is nothing for it to drift from.
+ * It mounts `RaceDetailView` — the component the race page mounts — over a `RaceDetail` whose track
+ * comes from `raceTrackHeatmap`, the same function `readRaceTrack` calls, scored through the same
+ * `polarTargets` and compared against the chart through the same `compareSailToChart`. The only
+ * thing that is a fixture is the data. Nothing about the layout, the drawing, the banding or the
+ * camera is reimplemented here, so there is nothing for it to drift from.
  */
 
 import { notFound } from 'next/navigation'
 import type { ReactElement } from 'react'
-import RaceTrackSection from '@/components/race/RaceTrackSection'
-import { spacing } from '@/lib/utils/design'
+import type { DeleteRaceResult } from '@/types'
+import RaceDetailView from '@/components/race/RaceDetailView'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { compareSailToChart } from '@/services/analysis/sail-agreement'
@@ -39,11 +41,15 @@ import {
   HARNESS_POLAR,
   HARNESS_SAILS,
   HARNESS_TESTIMONY,
+  harnessRace,
   harnessRows,
 } from './fixture'
 
 /** So the env guard is read per request rather than baked into a build. */
 export const dynamic = 'force-dynamic'
+
+/** Never called: `canDelete` is false, so nothing renders the panel that would call it. */
+const deleteNothing = async (): Promise<DeleteRaceResult> => ({ ok: true, bytes_removed: true })
 
 export default function RaceTrackHarnessPage(): ReactElement {
   if (process.env.LAYLINE_TRACK_HARNESS !== '1') notFound()
@@ -64,21 +70,15 @@ export default function RaceTrackHarnessPage(): ReactElement {
   })
 
   return (
-    // The same column the race page gives this section — `maxWidth: 720` and a `spacing(4)` gutter
-    // — so what a screenshot here shows is what the page shows, at both the 390px target and on a
-    // desktop window.
-    <div
-      style={{
-        background: 'var(--page-bg)',
-        minHeight: '100vh',
-        padding: spacing(4),
-        maxWidth: 720,
-      }}
-    >
-      <p style={{ margin: `0 0 ${spacing(3)}`, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-        Test harness — a synthetic race, not the archive.
-      </p>
-      <RaceTrackSection track={{ heatmap, scoring: 'polar' }} />
-    </div>
+    <RaceDetailView
+      race={harnessRace({ heatmap, scoring: 'polar' })}
+      // `canDelete` off, and not for want of a Role: `RaceDeletePanel` is a Client Component, so
+      // the action it takes has to be a real Server Action rather than a closure a harness can
+      // make up — and a no-op action is a production endpoint this route has no business adding.
+      // The panel has its own suite; the layout question does not turn on it.
+      canDelete={false}
+      canAmend
+      deleteRace={deleteNothing}
+    />
   )
 }

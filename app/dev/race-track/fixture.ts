@@ -14,7 +14,7 @@
  */
 
 import type { TrackAnnotationInput, TrackHeatmapRow } from '@/services/analysis/track-heatmap'
-import type { CrossoverChartPayload, PolarPayload } from '@/types'
+import type { CrossoverChartPayload, PolarPayload, RaceDetail, RaceTrack } from '@/types'
 
 /**
  * A grid whose lightest two angles are a manufactured ramp, so a row sailed at 45° is
@@ -198,4 +198,74 @@ export function harnessRows(): TrackHeatmapRow[] {
   }
 
   return rows
+}
+
+/**
+ * The synthetic race as its own page states it: Testimony, coverage, findings and the track.
+ *
+ * Plausible rather than remarkable — two sail changes, two sea states, every Boat Setup pointer
+ * set, a dropout in the Row Quality notes — because what the harness is for is the *layout* at a
+ * width jsdom cannot have an opinion about, and a page of empty sections would not show it.
+ */
+export function harnessRace(track: RaceTrack): RaceDetail {
+  return {
+    id: 'harness-race',
+    title: 'Harness race — synthetic',
+    window_start: stamp(0),
+    window_finish: stamp(74),
+    recording: {
+      id: 'harness-recording',
+      filename: '07-11-26-harness.csv',
+      first_row_time: stamp(0),
+      last_row_time: stamp(74),
+      source_columns: ['Date', 'Latitude', 'Longitude', 'COG', 'SOG', 'TWS', 'TWA'],
+    },
+    coverage: {
+      window_seconds: 2250,
+      lead_gap_seconds: 0,
+      tail_gap_seconds: 0,
+      live_seconds: 1830,
+      frozen_seconds: 420,
+      backwards_steps: 0,
+      row_count: 75,
+      median_interval_seconds: 30,
+    },
+    quality: {
+      detector_version: 'harness',
+      low_speed_sog_knots: 2,
+      dropout_min_rows: 3,
+      dropout_channels: ['latitude', 'longitude', 'cog', 'sog'],
+      rows: [],
+    },
+    track,
+    findings: [
+      { severity: 'note', message: 'The feed was dead for 8 minutes in the middle of this window.' },
+    ],
+    annotations: {
+      sails: [
+        { at: stamp(2), definition_number: 1, label: 'Main + Jib 1', note: null },
+        { at: stamp(26), definition_number: 4, label: 'Main + A2', note: null },
+      ],
+      sea_state: [
+        { at: stamp(26), sea_state: 'moderate' },
+        { at: stamp(48), sea_state: 'rough' },
+      ],
+    },
+    boat_setup: {
+      polar: { version_id: 'harness-polar', version_number: 3, effective_from: '2026-02-10' },
+      crossover_chart: {
+        version_id: 'harness-chart',
+        version_number: 2,
+        effective_from: '2026-01-15',
+      },
+      rig_tune: { version_id: 'harness-tune', version_number: 4, effective_from: '2026-04-20' },
+      instrument_calibration: {
+        version_id: 'harness-cal',
+        version_number: 1,
+        effective_from: '2026-03-02',
+      },
+      band: { band_id: 'harness-base', low_kt: 8, high_kt: 12, is_base: true, label: 'Base' },
+      logged_tws_mean: 10,
+    },
+  }
 }
