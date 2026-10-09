@@ -7,7 +7,26 @@
 import { readFileSync } from 'node:fs'
 
 const archive = JSON.parse(readFileSync(new URL('./archive.json', import.meta.url), 'utf8'))
-const { polar, races, rows } = archive
+const { polar, races } = archive
+
+/** The shipped `MatchableRow` flattened, because every tally below is one field deep. */
+const rows = archive.rows.map((row) => ({
+  race: row.race_id,
+  tws: row.tws,
+  twa: row.twa,
+  sog: row.sog,
+  target: row.efficiency.target_speed?.knots ?? null,
+  filler: row.efficiency.target_speed?.filler_anchored ?? false,
+  pct: row.efficiency.polar_efficiency,
+  vmg_pct: row.efficiency.vmg_efficiency,
+  vmg_filler: row.efficiency.target_vmg?.filler_anchored ?? false,
+  zone: row.efficiency.vmg_zone,
+  countable: row.countable,
+  excluded: row.excluded,
+  seconds: row.interval_seconds,
+  sea_state: row.sea_state,
+  sail: row.sail.recorded === 'definition' ? row.sail.label : row.sail.recorded,
+}))
 
 const countable = rows.filter((row) => row.countable)
 const scored = countable.filter((row) => row.pct !== null)

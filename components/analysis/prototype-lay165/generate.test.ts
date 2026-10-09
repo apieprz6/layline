@@ -37,39 +37,34 @@ import { parsePolarFile } from '@/services/boat/polarFile'
 import { classifyPolarCells } from '@/services/boat/polarSyntheticRows'
 import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
 import { assessRowQuality } from '@/services/recordings/row-quality'
-import type { PolarCellOrigin, PolarPayload, RaceTrackHeatmap } from '@/types'
+import type { NotCountableReason } from '@/services/analysis/countable'
+import type {
+  AnalysisArchiveRace,
+  MatchableRow,
+  PolarCellOrigin,
+  PolarPayload,
+  RaceTrackHeatmap,
+  RowSail,
+  SeaState,
+} from '@/types'
 
 const PETE = join(homedir(), 'git', 'Handsome-Pete')
 const RECORDINGS = join(PETE, 'raw-regatta-recordings')
 const POLAR = join(PETE, 'polars', 'HandsomePete_2026_ORC_final.pol')
 const OUT = join(__dirname, 'archive.json')
 
-/** One row of the file, as the prototype draws it. Two decimals: this is a picture, not a ledger. */
-interface PrototypeRow {
-  race: string
-  tws: number | null
-  twa: number | null
-  sog: number | null
-  /** Knots of **Target Speed**, bilinearly interpolated. Null where the Polar cannot answer. */
-  target: number | null
-  /** At least one corner of the bracket is the certificate's own manufactured filler (ADR 0036). */
-  filler: boolean
-  /** `SOG / Target Speed`. Null without both. */
-  pct: number | null
-  /** `VMG / Target VMG`, and its own filler flag — a different subset of rows from `pct`. */
-  vmg_pct: number | null
-  vmg_filler: boolean
-  zone: 'upwind' | 'downwind' | null
-  countable: boolean
-  /** Why not, where not: `frozen` | `low_speed` | `maneuver_window`. */
-  excluded: string | null
-  /** Seconds this row lasted, measured. Null for the last row and a clock that stepped back. */
-  seconds: number | null
-  sea_state: string | null
-  /** The **Sail Configuration** in force, as a label, or `note-only` / `not-recorded`. */
-  sail: string
-  /** Seconds past midnight in the recording's own frame — the `time of day` dimension's axis. */
-  day_seconds: number
+/**
+ * A row, in **the shipped shape** — `MatchableRow` — plus why it is not Countable where it is not.
+ *
+ * Deliberately not a flattened chart-friendly record. A `MatchableRow` is what `matchRows`,
+ * `coverageLedger` and `getPolarPerformanceData` already take, so the prototype's filter rail, its
+ * Coverage Ledger and its headline figures are **the shipped ones, computing the shipped numbers**,
+ * and the only new code is the drawing. A chart that disagreed with the figure printed above it
+ * would be a prototype arguing with the screen it is a prototype of.
+ */
+type PrototypeRow = MatchableRow & {
+  /** `frozen` | `low_speed` | `maneuver_window`, or null where the row is Countable. */
+  excluded: NotCountableReason | null
 }
 
 interface MetadataAnnotation {
@@ -141,17 +136,11 @@ function inForce(entries: readonly MetadataAnnotation[], at: string): MetadataAn
 }
 
 /** ADR 0029's three states for the `sail used` dimension, read off one resolved annotation. */
-function sailLabel(race: MetadataRace, at: string): string {
+function sailInForce(race: MetadataRace, at: string): RowSail {
   const entry = inForce(race.sails, at)
-  if (entry === null) return 'not-recorded'
-  if (entry.config === undefined || entry.config.length === 0) return 'note-only'
-  return entry.config.join(' + ')
-}
-
-function round(value: number | null, places = 2): number | null {
-  if (value === null || !Number.isFinite(value)) return null
-  const factor = 10 ** places
-  return Math.round(value * factor) / factor
+  if (entry === null) return { recorded: 'not-recorded' }
+  if (entry.config === undefined || entry.config.length === 0) return { recorded: 'note-only' }
+  return { recorded: 'definition', label: entry.config.join(' + ') }
 }
 
 describe('LAY-165 prototype data', () => {
@@ -165,7 +154,7 @@ describe('LAY-165 prototype data', () => {
 
     const metadata = readMetadata()
     const rows: PrototypeRow[] = []
-    const races: { id: string; day: string; seconds: number; rows: number }[] = []
+    const races: AnalysisArchiveRace[] = []
 
     /**
      * The three Races whose real **Race Track Heatmap** is emitted, so the per-Race view can mount
@@ -204,39 +193,32 @@ describe('LAY-165 prototype data', () => {
       let seconds = 0
 
       inWindow.forEach((row, index) => {
-        const efficiency = computeRowEfficiency(row, targets)
         const interval = intervals[index]
         seconds += interval ?? 0
 
         rows.push({
-          race: name,
-          tws: round(row.tws === null ? null : Number(row.tws)),
-          twa: round(row.twa === null ? null : Number(row.twa)),
-          sog: round(row.sog === null ? null : Number(row.sog)),
-          target: round(efficiency.target_speed?.knots ?? null),
-          filler: efficiency.target_speed?.filler_anchored ?? false,
-          pct: round(efficiency.polar_efficiency, 4),
-          vmg_pct: round(efficiency.vmg_efficiency, 4),
-          vmg_filler: efficiency.target_vmg?.filler_anchored ?? false,
-          zone: efficiency.vmg_zone,
-          countable: row.countable,
-          excluded: row.excluded,
-          seconds: interval,
-          sea_state: inForce(race.sea_state, row.row_time)?.sea_state ?? null,
-          sail: sailLabel(race, row.row_time),
+          race_id: name,
+          row_index: row.row_index,
+          day: row.row_time.slice(0, 10),
           day_seconds:
             Number(row.row_time.slice(11, 13)) * 3600 +
             Number(row.row_time.slice(14, 16)) * 60 +
             Number(row.row_time.slice(17, 19)),
+          tws: row.tws === null ? null : Number(row.tws),
+          twa: row.twa === null ? null : Number(row.twa),
+          sea_state: (inForce(race.sea_state, row.row_time)?.sea_state as SeaState) ?? null,
+          sail: sailInForce(race, row.row_time),
+          countable: row.countable,
+          interval_seconds: interval,
+          sog: row.sog === null ? null : Number(row.sog),
+          efficiency: computeRowEfficiency(row, targets),
+          excluded: row.excluded,
         })
       })
 
-      races.push({
-        id: name,
-        day: race.start.slice(0, 10),
-        seconds,
-        rows: inWindow.length,
-      })
+      // `AnalysisArchiveRace`, as `readRaceSet` builds it. The title is the file's own name here;
+      // in Layline it is whatever the sailor typed, and may be null.
+      races.push({ id: name, title: name, day: race.start.slice(0, 10), seconds })
 
       // The real thing, from the real function (`app/dev/race-track` does the same with a fixture).
       // No sail verdict: the Crossover Chart lives in the database, so the prototype's map offers
@@ -258,6 +240,20 @@ describe('LAY-165 prototype data', () => {
             origins,
           },
           races,
+          // What `analysisDimensions` needs to build the real rail's chips. The sails are the
+          // archive's own labels: the Crossover Chart Version that would add the three sails this
+          // boat owns and has never raced lives in the database, so the prototype's `sail` chip is
+          // narrower than the screen's will be, and the README says so.
+          vocabulary: {
+            sails: [
+              ...new Set(
+                rows.flatMap((row) =>
+                  row.sail.recorded === 'definition' ? [row.sail.label] : []
+                )
+              ),
+            ].sort(),
+            months: [...new Set(rows.map((row) => row.day.slice(0, 7)))].sort(),
+          },
           tracks,
           rows,
         },
@@ -268,7 +264,7 @@ describe('LAY-165 prototype data', () => {
 
     // Printed rather than asserted: this is a generator, and the numbers are the finding.
     const countable = rows.filter((row) => row.countable)
-    const scored = countable.filter((row) => row.pct !== null)
+    const scored = countable.filter((row) => row.efficiency.polar_efficiency !== null)
 
     console.log(
       [
@@ -276,8 +272,8 @@ describe('LAY-165 prototype data', () => {
         `in-window rows ${rows.length}`,
         `countable ${countable.length}`,
         `scored ${scored.length}`,
-        `filler-anchored ${scored.filter((row) => row.filler).length}`,
-        `no target ${countable.filter((row) => row.target === null).length}`,
+        `filler-anchored ${scored.filter((row) => row.efficiency.target_speed?.filler_anchored).length}`,
+        `no target ${countable.filter((row) => row.efficiency.target_speed === null).length}`,
       ].join(' · ')
     )
 

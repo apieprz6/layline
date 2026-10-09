@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
+    "prototype:lay165": "LAYLINE_LAY165=1 next build && LAYLINE_LAY165=1 next start -p 4165",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },
