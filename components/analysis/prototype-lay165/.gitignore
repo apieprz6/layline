@@ -1,0 +1,5 @@
+# PROTOTYPE (LAY-165). `archive.json` is 1.5 MB of the owner's own races, row by row — the
+# recordings themselves, rounded — not the aggregates LAY-149 committed. The repo is public, so it
+# stays out until the owner says otherwise; `generate.test.ts` rebuilds it from ~/git/Handsome-Pete
+# in three seconds.
+archive.json
