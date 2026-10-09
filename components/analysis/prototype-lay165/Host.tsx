@@ -34,7 +34,7 @@ import {
 import { describeDuration } from '@/services/recordings/coverage'
 import type { AnalysisDimensionSpec, AnalysisFilter } from '@/types'
 
-import type { PrototypeArchive, PrototypeRow, WindBandId } from './data'
+import type { PrototypeArchive, PrototypeRow } from './data'
 import { raceCount, unscored } from './data'
 import Switcher, { type Variant, type View } from './Switcher'
 import VariantA, { VARIANT_A_NAME } from './VariantA'
@@ -71,7 +71,11 @@ export default function Host({
   const [filter, setFilter] = useState<AnalysisFilter>(initialFilter)
   const [variant, setVariant] = useState<Variant>(initialVariant)
   const [view, setView] = useState<View>(initialView)
-  const [band, setBand] = useState<WindBandId>('medium')
+  /*
+   * No wind-band state here any more. The rose used to take one and it was a second control over
+   * an axis the rail already owns — see `VariantA`'s header. The rail narrows the rows; each chart
+   * reads the certificate where those rows are.
+   */
 
   /** The whole archive's rows, for the per-Race view's reference ghost. */
   const everything = archive.rows
@@ -100,7 +104,7 @@ export default function Host({
   const chart = (rows: readonly PrototypeRow[], mode: View, reference: readonly PrototypeRow[] | null) => {
     const props = { archive, rows, reference, mode: mode === 'teaser' ? ('teaser' as const) : mode === 'race' ? ('race' as const) : ('season' as const) }
 
-    if (variant === 'A') return <VariantA {...props} band={band} onBand={setBand} />
+    if (variant === 'A') return <VariantA {...props} />
     if (variant === 'B') return <VariantB {...props} />
     return <VariantC {...props} />
   }

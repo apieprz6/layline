@@ -45,9 +45,11 @@ overlays rather than six.
 
 ## What each variant is a position on
 
+**A is the owner's pick (9 Oct), with two changes made after the first look — see "Second round" below.**
+
 | | **A — Rose** | **B — Panels** | **C — Grid** |
 |---|---|---|---|
-| **Q1 what shape** | a polar rose: speed in knots at an angle, the certificate's own curves behind it | two cartesian panels: percent of target against `TWA`, and against `TWS` | the certificate's own 16 × 9 table with the boat's figures in the cells |
+| **Q1 what shape** | a polar rose: speed in knots at an angle, the certificate read at the rows' own mean wind behind it | two cartesian panels: percent of target against `TWA`, and against `TWS` | the certificate's own 16 × 9 table with the boat's figures in the cells |
 | **the claim** | the boat's whole speed profile — the ratio is a colour on it | only the ratio, which is the quantity every other screen here speaks | per-cell coverage first, performance second |
 | **Q2 filler-anchored** | drawn in place, hollow and stitched, **never coloured** | same refusal, on an axis: a hollow ring at its own height, value readable | **ADR 0036 colours itself** — computed, shown, flagged, and painted |
 | **Q3 narrowing** | the rail narrows the trace; bins that empty vanish and the certificate stays | the line shortens; the evidence bars under it collapse first | cells blank to hatch; the count above says how many were lost |
@@ -117,10 +119,66 @@ overlays rather than six.
   `actual_distance_nm / target_distance_nm` — both out of one `EfficiencyAggregate`. Had the rose
   averaged `SOG` per row, it would disagree with the percentage beside it by a little, always.
 
+## Second round — the rose has no wind chips, and it is interactive
+
+Two things the owner asked for after the first look, both of which changed the design rather than
+decorating it.
+
+**1. The band chips are gone, because they were a second control over the rail's own axis.** The
+first draft had a row of wind-band chips on the rose, and they were doing two jobs: choosing which
+*rows* were drawn — which is the **rail's** job, and already a chip on it — and choosing which of
+the certificate's nine columns were drawn. The first of those is the conflict ADR 0032 settled on
+the Instrument Tuning screen by making the Calibration Era *structure* rather than a chip. Same
+answer here: the rail decides which rows are in play, and the chart reads the certificate **where
+those rows actually are**.
+
+So the reference is now one curve, read through the shipped `targetSpeed` at the matched rows'
+**time-weighted mean TWS**, with a shadow behind it between their 10th and 90th percentile wind:
+
+- The Polar is interpolated between columns anyway (ADR 0028), so a curve at 9.6 kt is a legitimate
+  read of the grid rather than an invention — and `polar-targets.ts` is pure and isomorphic, so the
+  **client** reads the grid itself rather than being shipped a curve it cannot re-derive.
+- Each point carries its own `filler_anchored` flag, so the ink still changes along the curve's
+  length — and now **the stitched section moves as the rail narrows the wind**, which is the ragged
+  floor (52° at 4 kt, 45° at 6–8, 40° from 10 up) demonstrating itself.
+- The shadow is the honest cost of one curve over a range: on the unfiltered archive it spans
+  6–14 kt and is *wide*. The readout says so, and says that narrowing the rail's Wind speed chip
+  closes it. **The chart teaches the control instead of duplicating it.**
+- Clipping that shadow to the angles both percentile curves answer at is load-bearing: without it
+  the two curves have different lengths (the floor moves) and the closed path throws a spike off
+  the top of the rose.
+
+The per-Race view has no chips and no rail at all, per the map's decision 8; nothing else differs,
+because the curve is read at that race's own mean wind.
+
+**2. Every part of it is interactive** (ADR 0034's rule for the Instrument Tuning charts, which is
+the same rule):
+
+- **Tap any sector** — a whole 10° wedge is the target, because a 3px dot is not one on a phone —
+  for that bin's mean speed, its percent of target, the time and the number of races behind it, how
+  many rows in the sector were scored of how many are there, and **what the certificate says at that
+  angle at the mean wind**, including whether that cell is the file's own ramp.
+- **`←`/`→` step the selection** once the chart has focus, and stop there rather than also reaching
+  the switcher.
+- **A radius toggle: `Speed` | `% of target`**, two readings of one state — the selection survives
+  the switch. In the ratio reading the certificate becomes a dashed **100% circle** and a dent is a
+  loss wherever it is; there is no wind shadow, because the ratio has already divided the wind out.
+  This is also the answer to the rose's own weakness (that it makes the ratio secondary): the ratio
+  is one tap away, on the same picture, with the same selection.
+- `shots-a.mjs` drives all of it in a real browser and asserts the readout actually changed, because
+  a click on an un-hydrated node succeeds in this environment.
+
+One thing left as-is: the chart takes keyboard focus, so Chromium draws a focus ring around the
+frame after a click. Correct for a keyboard-operable chart, slightly noisy after a mouse tap; a
+`:focus-visible` rule in `globals.css` fixes it in the build and inline styles cannot.
+
 ## Still open, for the owner
 
-1. **Which shape** — A, B, C, or a mix (the obvious mix is B's panels on the season screen and A's
-   rose on one race, which is also the one combination that makes the two screens look unrelated).
-2. **The filler colour**, which is the real decision: refuse the ramp (A, B) or let ADR 0036 paint
-   it (C).
+1. ~~Which shape~~ — **A, the rose.** Settled 9 Oct.
+2. **The filler colour**, which is now the only open design decision: A refuses to colour a
+   Filler-Anchored bin (hollow, stitched, value still in the readout), C lets ADR 0036 paint it.
+   Worth looking at variant C's top two rows once before answering — 104–242% of "target", in teal
+   — and then at the same rows on A, where they are hollow rings outside a stitched curve. Either
+   way it is a display amendment to ADR 0036.
 3. Whether the Overall-tab teaser becomes a picture at all, or stays the text LAY-155 shipped.
+4. Whether `archive.json` may be committed, so the branch builds without `~/git/Handsome-Pete`.
