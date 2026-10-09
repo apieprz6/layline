@@ -9,6 +9,8 @@
  * that looks fine and describes a third of the race.
  */
 
+import { overlayPaint } from '@/services/analysis/track-overlays'
+
 import { readRace } from '../readRace'
 
 const raceMaybeSingle = jest.fn()
@@ -143,6 +145,45 @@ jest.mock('@/lib/supabase/server', () => ({
   createClient: () => createClient(),
 }))
 
+/**
+ * The Polar the race's track is scored against, and the id the read asked for.
+ *
+ * Mocked at the reader rather than at the table, because `readPolarVersions` is its own read with
+ * its own suite — what matters here is that the **id the Race holds** is the id this page asks for,
+ * never the Polar in force now (ADR 0012), and what happens to the track when the answer is null.
+ */
+let polarPayload: { twa_axis: number[]; tws_axis: number[]; boat_speed: number[][] } | null = null
+let polarIdAsked: string | null = null
+
+/**
+ * The Crossover Chart the sail-agreement overlay compares against, and the id asked for.
+ *
+ * Mocked at the reader, like the Polar: what matters here is that the id the **Race** holds is the
+ * id this page asks for — never the chart in force now, which would re-score a 2024 race against a
+ * vocabulary written after it (ADR 0012).
+ */
+let chartPayload: {
+  twa_axis: number[]
+  tws_axis: number[]
+  cells: number[][]
+  sail_definitions: { number: number; label: string }[]
+} | null = null
+let chartIdAsked: string | null = null
+
+jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
+  readCrossoverChartVersion: async (versionId: string) => {
+    chartIdAsked = versionId
+    return chartPayload === null ? null : { payload: chartPayload }
+  },
+}))
+
+jest.mock('@/services/boat/readPolarVersions', () => ({
+  readPolarVersion: async (versionId: string) => {
+    polarIdAsked = versionId
+    return polarPayload === null ? null : { payload: polarPayload }
+  },
+}))
+
 /** A stamp `n` seconds after 11:00, in the recording's own naive frame. */
 function stamp(seconds: number): string {
   const total = 11 * 3600 + seconds
@@ -261,6 +302,35 @@ describe('readRace', () => {
     }
     bandError = null
     bandIdAsked = null
+    // A flat 6-knot grid around the fixture's own angle and breeze: every cell measured, so a row
+    // that carries a `TWA` scores and nothing is Filler-Anchored. The ramp cases are
+    // `track-heatmap.test.ts`'s, over grids built to hold one.
+    polarPayload = {
+      twa_axis: [40, 50, 60],
+      tws_axis: [8, 12],
+      boat_speed: [
+        [6, 6],
+        [6, 6],
+        [6, 6],
+      ],
+    }
+    polarIdAsked = null
+    // One crossover at 12 knots: Jib 1 below it, Jib 3 above. The fixture's rows log 11 knots, so
+    // a race whose Testimony says Jib 1 agrees with the chart.
+    chartPayload = {
+      twa_axis: [40, 90, 135],
+      tws_axis: [6, 12],
+      cells: [
+        [1, 3],
+        [1, 3],
+        [1, 3],
+      ],
+      sail_definitions: [
+        { number: 1, label: 'Main + Jib 1' },
+        { number: 3, label: 'Main + Jib 3' },
+      ],
+    }
+    chartIdAsked = null
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -664,6 +734,128 @@ describe('readRace', () => {
         'Race: Wind Band read failed:',
         'the band this Race names did not come back'
       )
+    })
+  })
+
+  /**
+   * The **Race Track Heatmap**, which is the first thing below the Transcription boundary.
+   *
+   * What is checked here is the *composition*, not the drawing: that the map is built over the
+   * rows of the window, scored against the Polar Version the Race itself holds, and that an
+   * uncoloured track says which of the three reasons it has. The bands, the rings and the Dropout
+   * Bridge belong to `services/analysis/__tests__/track-heatmap.test.ts`.
+   */
+  describe('the race track', () => {
+    /** The fixture's rows with an angle on them, so the Polar has something to answer. */
+    beforeEach(() => {
+      stored = LATCHED_FEED.map((row) => ({ ...row, twa: '50' }))
+    })
+
+    it('draws every row of the window and colours only the ones a metric may read', async () => {
+      const track = (await readRace('race-1'))?.track
+
+      expect(track?.scoring).toBe('polar')
+      // Rows 3 to 7: the window, assessed over the whole file and clipped afterwards.
+      expect(track?.heatmap?.counts.rows).toBe(5)
+      expect(track?.heatmap?.counts.with_fix).toBe(5)
+      // Rows 3 and 4 are the tail of a dropout that began before the gun. They are drawn — ringed,
+      // since a frozen row repeats a position — and they carry no colour.
+      expect(track?.heatmap?.counts.frozen).toBe(2)
+      expect(track?.heatmap?.rings).toHaveLength(2)
+      expect(track?.heatmap?.counts.overlays.target_speed.scored).toBe(3)
+      // Two legs coloured on percent of target: the three live rows are joined by two of them.
+      expect(
+        track?.heatmap?.segments.filter(
+          (segment) => overlayPaint('target_speed', segment.row, true).band !== null
+        )
+      ).toHaveLength(2)
+    })
+
+    it('scores it against the Polar Version the Race holds, by id', async () => {
+      await readRace('race-1')
+
+      // Not the Polar in force now, and not one resolved from the recording's date: the id on the
+      // Race, which is the whole of ADR 0012.
+      expect(polarIdAsked).toBe('polar-v2')
+    })
+
+    it('compares the sails against the Crossover Chart Version the Race holds, by id', async () => {
+      // The same rule for the other artifact: one vocabulary, and it is the one this Race points
+      // at (ADR 0012, ADR 0023).
+      sailEntries = [{ at: '2026-08-22T11:00:00', definition_number: 1, note: null }]
+
+      const track = (await readRace('race-1'))?.track
+
+      expect(chartIdAsked).toBe('chart-v1')
+      // Three Countable rows in the window, all of them carrying Jib 1 in 11 knots, which is what
+      // the chart calls for there.
+      expect(track?.heatmap?.counts.overlays.sail.scored).toBe(3)
+      expect(track?.heatmap?.counts.overlays.sail.without_value).toBe(0)
+    })
+
+    it('says a race with no Crossover Chart Version has no verdict rather than a disagreement', async () => {
+      raceMaybeSingle.mockResolvedValue({
+        data: raceRow({ crossover_chart_version_id: null }),
+        error: null,
+      })
+
+      const track = (await readRace('race-1'))?.track
+
+      expect(chartIdAsked).toBeNull()
+      expect(track?.heatmap?.counts.overlays.sail.scored).toBe(0)
+      // An absence, and never a red stretch of track: a race with no chart disagrees with nothing.
+      expect(track?.heatmap?.counts.overlays.sail.without_value).toBe(3)
+    })
+
+    it('draws the track of a race that records no Polar, and colours none of it', async () => {
+      raceMaybeSingle.mockResolvedValue({
+        data: raceRow({ polar_version_id: null }),
+        error: null,
+      })
+
+      const track = (await readRace('race-1'))?.track
+
+      expect(track?.scoring).toBe('no-polar-version')
+      // Every row still drawn. The track is where the boat went, which is true whether or not
+      // anything exists to compare it against.
+      expect(track?.heatmap?.counts.rows).toBe(5)
+      expect(track?.heatmap?.counts.overlays.target_speed.scored).toBe(0)
+      // And not reported as rows the Polar could not answer for, which would blame the certificate
+      // for a pointer nobody set.
+      // Counted as an absence — there was nothing to compare against — which keeps every
+      // overlay's tallies adding up to the race. That it is not the certificate's fault is what
+      // the legend's own sentence says.
+      expect(track?.heatmap?.counts.overlays.target_speed.without_value).toBe(3)
+      // And the channel overlays are untouched by a pointer nobody set: a recorded speed does not
+      // depend on a certificate (ADR 0038).
+      expect(track?.heatmap?.counts.overlays.sog.scored).toBe(3)
+      expect(polarIdAsked).toBeNull()
+    })
+
+    it('keeps the page when the Polar it names cannot be read, and says which it is', async () => {
+      polarPayload = null
+
+      const race = await readRace('race-1')
+
+      // Not a 404: the track, the coverage and the Row Quality notes are all still true. "The
+      // comparison could not be read" is a different sentence from "no Polar was recorded", which
+      // is why `scoring` carries three states and not a boolean.
+      expect(race?.track.scoring).toBe('polar-unreadable')
+      expect(race?.track.heatmap?.counts.rows).toBe(5)
+      expect(consoleError).toHaveBeenCalledWith(
+        'Race: the Polar Version polar-v2 this race names could not be read'
+      )
+    })
+
+    it('says there is no track when the window holds no position at all', async () => {
+      // A real case in the archive, and one the page states in words: an empty frame explains
+      // nothing (ADR 0033).
+      stored = LATCHED_FEED.map((row) => ({ ...row, latitude: null, longitude: null }))
+
+      const race = await readRace('race-1')
+
+      expect(race?.track.heatmap).toBeNull()
+      expect(race?.track.scoring).toBe('polar')
     })
   })
 })

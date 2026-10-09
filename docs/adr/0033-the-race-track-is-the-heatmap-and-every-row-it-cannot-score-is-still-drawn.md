@@ -179,6 +179,84 @@ LAY-150 (ADR 0036)**: trust is per-cell, and a Filler-Anchored row is coloured a
 left dotted and uncoloured — so the dotted sub-floor state this ADR shipped no longer exists as its own
 render state. See ADR 0036 for the per-cell rule and the Filler-Anchored marker that replaces it.
 
+> **Further amended by [ADR 0038](./0038-the-track-carries-six-overlays-and-a-reading-is-gated-differently-from-a-ratio.md)
+> (LAY-164).** Three of this ADR's decisions no longer hold as written: the track carries **six**
+> overlays rather than the one ramp below, each with a scale of its own kind; and "the client gets
+> drawn geometry, not rows" is replaced by each row's values and verdicts crossing, with the banding
+> in one shared pure module both sides call — the guarantee it protected is kept, by other means.
+> and the ramp's upper arm is **teal, not blue**. The structure below — diverging, seven bands,
+> amber below, a neutral gray midpoint, one hue per arm — stands exactly as decided; only the hue
+> on the faster side moved, because blue did not read as *better* to the owner sailing with it
+> ("it's really hard to tell what is good vs bad") and is also this system's accent colour, on
+> links and on the selected chip. Teal reads as the good side while keeping this ADR's own
+> constraint — no red arm beside the `--wind-storm` rings — and, unlike green, stays
+> distinguishable from amber for a red-green colour-blind reader. Each arm is still validated as an
+> ordinal ramp: monotone OKLab lightness, adjacent ΔL ≥ 0.07, light ends at 2.4:1 (amber) and 2.3:1
+> (teal) against the sand surface.
+>
+> Everything else here stands, including the diverging ramp itself, the four render states, the
+> Dropout Bridge and the theme-aware legend, which 0037 extends to every scale.
+
+## Amendment 1 — what building it settled (LAY-161)
+
+Four things this ADR deliberately left open, answered by the implementation rather than by a second
+decision ticket. Nothing above is reversed.
+
+**The scoreable count in the table above is out of date, and the reason is ADR 0036.** Measured by
+the shipped code over the same recording, Chicago–Waukegan draws 258 rows and scores **113** of
+them, 31 of those Filler-Anchored — not 64. The 64 was the single-scalar 52° floor's answer; trust
+is per-cell now, so a row sailed below that floor against real cells is scored and one anchored on
+filler is scored *and flagged*. The Frozen (82) and Low-Speed (23) columns reproduce exactly. The
+Maneuver Window column reads **13** rather than 20, because `notCountableReason` gives each row one
+reason in order and the prototype counted every row in a window including ones already counted
+elsewhere — the disjoint accounting is the one under which the counts beneath the legend add up to
+the race. All of it is pinned in `services/analysis/__tests__/archive-track-heatmap.test.ts`.
+
+**The Filler-Anchored marker is the segment stitched in its own band colour** — same hue, same
+weight, a dashed stroke. ADR 0036 left the pixels to whoever implemented it. A texture rather than
+a glyph because it costs no extra ink on a 1,700-segment track, and it survives night vision, where
+a second hue is not available to mark anything with. Its weakness is a single isolated filler row,
+where one dash reads much like a short solid segment; these rows arrive in runs (light air at a low
+angle), and zoom separates them.
+
+**The map opens the half of the page below the Transcription boundary, not the page.** This ADR's
+"first section" was written against the analysis screen's own section list, and the page the archive
+actually has opens with Testimony that ADR 0010 puts above a drawn line. A track is not something
+the sailor said — it is the recording, drawn — so it leads the half of the page that is the
+recording, above Coverage and the Row Quality notes, and the breakdown tiles follow it there.
+
+**An uncoloured track carries its reason.** Three different facts produce one, and grey that means
+"this race records no Polar Version" must not read as grey that means the boat was slow: `RaceTrack`
+carries `polar` / `no-polar-version` / `polar-unreadable`, and the legend says each in words. Nine
+of this archive's races name no Polar at all. Per *segment*, the reason travels as a discriminated
+`TrackNotScored` — this ADR's "not as a boolean or a null percentage" — and reaches the DOM, even
+though several of those states are deliberately drawn as the same hairline.
+
+**A run of one fix is plotted, not dropped.** A heatmap needs a colour per row, so the track is
+segments between consecutive fixes — and a fix with no neighbour to join is in no segment at all.
+Chicago–Waukegan's window loses its feed seventeen times and twice comes back for exactly one fix
+before dying again, so until those two rows were drawn as points they were counted and drawn
+nowhere: the only two rows in thirteen races where this ADR's own "every recorded row is still
+drawn" was false. `TrackMap` already plotted the same case for the same reason.
+
+**One thing left as the prototype decided it, and flagged rather than quietly re-decided.** Two of
+the seven ramp steps are byte-identical to wind-band tokens — `--track-below-2` is `--wind-heavy`'s
+`#C47000` and `--track-above-2` is `--wind-medium`'s `#0055BB`. The *token* refusal this ADR makes is
+honoured and tested: the ramp holds its own seven values, so changing what 16–22 knots looks like
+cannot move what 85–95% of target looks like. But the reason the ADR gives for the refusal is
+perceptual — "one palette for two quantities makes the screen unreadable in the one place it matters
+most" — and at two steps out of seven the palettes do coincide, on a page that will carry both
+quantities. These are the hexes the prototype validated and the owner decided from, and the design
+system has one amber and one blue, so they stand; whoever adds a wind-banded chart to this page
+should look at the two together and say whether the ramp needs its own amber and blue.
+
+One cost is worth naming. The browser test this ADR requires has nothing to open: there is no race
+in any local database, because the archive is hand-entered through the finished UI. So the camera is
+exercised against `app/dev/race-track`, a harness route that 404s unless the server was started with
+`LAYLINE_TRACK_HARNESS=1`, mounting the same component over the same drawing function with a
+synthetic race. It is a fixture page in the production tree, which is a real cost; the alternative
+was no coverage of the one thing only a browser can answer.
+
 ## Consequences
 
 - **`services/analysis/` needs a per-race, full-resolution, per-row read** — every row with its

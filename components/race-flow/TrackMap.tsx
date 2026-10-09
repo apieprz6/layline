@@ -17,7 +17,9 @@
  *
  * Projection is equirectangular with a cos(lat) correction on longitude — exact enough over the two
  * nautical miles a Lake Michigan beer can covers, and it carries a scale bar so nobody has to guess.
- * It is not a chart plotter.
+ * It is not a chart plotter. It lives in `services/recordings/track-projection.ts` rather than here,
+ * because the **Race Track Heatmap** draws the same track on another screen and two copies of a
+ * projection disagree by a few pixels with nothing failing anywhere (ADR 0033).
  *
  * Every time here is absolute seconds in the recording's own naive frame. Nothing constructs a
  * `Date`: an offset would be a claim about a timezone the recording never made.
@@ -30,6 +32,11 @@ import {
   insideRaceWindow,
   type RaceWindowSeconds,
 } from '@/services/recordings/race-window'
+import {
+  niceDistance,
+  projectTrack,
+  scaleBarLabel,
+} from '@/services/recordings/track-projection'
 import type { RaceChartSeries } from '@/types'
 
 import {
@@ -85,40 +92,14 @@ export default function TrackMap({
   const mapHeight = height - RAIL_HEIGHT
   const { row_seconds, latitude, longitude, frozen } = series
 
-  const project = useMemo(() => {
-    let minLat = Infinity
-    let maxLat = -Infinity
-    let minLon = Infinity
-    let maxLon = -Infinity
-
-    for (let at = 0; at < latitude.length; at += 1) {
-      const lat = latitude[at]
-      const lon = longitude[at]
-      if (lat === null || lon === null) continue
-      if (lat < minLat) minLat = lat
-      if (lat > maxLat) maxLat = lat
-      if (lon < minLon) minLon = lon
-      if (lon > maxLon) maxLon = lon
-    }
-
-    if (!Number.isFinite(minLat)) return null
-
-    const midLat = (minLat + maxLat) / 2
-    // Work in "corrected degrees" so one unit east is one unit north on screen.
-    const kx = Math.cos((midLat * Math.PI) / 180)
-    const spanX = Math.max((maxLon - minLon) * kx, 1e-6)
-    const spanY = Math.max(maxLat - minLat, 1e-6)
-    const scale = Math.min((WIDTH - PAD * 2) / spanX, (mapHeight - PAD * 2) / spanY)
-    const centreLon = (minLon + maxLon) / 2
-
-    return {
-      x: (lon: number) => WIDTH / 2 + (lon - centreLon) * kx * scale,
-      // Screen y grows downward; latitude grows north.
-      y: (lat: number) => mapHeight / 2 - (lat - midLat) * scale,
-      /** Metres per screen unit, for a scale bar that states a real distance. */
-      metresPerUnit: 111_320 / scale,
-    }
-  }, [latitude, longitude, mapHeight])
+  const project = useMemo(
+    () =>
+      projectTrack(
+        latitude.map((lat, at) => ({ latitude: lat, longitude: longitude[at] })),
+        { width: WIDTH, height: mapHeight, pad: PAD }
+      ),
+    [latitude, longitude, mapHeight]
+  )
 
   /**
    * The track as runs of points: inside the window, outside it, and broken across both Dropouts and
@@ -490,7 +471,7 @@ export default function TrackMap({
           fontFamily="var(--font-mono)"
           fill="var(--text-muted)"
         >
-          {barMetres >= 1852 ? `${(barMetres / 1852).toFixed(1)} nm` : `${barMetres} m`}
+          {scaleBarLabel(barMetres)}
         </text>
       </g>
 
@@ -556,12 +537,4 @@ export default function TrackMap({
       })}
     </svg>
   )
-}
-
-/** 1-2-5 rounding, so the scale bar reads as a distance somebody would state. */
-function niceDistance(metres: number): number {
-  const power = Math.pow(10, Math.floor(Math.log10(Math.max(metres, 1))))
-  const leading = metres / power
-  const step = leading >= 5 ? 5 : leading >= 2 ? 2 : 1
-  return step * power
 }

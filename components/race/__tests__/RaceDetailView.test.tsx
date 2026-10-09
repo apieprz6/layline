@@ -20,8 +20,14 @@
  * screen than no button, and `deleteRace` refuses a viewer regardless.
  */
 
-import { render, screen, within } from '@testing-library/react'
-import type { RaceAnnotations, RaceBoatSetup, RaceDetail } from '@/types'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import type {
+  RaceAnnotations,
+  RaceBoatSetup,
+  RaceDetail,
+  RaceTrack,
+  TrackRowFacts,
+} from '@/types'
 import RaceDetailView from '../RaceDetailView'
 
 jest.mock('next/navigation', () => ({
@@ -53,7 +59,79 @@ const NOTHING: RaceBoatSetup = {
   logged_tws_mean: null,
 }
 
-function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup = SETUP): RaceDetail {
+/**
+ * A short track, drawn: one scored leg and one the metrics may not read.
+ *
+ * Geometry rather than rows, which is what crosses to this page at all (ADR 0033) — so a fixture
+ * for it is a path string and a band, and the section's own suite is where the drawing is checked.
+ */
+/** One row on the pace, and one the boat spent parked — enough for the section to draw both. */
+const ON_THE_PACE: TrackRowFacts = {
+  row_index: 1,
+  row_time: '2026-06-03T19:04:00',
+  sog: 6.4,
+  tws: 11,
+  twa: 48,
+  cog: 40,
+  target_speed: 6.4,
+  polar_efficiency: 1,
+  target_vmg: 4.6,
+  vmg_efficiency: 0.93,
+  filler_anchored: false,
+  excluded: null,
+  sail_agreement: 'agrees',
+  sail_flown: 'Main + Jib 1',
+  sail_recommended: 'Main + Jib 1',
+}
+
+const PARKED: TrackRowFacts = {
+  ...ON_THE_PACE,
+  row_index: 2,
+  row_time: '2026-06-03T19:04:30',
+  sog: 1.1,
+  polar_efficiency: null,
+  vmg_efficiency: null,
+  excluded: 'low_speed',
+}
+
+const TRACK: RaceTrack = {
+  heatmap: {
+    width: 360,
+    height: 440,
+    metres_per_unit: 4,
+    segments: [
+      { points: '10.0,10.0 20.0,20.0', x1: 10, y1: 10, x2: 20, y2: 20, row: ON_THE_PACE },
+      { points: '20.0,20.0 30.0,25.0', x1: 20, y1: 20, x2: 30, y2: 25, row: PARKED },
+    ],
+    points: [],
+    bridges: [],
+    rings: [],
+    annotations: [],
+    counts: {
+      rows: 3,
+      with_fix: 3,
+      frozen: 0,
+      low_speed: 1,
+      maneuver_window: 0,
+      annotations_not_placed: 0,
+      overlays: {
+        target_speed: { scored: 1, flagged: 0, without_value: 0 },
+        target_vmg: { scored: 1, flagged: 0, without_value: 0 },
+        sog: { scored: 2, flagged: 0, without_value: 0 },
+        tws: { scored: 2, flagged: 0, without_value: 0 },
+        twa: { scored: 2, flagged: 0, without_value: 0 },
+        sail: { scored: 2, flagged: 0, without_value: 0 },
+      },
+    },
+  },
+  scoring: 'polar',
+}
+
+function raceOf(
+  annotations: RaceAnnotations = EMPTY,
+  boatSetup: RaceBoatSetup = SETUP,
+  track: RaceTrack = TRACK
+): RaceDetail {
   return {
     id: 'race-1',
     title: 'Wednesday night',
@@ -83,6 +161,7 @@ function raceOf(annotations: RaceAnnotations = EMPTY, boatSetup: RaceBoatSetup =
       dropout_channels: ['latitude', 'longitude'],
       rows: [],
     },
+    track,
     findings: [],
     annotations,
     boat_setup: boatSetup,
@@ -405,10 +484,15 @@ describe('the line between what the sailor said and what the file said', () => {
 
     const boundary = screen.getByTestId('transcription-boundary')
     expect(boundary).toBeInTheDocument()
-    expect(within(boundary).getByText('Below this line: the recording')).toBeInTheDocument()
-    expect(boundary).toHaveTextContent(/None of it is editable, here or by any other path/)
-    // AC 10 as the page states it: the three figures re-derive, so there is nothing to recompute.
-    expect(boundary).toHaveTextContent(/amending the window above changes them with nothing to recompute/)
+    expect(
+      within(boundary).getByText('Below this line: the recording — not editable')
+    ).toBeInTheDocument()
+    // AC 10 as the page states it, in the disclosure that holds the argument: the figures
+    // re-derive, so there is nothing to recompute.
+    expect(boundary).toHaveTextContent(/None of that is editable by any path/)
+    expect(boundary).toHaveTextContent(
+      /amending the window above changes them with nothing to recompute/
+    )
   })
 
   it('puts Row Quality and Gap Seconds on the recorded side of it', () => {
@@ -430,8 +514,38 @@ describe('the line between what the sailor said and what the file said', () => {
   it('draws the line for a viewer too, because it is a fact about the archive', () => {
     renderRace(raceOf())
 
-    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(
-      /Everything above is what the sailor said/
-    )
+    // Which half of the page is Testimony and which is the recording is a fact about the archive,
+    // not about who is reading it.
+    const boundary = screen.getByTestId('transcription-boundary')
+    expect(within(boundary).getByText('Below this line: the recording')).toBeInTheDocument()
+  })
+
+  it('keeps the argument for the line one tap down rather than five lines in the way', () => {
+    renderRace(raceOf(), true)
+
+    // ADR 0010 wants the boundary stated, and it is — in the heading. *Why* it is there is a
+    // paragraph every reader scrolled past on every visit, which loses an explanation as
+    // thoroughly as never writing it, so it lives in a disclosure that needs no JavaScript.
+    const why = screen.getByTestId('transcription-why')
+    expect(why.tagName).toBe('DETAILS')
+    expect(why).not.toHaveAttribute('open')
+    expect(why).toHaveTextContent(/Above the line is what the sailor said/)
+    expect(why).toHaveTextContent(/kept exactly as it was transcribed/)
+  })
+
+  it('explains the line to whoever can amend, and to nobody else', () => {
+    // The explanation answers "why can't I correct this?", and that is a question only somebody
+    // who can correct *something* has. A viewer may amend nothing on this page, so the disclosure
+    // would answer a question they never asked and imply an affordance they do not have — the same
+    // reason the amend chips are absent for them rather than present and refused (ADR 0019).
+    renderRace(raceOf())
+    expect(screen.queryByTestId('transcription-why')).not.toBeInTheDocument()
+    expect(screen.getByTestId('transcription-boundary')).not.toHaveTextContent(/not editable/)
+
+    cleanup()
+
+    renderRace(raceOf(), true)
+    expect(screen.getByTestId('transcription-why')).toBeInTheDocument()
+    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(/not editable/)
   })
 })
