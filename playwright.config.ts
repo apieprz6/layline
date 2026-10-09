@@ -67,6 +67,20 @@ export default defineConfig({
       testMatch: /auth\.setup\.ts/,
     },
     {
+      // Writes the one synthetic Race the Instrument Tuning charts are driven over, and removes it
+      // again afterwards. Depends on `setup` because it attributes the Race to the admin fixture
+      // that script creates. See `e2e/fixtures/synthetic-race.ts` on why a fixture Race exists at
+      // all when the real archive is measured in Jest.
+      name: 'archive',
+      testMatch: /archive\.setup\.ts/,
+      dependencies: ['setup'],
+      teardown: 'archive-teardown',
+    },
+    {
+      name: 'archive-teardown',
+      testMatch: /archive\.teardown\.ts/,
+    },
+    {
       name: 'mobile-390',
       // `e2e/authenticated/` is guest-proof by construction: these two
       // projects carry no storageState, so a spec that needs a session
@@ -85,13 +99,13 @@ export default defineConfig({
       // authenticated twin.
       name: 'mobile-390-auth',
       testMatch: AUTHENTICATED_DIR,
-      dependencies: ['setup'],
+      dependencies: ['setup', 'archive'],
       use: { ...MOBILE_390, storageState: ADMIN_STORAGE_STATE },
     },
     {
       name: 'desktop-auth',
       testMatch: AUTHENTICATED_DIR,
-      dependencies: ['setup'],
+      dependencies: ['setup', 'archive'],
       use: { ...DESKTOP, storageState: ADMIN_STORAGE_STATE },
     },
   ],
