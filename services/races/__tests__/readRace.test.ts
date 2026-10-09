@@ -9,6 +9,8 @@
  * that looks fine and describes a third of the race.
  */
 
+import { overlayPaint } from '@/services/analysis/track-overlays'
+
 import { readRace } from '../readRace'
 
 const raceMaybeSingle = jest.fn()
@@ -716,8 +718,13 @@ describe('readRace', () => {
       // since a frozen row repeats a position — and they carry no colour.
       expect(track?.heatmap?.counts.frozen).toBe(2)
       expect(track?.heatmap?.rings).toHaveLength(2)
-      expect(track?.heatmap?.counts.scored).toBe(3)
-      expect(track?.heatmap?.segments.filter((segment) => segment.band !== null)).toHaveLength(2)
+      expect(track?.heatmap?.counts.overlays.target_speed.scored).toBe(3)
+      // Two legs coloured on percent of target: the three live rows are joined by two of them.
+      expect(
+        track?.heatmap?.segments.filter(
+          (segment) => overlayPaint('target_speed', segment.row, true).band !== null
+        )
+      ).toHaveLength(2)
     })
 
     it('scores it against the Polar Version the Race holds, by id', async () => {
@@ -740,10 +747,13 @@ describe('readRace', () => {
       // Every row still drawn. The track is where the boat went, which is true whether or not
       // anything exists to compare it against.
       expect(track?.heatmap?.counts.rows).toBe(5)
-      expect(track?.heatmap?.counts.scored).toBe(0)
+      expect(track?.heatmap?.counts.overlays.target_speed.scored).toBe(0)
       // And not reported as rows the Polar could not answer for, which would blame the certificate
       // for a pointer nobody set.
-      expect(track?.heatmap?.counts.without_target).toBe(0)
+      expect(track?.heatmap?.counts.overlays.target_speed.without_value).toBe(0)
+      // And the channel overlays are untouched by a pointer nobody set: a recorded speed does not
+      // depend on a certificate (ADR 0037).
+      expect(track?.heatmap?.counts.overlays.sog.scored).toBe(3)
       expect(polarIdAsked).toBeNull()
     })
 

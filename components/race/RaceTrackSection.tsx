@@ -20,8 +20,7 @@ import type { ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 import type { RaceTrack } from '@/types'
 
-import TrackHeatmapFrame from './TrackHeatmapFrame'
-import TrackHeatmapLegend from './TrackHeatmapLegend'
+import TrackHeatmap from './TrackHeatmap'
 
 const SECTION_HEADING = {
   margin: 0,
@@ -30,11 +29,6 @@ const SECTION_HEADING = {
   letterSpacing: '0.1em',
   color: 'var(--text-muted)',
 }
-
-/** What the map is, for a reader who cannot see it. Said once, here, and passed in. */
-const LABEL =
-  'The race track, with each stretch coloured by how the boat compared with its target speed ' +
-  'there. Zoomable and pannable.'
 
 export default function RaceTrackSection({ track }: { track: RaceTrack }): ReactElement {
   return (
@@ -56,10 +50,7 @@ export default function RaceTrackSection({ track }: { track: RaceTrack }): React
           draw. Everything else on this page still describes it.
         </p>
       ) : (
-        <>
-          <TrackHeatmapFrame heatmap={track.heatmap} label={LABEL} />
-          <TrackHeatmapLegend counts={track.heatmap.counts} scoring={track.scoring} />
-        </>
+        <TrackHeatmap heatmap={track.heatmap} scoring={track.scoring} />
       )}
     </section>
   )

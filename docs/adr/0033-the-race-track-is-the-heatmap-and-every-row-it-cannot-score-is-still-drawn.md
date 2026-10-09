@@ -179,6 +179,14 @@ LAY-150 (ADR 0036)**: trust is per-cell, and a Filler-Anchored row is coloured a
 left dotted and uncoloured — so the dotted sub-floor state this ADR shipped no longer exists as its own
 render state. See ADR 0036 for the per-cell rule and the Filler-Anchored marker that replaces it.
 
+> **Further amended by [ADR 0037](./0037-the-track-carries-six-overlays-and-a-reading-is-gated-differently-from-a-ratio.md)
+> (LAY-164).** Two of this ADR's decisions no longer hold as written: the track carries **six**
+> overlays rather than the one ramp below, each with a scale of its own kind; and "the client gets
+> drawn geometry, not rows" is replaced by each row's values and verdicts crossing, with the banding
+> in one shared pure module both sides call — the guarantee it protected is kept, by other means.
+> Everything else here stands, including the diverging ramp itself, the four render states, the
+> Dropout Bridge and the theme-aware legend, which 0037 extends to every scale.
+
 ## Amendment 1 — what building it settled (LAY-161)
 
 Four things this ADR deliberately left open, answered by the implementation rather than by a second

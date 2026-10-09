@@ -96,6 +96,19 @@ const COURSE: Leg[] = [
   { rows: 12, north: -0.0007, east: 0.0005, twa: '90', sog: '8.6' },
 ]
 
+/**
+ * The course the leg is actually drawn on, in degrees true, so the `COG` overlay agrees with the
+ * shape of the track rather than contradicting it.
+ *
+ * A frozen leg goes nowhere, and a course from a zero-length step would be an invented bearing, so
+ * it reports the one it held before stalling — which is what a dead feed does anyway: repeat.
+ */
+function courseOf(leg: Leg): string {
+  if (leg.north === 0 && leg.east === 0) return '45'
+  const degrees = (Math.atan2(leg.east, leg.north) * 180) / Math.PI
+  return String(Math.round((degrees + 360) % 360))
+}
+
 export function harnessRows(): TrackHeatmapRow[] {
   const rows: TrackHeatmapRow[] = []
   let lat = LAT
@@ -134,6 +147,7 @@ export function harnessRows(): TrackHeatmapRow[] {
         latitude: lat.toFixed(6),
         longitude: lon.toFixed(6),
         sog: leg.sog,
+        cog: courseOf(leg),
         tws: '10',
         twa: leg.twa,
       })

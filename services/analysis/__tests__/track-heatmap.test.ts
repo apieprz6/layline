@@ -18,13 +18,11 @@
  */
 
 import {
-  TRACK_BANDS,
   dropoutDuration,
   raceTrackHeatmap,
-  trackBand,
-  trackBandColour,
   type TrackHeatmapRow,
 } from '@/services/analysis/track-heatmap'
+import { overlayPaint } from '@/services/analysis/track-overlays'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import type { Maneuver, PolarPayload } from '@/types'
 
@@ -68,6 +66,7 @@ interface RowOptions {
   sog?: string | null
   tws?: string | null
   twa?: string | null
+  cog?: string | null
   positioned?: boolean
 }
 
@@ -84,6 +83,7 @@ function row(index: number, options: RowOptions = {}): TrackHeatmapRow {
     sog = '6.75',
     tws = '10',
     twa = '55',
+    cog = '40',
     positioned = true,
   } = options
 
@@ -103,47 +103,22 @@ function row(index: number, options: RowOptions = {}): TrackHeatmapRow {
     latitude: positioned ? (41.85 + north).toFixed(6) : null,
     longitude: positioned ? (-87.55 + north).toFixed(6) : null,
     sog,
+    cog,
     tws,
     twa,
   }
 }
 
-describe('the seven-band diverging ramp', () => {
-  it('centres on 100% with a neutral midpoint and one hue each side', () => {
-    expect(TRACK_BANDS.map((band) => band.band)).toEqual([
-      'below-3',
-      'below-2',
-      'below-1',
-      'at',
-      'above-1',
-      'above-2',
-      'above-3',
-    ])
-  })
-
-  it('reads each band off its own upper edge, which belongs to the band above', () => {
-    expect(trackBand(0.5)).toBe('below-3')
-    expect(trackBand(0.8499)).toBe('below-3')
-    expect(trackBand(0.85)).toBe('below-2')
-    expect(trackBand(0.9799)).toBe('below-1')
-    // 98–102% is one band, so a boat two percent either side of target reads as on it.
-    expect(trackBand(0.98)).toBe('at')
-    expect(trackBand(1.0)).toBe('at')
-    expect(trackBand(1.0199)).toBe('at')
-    expect(trackBand(1.02)).toBe('above-1')
-    expect(trackBand(1.15)).toBe('above-3')
-    expect(trackBand(4.8)).toBe('above-3')
-  })
-
-  it('names a token and never a hex, so the theme stays in charge', () => {
-    // After dark `.theme-nightvision` collapses both arms onto one red depth ramp. A chart escaping
-    // the theme is the one thing `globals.css` forbids, which is why nothing here knows a colour.
-    expect(trackBandColour('below-2')).toBe('var(--track-below-2)')
-    expect(trackBandColour('at')).toBe('var(--track-at)')
-    // And never a wind-speed token: those mean an absolute speed, on the same screen (ADR 0033).
-    expect(TRACK_BANDS.map((band) => trackBandColour(band.band)).join(' ')).not.toMatch(/--wind-/)
-  })
-})
+/** How the chosen overlay paints each leg, which is the question every assertion below asks. */
+function bandsOf(
+  heatmap: ReturnType<typeof raceTrackHeatmap>,
+  overlay: Parameters<typeof overlayPaint>[0] = 'target_speed',
+  hasPolar = true
+): (string | null)[] {
+  return (heatmap?.segments ?? []).map(
+    (segment) => overlayPaint(overlay, segment.row, hasPolar).band
+  )
+}
 
 describe('a race’s track, drawn', () => {
   it('draws every recorded row and colours only the ones a metric may read', () => {
@@ -162,12 +137,12 @@ describe('a race’s track, drawn', () => {
     expect(heatmap?.segments).toHaveLength(4)
     expect(heatmap?.counts.rows).toBe(5)
     expect(heatmap?.counts.with_fix).toBe(5)
-    expect(heatmap?.counts.scored).toBe(3)
+    expect(heatmap?.counts.overlays.target_speed.scored).toBe(3)
     expect(heatmap?.counts.low_speed).toBe(1)
     expect(heatmap?.counts.maneuver_window).toBe(1)
 
     // The two excluded rows' legs carry no band, and the colour is not borrowed from a neighbour.
-    expect(heatmap?.segments.map((segment) => segment.band)).toEqual([null, null, 'at', 'at'])
+    expect(bandsOf(heatmap)).toEqual([null, null, 'track-at', 'track-at'])
   })
 
   it('tells the renderer *why* a leg carries no colour, rather than handing it a null', () => {
@@ -184,7 +159,9 @@ describe('a race’s track, drawn', () => {
 
     const heatmap = raceTrackHeatmap(rows, TARGETS)
 
-    expect(heatmap?.segments.map((segment) => segment.not_scored)).toEqual([
+    expect(
+      heatmap?.segments.map((segment) => overlayPaint('target_speed', segment.row, true).not_scored)
+    ).toEqual([
       'low_speed',
       'maneuver_window',
       'no_target',
@@ -196,8 +173,12 @@ describe('a race’s track, drawn', () => {
     const withoutPolar = raceTrackHeatmap([row(0), row(1)], null)
     const offAxis = raceTrackHeatmap([row(0), row(1, { tws: '40' })], TARGETS)
 
-    expect(withoutPolar?.segments[0].not_scored).toBe('no_polar_version')
-    expect(offAxis?.segments[0].not_scored).toBe('no_target')
+    expect(overlayPaint('target_speed', withoutPolar!.segments[0].row, false).not_scored).toBe(
+      'no_polar_version'
+    )
+    expect(overlayPaint('target_speed', offAxis!.segments[0].row, true).not_scored).toBe(
+      'no_target'
+    )
   })
 
   it('never lets an uncomputable percent paint itself as the fastest band', () => {
@@ -206,8 +187,10 @@ describe('a race’s track, drawn', () => {
     // the last band and claim the boat was above 115% of target.
     const heatmap = raceTrackHeatmap([row(0), row(1, { sog: null })], TARGETS)
 
-    expect(heatmap?.segments[0].band).toBeNull()
-    expect(heatmap?.segments[0].not_scored).toBe('no_target')
+    expect(bandsOf(heatmap)[0]).toBeNull()
+    expect(overlayPaint('target_speed', heatmap!.segments[0].row, true).not_scored).toBe(
+      'no_target'
+    )
   })
 
   it('refuses a flattering percentage on a row the boat spent parked', () => {
@@ -217,12 +200,12 @@ describe('a race’s track, drawn', () => {
 
     // The leg into the parked row carries no band. The counts are per *row*, and row 0 is scored
     // while drawing no leg of its own — a race's first fix has nothing behind it to join.
-    expect(heatmap?.segments[0].band).toBeNull()
-    expect(heatmap?.counts.scored).toBe(1)
+    expect(bandsOf(heatmap)[0]).toBeNull()
+    expect(heatmap?.counts.overlays.target_speed.scored).toBe(1)
     expect(heatmap?.counts.low_speed).toBe(1)
     // Not counted as a row the Polar could not answer for, either: the Polar answered fine and
     // ADR 0025 is what excluded it.
-    expect(heatmap?.counts.without_target).toBe(0)
+    expect(heatmap?.counts.overlays.target_speed.without_value).toBe(0)
   })
 
   it('colours a Filler-Anchored row by its own percent and marks it', () => {
@@ -233,17 +216,17 @@ describe('a race’s track, drawn', () => {
 
     const heatmap = raceTrackHeatmap(rows, TARGETS)
 
-    expect(heatmap?.segments[0].filler_anchored).toBe(true)
-    expect(heatmap?.segments[0].band).not.toBeNull()
-    expect(heatmap?.counts.scored).toBe(2)
-    expect(heatmap?.counts.filler_anchored).toBe(2)
+    expect(overlayPaint('target_speed', heatmap!.segments[0].row, true).flagged).toBe(true)
+    expect(bandsOf(heatmap)[0]).not.toBeNull()
+    expect(heatmap?.counts.overlays.target_speed.scored).toBe(2)
+    expect(heatmap?.counts.overlays.target_speed.flagged).toBe(2)
   })
 
   it('leaves a fully measured row unmarked, so the two still read apart', () => {
     const heatmap = raceTrackHeatmap([row(0), row(1)], TARGETS)
 
-    expect(heatmap?.segments[0].filler_anchored).toBe(false)
-    expect(heatmap?.counts.filler_anchored).toBe(0)
+    expect(overlayPaint('target_speed', heatmap!.segments[0].row, true).flagged).toBe(false)
+    expect(heatmap?.counts.overlays.target_speed.flagged).toBe(0)
   })
 
   it('draws a row the Polar cannot answer for as an absence of colour, never as a value', () => {
@@ -253,17 +236,17 @@ describe('a race’s track, drawn', () => {
 
     const heatmap = raceTrackHeatmap(rows, TARGETS)
 
-    expect(heatmap?.segments[0].band).toBeNull()
-    expect(heatmap?.counts.without_target).toBe(1)
-    expect(heatmap?.counts.scored).toBe(2)
+    expect(bandsOf(heatmap)[0]).toBeNull()
+    expect(heatmap?.counts.overlays.target_speed.without_value).toBe(1)
+    expect(heatmap?.counts.overlays.target_speed.scored).toBe(2)
   })
 
   it('colours nothing when the race records no Polar, and blames the certificate for none of it', () => {
     const heatmap = raceTrackHeatmap([row(0), row(1), row(2)], null)
 
-    expect(heatmap?.segments.every((segment) => segment.band === null)).toBe(true)
-    expect(heatmap?.counts.scored).toBe(0)
-    expect(heatmap?.counts.without_target).toBe(0)
+    expect(bandsOf(heatmap, 'target_speed', false).every((band) => band === null)).toBe(true)
+    expect(heatmap?.counts.overlays.target_speed.scored).toBe(0)
+    expect(heatmap?.counts.overlays.target_speed.without_value).toBe(0)
   })
 
   it('accounts for every row it was given, in one tally each', () => {
@@ -282,23 +265,30 @@ describe('a race’s track, drawn', () => {
 
     const counts = raceTrackHeatmap(rows, TARGETS)?.counts
 
-    expect(counts).toEqual({
-      rows: 8,
-      with_fix: 8,
-      scored: 2,
-      filler_anchored: 0,
-      frozen: 3,
-      low_speed: 1,
-      maneuver_window: 1,
-      without_target: 1,
-    })
-    const tallied =
-      (counts?.scored ?? 0) +
-      (counts?.frozen ?? 0) +
-      (counts?.low_speed ?? 0) +
-      (counts?.maneuver_window ?? 0) +
-      (counts?.without_target ?? 0)
-    expect(tallied).toBe(counts?.rows)
+    expect(counts?.rows).toBe(8)
+    expect(counts?.with_fix).toBe(8)
+    expect(counts?.frozen).toBe(3)
+    expect(counts?.low_speed).toBe(1)
+    expect(counts?.maneuver_window).toBe(1)
+    expect(counts?.overlays.target_speed).toEqual({ scored: 2, flagged: 0, without_value: 1 })
+
+    // Percent of target accounts for all eight by its own reasons…
+    const target = counts?.overlays.target_speed
+    expect(
+      (target?.scored ?? 0) +
+        (target?.without_value ?? 0) +
+        (counts?.frozen ?? 0) +
+        (counts?.low_speed ?? 0) +
+        (counts?.maneuver_window ?? 0)
+    ).toBe(counts?.rows)
+
+    // …and so does a reading, by *fewer* of them: a parked or mid-manoeuvre row's speed over the
+    // ground is simply what the GPS recorded, so only the dead feed is excluded (ADR 0037).
+    const sog = counts?.overlays.sog
+    expect(sog).toEqual({ scored: 5, flagged: 0, without_value: 0 })
+    expect((sog?.scored ?? 0) + (sog?.without_value ?? 0) + (counts?.frozen ?? 0)).toBe(
+      counts?.rows
+    )
   })
 
   it('draws the frame it was asked for, not the shape of the track', () => {
@@ -356,8 +346,8 @@ describe('a race’s track, drawn', () => {
     expect(heatmap?.points).toHaveLength(2)
     expect(heatmap?.segments).toHaveLength(1)
     // And it is a point with its own reading on it, not an undifferentiated dot.
-    expect(heatmap?.points[0].band).toBe('at')
-    expect(heatmap?.points[0].not_scored).toBeNull()
+    expect(overlayPaint('target_speed', heatmap!.points[0].row, true).band).toBe('track-at')
+    expect(overlayPaint('target_speed', heatmap!.points[0].row, true).not_scored).toBeNull()
   })
 
   it('plots a lone fix the metrics may not read without colouring it', () => {
@@ -373,8 +363,8 @@ describe('a race’s track, drawn', () => {
     const heatmap = raceTrackHeatmap(rows, TARGETS)
 
     expect(heatmap?.points).toHaveLength(1)
-    expect(heatmap?.points[0].band).toBeNull()
-    expect(heatmap?.points[0].not_scored).toBe('low_speed')
+    expect(overlayPaint('target_speed', heatmap!.points[0].row, true).band).toBeNull()
+    expect(overlayPaint('target_speed', heatmap!.points[0].row, true).not_scored).toBe('low_speed')
   })
 })
 

@@ -1725,24 +1725,39 @@ export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
 // forced — a projection carries closures and cannot be serialised at all.
 
 /**
- * One of the seven bands of the percent-of-**Target Speed** diverging ramp, centred on 100%.
+ * Which quantity the track is coloured by (ADR 0037).
  *
- * A band and not a colour, so the hex stays in `globals.css` where the theme owns it: after dark
- * `.theme-nightvision` collapses both arms onto one red depth ramp, which is the theme's whole
- * proposition and the reason the legend must change its own words rather than its swatches.
- *
- * Amber below, neutral gray at the midpoint, blue above — never the wind-speed tokens, which mean
- * a different quantity on the same screen (ADR 0033). `services/analysis/track-heatmap.ts` holds
- * the one list of edges every band is read off.
+ * The first two are **performance metrics** and the rest are **readings**, which is not a
+ * cosmetic distinction: it decides which rows each may colour, because ADR 0025 excludes
+ * Low-Speed and mid-manoeuvre rows from a metric and has nothing to say about a channel.
+ * `services/analysis/track-overlays.ts` holds every scale and every gate.
  */
-export type TrackBand =
-  | 'below-3'
-  | 'below-2'
-  | 'below-1'
-  | 'at'
-  | 'above-1'
-  | 'above-2'
-  | 'above-3'
+export type TrackOverlay = 'target_speed' | 'target_vmg' | 'sog' | 'tws' | 'twa' | 'cog'
+
+/**
+ * A band, named as the design token that paints it.
+ *
+ * A token and never a hex, so the theme stays in charge: after dark `.theme-nightvision` collapses
+ * every one of these to a red depth ramp, which is the theme's whole proposition and the reason
+ * each scale's legend must change its own *words* rather than its swatches.
+ *
+ * Five families, one per scale shape. The ratio ramp is ADR 0033's — amber below, neutral gray at
+ * the midpoint, blue above, and never the wind-speed tokens, which mean a different quantity. The
+ * `wind-*` family appears here for exactly one overlay, `TWS`, which *is* that quantity.
+ */
+export type TrackBandToken =
+  | 'track-below-3'
+  | 'track-below-2'
+  | 'track-below-1'
+  | 'track-at'
+  | 'track-above-1'
+  | 'track-above-2'
+  | 'track-above-3'
+  | `track-speed-${1 | 2 | 3 | 4 | 5}`
+  | `wind-${'light' | 'medium' | 'heavy' | 'storm'}`
+  | `track-port-${1 | 2 | 3}`
+  | `track-stbd-${1 | 2 | 3}`
+  | `track-cog-${'n' | 'e' | 's' | 'w'}`
 
 /**
  * Why a drawn row carries no colour — the state, never a bare null.
@@ -1770,36 +1785,89 @@ export type TrackNotScored =
   | 'no_target'
   /** The race records no **Polar Version** at all, so there is nothing to be a percent of. */
   | 'no_polar_version'
+  /** A channel overlay whose own channel this row left blank. Not an exclusion — an absence. */
+  | 'no_reading'
 
-/** What a row's own reading makes of it: a band, or the reason there is none. */
+/** What a row makes of one overlay: a band, or the reason there is none. */
 export interface TrackPaint {
-  /** Null for a row that carries no measurement, which is drawn as an uncoloured hairline. */
-  band: TrackBand | null
+  /** Null for a row this overlay cannot colour, which is drawn as an uncoloured hairline. */
+  band: TrackBandToken | null
   /** Set exactly when `band` is null. */
   not_scored: TrackNotScored | null
   /**
-   * The row's **Target Speed** interpolated through at least one of the Polar's manufactured
-   * filler cells (ADR 0036).
+   * The figure rests on at least one of the Polar's manufactured filler cells — **Filler-Anchored**
+   * (ADR 0036).
    *
    * Coloured by its own percent like any other row *and* marked, because the doubt belongs on the
-   * number rather than in place of it. Always false where `band` is null: there is no figure for a
-   * flag to qualify.
+   * number rather than in place of it. Only ever true on a ratio overlay: it is a property of the
+   * comparison, not of the reading.
    */
-  filler_anchored: boolean
+  flagged: boolean
 }
 
 /**
- * One leg of the track: the stretch between two consecutive fixes, carrying the state of the row
- * it arrives at.
+ * Everything the map knows about one row: the values, and the verdicts on them.
+ *
+ * This is what crosses to the client, and it is the amendment ADR 0037 makes to ADR 0033's
+ * "drawn geometry, not rows". The reason that rule existed — the client must not be able to
+ * re-decide what a row meant — is kept by a different means: every value and every verdict here is
+ * computed on the server, and the banding both sides apply lives in one shared pure module. What
+ * the client gains is the ability to switch overlay without a round trip, and to read a stretch of
+ * track out when the sailor taps it, neither of which is a decision.
+ *
+ * Numbers rather than the Transcription's text, because these have been read already — by
+ * `channelValue`, which is the one place a blank becomes null rather than a zero.
+ */
+export interface TrackRowFacts {
+  row_index: number
+  /** The recording's own naive stamp, which the readout prints verbatim (ADR 0008). */
+  row_time: string
+  /** Knots over the ground. **Position-Derived**: the GPS's own figure. */
+  sog: number | null
+  /** Knots of true wind. **Computed** by qtVlm, never a masthead reading (ADR 0008). */
+  tws: number | null
+  /** Signed, −180..180, positive = starboard. Computed, like every wind figure. */
+  twa: number | null
+  /** Course over the ground, degrees true. Position-Derived. */
+  cog: number | null
+  /** What the Polar says the boat could have done here, in knots. Null where it cannot answer. */
+  target_speed: number | null
+  /** `SOG` over **Target Speed** (ADR 0027). */
+  polar_efficiency: number | null
+  /** The **Target VMG** *estimate* for this leg and wind speed. Carries a standing caveat. */
+  target_vmg: number | null
+  /** **VMG** over Target VMG. */
+  vmg_efficiency: number | null
+  /** Either target read through a manufactured cell of the Polar (ADR 0036). */
+  filler_anchored: boolean
+  /**
+   * Which of ADR 0025's three exclusions applies to this row, or null where none does.
+   *
+   * `NotCountableReason`'s own words — `services/analysis/track-heatmap.ts` assigns one straight
+   * into this field, so a fourth reason there stops compiling here.
+   */
+  excluded: 'frozen' | 'low_speed' | 'maneuver_window' | null
+}
+
+/**
+ * One leg of the track: the stretch between two consecutive fixes, carrying the row it arrives at.
  *
  * One segment per row transition rather than one polyline per run, because the colour has to
  * change where the boat's performance changed. No segment is emitted across a **Dropout** or a
  * missing fix, so a stall is visible as absence rather than as a straight line through water the
  * boat may never have crossed.
+ *
+ * The endpoints travel as numbers as well as a path string, because a tap has to find the nearest
+ * leg and parsing the string back would be the same numbers read twice.
  */
-export interface TrackSegment extends TrackPaint {
-  /** `x1,y1 x2,y2` in the frame's own units. */
+export interface TrackSegment {
+  /** `x1,y1 x2,y2` in the frame's own units, ready to hand to a `<polyline>`. */
   points: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  row: TrackRowFacts
 }
 
 /**
@@ -1810,9 +1878,10 @@ export interface TrackSegment extends TrackPaint {
  * "every recorded row is drawn" true at the edges. `TrackMap` plots the same case for the same
  * reason.
  */
-export interface TrackPoint extends TrackPaint {
+export interface TrackPoint {
   x: number
   y: number
+  row: TrackRowFacts
 }
 
 /**
@@ -1857,15 +1926,30 @@ export interface TrackHeatmapCounts {
   rows: number
   /** Rows carrying a position at all. A row without one is in no part of the picture. */
   with_fix: number
-  /** Rows coloured on the ramp: **Countable**, with a **Target Speed**. */
-  scored: number
-  /** How many of those are **Filler-Anchored**. Stated, never used to exclude. */
-  filler_anchored: number
   frozen: number
   low_speed: number
   maneuver_window: number
-  /** Countable rows the Polar could not answer for — outside an axis, or over an empty cell. */
-  without_target: number
+  /**
+   * What each overlay could and could not colour, since they do not agree.
+   *
+   * A Low-Speed row carries no percent of target and does carry a speed over the ground, so one
+   * tally for all six would be wrong for five of them — and the sentence under the legend is about
+   * the overlay the sailor is looking at.
+   */
+  overlays: Record<TrackOverlay, TrackOverlayCounts>
+}
+
+/** One overlay's own coverage of a race. */
+export interface TrackOverlayCounts {
+  /** Rows this overlay colours. */
+  scored: number
+  /** How many of those are **Filler-Anchored**. Stated, never used to exclude. */
+  flagged: number
+  /**
+   * Rows it leaves uncoloured for want of a value rather than by an exclusion — the Polar off its
+   * axis for a ratio, a blank channel for a reading.
+   */
+  without_value: number
 }
 
 /**

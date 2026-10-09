@@ -43,7 +43,17 @@ export default function RaceTrackHarnessPage(): ReactElement {
   const heatmap = raceTrackHeatmap(harnessRows(), polarTargets(HARNESS_POLAR))
 
   return (
-    <div style={{ background: 'var(--page-bg)', minHeight: '100vh', padding: spacing(4) }}>
+    // The same column the race page gives this section — `maxWidth: 720` and a `spacing(4)` gutter
+    // — so what a screenshot here shows is what the page shows, at both the 390px target and on a
+    // desktop window.
+    <div
+      style={{
+        background: 'var(--page-bg)',
+        minHeight: '100vh',
+        padding: spacing(4),
+        maxWidth: 720,
+      }}
+    >
       <p style={{ margin: `0 0 ${spacing(3)}`, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
         Test harness — a synthetic race, not the archive.
       </p>

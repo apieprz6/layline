@@ -101,6 +101,39 @@
   --track-above-2: #0055BB;   /* 105–115% */
   --track-above-3: #002277;   /* above 115% */
 
+  /* The Race Track Heatmap's other three scales (ADR 0037). One scale shape per quantity: a
+     ratio diverges about 100% (above), a speed is sequential, a signed angle diverges by tack,
+     and a course is cyclic and so is drawn as four quadrants rather than as a hue wheel the
+     design system does not have — and could not keep after dark.
+     TWS has no family here on purpose: it is wind speed, so it reads the --wind-* bands, which is
+     the one place those tokens are the right ones. */
+
+  /* Boat speed over the ground, in knots: one hue, light to dark. Monotone OKLab lightness,
+     adjacent ΔL ≥ 0.069, light end 2.1:1 against the sand surface, measured. */
+  --track-speed-1: #7FA8E4;   /* under 3 kt */
+  --track-speed-2: #4A86DB;   /* 3–4.5 */
+  --track-speed-3: #0055BB;   /* 4.5–6 */
+  --track-speed-4: #003399;   /* 6–7.5 */
+  --track-speed-5: #002277;   /* over 7.5 */
+
+  /* True wind angle: the tack by hue — the --tack-* pair's own crimson and green, so a port leg
+     here is the colour port is everywhere else — and depth for how far off the wind. Each arm is
+     monotone with adjacent ΔL ≥ 0.12 and a light end above 2:1. */
+  --track-port-1: #E8788F;    /* close-hauled, port */
+  --track-port-2: #DC143C;    /* reaching, port */
+  --track-port-3: #8E0C26;    /* running, port */
+  --track-stbd-1: #4FB383;    /* close-hauled, starboard */
+  --track-stbd-2: #1E8E5A;    /* reaching, starboard */
+  --track-stbd-3: #0F5436;    /* running, starboard */
+
+  /* Course over the ground, as four compass quadrants. Categorical, so these vary by hue first —
+     four distinct hues, each at 3.2:1 or better against the sand surface, with their lightness
+     spread as well so the four stay apart for a colour-blind reader. */
+  --track-cog-n: #00524A;     /* northerly, 315–45° */
+  --track-cog-e: #3C82E8;     /* easterly, 45–135° */
+  --track-cog-s: #B05A00;     /* southerly, 135–225° */
+  --track-cog-w: #7B23A8;     /* westerly, 225–315° */
+
   /* Semantic — UI states */
   --state-success: #007A2F;
   --state-warning: #C47000;
@@ -414,6 +447,28 @@
   --track-above-1: #E82626;
   --track-above-2: #C00000;
   --track-above-3: #8E0000;
+
+  /* The other three scales after dark. Each loses something different, and each legend says which
+     (ADR 0037): the speed ramp survives intact — one hue in, one hue out — the tack pair collapses
+     so that depth is the angle and the tack comes from the numbers, and the four quadrants keep
+     four steps because four is what one red ramp can hold apart. */
+  --track-speed-1: #FFB3B3;
+  --track-speed-2: #FF6B6B;
+  --track-speed-3: #E82626;
+  --track-speed-4: #C00000;
+  --track-speed-5: #8E0000;
+
+  --track-port-1: #E82626;
+  --track-port-2: #C00000;
+  --track-port-3: #8E0000;
+  --track-stbd-1: #E82626;
+  --track-stbd-2: #C00000;
+  --track-stbd-3: #8E0000;
+
+  --track-cog-n: #FFB3B3;
+  --track-cog-e: #E82626;
+  --track-cog-s: #C00000;
+  --track-cog-w: #8E0000;
 
   --state-success: #AA2222;
   --state-warning: #CC3300;

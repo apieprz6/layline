@@ -1,13 +1,16 @@
 'use client'
 
 /**
- * The **Race Track Heatmap**'s frame: a stable box the sailor zooms and pans inside.
+ * The **Race Track Heatmap**'s frame: a stable box the sailor zooms, pans and taps inside.
  *
- * The one Client Component in this section, and it owns exactly one thing — the camera. It takes
- * *drawn* geometry rather than rows: the projection and the state classification happened on the
- * server, and what crossed the boundary is a list of `x,y x,y` strings with a band each. That is
- * both the cheap thing to serialise (a 1,743-row recording is already reduced to path strings) and
- * the honest split, since nothing on this side can re-decide what a row meant (ADR 0033).
+ * It owns the camera and the hit test, and nothing else — which overlay is painted and which row
+ * is selected are its caller's state, because the legend and the readout need the same two answers
+ * and two copies of them would drift.
+ *
+ * It takes drawn geometry with each row's facts attached, and bands them through
+ * `track-overlays.ts` — the same module the server tallies its counts with, so a band this draws
+ * cannot be one the rules refuse (ADR 0037). The projection stays on the server: it carries
+ * closures and cannot be serialised at all.
  *
  * Three constraints the prototype got wrong first, each load-bearing here:
  *
@@ -18,14 +21,16 @@
  * ink that is not geography — type, ring radii — divides the zoom back out: zooming in is for
  * separating the segments, not fattening them.
  *
- * **Touch belongs to the page until the sailor zooms in.** A 440-unit-tall map on a 390px phone
- * would otherwise swallow every attempt to scroll past it, and at 1× the whole track is in frame
- * with nothing to pan to. So `touch-action` switches on zoom state and the ⤢ button hands the
- * gesture back.
+ * **Touch belongs to the page until the sailor zooms in.** A map this tall on a 390px phone would
+ * otherwise swallow every attempt to scroll past it, and at 1× the whole track is in frame with
+ * nothing to pan to. So `touch-action` switches on zoom state and the ⤢ button hands the gesture
+ * back. A *tap* is never swallowed, at any zoom, because it is read on pointer-up from a pointer
+ * that did not travel.
  *
  * **The box never changes shape.** A frame that took the track's aspect ratio reflows the page
  * between races and still cannot make a 25nm point-to-point legible on a phone, which is why the
- * answer to a long thin track is zoom rather than a reshaped frame.
+ * answer to a long thin track is zoom rather than a reshaped frame. Its *size* is fluid: the
+ * `viewBox` holds the projection true at whatever width the column gives it.
  */
 
 import {
@@ -37,12 +42,13 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { dropoutDuration, trackBandColour } from '@/services/analysis/track-heatmap'
+import { dropoutDuration } from '@/services/analysis/track-heatmap'
+import { overlayColour, overlayPaint } from '@/services/analysis/track-overlays'
 import { niceDistance, scaleBarLabel } from '@/services/recordings/track-projection'
 import { spacing } from '@/lib/utils/design'
-import type { RaceTrackHeatmap, TrackBand } from '@/types'
+import type { RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@/types'
 
-import { DROPOUT, FILLER_DASH, HAIRLINE, TRACK_STROKE } from './track-ink'
+import { DROPOUT, FILLER_DASH, HAIRLINE, SELECTION, TRACK_STROKE } from './track-ink'
 
 const MIN_ZOOM = 1
 /** Chicago–Waukegan is ~25nm end to end: at 12× a 390px screen covers about a quarter-mile of it. */
@@ -52,6 +58,18 @@ const STEP = 1.6
 
 /** The frame's own padding, matching `TRACK_BOX`'s, for the chrome drawn in box coordinates. */
 const PAD = 12
+
+/**
+ * How far a pointer may travel and still count as a tap, in CSS pixels.
+ *
+ * A finger never lands still, so zero would make the track untappable on the one device this is
+ * designed for; much more than this and a short pan would select a stretch the sailor was only
+ * dragging past.
+ */
+const TAP_SLOP = 6
+
+/** How near a tap has to land, in box units, before it is taken to mean *that* stretch. */
+const TAP_REACH = 20
 
 interface View {
   zoom: number
@@ -90,24 +108,51 @@ function about(view: View, next: number, px: number, py: number): View {
   }
 }
 
+/** How far (`px`, `py`) is from the segment `a`–`b`, in box units. */
+function distanceToSegment(
+  px: number,
+  py: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const lengthSquared = dx * dx + dy * dy
+
+  // A zero-length leg is a point: two fixes the projection rounded onto each other.
+  if (lengthSquared === 0) return Math.hypot(px - a.x, py - a.y)
+
+  // Where the foot of the perpendicular falls along the leg, clamped to its ends — so a tap beyond
+  // one end measures to that end rather than to the infinite line through it.
+  const along = Math.min(1, Math.max(0, ((px - a.x) * dx + (py - a.y) * dy) / lengthSquared))
+  return Math.hypot(px - (a.x + along * dx), py - (a.y + along * dy))
+}
+
 export default function TrackHeatmapFrame({
   heatmap,
   label,
+  overlay,
+  hasPolar,
+  selected,
+  onSelect,
 }: {
   heatmap: RaceTrackHeatmap
   /** What the map is, for a reader who cannot see it. The section's own words, not a restatement. */
   label: string
+  overlay: TrackOverlay
+  /** Whether the race records a **Polar Version**, which the two ratio overlays need. */
+  hasPolar: boolean
+  /** The `row_index` of the stretch being read out, or null. */
+  selected: number | null
+  onSelect: (row: TrackRowFacts | null) => void
 }): ReactElement {
   const { width, height, metres_per_unit, segments, points, bridges, rings } = heatmap
-
-  // Partitioned once rather than walked twice: the unscored hairlines go down first, under the
-  // coloured track, so the measurement overlays the geometry rather than competing with it.
-  const unscored = segments.filter((segment) => segment.band === null)
-  const scored = segments.filter((segment) => segment.band !== null)
   const svg = useRef<SVGSVGElement | null>(null)
   const [view, setView] = useState<View>(HOME)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ distance: number; zoom: number } | null>(null)
+  /** Where a single pointer went down, and whether it has travelled far enough to be a drag. */
+  const tap = useRef<{ x: number; y: number; travelled: boolean } | null>(null)
 
   /** Client coordinates into box coordinates, the space every transform is expressed in. */
   const toBox = useCallback(
@@ -121,6 +166,15 @@ export default function TrackHeatmapFrame({
       }
     },
     [width, height]
+  )
+
+  /** Box coordinates into the *track's* own coordinates, which the camera has moved. */
+  const toTrack = useCallback(
+    (box: { x: number; y: number }): { x: number; y: number } => ({
+      x: (box.x - view.tx) / view.zoom,
+      y: (box.y - view.ty) / view.zoom,
+    }),
+    [view]
   )
 
   // React attaches `onWheel` passively, so the page would scroll as well as the map zooming. The
@@ -159,7 +213,11 @@ export default function TrackHeatmapFrame({
 
   function onPointerDown(event: ReactPointerEvent<SVGSVGElement>): void {
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
-    event.currentTarget.setPointerCapture(event.pointerId)
+    // Optional because jsdom has no pointer capture, and a component that only works in a browser
+    // cannot be tested in the runner that answers most of the questions about it. `TrackMap` calls
+    // it the same way.
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    tap.current = { x: event.clientX, y: event.clientY, travelled: false }
     if (pointers.current.size === 2) pinch.current = { distance: spread(), zoom: view.zoom }
   }
 
@@ -167,6 +225,13 @@ export default function TrackHeatmapFrame({
     const previous = pointers.current.get(event.pointerId)
     if (!previous) return
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (
+      tap.current !== null &&
+      Math.hypot(event.clientX - tap.current.x, event.clientY - tap.current.y) > TAP_SLOP
+    ) {
+      tap.current.travelled = true
+    }
 
     const rect = svg.current?.getBoundingClientRect()
     if (!rect || rect.width === 0) return
@@ -194,9 +259,54 @@ export default function TrackHeatmapFrame({
     )
   }
 
+  /**
+   * The nearest stretch to where the sailor tapped, or null when they tapped open water.
+   *
+   * Nearest *geographically*, which is the whole reason the track is tappable: a sailor points at
+   * the place they were slow, not at a moment on an axis. Measured in the track's own coordinates
+   * so that the reach is the same patch of water at every zoom — and null beyond it, because
+   * selecting a stretch a thumb-width away would be the map answering a question nobody asked.
+   */
+  function nearest(box: { x: number; y: number }): TrackRowFacts | null {
+    const where = toTrack(box)
+    let best: TrackRowFacts | null = null
+    let bestDistance = TAP_REACH / view.zoom
+
+    for (const segment of segments) {
+      const distance = distanceToSegment(
+        where.x,
+        where.y,
+        { x: segment.x1, y: segment.y1 },
+        { x: segment.x2, y: segment.y2 }
+      )
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = segment.row
+      }
+    }
+
+    for (const point of points) {
+      const distance = Math.hypot(where.x - point.x, where.y - point.y)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = point.row
+      }
+    }
+
+    return best
+  }
+
   function onPointerUp(event: ReactPointerEvent<SVGSVGElement>): void {
+    const wasTap = tap.current !== null && !tap.current.travelled && pointers.current.size === 1
+
     pointers.current.delete(event.pointerId)
     if (pointers.current.size < 2) pinch.current = null
+    tap.current = null
+
+    // A tap selects what it landed on, and clears the readout when it landed on water. Read on
+    // pointer-*up* from a pointer that did not travel, so a pan never selects anything and a tap
+    // works at every zoom, including the one where the page owns the scroll gesture.
+    if (wasTap) onSelect(nearest(toBox(event.clientX, event.clientY)))
   }
 
   function step(factor: number): void {
@@ -212,8 +322,23 @@ export default function TrackHeatmapFrame({
   const metresOnScreen = metres_per_unit / zoom
   const barMetres = niceDistance(metresOnScreen * (width / 5))
 
+  const painted = segments.map((segment) => ({
+    segment,
+    paint: overlayPaint(overlay, segment.row, hasPolar),
+  }))
+  // Partitioned once rather than walked twice: the unscored hairlines go down first, under the
+  // coloured track, so the measurement overlays the geometry rather than competing with it.
+  const unscored = painted.filter(({ paint }) => paint.band === null)
+  const scored = painted.filter(({ paint }) => paint.band !== null)
+  const chosen = segments.find(({ row }) => row.row_index === selected)
+
   return (
-    <div style={{ position: 'relative', maxWidth: width, margin: '0 auto' }}>
+    // Fluid, and *not* capped at the box's own 360 units: the `viewBox` holds the projection true
+    // whatever room the element gets, so the track takes the whole width of the column it is in
+    // rather than sitting at half the width of a desktop one. The box being *stable* is a claim
+    // about its aspect ratio — it does not reshape to the track's extent — never about its size in
+    // CSS pixels. `TrackMap` is fluid for the same reason.
+    <div style={{ position: 'relative' }}>
       <svg
         ref={svg}
         viewBox={`0 0 ${width} ${height}`}
@@ -230,7 +355,7 @@ export default function TrackHeatmapFrame({
           // The stable frame: the box never changes shape, only its contents move inside it.
           aspectRatio: `${width} / ${height}`,
           touchAction: zoomed ? 'none' : 'pan-y',
-          cursor: zoomed ? 'grab' : 'default',
+          cursor: zoomed ? 'grab' : 'pointer',
           // Without this a drag across the map selects the dropout labels instead of panning, and
           // `feed dead 57m` ends up highlighted in the middle of the chart.
           userSelect: 'none',
@@ -248,12 +373,24 @@ export default function TrackHeatmapFrame({
               never hydrates in this environment and a Playwright click on an un-hydrated node
               succeeds silently — so "the button was clicked" proves nothing (ADR 0033). */}
           <g data-testid="track-camera" transform={`translate(${view.tx} ${view.ty}) scale(${zoom})`}>
-            {/* Drawn but not scored, first and underneath: a hairline the coloured track overlays
-                rather than competes with. The boat was there, so the line is continuous; it carries
-                no colour, so it makes no claim. Never the ramp's grey, which means on target. */}
-            {unscored.map((segment, index) => (
+            {/* The stretch being read out, under everything: a halo rather than a recolour, so the
+                band the sailor is asking about is still the band they can see. */}
+            {chosen && (
               <polyline
-                key={`unscored-${index}`}
+                data-testid="track-selection"
+                points={chosen.points}
+                fill="none"
+                stroke={SELECTION.stroke}
+                strokeWidth={SELECTION.width}
+                strokeLinecap="round"
+                opacity={SELECTION.opacity}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+
+            {unscored.map(({ segment, paint }) => (
+              <polyline
+                key={`unscored-${segment.row.row_index}`}
                 points={segment.points}
                 fill="none"
                 stroke={HAIRLINE.stroke}
@@ -263,42 +400,46 @@ export default function TrackHeatmapFrame({
                 // The reason, carried to the DOM even though all of these draw alike: the state is
                 // discriminated all the way to the renderer (ADR 0033), and a hairline that cannot
                 // say why it is grey is the collapse that rule exists to prevent.
-                data-not-scored={segment.not_scored ?? undefined}
+                data-not-scored={paint.not_scored ?? undefined}
               />
             ))}
 
             {/* The measurement. A Filler-Anchored row is coloured by its own percent like any
                 other and stitched rather than solid, so it still reads differently from a fully
                 measured one (ADR 0036) — the doubt is on the number, not in place of it. */}
-            {scored.map((segment, index) => (
+            {scored.map(({ segment, paint }) => (
               <polyline
-                key={`scored-${index}`}
+                key={`scored-${segment.row.row_index}`}
                 points={segment.points}
                 fill="none"
-                stroke={trackBandColour(segment.band as TrackBand)}
+                stroke={overlayColour(paint.band!)}
                 strokeWidth={TRACK_STROKE}
                 strokeLinecap="round"
-                strokeDasharray={segment.filler_anchored ? FILLER_DASH : undefined}
+                strokeDasharray={paint.flagged ? FILLER_DASH : undefined}
                 vectorEffect="non-scaling-stroke"
-                data-filler-anchored={segment.filler_anchored ? 'true' : undefined}
+                data-filler-anchored={paint.flagged ? 'true' : undefined}
               />
             ))}
 
             {/* A fix with no neighbour to join. A run of one cannot be a polyline, and a boat that
                 surfaced for a single fix between two dropouts was somewhere — so it is plotted
                 rather than dropped, at the weight of the run it would have been part of. */}
-            {points.map((point, index) => (
-              <circle
-                key={`point-${index}`}
-                cx={point.x}
-                cy={point.y}
-                r={TRACK_STROKE / 2 / zoom}
-                fill={point.band === null ? HAIRLINE.stroke : trackBandColour(point.band)}
-                opacity={point.band === null ? HAIRLINE.opacity : 1}
-                data-not-scored={point.not_scored ?? undefined}
-                data-filler-anchored={point.filler_anchored ? 'true' : undefined}
-              />
-            ))}
+            {points.map((point) => {
+              const paint = overlayPaint(overlay, point.row, hasPolar)
+
+              return (
+                <circle
+                  key={`point-${point.row.row_index}`}
+                  cx={point.x}
+                  cy={point.y}
+                  r={TRACK_STROKE / 2 / zoom}
+                  fill={paint.band === null ? HAIRLINE.stroke : overlayColour(paint.band)}
+                  opacity={paint.band === null ? HAIRLINE.opacity : 1}
+                  data-not-scored={paint.not_scored ?? undefined}
+                  data-filler-anchored={paint.flagged ? 'true' : undefined}
+                />
+              )
+            })}
 
             <DropoutBridges bridges={bridges} width={width} zoom={zoom} />
 
@@ -379,8 +520,8 @@ export default function TrackHeatmapFrame({
         }}
       >
         {zoomed
-          ? `${zoom.toFixed(1)}× — drag to pan, ⤢ for the whole track`
-          : 'pinch, scroll or + to zoom in'}
+          ? `${zoom.toFixed(1)}× — drag to pan, tap a stretch to read it, ⤢ for the whole track`
+          : 'tap a stretch to read it · pinch, scroll or + to zoom in'}
       </p>
     </div>
   )

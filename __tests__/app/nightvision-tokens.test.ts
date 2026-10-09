@@ -23,6 +23,22 @@ describe('.theme-nightvision CSS token overrides', () => {
     return parseInt(clean.substring(0, 2), 16)
   }
 
+  /**
+   * Relative luminance, for the ramps whose steps differ in more than the red channel.
+   *
+   * This theme's lightest reds are washed out rather than saturated — `#FFB3B3` and `#FF6B6B` are
+   * two depths and the same red byte — so the proxy above cannot order them.
+   */
+  function lightness(hex: string): number {
+    const clean = hex.replace('#', '')
+    const channel = (at: number): number => {
+      const value = parseInt(clean.substring(at, at + 2), 16) / 255
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    }
+
+    return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  }
+
   const nightvision = extractBlock('.theme-nightvision')
 
   it('defines a .theme-nightvision block', () => {
@@ -177,6 +193,65 @@ describe('.theme-nightvision CSS token overrides', () => {
         expect(getPropertyValue(root, band)).not.toMatch(/var\(/)
         expect(getPropertyValue(nightvision, band)).not.toMatch(/var\(/)
       })
+    })
+
+    /**
+     * The three scales ADR 0037 adds beside the ratio ramp.
+     *
+     * Every band of every overlay has to be declared in both themes, or that overlay keeps its
+     * daylight hues on a near-black screen — a chart escaping the theme, which is the one thing
+     * `globals.css` forbids.
+     */
+    it('declares the speed, tack and quadrant scales in both themes too', () => {
+      const scales = [
+        ...[1, 2, 3, 4, 5].map((step) => `--track-speed-${step}`),
+        ...[1, 2, 3].map((step) => `--track-port-${step}`),
+        ...[1, 2, 3].map((step) => `--track-stbd-${step}`),
+        ...['n', 'e', 's', 'w'].map((point) => `--track-cog-${point}`),
+      ]
+
+      scales.forEach((token) => {
+        expect(getPropertyValue(root, token)).not.toBeNull()
+        expect(getPropertyValue(nightvision, token)).not.toBeNull()
+        expect(getPropertyValue(root, token)).not.toMatch(/var\(/)
+      })
+    })
+
+    it('keeps the speed ramp monotone after dark, since one hue survives one hue', () => {
+      // Measured as real lightness rather than by the red byte: this theme's lightest steps are
+      // washed-out reds like `#FFB3B3` and `#FF6B6B`, which are the *same* in red and differ in
+      // the other two channels — so a red-byte reading would call them one depth.
+      const depth = [1, 2, 3, 4, 5].map((step) =>
+        lightness(getPropertyValue(nightvision, `--track-speed-${step}`)!)
+      )
+
+      expect(depth).toEqual([...depth].sort((a, b) => b - a))
+      expect(new Set(depth).size).toBe(depth.length)
+    })
+
+    it('collapses the two tacks onto one ramp after dark, and says so in the legend', () => {
+      // Accepted, like the diverging ramp: there is one hue to be symmetric in, so port and
+      // starboard *are* the same colour and depth becomes the angle. The obligation that comes
+      // with it is on the words, which `RaceTrackSection.test.tsx` pins.
+      ;[1, 2, 3].forEach((step) => {
+        expect(getPropertyValue(nightvision, `--track-port-${step}`)).toBe(
+          getPropertyValue(nightvision, `--track-stbd-${step}`)
+        )
+      })
+    })
+
+    it('keeps four quadrants apart after dark, which is what four steps are for', () => {
+      const depth = ['n', 'e', 's', 'w'].map((point) =>
+        redChannelBrightness(getPropertyValue(nightvision, `--track-cog-${point}`)!)
+      )
+
+      expect(new Set(depth).size).toBe(4)
+    })
+
+    it('spends the wind-speed tokens on no scale of its own', () => {
+      // `TWS` reads `--wind-*` directly, which is why there is no `--track-wind-*` family: two
+      // copies of what medium air looks like would be two chances to disagree about it.
+      expect(getPropertyValue(root, '--track-wind-1')).toBeNull()
     })
 
     it('collapses after dark to one red ramp, symmetric about the brightest midpoint', () => {

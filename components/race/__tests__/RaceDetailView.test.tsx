@@ -21,7 +21,13 @@
  */
 
 import { render, screen, within } from '@testing-library/react'
-import type { RaceAnnotations, RaceBoatSetup, RaceDetail, RaceTrack } from '@/types'
+import type {
+  RaceAnnotations,
+  RaceBoatSetup,
+  RaceDetail,
+  RaceTrack,
+  TrackRowFacts,
+} from '@/types'
 import RaceDetailView from '../RaceDetailView'
 
 jest.mock('next/navigation', () => ({
@@ -59,19 +65,40 @@ const NOTHING: RaceBoatSetup = {
  * Geometry rather than rows, which is what crosses to this page at all (ADR 0033) — so a fixture
  * for it is a path string and a band, and the section's own suite is where the drawing is checked.
  */
+/** One row on the pace, and one the boat spent parked — enough for the section to draw both. */
+const ON_THE_PACE: TrackRowFacts = {
+  row_index: 1,
+  row_time: '2026-06-03T19:04:00',
+  sog: 6.4,
+  tws: 11,
+  twa: 48,
+  cog: 40,
+  target_speed: 6.4,
+  polar_efficiency: 1,
+  target_vmg: 4.6,
+  vmg_efficiency: 0.93,
+  filler_anchored: false,
+  excluded: null,
+}
+
+const PARKED: TrackRowFacts = {
+  ...ON_THE_PACE,
+  row_index: 2,
+  row_time: '2026-06-03T19:04:30',
+  sog: 1.1,
+  polar_efficiency: null,
+  vmg_efficiency: null,
+  excluded: 'low_speed',
+}
+
 const TRACK: RaceTrack = {
   heatmap: {
     width: 360,
     height: 440,
     metres_per_unit: 4,
     segments: [
-      { points: '10.0,10.0 20.0,20.0', band: 'at', not_scored: null, filler_anchored: false },
-      {
-        points: '20.0,20.0 30.0,25.0',
-        band: null,
-        not_scored: 'low_speed',
-        filler_anchored: false,
-      },
+      { points: '10.0,10.0 20.0,20.0', x1: 10, y1: 10, x2: 20, y2: 20, row: ON_THE_PACE },
+      { points: '20.0,20.0 30.0,25.0', x1: 20, y1: 20, x2: 30, y2: 25, row: PARKED },
     ],
     points: [],
     bridges: [],
@@ -79,12 +106,17 @@ const TRACK: RaceTrack = {
     counts: {
       rows: 3,
       with_fix: 3,
-      scored: 1,
-      filler_anchored: 0,
       frozen: 0,
       low_speed: 1,
       maneuver_window: 0,
-      without_target: 0,
+      overlays: {
+        target_speed: { scored: 1, flagged: 0, without_value: 0 },
+        target_vmg: { scored: 1, flagged: 0, without_value: 0 },
+        sog: { scored: 2, flagged: 0, without_value: 0 },
+        tws: { scored: 2, flagged: 0, without_value: 0 },
+        twa: { scored: 2, flagged: 0, without_value: 0 },
+        cog: { scored: 2, flagged: 0, without_value: 0 },
+      },
     },
   },
   scoring: 'polar',

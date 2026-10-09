@@ -43,6 +43,11 @@ import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { readableRows } from '@/services/analysis/readable-rows'
 import {
+  TRACK_OVERLAYS,
+  isRatioOverlay,
+  overlayPaint,
+} from '@/services/analysis/track-overlays'
+import {
   dropoutDuration,
   raceTrackHeatmap,
   type TrackHeatmapRow,
@@ -113,18 +118,35 @@ describeSeason('Chicago–Waukegan, the race a quarter of which is scoreable', (
   it('scores 113 of them because trust is per cell, and flags 31 as Filler-Anchored', () => {
     // The ADR's 64 was the scalar floor's answer. Under ADR 0036 a row sailed below it is scored,
     // and a row anchored on filler is scored *and marked* — never left uncoloured.
-    expect(whole().counts.scored).toBe(113)
-    expect(whole().counts.filler_anchored).toBe(31)
-    expect(whole().counts.without_target).toBe(27)
+    const target = whole().counts.overlays.target_speed
+
+    expect(target.scored).toBe(113)
+    expect(target.flagged).toBe(31)
+    expect(target.without_value).toBe(27)
 
     // 145 of 258 drawn and not scored, which is the sentence the legend states in words.
-    expect(whole().counts.rows - whole().counts.scored).toBe(145)
+    expect(whole().counts.rows - target.scored).toBe(145)
   })
 
   it('accounts for every row in exactly one tally', () => {
-    const { rows, scored, frozen, low_speed, maneuver_window, without_target } = whole().counts
+    const { rows, frozen, low_speed, maneuver_window } = whole().counts
+    const { scored, without_value } = whole().counts.overlays.target_speed
 
-    expect(scored + frozen + low_speed + maneuver_window + without_target).toBe(rows)
+    expect(scored + frozen + low_speed + maneuver_window + without_value).toBe(rows)
+  })
+
+  it('colours more of the same race on a channel overlay than on a ratio', () => {
+    // The asymmetry ADR 0037 settles, measured. Speed over the ground is a *reading*: a parked or
+    // mid-manoeuvre row's figure is simply what the GPS recorded, so the only rows it cannot
+    // colour are the dead feed and the blank channels — where percent of target must also drop the
+    // 23 Low-Speed and 13 in-manoeuvre rows ADR 0025 excludes from every performance metric.
+    const { sog, target_speed } = whole().counts.overlays
+
+    expect(sog.scored).toBe(176)
+    expect(sog.scored).toBe(whole().counts.rows - whole().counts.frozen)
+    expect(sog.scored).toBeGreaterThan(target_speed.scored)
+    // And nothing is ever Filler-Anchored on a reading: that flag is a property of a comparison.
+    expect(sog.flagged).toBe(0)
   })
 
   it('rings 50 frozen rows inside the window on 11 positions, and bridges every gap', () => {
@@ -178,8 +200,8 @@ describeSeason('Chicago–St Joe, the race whose feed was dead 47% of the time',
   })
 
   it('still scores the three quarters of it that are a measurement', () => {
-    expect(whole().counts.scored).toBe(773)
-    expect(whole().counts.filler_anchored).toBe(102)
+    expect(whole().counts.overlays.target_speed.scored).toBe(773)
+    expect(whole().counts.overlays.target_speed.flagged).toBe(102)
   })
 })
 
@@ -201,14 +223,22 @@ describeSeason('every race in the archive', () => {
     )
   })
 
-  it('accounts for every row of every race, in one tally each', () => {
+  it('accounts for every row of every race, in one tally each, on every overlay', () => {
     season().forEach(({ filename, heatmap }) => {
-      const { rows, scored, frozen, low_speed, maneuver_window, without_target } = heatmap.counts
+      const { rows, frozen, low_speed, maneuver_window } = heatmap.counts
 
-      expect({
-        filename,
-        tallied: scored + frozen + low_speed + maneuver_window + without_target,
-      }).toEqual({ filename, tallied: rows })
+      TRACK_OVERLAYS.forEach((overlay) => {
+        const { scored, without_value } = heatmap.counts.overlays[overlay]
+        // A ratio overlay also excludes ADR 0025's two; a reading excludes only the dead feed. So
+        // what every overlay must account for is the same rows, by whichever of its own reasons.
+        const excluded = isRatioOverlay(overlay) ? frozen + low_speed + maneuver_window : frozen
+
+        expect({ filename, overlay, tallied: scored + without_value + excluded }).toEqual({
+          filename,
+          overlay,
+          tallied: rows,
+        })
+      })
     })
   })
 
@@ -238,16 +268,30 @@ describeSeason('every race in the archive', () => {
     expect(lone).toEqual([{ filename: CHI_WAUK, points: 2 }])
   })
 
-  it('never colours a row no metric may read', () => {
+  it('never colours a row no metric may read, on either ratio', () => {
     // The one rule the whole screen rests on, asserted over the real season rather than a fixture:
     // nothing that is not a measurement borrows a step of the ramp.
     season().forEach(({ heatmap }) => {
-      expect(heatmap.counts.scored).toBeLessThanOrEqual(
+      const countable =
         heatmap.counts.rows -
-          heatmap.counts.frozen -
-          heatmap.counts.low_speed -
-          heatmap.counts.maneuver_window
-      )
+        heatmap.counts.frozen -
+        heatmap.counts.low_speed -
+        heatmap.counts.maneuver_window
+
+      expect(heatmap.counts.overlays.target_speed.scored).toBeLessThanOrEqual(countable)
+      expect(heatmap.counts.overlays.target_vmg.scored).toBeLessThanOrEqual(countable)
+    })
+  })
+
+  it('never colours a Frozen row on any overlay, including the readings', () => {
+    // The one exclusion every overlay keeps: those values are the row above's, verbatim, so a
+    // channel overlay drawing one would paint a number the boat never produced (ADR 0009).
+    season().forEach(({ heatmap }) => {
+      TRACK_OVERLAYS.forEach((overlay) => {
+        expect(heatmap.counts.overlays[overlay].scored).toBeLessThanOrEqual(
+          heatmap.counts.rows - heatmap.counts.frozen
+        )
+      })
     })
   })
 
@@ -255,10 +299,12 @@ describeSeason('every race in the archive', () => {
     // If this stopped being true the marker would be dead code and the certificate's filler would
     // be silently excluded again (ADR 0036).
     const flagged = season().flatMap(({ heatmap }) =>
-      heatmap.segments.filter((segment) => segment.filler_anchored)
+      heatmap.segments
+        .map((segment) => overlayPaint('target_speed', segment.row, true))
+        .filter((paint) => paint.flagged)
     )
 
     expect(flagged.length).toBeGreaterThan(0)
-    expect(flagged.every((segment) => segment.band !== null)).toBe(true)
+    expect(flagged.every((paint) => paint.band !== null)).toBe(true)
   })
 })

@@ -31,6 +31,30 @@ async function panOf(page: Page): Promise<[number, number]> {
   return [Number(match?.[1]), Number(match?.[2])]
 }
 
+/**
+ * Where to click to land on the track: the midpoint of the first coloured leg, in client pixels.
+ *
+ * Read off the element's own `points` and `viewBox`, and converted the way the component converts
+ * in the other direction — so the aim follows what was actually drawn rather than assuming where
+ * the fixture's course happens to run.
+ */
+async function middleOfATrackLeg(page: Page): Promise<{ x: number; y: number }> {
+  const svg = page.locator('svg[role="img"]')
+  const box = await svg.boundingBox()
+  const viewBox = (await svg.getAttribute('viewBox'))?.split(' ').map(Number) ?? []
+  const points = await page
+    .locator('[data-testid="track-camera"] polyline[stroke^="var(--track-"]')
+    .first()
+    .getAttribute('points')
+
+  const [from, to] = (points ?? '').split(' ').map((pair) => pair.split(',').map(Number))
+
+  return {
+    x: (box?.x ?? 0) + ((from[0] + to[0]) / 2 / viewBox[2]) * (box?.width ?? 0),
+    y: (box?.y ?? 0) + ((from[1] + to[1]) / 2 / viewBox[3]) * (box?.height ?? 0),
+  }
+}
+
 test.describe('the race track, zoomed and panned at 390px', () => {
   test.beforeEach(async ({ page }) => {
     await gotoHydrated(page, '/dev/race-track')
@@ -120,6 +144,78 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     expect(await zoomOf(page)).toBe(1)
     expect(await panOf(page)).toEqual([0, 0])
     await expect(page.getByLabel('Whole track')).toBeDisabled()
+  })
+
+  test('reads out the stretch the sailor taps, and clears when they tap water', async ({
+    page,
+  }) => {
+    // Only a browser can answer this one: the hit test is in the track's own coordinates, through
+    // a `getBoundingClientRect` that jsdom reports as zero, so a Jest version of it would be
+    // measuring nothing. Which is also why the camera assertion above is an attribute and not a
+    // click (ADR 0033).
+    await expect(page.getByTestId('track-readout-empty')).toContainText('Tap a stretch')
+
+    // Aimed at a leg the map actually drew, read off its own `points` attribute and converted
+    // through the `viewBox` — rather than at a spot on the frame that looked about right. A
+    // hard-coded corner would make this test a statement about the fixture's course.
+    const { x, y } = await middleOfATrackLeg(page)
+    await page.mouse.click(x, y)
+
+    const readout = page.getByTestId('track-readout')
+    await expect(readout).toBeVisible()
+    await expect(readout).toContainText('of target speed')
+    // The stretch being read is marked on the map as well as read out, so the sailor can see which
+    // one they got.
+    await expect(page.getByTestId('track-selection')).toBeAttached()
+
+    // A tap on open water is a question with no answer, and clearing is the honest one. The
+    // frame's bottom-left corner is water on any track the fixture draws.
+    const box = await page.locator('svg[role="img"]').boundingBox()
+    await page.mouse.click((box?.x ?? 0) + 14, (box?.y ?? 0) + (box?.height ?? 0) - 90)
+    await expect(page.getByTestId('track-readout-empty')).toBeVisible()
+    await expect(page.getByTestId('track-selection')).toHaveCount(0)
+  })
+
+  test('does not select anything when the sailor was only panning', async ({ page }) => {
+    // The tap is read on pointer-up from a pointer that did not travel. Without that, every pan
+    // would end by selecting whatever stretch the finger happened to lift over.
+    await page.getByLabel('Zoom in').click()
+
+    const box = await page.locator('svg[role="img"]').boundingBox()
+    const centre = {
+      x: (box?.x ?? 0) + (box?.width ?? 0) / 2,
+      y: (box?.y ?? 0) + (box?.height ?? 0) / 2,
+    }
+
+    await page.mouse.move(centre.x, centre.y)
+    await page.mouse.down()
+    await page.mouse.move(centre.x - 40, centre.y - 30, { steps: 6 })
+    await page.mouse.up()
+
+    await expect(page.getByTestId('track-readout-empty')).toBeVisible()
+  })
+
+  test('repaints the track when the overlay changes, without moving the camera', async ({
+    page,
+  }) => {
+    const strokes = async (): Promise<string[]> =>
+      page.$$eval('[data-testid="track-camera"] polyline', (nodes) =>
+        nodes.map((node) => node.getAttribute('stroke') ?? '')
+      )
+
+    const onTarget = await strokes()
+    expect(onTarget.join(' ')).toContain('--track-')
+
+    await page.getByRole('button', { name: 'Wind speed' }).click()
+
+    const onWind = await strokes()
+    // The one overlay the wind-condition tokens are right for, because it *is* that quantity.
+    expect(onWind.join(' ')).toContain('--wind-')
+    expect(onWind).not.toEqual(onTarget)
+
+    // Switching what the track means does not move the camera out from under the sailor.
+    expect(await zoomOf(page)).toBe(1)
+    expect(await panOf(page)).toEqual([0, 0])
   })
 
   test('stops at 12×, which is about a quarter-mile of a 25nm race on this screen', async ({
