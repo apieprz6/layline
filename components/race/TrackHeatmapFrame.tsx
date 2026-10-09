@@ -632,8 +632,8 @@ export default function TrackHeatmapFrame({
         }}
       >
         {zoomed
-          ? `${zoom.toFixed(1)}× — drag to pan, tap a stretch to read it, ⤢ for the whole track`
-          : 'tap a stretch to read it · pinch, scroll or + to zoom in'}
+          ? `${zoom.toFixed(1)}× — drag to pan, tap a stretch to read it`
+          : 'tap a stretch to read it · pinch or + to zoom'}
       </p>
     </div>
   )

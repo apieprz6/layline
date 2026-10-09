@@ -27,6 +27,8 @@ import { spacing } from '@/lib/utils/design'
 import { TRACK_SCALES, isRatioOverlay, overlayColour } from '@/services/analysis/track-overlays'
 import type { RaceTrack, TrackHeatmapCounts, TrackOverlay } from '@/types'
 
+import Explainer from '@/components/common/Explainer'
+
 import { DROPOUT, FILLER_DASH, HAIRLINE, TESTIMONY, TRACK_STROKE, testimonyGlyph } from './track-ink'
 
 export default function TrackHeatmapLegend({
@@ -115,7 +117,7 @@ export default function TrackHeatmapLegend({
           color: 'var(--text-muted)',
         }}
       >
-        <SwatchRow label="Drawn, not coloured — the boat was there; this overlay has nothing to say about the row.">
+        <SwatchRow label={`Drawn, not coloured — ${counts.rows - counts.overlays[overlay].scored} rows`}>
           <svg width="26" height="10" aria-hidden>
             <line
               x1="1"
@@ -130,9 +132,7 @@ export default function TrackHeatmapLegend({
         </SwatchRow>
 
         {drawable && isRatioOverlay(overlay) && (
-          <SwatchRow
-            label={`Compared against the certificate's own filler — ${tallies.flagged} rows. The figure is shown; the yardstick is weak.`}
-          >
+          <SwatchRow label={`Filler-anchored — ${tallies.flagged} rows`}>
             <svg width="26" height="10" aria-hidden>
               <line
                 x1="1"
@@ -149,12 +149,8 @@ export default function TrackHeatmapLegend({
 
         {annotations > 0 && (
           <SwatchRow
-            label={`What the sailor said — ${annotations} sail or sea-state ${
-              annotations === 1 ? 'note' : 'notes'
-            }, at the place on the water they were given about. Testimony, not a measurement.${
-              counts.annotations_not_placed > 0
-                ? ` ${counts.annotations_not_placed} more were given about a time no fix of this window is near, so the track does not claim to place ${counts.annotations_not_placed === 1 ? 'it' : 'them'}.`
-                : ''
+            label={`What the sailor said — ${annotations} ${annotations === 1 ? 'note' : 'notes'}${
+              counts.annotations_not_placed > 0 ? `, ${counts.annotations_not_placed} unplaceable` : ''
             }`}
           >
             <svg width="26" height="14" aria-hidden>
@@ -185,9 +181,7 @@ export default function TrackHeatmapLegend({
           </SwatchRow>
         )}
 
-        <SwatchRow
-          label={`Frozen feed — ${counts.frozen} rows repeating one position, ringed, with the gap bridged and its duration on it.`}
-        >
+        <SwatchRow label={`Frozen feed — ${counts.frozen} rows`}>
           <svg width="26" height="10" aria-hidden>
             <line
               x1="1"
@@ -222,85 +216,108 @@ export default function TrackHeatmapLegend({
           fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
           fontStyle: 'italic',
-          lineHeight: 1.5,
         }}
       >
-        {countSentence(overlay, counts, scoring)}
+        {headlineCount(overlay, counts, scoring)}
       </p>
+
+      {/* The reasoning, one tap down. ADR 0033 requires the proportion to be *stated* rather than
+          inferred from how much grey is on screen — which the line above does. Why each row is grey
+          is the argument behind that claim, and five lines of it under every map is five lines
+          nobody reads twice. */}
+      <Explainer summary="What isn’t coloured, and why?" testId="track-counts-why">
+        {countDetail(overlay, counts, scoring)}
+      </Explainer>
     </div>
   )
 }
 
 /**
- * What this overlay is made of, as a sentence a sailor can check against the picture.
+ * The one line the legend owes: how much of the race this overlay could not colour.
  *
- * Every row the window holds is accounted for: coloured, excluded by one of ADR 0025's three
- * reasons, left uncoloured for want of a value, or never positioned at all. A row that dropped out
- * of every tally would be exactly the silent omission ADR 0025 asks a coverage count to prevent.
+ * ADR 0033 requires the proportion to be *stated* rather than inferred from how much grey is on
+ * screen, and this is that claim — short enough that it is read every time, with the reasoning
+ * behind it in `countDetail` one tap down.
  */
-function countSentence(
+function headlineCount(
+  overlay: TrackOverlay,
+  counts: TrackHeatmapCounts,
+  scoring: RaceTrack['scoring']
+): string {
+  const { rows, with_fix } = counts
+  const { scored } = counts.overlays[overlay]
+
+  if (isRatioOverlay(overlay) && scoring !== 'polar') {
+    return scoring === 'no-polar-version'
+      ? 'This race records no Polar Version — nothing on the track is a comparison.'
+      : 'This race’s Polar Version could not be read — the comparison is missing.'
+  }
+
+  // "Drawn but not coloured" only where every row is in fact drawn, which is every race in this
+  // archive. A row that logged no position is in the count and in no part of the picture, and
+  // `countDetail` says so rather than this line quietly including it.
+  return with_fix === rows
+    ? `${rows - scored} of ${rows} rows are drawn but not coloured.`
+    : `${rows - scored} of ${rows} rows carry no figure on this overlay.`
+}
+
+/**
+ * Why each of those rows is not coloured, by reason — the argument behind the line above.
+ *
+ * Three different sentences, because the overlays do not exclude the same rows: a ratio and sail
+ * agreement are claims about how the boat was sailed and carry ADR 0025 whole, while a reading
+ * excludes only the dead feed, since a parked boat's speed over the ground is simply what the GPS
+ * recorded (ADR 0037).
+ */
+function countDetail(
   overlay: TrackOverlay,
   counts: TrackHeatmapCounts,
   scoring: RaceTrack['scoring']
 ): string {
   const { rows, frozen, low_speed, maneuver_window, with_fix } = counts
-  const { scored, without_value } = counts.overlays[overlay]
+  const { without_value } = counts.overlays[overlay]
   const parked = low_speed + maneuver_window
   const noFix = rows - with_fix
-  const ratio = isRatioOverlay(overlay)
 
   const sentences: string[] = []
 
   if (overlay === 'sail') {
-    // A difference is a decision somebody made on the water, and the legend says so where the
-    // sailor is reading the colours rather than only in an ADR.
     sentences.push(
-      `${counts.overlays.sail.scored} rows carry a verdict: green where what was up matches the ` +
-        'chart, red where the two records differ — which is a difference and not a fault.'
+      'Green is where what the sailor recorded as flying matches the chart’s own cell for that ' +
+        'angle and wind speed, red where the two records differ — which is a difference and not a ' +
+        'fault.'
     )
   }
 
-  if (ratio && scoring === 'no-polar-version') {
+  if (isRatioOverlay(overlay) && scoring === 'no-polar-version') {
     sentences.push(
-      `This race records no Polar Version, so none of its ${rows} rows carries a percent of ` +
-        'target. The track is where the boat went; nothing on it is a comparison.'
+      `No Polar Version is recorded for this race, so none of its ${rows} rows carries a percent ` +
+        'of target. The track is still where the boat went.'
     )
-  } else if (ratio && scoring === 'polar-unreadable') {
+  } else if (isRatioOverlay(overlay) && scoring === 'polar-unreadable') {
     sentences.push(
-      `The Polar Version this race points at could not be read, so none of its ${rows} rows is ` +
-        'coloured. The track is still what the recording says; the comparison is missing.'
+      'The Polar Version this race points at could not be read. The track is still what the ' +
+        'recording says; only the comparison is missing.'
+    )
+  } else if (isRatioOverlay(overlay)) {
+    sentences.push(
+      `${frozen} rows sat inside a dropout, ${parked} were parked or mid-manoeuvre — neither reads ` +
+        `in a performance figure (ADR 0025) — and ${without_value} are in range of nothing the ` +
+        'Polar can answer.'
+    )
+  } else if (overlay === 'sail') {
+    sentences.push(
+      `${frozen} rows sat inside a dropout and ${parked} were parked or mid-manoeuvre, where a ` +
+        `wind angle sweeping through head to wind makes the chart’s answer meaningless. ` +
+        `${without_value} have nothing to compare: no chart recorded, no sail written down, a sail ` +
+        'the chart does not name, or an angle below its own axes.'
     )
   } else {
-    // "Drawn but not coloured" only where every row is in fact drawn, which is every race in this
-    // archive — a row that logged no position is in the count and in no part of the picture, and
-    // the sentence below says so rather than quietly including it here.
     sentences.push(
-      noFix === 0
-        ? `${rows - scored} of ${rows} rows are drawn but not coloured.`
-        : `${rows - scored} of ${rows} rows carry no ${TRACK_SCALES[overlay].title.toLowerCase()}.`
+      `${frozen} rows sat inside a dropout, where every value is a copy of the row above, and ` +
+        `${without_value} left this channel blank. A parked or mid-manoeuvre row keeps its colour ` +
+        'here: its speed over the ground is simply what the GPS recorded.'
     )
-
-    if (ratio) {
-      sentences.push(
-        `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
-          `${without_value} are in range of nothing the Polar can answer.`
-      )
-    } else if (overlay === 'sail') {
-      // Gated like a performance metric — a manoeuvre's TWA sweeps through head to wind, and the
-      // chart's answer there is to a question nobody asked — and its absences are its own four.
-      sentences.push(
-        `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
-          `${without_value} have nothing to compare: no chart recorded, no sail written down, a ` +
-          'sail the chart does not name, or an angle below its own axes.'
-      )
-    } else {
-      // A reading is not a performance metric, so only the dead feed is excluded here — a parked
-      // boat's speed over the ground is simply what the GPS measured (ADR 0037).
-      sentences.push(
-        `${frozen} sat inside a dropout, where every value is a copy of the row above, and ` +
-          `${without_value} left this channel blank.`
-      )
-    }
   }
 
   if (noFix > 0) {

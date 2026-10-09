@@ -232,8 +232,7 @@ describe('the track, drawn', () => {
   it('says in the legend that the markers are Testimony, with the count', () => {
     render(<RaceTrackSection track={trackOf()} />)
 
-    expect(screen.getByText(/What the sailor said — 2 sail or sea-state notes/)).toBeInTheDocument()
-    expect(screen.getByText(/Testimony, not a measurement/)).toBeInTheDocument()
+    expect(screen.getByText(/What the sailor said — 2 notes/)).toBeInTheDocument()
   })
 
   it('says when an annotation was given about a time the track cannot place', () => {
@@ -245,7 +244,7 @@ describe('the track, drawn', () => {
       />
     )
 
-    expect(screen.getByText(/1 more were given about a time no fix of this window is near/)).toBeInTheDocument()
+    expect(screen.getByText(/1 unplaceable/)).toBeInTheDocument()
   })
 
   it('draws no Testimony row where nobody wrote anything down', () => {
@@ -334,7 +333,7 @@ describe('the track, drawn', () => {
 
     // A real case in the archive. An empty frame explains nothing, so the words go where the map
     // would be.
-    expect(screen.getByTestId('track-no-fixes')).toHaveTextContent(/logged no position anywhere/)
+    expect(screen.getByTestId('track-no-fixes')).toHaveTextContent(/No position was logged/)
     expect(screen.queryByTestId('track-camera')).not.toBeInTheDocument()
   })
 })
@@ -348,10 +347,12 @@ describe('switching what the track is coloured by', () => {
     // The fixture's rows agree, bar the parked one, which this overlay cannot read either — it is
     // gated like a performance metric, because a manoeuvre's TWA sweeps through head to wind.
     expect(strokes(container)).toContain('var(--track-agree)')
-    expect(screen.getByTestId('track-counts')).toHaveTextContent(
-      /green where what was up matches the chart, red where the two records differ/
+    // The headline count is one line; "a difference and not a fault" is said where the colours
+    // are explained — on the ramp's own line — and again in the detail behind the disclosure.
+    expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent(
+      /green agrees with the chart · red differs — a difference, not a fault/
     )
-    expect(screen.getByTestId('track-counts')).toHaveTextContent(/a difference and not a fault/)
+    expect(screen.getByTestId('track-counts-why')).toHaveTextContent(/a difference and not a fault/)
   })
 
   it('says which of the four ways a row has no sail verdict, in the readout’s words', async () => {
@@ -377,7 +378,7 @@ describe('switching what the track is coloured by', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sail vs chart' }))
 
     // Not a dash: a sail the chart cannot name is a different fact from a chart that cannot answer.
-    expect(screen.getByTestId('track-counts')).toHaveTextContent(/a sail the chart does not name/)
+    expect(screen.getByTestId('track-counts-why')).toHaveTextContent(/a sail the chart does not name/)
   })
 
   it('offers all six overlays, opening on percent of target', () => {
@@ -435,7 +436,7 @@ describe('switching what the track is coloured by', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Wind angle' }))
 
-    expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent(/port tack/)
+    expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent(/port · close-hauled/)
     expect(screen.getByTestId('track-ramp').children).toHaveLength(6)
   })
 
@@ -446,7 +447,7 @@ describe('switching what the track is coloured by', () => {
     expect(screen.queryByTestId('track-caveat')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: '% of VMG' }))
-    expect(screen.getByTestId('track-caveat')).toHaveTextContent(/estimated from the Polar/)
+    expect(screen.getByTestId('track-caveat')).toHaveTextContent(/estimated from the grid/)
 
     await userEvent.click(screen.getByRole('button', { name: 'Wind speed' }))
     expect(screen.getByTestId('track-caveat')).toHaveTextContent(/computed by qtVlm/)
@@ -493,8 +494,8 @@ describe('the legend beneath it', () => {
     render(<RaceTrackSection track={trackOf()} />)
 
     const wording = screen.getByTestId('track-ramp-wording')
-    expect(wording).toHaveTextContent(/depth, not side/)
-    expect(wording).toHaveTextContent(/either/)
+    expect(wording).toHaveTextContent(/depth is distance from target/)
+    expect(wording).toHaveTextContent(/either way/)
     // The daylight sentence is gone rather than reworded around: 85% and 115% are the same colour
     // on this theme, so "slower … faster" would be a lie about the swatches above it.
     expect(wording).not.toHaveTextContent('slower than target')
@@ -514,14 +515,18 @@ describe('the legend beneath it', () => {
   it('states in words how much of the race it could not colour', () => {
     render(<RaceTrackSection track={trackOf()} />)
 
-    const counts = screen.getByTestId('track-counts')
-    // Never left to be inferred from how much grey is on screen (ADR 0033).
-    expect(counts).toHaveTextContent('145 of 258 rows are drawn but not coloured.')
-    // And by reason, because "the boat was parked" and "the Polar cannot answer out here" are not
-    // the same sentence.
-    expect(counts).toHaveTextContent('82 sat inside a dropout')
-    expect(counts).toHaveTextContent('36 were parked or mid-manoeuvre')
-    expect(counts).toHaveTextContent('27 are in range of nothing the Polar can answer')
+    // The proportion is stated rather than inferred from how much grey is on screen (ADR 0033),
+    // and it is one line, because a line nobody reads states nothing.
+    expect(screen.getByTestId('track-counts')).toHaveTextContent(
+      '145 of 258 rows are drawn but not coloured.'
+    )
+
+    // The reasons are a tap down, because "the boat was parked" and "the Polar cannot answer out
+    // here" are different facts and the argument for each is longer than the claim.
+    const why = screen.getByTestId('track-counts-why')
+    expect(why).toHaveTextContent('82 rows sat inside a dropout')
+    expect(why).toHaveTextContent('36 were parked or mid-manoeuvre')
+    expect(why).toHaveTextContent('27 are in range of nothing the Polar can answer')
   })
 
   it('counts a reading’s coverage by its own gate, not by the ratio’s', async () => {
@@ -529,12 +534,14 @@ describe('the legend beneath it', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Boat speed' }))
 
-    const counts = screen.getByTestId('track-counts')
-    // 176 of 258 coloured: everything except the dead feed. The parked rows are not mentioned
-    // among the exclusions, because this overlay does not exclude them (ADR 0037).
-    expect(counts).toHaveTextContent('82 of 258 rows are drawn but not coloured.')
-    expect(counts).toHaveTextContent(/every value is a copy of the row above/)
-    expect(counts).not.toHaveTextContent('parked or mid-manoeuvre')
+    expect(screen.getByTestId('track-counts')).toHaveTextContent(
+      '82 of 258 rows are drawn but not coloured.'
+    )
+    // 176 of 258 coloured: everything except the dead feed. And the detail says *why* a parked row
+    // keeps its colour here, rather than listing it among the exclusions (ADR 0037).
+    const why = screen.getByTestId('track-counts-why')
+    expect(why).toHaveTextContent(/every value is a copy of the row above/)
+    expect(why).toHaveTextContent(/A parked or mid-manoeuvre row keeps its colour here/)
   })
 
   it('says a race with no Polar Version has nothing to compare, and shows no ramp', async () => {
@@ -543,10 +550,9 @@ describe('the legend beneath it', () => {
     // It opens on a channel overlay, which this race *can* draw…
     expect(screen.getByTestId('track-ramp')).toBeInTheDocument()
 
-    // …and the ratio is not offered at all, so the only way to hear about the missing Polar is the
-    // sentence under the legend of the overlay the sailor is on. Checked through the readout's own
-    // words instead: a race with no Polar says so wherever a percent would have been.
+    // …and the ratio is not offered at all, so the missing Polar is said by whichever overlay the
+    // sailor is on, in its own detail.
     await userEvent.click(screen.getByRole('button', { name: 'Wind speed' }))
-    expect(screen.getByTestId('track-counts')).toHaveTextContent(/left this channel blank/)
+    expect(screen.getByTestId('track-counts-why')).toHaveTextContent(/left this channel blank/)
   })
 })

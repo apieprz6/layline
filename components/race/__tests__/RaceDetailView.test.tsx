@@ -484,10 +484,15 @@ describe('the line between what the sailor said and what the file said', () => {
 
     const boundary = screen.getByTestId('transcription-boundary')
     expect(boundary).toBeInTheDocument()
-    expect(within(boundary).getByText('Below this line: the recording')).toBeInTheDocument()
-    expect(boundary).toHaveTextContent(/None of it is editable, here or by any other path/)
-    // AC 10 as the page states it: the three figures re-derive, so there is nothing to recompute.
-    expect(boundary).toHaveTextContent(/amending the window above changes them with nothing to recompute/)
+    expect(
+      within(boundary).getByText('Below this line: the recording — not editable')
+    ).toBeInTheDocument()
+    // AC 10 as the page states it, in the disclosure that holds the argument: the figures
+    // re-derive, so there is nothing to recompute.
+    expect(boundary).toHaveTextContent(/None of that is editable by any path/)
+    expect(boundary).toHaveTextContent(
+      /amending the window above changes them with nothing to recompute/
+    )
   })
 
   it('puts Row Quality and Gap Seconds on the recorded side of it', () => {
@@ -509,8 +514,21 @@ describe('the line between what the sailor said and what the file said', () => {
   it('draws the line for a viewer too, because it is a fact about the archive', () => {
     renderRace(raceOf())
 
-    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(
-      /Everything above is what the sailor said/
-    )
+    // The fact is on the line itself — a sailor who can correct the sail plan has to see that the
+    // recording beneath it is not theirs to correct.
+    expect(screen.getByTestId('transcription-boundary')).toHaveTextContent(/not editable/)
+  })
+
+  it('keeps the argument for the line one tap down rather than five lines in the way', () => {
+    renderRace(raceOf())
+
+    // ADR 0010 wants the boundary stated, and it is — in the heading. *Why* it is there is a
+    // paragraph every reader scrolled past on every visit, which loses an explanation as
+    // thoroughly as never writing it, so it lives in a disclosure that needs no JavaScript.
+    const why = screen.getByTestId('transcription-why')
+    expect(why.tagName).toBe('DETAILS')
+    expect(why).not.toHaveAttribute('open')
+    expect(why).toHaveTextContent(/Above the line is what the sailor said/)
+    expect(why).toHaveTextContent(/kept exactly as it was transcribed/)
   })
 })

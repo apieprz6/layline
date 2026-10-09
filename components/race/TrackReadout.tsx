@@ -48,15 +48,15 @@ import type { RaceTrack, TrackOverlay, TrackRowFacts } from '@/types'
 
 /** What each reason reads as in a sentence, in the words a sailor would recognise. */
 const WHY: Record<string, string> = {
-  frozen: 'the feed was dead here — every value on this row is a copy of the row above',
+  frozen: 'the feed was dead — every value on this row is a copy of the one above',
   low_speed: 'the boat was below the speed gate, so no performance figure reads it',
-  maneuver_window: 'this row sits inside a manoeuvre window, so no performance figure reads it',
+  maneuver_window: 'mid-manoeuvre, so no performance figure reads it',
   no_target: 'the Polar has no answer at this angle and wind speed',
-  no_polar_version: 'this race records no Polar Version, so there is nothing to compare against',
+  no_polar_version: 'no Polar Version is recorded for this race',
   no_reading: 'the recording left this channel blank',
-  no_chart_version: 'this race records no Crossover Chart Version, so it has no sail vocabulary',
+  no_chart_version: 'no Crossover Chart Version is recorded for this race',
   no_sail_recorded: 'nobody wrote down what was flying here',
-  sail_unnamed: 'what was flying was recorded as a note rather than one of the chart’s own sails',
+  sail_unnamed: 'what was flying was a note, not one of the chart’s own sails',
   no_chart_cell: 'this angle and wind speed sit below the chart’s own axes',
 }
 
@@ -165,7 +165,7 @@ export default function TrackReadout({
             lineHeight: 1.4,
           }}
         >
-          No figure here: {WHY[paint.not_scored ?? ''] ?? 'this overlay cannot read the row'}.
+          No figure: {WHY[paint.not_scored ?? ''] ?? 'this overlay cannot read the row'}.
         </p>
       ) : (
         <p
@@ -190,7 +190,7 @@ export default function TrackReadout({
                 color: 'var(--state-warning)',
               }}
             >
-              filler-anchored — the certificate’s own manufactured cell
+              filler-anchored — a manufactured cell of the certificate
             </span>
           )}
         </p>
@@ -248,9 +248,8 @@ export default function TrackReadout({
             lineHeight: 1.5,
           }}
         >
-          Speed and course over the ground are the GPS’s own figures. Every wind figure was computed
-          by qtVlm from the boat’s instruments rather than read off the masthead, and Target VMG is
-          estimated from the Polar’s grid, not the certificate’s published optimum.
+          SOG and COG are the GPS’s own figures. Wind figures are computed by qtVlm, not read off
+          the masthead. Target VMG is estimated from the grid, not the certificate’s optimum.
         </p>
       )}
     </div>

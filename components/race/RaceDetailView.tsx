@@ -32,10 +32,12 @@
  *
  * The page draws the **Testimony/Transcription boundary** as a line, with words on it. Above it is what
  * the sailor said, all of it amendable. Below it is the recording and what Layline derives from the
- * recording — Coverage, Gap Seconds and the Row Quality notes — and none of that is editable by any path
- * in Layline, because a Transcription is immutable (ADR 0010) and the three figures are derived at read
- * and stored nowhere (ADR 0009). The line is explicit rather than implied by the reading order: a sailor
- * who can correct the sail plan needs to know why they cannot correct the wind speed beneath it.
+ * recording, and none of that is editable by any path in Layline, because a Transcription is immutable
+ * (ADR 0010) and the figures are derived at read and stored nowhere (ADR 0009). The line is explicit
+ * rather than implied by the reading order: a sailor who can correct the sail plan needs to know why
+ * they cannot correct the wind speed beneath it. *Why* they cannot is one tap down, in an `Explainer`
+ * — the fact is the heading, and the paragraph arguing it was five lines everybody scrolled past,
+ * which loses an explanation as thoroughly as never writing it.
  *
  * Below that line, the **Race Track Heatmap** goes first (ADR 0033). It is the recording drawn — the
  * boat's own trace, coloured by how each stretch compared with its target speed — so it belongs under
@@ -63,6 +65,8 @@ import type {
   RaceSailAnnotation,
   WindBandRef,
 } from '@/types'
+
+import Explainer from '@/components/common/Explainer'
 
 import CoverageReadout from './CoverageReadout'
 import RaceDeletePanel from './RaceDeletePanel'
@@ -147,8 +151,7 @@ export default function RaceDetailView({
             {canAmend && <AmendPencil raceId={race.id} section="window" size={11} />}
           </p>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-            The recording’s own clock, exactly as its instruments wrote it — no timezone was applied
-            in either direction.
+            The recording’s own clock — no timezone applied, in either direction.
           </p>
         </header>
 
@@ -585,22 +588,15 @@ function TranscriptionBoundary(): ReactElement {
       }}
     >
       <h2 style={{ ...SECTION_HEADING, color: 'var(--text-primary)' }}>
-        Below this line: the recording
+        Below this line: the recording — not editable
       </h2>
-      <p
-        style={{
-          margin: 0,
-          fontSize: 'var(--text-xs)',
-          color: 'var(--text-muted)',
-          lineHeight: 1.5,
-        }}
-      >
-        Everything above is what the sailor said, and every bit of it can be amended. Everything below is
-        what the file said and what Layline works out from it — Coverage, Gap Seconds and the Row Quality
-        notes. None of it is editable, here or by any other path: the recording is kept exactly as it was
-        transcribed, and the three figures are derived from it each time this page is read, so amending
+      <Explainer summary="Why can’t I correct anything below here?" testId="transcription-why">
+        Above the line is what the sailor said, and every bit of it can be amended. Below it is what
+        the file said and what Layline works out from it — the track, Coverage, Gap Seconds and the
+        Row Quality notes. None of that is editable by any path: the recording is kept exactly as it
+        was transcribed, and the figures are derived from it each time this page is read, so amending
         the window above changes them with nothing to recompute.
-      </p>
+      </Explainer>
     </div>
   )
 }

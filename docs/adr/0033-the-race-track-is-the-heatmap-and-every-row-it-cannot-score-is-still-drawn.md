@@ -180,10 +180,20 @@ left dotted and uncoloured — so the dotted sub-floor state this ADR shipped no
 render state. See ADR 0036 for the per-cell rule and the Filler-Anchored marker that replaces it.
 
 > **Further amended by [ADR 0037](./0037-the-track-carries-six-overlays-and-a-reading-is-gated-differently-from-a-ratio.md)
-> (LAY-164).** Two of this ADR's decisions no longer hold as written: the track carries **six**
+> (LAY-164).** Three of this ADR's decisions no longer hold as written: the track carries **six**
 > overlays rather than the one ramp below, each with a scale of its own kind; and "the client gets
 > drawn geometry, not rows" is replaced by each row's values and verdicts crossing, with the banding
 > in one shared pure module both sides call — the guarantee it protected is kept, by other means.
+> and the ramp's upper arm is **teal, not blue**. The structure below — diverging, seven bands,
+> amber below, a neutral gray midpoint, one hue per arm — stands exactly as decided; only the hue
+> on the faster side moved, because blue did not read as *better* to the owner sailing with it
+> ("it's really hard to tell what is good vs bad") and is also this system's accent colour, on
+> links and on the selected chip. Teal reads as the good side while keeping this ADR's own
+> constraint — no red arm beside the `--wind-storm` rings — and, unlike green, stays
+> distinguishable from amber for a red-green colour-blind reader. Each arm is still validated as an
+> ordinal ramp: monotone OKLab lightness, adjacent ΔL ≥ 0.07, light ends at 2.4:1 (amber) and 2.3:1
+> (teal) against the sand surface.
+>
 > Everything else here stands, including the diverging ramp itself, the four render states, the
 > Dropout Bridge and the theme-aware legend, which 0037 extends to every scale.
 

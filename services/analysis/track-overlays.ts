@@ -154,8 +154,7 @@ const RATIO_BANDS: readonly TrackBandStep[] = [
 
 /** The sentence a diverging ramp owes after dark, where both arms land on the same red. */
 const RATIO_NIGHT =
-  'After dark this scale is depth, not side: the deeper the band, the further from target — in ' +
-  'either direction. Which side a stretch was on comes from the figures under the map, not from ' +
+  'After dark: depth is distance from target, either way — which side comes from the figures, not ' +
   'the colour.'
 
 /**
@@ -253,13 +252,12 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: null,
     kind: 'diverging',
     bands: RATIO_BANDS,
-    day: 'worse VMG than target · 100% · better',
+    day: 'worse VMG · 100% · better',
     night: RATIO_NIGHT,
     // ADR 0036's standing caveat, not conditional on anything: a rectangular grid cannot hold an
     // optimum that moves with wind speed, so this is an estimate of the certificate's answer and
     // never a reproduction of it. Layline states no point beat or gybe angle, ever.
-    caveat:
-      'Target VMG is estimated from the Polar’s grid, not the certificate’s own published optimum.',
+    caveat: 'Target VMG is estimated from the grid, not the certificate’s published optimum.',
   },
   sog: {
     overlay: 'sog',
@@ -268,8 +266,8 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: 'kt',
     kind: 'sequential',
     bands: SOG_BANDS,
-    day: 'slower · faster. The GPS’s own figure, not the paddlewheel’s.',
-    night: 'One hue in, one out: after dark the deeper the band, the faster the boat.',
+    day: 'slower · faster, by the GPS’s own figure',
+    night: 'After dark: deeper is faster. One hue in, one out.',
   },
   tws: {
     overlay: 'tws',
@@ -278,12 +276,11 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: 'kt',
     kind: 'sequential',
     bands: TWS_BANDS,
-    day: 'light · medium · heavy · storm, in Layline’s own wind bands.',
-    night: 'Depth is wind speed after dark, in the same four bands.',
+    day: 'light · medium · heavy · storm',
+    night: 'After dark: depth is wind speed, in the same four bands.',
     // ADR 0008: every wind figure in a recording is Computed by qtVlm from a solved current and a
     // wind-instrument altitude, none of which appear in the export. Not a masthead reading.
-    caveat:
-      'Every wind figure here was computed by qtVlm from the boat’s instruments, not read off the masthead.',
+    caveat: 'Wind figures are computed by qtVlm, not read off the masthead.',
   },
   twa: {
     overlay: 'twa',
@@ -292,12 +289,11 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: '°',
     kind: 'tack',
     bands: TWA_BANDS,
-    day: 'port tack · close-hauled · starboard tack. Depth is how far off the wind.',
+    day: 'port · close-hauled · starboard; depth is how far off the wind',
     night:
-      'After dark the two tacks are the same colour: depth is how far off the wind, and which ' +
-      'tack a stretch was on comes from the figures under the map.',
-    caveat:
-      'Every wind figure here was computed by qtVlm from the boat’s instruments, not read off the masthead.',
+      'After dark the two tacks are the same colour: depth is how far off the wind, and the tack ' +
+      'comes from the figures.',
+    caveat: 'Wind figures are computed by qtVlm, not read off the masthead.',
   },
   sail: {
     overlay: 'sail',
@@ -306,12 +302,8 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: null,
     kind: 'categorical',
     bands: SAIL_BANDS,
-    day:
-      'Green where what was up matches the chart, red where the two records differ — which is a ' +
-      'difference and not a fault.',
-    night:
-      'After dark the two are told apart by depth: the brighter stretches are where what was up ' +
-      'and what the chart called for differ.',
+    day: 'green agrees with the chart · red differs — a difference, not a fault',
+    night: 'After dark: the brighter stretches are where the two records differ.',
   },
 }
 

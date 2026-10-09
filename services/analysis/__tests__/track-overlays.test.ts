@@ -152,7 +152,7 @@ describe('the scales', () => {
   it('carries a standing caveat on Target VMG and on every wind figure', () => {
     // ADR 0036: a rectangular grid cannot hold an optimum that moves with wind speed, so this is
     // an estimate of the certificate's answer and never a reproduction of it.
-    expect(TRACK_SCALES.target_vmg.caveat).toMatch(/estimated from the Polar/)
+    expect(TRACK_SCALES.target_vmg.caveat).toMatch(/estimated from the grid/)
     // ADR 0008: every wind figure is computed by qtVlm, never read off the masthead.
     expect(TRACK_SCALES.tws.caveat).toMatch(/computed by qtVlm/)
     expect(TRACK_SCALES.twa.caveat).toMatch(/computed by qtVlm/)

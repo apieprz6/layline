@@ -91,15 +91,15 @@
      🚨 This ramp is a RATIO and must never be reused for anything else — the wind bands above mean
      an absolute speed, and the two are on the same screen. Each arm holds on its own as an ordinal
      ramp against the sand surface — monotone OKLab lightness, adjacent ΔL ≥ 0.07, light end at
-     2.4:1 (amber) and 2.7:1 (blue) against #F0EDE6, measured. The light ends are darker than a
+     2.4:1 (amber) and 2.3:1 (teal) against #F0EDE6, measured. The light ends are darker than a
      stock ramp's because #F0EDE6 is a pale surface to sit a hairline-wide ramp on. */
   --track-below-3: #8A4D00;   /* below 85% of target */
   --track-below-2: #C47000;   /* 85–95% */
   --track-below-1: #D68A2E;   /* 95–98% */
   --track-at:      #8F887E;   /* on target, 98–102% — neutral, never a hue */
-  --track-above-1: #5C93E0;   /* 102–105% */
-  --track-above-2: #0055BB;   /* 105–115% */
-  --track-above-3: #002277;   /* above 115% */
+  --track-above-1: #46AE8A;   /* 102–105% */
+  --track-above-2: #15805A;   /* 105–115% */
+  --track-above-3: #0B5E42;   /* above 115% */
 
   /* The Race Track Heatmap's other three scales (ADR 0037). One scale shape per quantity: a
      ratio diverges about 100% (above), a speed is sequential, a signed angle diverges by tack,

@@ -46,8 +46,7 @@ export default function RaceTrackSection({ track }: { track: RaceTrack }): React
             lineHeight: 1.5,
           }}
         >
-          This recording logged no position anywhere in the race window, so there is no track to
-          draw. Everything else on this page still describes it.
+          No position was logged anywhere in this race window, so there is no track to draw.
         </p>
       ) : (
         <TrackHeatmap heatmap={track.heatmap} scoring={track.scoring} />

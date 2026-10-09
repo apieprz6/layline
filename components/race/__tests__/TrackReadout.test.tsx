@@ -115,7 +115,7 @@ describe('a stretch the boat sailed', () => {
     await userEvent.click(screen.getByRole('button', { name: 'All figures' }))
     expect(panel).toHaveTextContent(/GPS’s own figures/)
     expect(panel).toHaveTextContent(/computed by qtVlm/)
-    expect(panel).toHaveTextContent(/not the certificate’s published optimum/)
+    expect(panel).toHaveTextContent(/not the certificate’s optimum/)
   })
 
   it('shows a Filler-Anchored figure, flagged, rather than withholding it', () => {
@@ -189,13 +189,13 @@ describe('a stretch with no figure on this overlay', () => {
   it('says it was mid-manoeuvre, which is a different fact', () => {
     show({ row: facts({ excluded: 'maneuver_window' }), overlay: 'target_speed' })
 
-    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/manoeuvre window/)
+    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/mid-manoeuvre/)
   })
 
   it('says the feed was dead, and that every value on the row is a copy', () => {
     show({ row: facts({ excluded: 'frozen' }), overlay: 'sog' })
 
-    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/copy of the row above/)
+    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/copy of the one above/)
   })
 
   it('tells a Polar that cannot answer apart from a race that records none', () => {
@@ -206,7 +206,7 @@ describe('a stretch with no figure on this overlay', () => {
     unmount()
 
     show({ row: facts(), overlay: 'target_speed', scoring: 'no-polar-version' })
-    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/records no Polar Version/)
+    expect(screen.getByTestId('track-readout-why')).toHaveTextContent(/no Polar Version is recorded/)
   })
 
   it('says a blank channel is blank, on a reading overlay', () => {

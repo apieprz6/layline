@@ -49,7 +49,7 @@ ground is a fact about the boat, not a claim about how well it was sailed.
 
 | overlay | quantity | scale | tokens |
 |---|---|---|---|
-| % of **Target Speed** | ratio about 100% | diverging, seven bands | `--track-below-3` … `--track-above-3` |
+| % of **Target Speed** | ratio about 100% | diverging, seven bands: amber below, gray, **teal** above | `--track-below-3` … `--track-above-3` |
 | % of **Target VMG** | ratio about 100% | *the same* ramp | the same seven |
 | `SOG` | knots | sequential, one hue | `--track-speed-1` … `-5` |
 | `TWS` | knots | **the wind bands** | `--wind-light` … `--wind-storm` |
@@ -60,7 +60,11 @@ Four of those rows carry an argument:
 
 **The two ratios share one ramp** rather than getting one each. They are the same shape of question,
 and two diverging ramps on one screen would invite the sailor to read a difference of palette as a
-difference of kind.
+difference of kind. Its faster arm is **teal**, not ADR 0033's blue: blue read as neutral rather
+than as *better* — it is also this system's accent, on links and on the selected chip — and teal
+carries "good" without becoming the green half of a red/green pair, which is the one diverging
+choice a red-green colour-blind reader cannot use. Amber against teal differs on the blue-yellow
+axis, which both common kinds of colour blindness keep.
 
 **`TWS` is the one overlay the wind-condition tokens belong to.** ADR 0033 refused them for
 percent-of-target because they mean an absolute wind speed on a screen that also shows a ratio. Here
@@ -208,6 +212,29 @@ the `viewBox` keeps the projection true. The track's stroke goes from 3.2 to 5.4
 ink is its message, and at 3.2 the sailor had to squint at a hue, which defeats the one thing the map
 exists for.
 
+### The page says the fact and keeps the argument one tap down
+
+The owner's other note on the same pass: *"in general just clean up the verbosity. The UI is too
+wordy right now."* This screen owes a great many explanations, and ADR after ADR requires them to be
+**stated** rather than inferred — the proportion of a race that is not coloured (ADR 0033), the
+caveat that travels with a figure (ADR 0036), why the recording cannot be edited (ADR 0010). None of
+those obligations are withdrawn. What changes is that *stated* no longer means stated at full length
+in front of every reader on every visit: a five-line paragraph under every map is a paragraph nobody
+reads twice, which loses an explanation as thoroughly as never writing it.
+
+So each of those becomes two parts: a line that states the fact, and a native `<details>`
+disclosure — `components/common/Explainer.tsx`, no JavaScript, keyboard-reachable — holding the
+reasoning. The split is not arbitrary:
+
+- **On the page:** the count, the caveat, the theme-aware sentence, the name of a state. Hiding any
+  of those would hide the claim.
+- **One tap down:** why each row is uncoloured, by reason; why the recording is not editable. Those
+  are arguments *for* a claim already on screen.
+
+The legend's swatch rows lose their sentences and keep their counts — "Frozen feed — 82 rows"
+rather than a clause explaining what a frozen feed is, which the swatch itself and the disclosure
+both say.
+
 ## Consequences
 
 - **Thirteen new tokens**, each with a declared night-vision mapping: five sequential, six for the
@@ -231,6 +258,9 @@ exists for.
 - **A sail change given during a dropout is placed**, which is the one case where this map reads a
   Frozen row's position as meaningful. It is Testimony about the water, not a measurement, so the rule
   that excludes those rows from every overlay does not apply to it.
+- **`Explainer` is a page-wide pattern now**, not this screen's: anything that owes a reason rather
+  than a fact belongs in one. It is deliberately `<details>` rather than a tooltip, because a
+  tooltip is unreachable on a touch screen, which is the device this product is for.
 - **Still open**: the readout is reachable only by pointer. A keyboard or screen-reader path to the
   same figures — stepping the selection row by row — is not built, and that is a gap rather than a
   decision.
