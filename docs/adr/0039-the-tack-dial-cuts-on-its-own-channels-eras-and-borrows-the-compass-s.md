@@ -1,4 +1,4 @@
-# ADR 0038: The Tack Dial Cuts on Its Own Channel's Eras, and Borrows the Compass's
+# ADR 0039: The Tack Dial Cuts on Its Own Channel's Eras, and Borrows the Compass's
 
 ## Status
 
