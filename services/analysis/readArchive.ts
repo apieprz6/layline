@@ -108,7 +108,19 @@ async function raceRows(
 
   if (transcription === null || annotations === null) return null
 
-  return buildMatchableRows(transcription, { id: race.id, window: race }, annotations, targets)
+  return buildMatchableRows(
+    transcription,
+    // The chart Version travels onto every row because it is the vocabulary that Race's **Sail
+    // Configurations** are numbered in, and agreement is an integer comparison valid only inside
+    // one of them (ADR 0038, ADR 0023).
+    {
+      id: race.id,
+      window: race,
+      crossover_chart_version_id: race.crossover_chart_version_id,
+    },
+    annotations,
+    targets
+  )
 }
 
 /**

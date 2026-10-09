@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SailSelectionContent from '@/components/analysis/SailSelectionContent'
 import {
+  ARCHIVE_CHART_VERSION,
   archiveChart,
   archiveDomain,
   archiveMonths,
@@ -47,6 +48,7 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
         initialFilter={EMPTY_FILTER}
         chart={archiveChart()}
         domain={archiveDomain()}
+        chartVersionId={ARCHIVE_CHART_VERSION}
       />
     )
     return userEvent.setup({ delay: null })

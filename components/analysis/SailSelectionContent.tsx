@@ -62,6 +62,14 @@ interface SailSelectionContentProps {
    * its Race was sailed under (ADR 0012) and is not re-derived here.
    */
   domain: PolarDomain | null
+  /**
+   * The **Crossover Chart Version** `chart` is the payload of, or null where it is not known.
+   *
+   * Agreement is an integer comparison valid only inside one Version (ADR 0038), so this is what
+   * lets the grid place a row from another Version without judging it. Null claims nothing either
+   * way, which is what a fixture or a caller with no Version to hand should say.
+   */
+  chartVersionId?: string | null
 }
 
 /**
@@ -93,6 +101,7 @@ export default function SailSelectionContent({
   initialFilter,
   chart,
   domain,
+  chartVersionId = null,
 }: SailSelectionContentProps): ReactElement {
   const [filter, setFilter] = useState<AnalysisFilter>(initialFilter)
   const [layer, setLayer] = useState<SailSelectionLayer>('chart')
@@ -104,7 +113,7 @@ export default function SailSelectionContent({
   // full-size one — plus the summary line. Everything downstream reads the fold rather than
   // redoing it, which is what `cellViews` and a `gridCoverage` over views are for.
   const { data, views, coverage, reasons } = useMemo(() => {
-    const selection = getSailSelectionData(rows, filter, dimensions, chart, domain)
+    const selection = getSailSelectionData(rows, filter, dimensions, chart, domain, chartVersionId)
     const folded = cellViews(selection.cells)
 
     return {
@@ -117,7 +126,7 @@ export default function SailSelectionContent({
       // columns are one sentence between them.
       reasons: unreachableRegions(selection.cells, domain),
     }
-  }, [rows, filter, dimensions, chart, domain])
+  }, [rows, filter, dimensions, chart, domain, chartVersionId])
 
   const active = sailSelectionLayer(layer)
   const open = views.find((view) => cellKey(view.cell.row, view.cell.column) === selected) ?? null
@@ -320,6 +329,11 @@ function Legend({
           <li>
             <Swatch fill={agreementTint('off-chart')} /> {AGREEMENT_GLYPHS['off-chart']} a sail the
             chart has no word for — the vocabulary running out, and never disagreement
+          </li>
+          <li>
+            <Swatch fill={agreementTint('other-version')} /> {AGREEMENT_GLYPHS['other-version']}{' '}
+            sailed under a different Crossover Chart, where the same sail number means a different
+            sail — drawn where it sailed, and not judged against this chart
           </li>
         </>
       )}

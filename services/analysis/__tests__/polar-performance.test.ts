@@ -26,6 +26,9 @@ const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, {
   months: ['2026-06', '2026-07'],
 })
 
+/** The Crossover Chart Version these rows were sailed under: the vocabulary their sail numbers are in. */
+const CHART_VERSION = 'chart-version-1'
+
 let nextIndex = 0
 
 /** A row the Polar could answer for: `sog` knots against `target` knots, for `seconds`. */
@@ -51,7 +54,8 @@ function scored(over: {
     tws: over.tws === undefined ? 11 : over.tws,
     twa: 42,
     sea_state: 'calm',
-    sail: { recorded: 'definition', label: 'Main + Jib 1' },
+    crossover_chart_version_id: CHART_VERSION,
+    sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' },
     countable: over.countable ?? true,
     interval_seconds: over.seconds === undefined ? 60 : over.seconds,
     sog,

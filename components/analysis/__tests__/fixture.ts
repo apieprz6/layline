@@ -11,6 +11,15 @@
 import type { PolarDomain } from '@/services/analysis/polar-targets'
 import type { AnalysisArchiveRace, CrossoverChartPayload, MatchableRow, RowSail } from '@/types'
 
+/**
+ * The **Crossover Chart Version** every fixture row was sailed under, which is `CHART`'s own.
+ *
+ * It has to be stated rather than left null, because agreement is an integer comparison valid only
+ * inside one Version (ADR 0038): a row whose Race points at some other Version is a row the Sail
+ * Selection Screen may place on this grid and may not judge against it.
+ */
+export const CHART_VERSION = 'chart-version-1'
+
 export const VOCABULARY = {
   /** `Reef + Jib 2` is in the chart and in no race — the disabled chip ADR 0014 asks for. */
   sails: ['Main + Jib 1', 'Main + Jib 2', 'Reef + Jib 2'],
@@ -67,7 +76,8 @@ export function matchableRow(over: Partial<MatchableRow> = {}): MatchableRow {
     tws: 11,
     twa: 42,
     sea_state: 'calm',
-    sail: { recorded: 'definition', label: 'Main + Jib 1' } satisfies RowSail,
+    crossover_chart_version_id: CHART_VERSION,
+    sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' } satisfies RowSail,
     countable: true,
     interval_seconds: 60,
     sog,

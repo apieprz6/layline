@@ -291,7 +291,15 @@ describe('what the read returns', () => {
     const row = archive?.rows[0]
 
     expect(row?.sea_state).toBe('calm')
-    expect(row?.sail).toEqual({ recorded: 'definition', label: 'Main + Jib 1' })
+    // Both halves of the Configuration, read for different things: the **number** is what
+    // agreement is compared on (ADR 0038) and the **label** is what a filter chip groups on.
+    expect(row?.sail).toEqual({
+      recorded: 'definition',
+      definition_number: 1,
+      label: 'Main + Jib 1',
+    })
+    // And the Version that numbering is written in, which is what makes the comparison valid.
+    expect(row?.crossover_chart_version_id).toBe('chart-v1')
     expect(row?.efficiency.target_speed).not.toBeNull()
   })
 

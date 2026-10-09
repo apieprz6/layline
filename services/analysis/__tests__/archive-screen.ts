@@ -35,6 +35,16 @@ import type { CrossoverChartPayload, MatchableRow } from '@/types'
 /** `describe` where the recordings *and* the artifacts are to hand, `describe.skip` otherwise. */
 export const describeArchiveScreen = archiveFilenames.length > 0 ? describeBoatSetup : describe.skip
 
+/**
+ * The one **Crossover Chart Version** this archive's **Sail Configurations** are numbered in.
+ *
+ * The boat owns one chart, every annotated Race points at it, and a Configuration cannot exist
+ * without one (ADR 0023) — so a single id across every Race is what the database actually holds.
+ * It has to be *stated*, because agreement is an integer comparison valid only inside one Version
+ * (ADR 0038), and leaving it null would make the `other-version` tally read empty for no reason.
+ */
+export const ARCHIVE_CHART_VERSION = 'handsome-pete-2026-sailselect'
+
 /** Deferred until first asked for, then kept: thirteen files parsed, assessed, joined and scored. */
 export function once<T>(build: () => T): () => T {
   let cached: { value: T } | null = null
@@ -59,7 +69,7 @@ export const archiveRows = once((): MatchableRow[] => {
 
     return buildMatchableRows(
       transcription.rows,
-      { id: stem, window: raceWindowFor(filename) },
+      { id: stem, window: raceWindowFor(filename), crossover_chart_version_id: ARCHIVE_CHART_VERSION },
       archiveAnnotations(filename),
       targets
     )

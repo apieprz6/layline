@@ -120,6 +120,9 @@ async function SailSelectionScreen({ params }: { params: SearchParams }): Promis
         initialFilter={filterFromSearchParams(params, dimensions)}
         chart={payload}
         domain={polar?.current == null ? null : polarDomain(polar.current.payload)}
+        // Which **Version** the grid above is drawn from, so a row sailed under a different one is
+        // placed and left unjudged rather than compared across two vocabularies (ADR 0038).
+        chartVersionId={chart?.current?.id ?? null}
       />
     </Screen>
   )

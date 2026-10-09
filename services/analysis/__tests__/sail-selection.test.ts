@@ -39,6 +39,14 @@ import type { AnalysisFilter, CrossoverChartPayload, MatchableRow, RowSail } fro
 const JIB = 'Main + Jib 1'
 const KITE = 'Main + A2'
 
+/** Which Definition each sail is in `CHART` — the number agreement is compared on (ADR 0038). */
+const DEFINITION: Record<string, number> = { [JIB]: 1, [KITE]: 8 }
+
+/** A **Sail Configuration** naming one of `CHART`'s own Definitions, by number and in its words. */
+function carrying(label: string): RowSail {
+  return { recorded: 'definition', definition_number: DEFINITION[label], label }
+}
+
 /**
  * A chart with the two shapes that matter: a coarse angle axis to floor onto, and a wind-speed
  * column (25 kt) past where any ORC certificate reaches. The boat's own chart has exactly that
@@ -64,6 +72,9 @@ const DIMENSIONS = analysisDimensions(SAIL_SELECTION_DIMENSIONS, {
   sails: [JIB, KITE],
   months: ['2026-06', '2026-07'],
 })
+
+/** The Crossover Chart Version these rows were sailed under: the vocabulary their sail numbers are in. */
+const CHART_VERSION = 'chart-version-1'
 
 let nextIndex = 0
 
@@ -92,7 +103,8 @@ function row(over: {
     tws: over.tws === undefined ? 14 : over.tws,
     twa: over.twa === undefined ? 95 : over.twa,
     sea_state: over.sea === undefined ? 'calm' : over.sea,
-    sail: over.sail ?? { recorded: 'definition', label: KITE },
+    crossover_chart_version_id: CHART_VERSION,
+    sail: over.sail ?? carrying(KITE),
     countable: over.countable ?? true,
     interval_seconds: over.seconds === undefined ? 60 : over.seconds,
     sog,
@@ -201,17 +213,23 @@ describe('Cell Agreement, as a proportion over the cell’s own rows', () => {
     const totals = agreement([row({}), row({})])
 
     expect(totals.agreement).toBe('agrees')
-    expect(totals.verdicts).toEqual({ agrees: 2, differs: 0, 'off-chart': 0, 'not-recorded': 0 })
+    expect(totals.verdicts).toEqual({
+      agrees: 2,
+      differs: 0,
+      'off-chart': 0,
+      'not-recorded': 0,
+      'other-version': 0,
+    })
   })
 
   it('differs where every judgeable row carried something else', () => {
-    expect(agreement([row({ sail: { recorded: 'definition', label: JIB } })]).agreement).toBe(
+    expect(agreement([row({ sail: carrying(JIB) })]).agreement).toBe(
       'differs'
     )
   })
 
   it('reads Mixed where one cell holds both, which 38 of this archive’s cells do', () => {
-    const totals = agreement([row({}), row({ sail: { recorded: 'definition', label: JIB } })])
+    const totals = agreement([row({}), row({ sail: carrying(JIB) })])
 
     expect(totals.agreement).toBe('mixed')
     expect(totals.verdicts.agrees).toBe(1)
@@ -376,8 +394,8 @@ describe('a cell that can never hold a percent of Target Speed', () => {
 
 describe('a tapped cell’s breakdown', () => {
   const ROWS = [
-    row({ sail: { recorded: 'definition', label: KITE }, sea: 'calm', hour: 14, sog: 6 }),
-    row({ sail: { recorded: 'definition', label: JIB }, sea: 'slight', hour: 22, sog: 3 }),
+    row({ sail: carrying(KITE), sea: 'calm', hour: 14, sog: 6 }),
+    row({ sail: carrying(JIB), sea: 'slight', hour: 22, sog: 3 }),
     row({ sail: { recorded: 'not-recorded' }, sea: null, hour: 14, sog: 6, target: null }),
   ]
 
@@ -432,7 +450,7 @@ describe('what the grid says about itself', () => {
   it('counts reached, figure-bearing, unreachable, mixed and ghosted cells', () => {
     const rows = [
       row({ twa: 95, tws: 14 }),
-      row({ twa: 95, tws: 14, sail: { recorded: 'definition', label: JIB } }),
+      row({ twa: 95, tws: 14, sail: carrying(JIB) }),
       row({ twa: 45, tws: 7, target: null }),
     ]
 

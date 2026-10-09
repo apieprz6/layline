@@ -54,6 +54,9 @@ export const AGREEMENT_GLYPHS: Record<CellAgreement, string> = {
   mixed: '±',
   'not-recorded': '?',
   'off-chart': '⊘',
+  // A footnote mark, which is what it is: a reserved state nobody has seen, whose whole meaning
+  // lives in the legend beside it.
+  'other-version': '*',
   'no-rows': '',
 }
 
@@ -64,6 +67,7 @@ export const AGREEMENT_WORDS: Record<CellAgreement, string> = {
   mixed: 'both, across this cell’s rows',
   'not-recorded': 'no row’s sail was written down',
   'off-chart': 'a sail the chart has no word for — never counted as disagreement',
+  'other-version': 'sailed under another Crossover Chart, so its sail numbers mean something else',
   'no-rows': 'no rows here',
 }
 
@@ -101,10 +105,10 @@ export function coverageTint(races: number): string {
 /**
  * The three state tokens and a muted neutral, because a verdict has no order.
  *
- * The two states that are *about the record* rather than about the water — **Not recorded** and
- * **Off-chart** — share the neutral and sit at a lower alpha, so neither reads as a judgement on
- * the crew. Off-chart is emphatically not disagreement (ADR 0023), and the glyph is what tells the
- * two apart.
+ * The states that are *about the record* rather than about the water — **Not recorded**,
+ * **Off-chart** and **Other-version** — share the neutral and sit at a lower alpha, so none of
+ * them reads as a judgement on the crew. Off-chart is emphatically not disagreement (ADR 0023),
+ * and the glyph is what tells the three apart.
  */
 const AGREEMENT_TOKENS: Record<CellAgreement, string | null> = {
   agrees: '--state-success',
@@ -112,6 +116,7 @@ const AGREEMENT_TOKENS: Record<CellAgreement, string | null> = {
   differs: '--state-danger',
   'not-recorded': '--text-muted',
   'off-chart': '--text-muted',
+  'other-version': '--text-muted',
   'no-rows': null,
 }
 

@@ -37,6 +37,9 @@ const VOCABULARY = {
 
 const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, VOCABULARY)
 
+/** The Crossover Chart Version these rows were sailed under: the vocabulary their sail numbers are in. */
+const CHART_VERSION = 'chart-version-1'
+
 let nextIndex = 0
 
 /** A row with nothing recorded, overridden field by field. */
@@ -50,7 +53,8 @@ function row(over: Partial<MatchableRow> = {}): MatchableRow {
     tws: 11,
     twa: 42,
     sea_state: 'calm',
-    sail: { recorded: 'definition', label: 'Main + Jib 1' } satisfies RowSail,
+    crossover_chart_version_id: CHART_VERSION,
+    sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' } satisfies RowSail,
     countable: true,
     interval_seconds: 30,
     sog: 6,
@@ -187,7 +191,7 @@ describe('which bucket a row falls in', () => {
   })
 
   it('tells a named sail from a note-only Configuration from no Configuration at all', () => {
-    expect(bucketOf(row({ sail: { recorded: 'definition', label: 'Main + A2' } }), 'sail')).toBe(
+    expect(bucketOf(row({ sail: { recorded: 'definition', definition_number: 8, label: 'Main + A2' } }), 'sail')).toBe(
       'Main + A2'
     )
     expect(bucketOf(row({ sail: { recorded: 'note-only' } }), 'sail')).toBe(NOTE_ONLY)
@@ -473,7 +477,7 @@ describe('what must hold over any row set, not just a hand-picked one', () => {
     row({ sea_state: 'rough' }),
     row({ sail: { recorded: 'not-recorded' } }),
     row({ sail: { recorded: 'note-only' } }),
-    row({ sail: { recorded: 'definition', label: 'Main + Jib 2' } }),
+    row({ sail: { recorded: 'definition', definition_number: 2, label: 'Main + Jib 2' } }),
     row({ day: '2026-07-22', day_seconds: 0, race_id: 'b' }),
     row({ day: '2026-07-22', day_seconds: 23 * 3600 + 3599, race_id: 'b' }),
   ]

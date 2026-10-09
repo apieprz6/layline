@@ -15,6 +15,7 @@
  */
 
 import {
+  ARCHIVE_CHART_VERSION,
   archiveChart,
   archiveDomain,
   archiveMonths,
@@ -46,7 +47,14 @@ const dimensions = once(() =>
 
 /** The whole archive laid over the boat's own chart, under one filter. */
 function screenFor(filter: AnalysisFilter): SailSelection {
-  return getSailSelectionData(archiveRows(), filter, dimensions(), archiveChart(), archiveDomain())
+  return getSailSelectionData(
+    archiveRows(),
+    filter,
+    dimensions(),
+    archiveChart(),
+    archiveDomain(),
+    ARCHIVE_CHART_VERSION
+  )
 }
 
 const screen = once((): SailSelection => screenFor(EMPTY_FILTER))
@@ -71,6 +79,7 @@ const verdicts = once((): Record<CellVerdict, number> => {
     differs: 0,
     'off-chart': 0,
     'not-recorded': 0,
+    'other-version': 0,
   }
 
   for (const cell of screen().cells) {
@@ -194,6 +203,8 @@ describeArchiveScreen('Cell Agreement over the whole archive', () => {
       differs: 295,
       'off-chart': 0,
       'not-recorded': 1298,
+      // The boat has one Crossover Chart Version, so no row is written in another's vocabulary.
+      'other-version': 0,
     })
   })
 
@@ -203,6 +214,24 @@ describeArchiveScreen('Cell Agreement over the whole archive', () => {
 
     // The rest reached no cell at all, and the screen says how many and why.
     expect(placed + screen().rows_off_grid + screen().rows_unplaced).toBe(countable)
+  })
+
+  /**
+   * `Other-version` is empty for a reason, not for want of the field being filled.
+   *
+   * Every Race that carries a **Sail Configuration** points at the one **Crossover Chart Version**
+   * this boat owns — a Configuration cannot exist without one (ADR 0023) — so the integer
+   * comparison ADR 0038 fixes is valid on every judgeable row in the archive. Asserted rather than
+   * assumed, because a null Version id would also produce an empty tally and mean nothing.
+   */
+  it('reads every Configuration in one chart Version’s own numbering', () => {
+    const configured = archiveRows().filter((row) => row.sail.recorded === 'definition')
+    const versions = new Set(configured.map((row) => row.crossover_chart_version_id))
+
+    expect(configured.length).toBeGreaterThan(0)
+    expect(versions.size).toBe(1)
+    expect([...versions][0]).not.toBeNull()
+    expect(verdicts()['other-version']).toBe(0)
   })
 
   it('leaves Off-chart empty, because the unnameable sail was flown below the chart', () => {
@@ -245,8 +274,14 @@ describeArchiveScreen('what the Overall tab’s card says about this chart', () 
 
   const card = once(() =>
     chartAgreement(
-      getSailSelectionData(window(), EMPTY_FILTER, dimensions(), archiveChart(), archiveDomain())
-        .cells
+      getSailSelectionData(
+        window(),
+        EMPTY_FILTER,
+        dimensions(),
+        archiveChart(),
+        archiveDomain(),
+        ARCHIVE_CHART_VERSION
+      ).cells
     )
   )
 
@@ -283,14 +318,21 @@ describeArchiveScreen('what the Overall tab’s card says about this chart', () 
   })
 
   it('accounts for every placed row across the two sides and the two unjudgeable states', () => {
-    const totals = { agrees: 0, differs: 0, 'off-chart': 0, 'not-recorded': 0 }
+    const totals: Record<CellVerdict, number> = {
+      agrees: 0,
+      differs: 0,
+      'off-chart': 0,
+      'not-recorded': 0,
+      'other-version': 0,
+    }
 
     for (const cell of getSailSelectionData(
       window(),
       EMPTY_FILTER,
       dimensions(),
       archiveChart(),
-      archiveDomain()
+      archiveDomain(),
+      ARCHIVE_CHART_VERSION
     ).cells) {
       const verdicts = cellTotals(cell.slices).verdicts
       for (const key of Object.keys(totals) as CellVerdict[]) totals[key] += verdicts[key]

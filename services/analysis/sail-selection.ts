@@ -60,13 +60,26 @@ import type {
 /**
  * What one row says about its own cell's recommendation.
  *
- * Four, and **Off-chart is not disagreement**. A **Sail Configuration** that names no **Sail
- * Definition** is the vocabulary running out, not the crew contradicting the chart's advice (ADR
- * 0023, ADR 0030) — and the same verdict covers the mirror case, a chart cell whose sail number
- * names no Definition of its own Version, because there too one side of the comparison has no
- * word for what it is holding.
+ * Two verdicts and three ways to have none, kept apart because they are different facts and a
+ * single "no" would flatten a decision somebody made on the water, a gap in the archive and the
+ * edge of a vocabulary into one shrug (ADR 0038's reasoning, at this grain).
+ *
+ * **Off-chart is not disagreement.** A **Sail Configuration** that names no **Sail Definition** is
+ * the vocabulary running out, not the crew contradicting the chart's advice (ADR 0023, ADR 0030) —
+ * and the same verdict covers the mirror case, a chart cell whose sail number names no Definition
+ * of its own Version, because there too one side of the comparison has no word for what it holds.
+ *
+ * **Other-version is reserved and empty**, like `off-chart` before it. A row whose Race was sailed
+ * under a different **Crossover Chart Version** has its sail written in a different vocabulary, so
+ * the integer comparison ADR 0038 fixes is not available and nothing may be concluded — see
+ * `verdictOf`. This boat has one Version, so no row is in this state today.
  */
-export type CellVerdict = 'agrees' | 'differs' | 'off-chart' | 'not-recorded'
+export type CellVerdict =
+  | 'agrees'
+  | 'differs'
+  | 'off-chart'
+  | 'not-recorded'
+  | 'other-version'
 
 /**
  * **Cell Agreement**: what a cell's Countable rows, taken together, say about its recommendation.
@@ -199,9 +212,9 @@ export interface CellBreakdown {
   times: BreakdownLine[]
 }
 
-/** The slice key: three bucket ids, joined on a character no bucket id can hold. */
-function sliceKey(sail: string, sea: string, time: string): string {
-  return `${sail}\u0000${sea}\u0000${time}`
+/** The slice key: three bucket ids and a verdict, joined on a character none of them can hold. */
+function sliceKey(sail: string, sea: string, time: string, verdict: CellVerdict): string {
+  return `${sail}\u0000${sea}\u0000${time}\u0000${verdict}`
 }
 
 /**
@@ -221,16 +234,47 @@ const NO_SLICES: ReadonlyMap<string, MatchableRow[]> = new Map()
 /**
  * How one row's sail stands against one cell's recommendation.
  *
- * Both ways the comparison can fail to be a comparison land on `off-chart`, which is never counted
+ * **An integer comparison, in one vocabulary** — ADR 0038's rule, and this module reads it the same
+ * way `compareSailToChart` does at the per-row grain the Race Track Heatmap draws. A
+ * **Sail Configuration** names a **Sail Definition** *number* of the Version its Race points at,
+ * and so does the chart's own cell (ADR 0023); matching on names instead would make "Main + A2" and
+ * "Main+A2" two different sails. `services/analysis/__tests__/sail-agreement-reconciliation.test.ts`
+ * holds the two readings to the same answer, so "the two cannot disagree" is a test rather than a
+ * sentence in an ADR.
+ *
+ * **Which makes the Version load-bearing here in a way it is not there.** The heatmap colours a row
+ * against its own Race's chart; this screen draws **one** grid and lays a whole season over it. A
+ * row from another Version is still *placed* — the grid's geometry is the drawn chart's, and the
+ * boat really did sail at that angle and wind speed — but it cannot be *judged*, because its sail
+ * number means something else in its own chart. That is `other-version`, and concluding anything
+ * from it would be comparing two vocabularies' integers.
+ *
+ * Both ways the comparison can simply run out of words land on `off-chart`, which is never counted
  * as disagreement: the crew flew something the chart has no word for, or the chart's own cell holds
  * a sail number its Version no longer defines. Either way the vocabulary ran out on one side, and
  * that is not the crew contradicting the chart (ADR 0023, ADR 0030).
  */
-function verdictOf(sail: string, recommendation: SailRecommendation | null): CellVerdict {
-  if (sail === NOT_RECORDED) return 'not-recorded'
-  if (sail === NOTE_ONLY || recommendation === null) return 'off-chart'
+function verdictOf(
+  row: MatchableRow,
+  recommendation: SailRecommendation | null,
+  /** The Version the grid is drawn from, or null where the caller could not say which. */
+  chartVersionId: string | null
+): CellVerdict {
+  if (row.sail.recorded === 'not-recorded') return 'not-recorded'
+  if (row.sail.recorded === 'note-only' || recommendation === null) return 'off-chart'
 
-  return sail === recommendation.definition.label ? 'agrees' : 'differs'
+  // Null on either side is not a mismatch: a caller that cannot name the drawn Version is not
+  // evidence that the row came from another one, and this archive's Races that carry Sail
+  // Configurations all point at the Version the chart is drawn from.
+  if (
+    chartVersionId !== null &&
+    row.crossover_chart_version_id !== null &&
+    row.crossover_chart_version_id !== chartVersionId
+  ) {
+    return 'other-version'
+  }
+
+  return row.sail.definition_number === recommendation.definition.number ? 'agrees' : 'differs'
 }
 
 /**
@@ -398,19 +442,26 @@ export function unreachableRegions(
  * The ledger is computed from the same rows and the same filter rather than from the matched set,
  * so its totals are the archive's and cannot drift from the grid beside them.
  *
- * `chart` is the **Crossover Chart** the grid is drawn from, and every row is placed on it and
- * judged against it — including a row whose Race was sailed under an older **Version**. That is
- * deliberate, and it is the only self-consistent reading: a cell shows one recommendation, so
- * "agrees" inside that cell has to mean agreement with *that* recommendation. Judging each row
- * against its own Race's Version would print `=` in a cell whose sail the row never carried. The
- * comparison is on labels, which is the only thing two Versions can be compared on (ADR 0023).
+ * ## Placed by the drawn chart, judged in its own Version
+ *
+ * `chart` is the **Crossover Chart** the grid is drawn from, and **every** row is placed on it —
+ * a cell shows one recommendation, so "agrees" inside that cell has to mean agreement with *that*
+ * recommendation, and judging each row against its own Race's Version would print `=` in a cell
+ * whose sail the row never carried.
+ *
+ * Which is exactly why the two cannot be the same question. Placement is geometry and applies to
+ * every row; the verdict is an integer comparison and is only meaningful inside one Version (ADR
+ * 0038, ADR 0023). So a row from another Version is drawn where it sailed and left unjudged
+ * (`other-version`) rather than name-matched across vocabularies. `chartVersionId` is what tells
+ * the two apart; null where the caller cannot say, which claims nothing either way.
  */
 export function getSailSelectionData(
   rows: readonly MatchableRow[],
   filter: AnalysisFilter,
   dimensions: readonly AnalysisDimensionSpec[],
   chart: CrossoverChartPayload,
-  domain: PolarDomain | null
+  domain: PolarDomain | null,
+  chartVersionId: string | null = null
 ): SailSelection {
   const lookup = crossoverLookup(chart)
 
@@ -453,7 +504,17 @@ export function getSailSelectionData(
     const slices = grouped.get(cell) ?? new Map<string, MatchableRow[]>()
     grouped.set(cell, slices)
 
-    const key = sliceKey(bucketOf(row, 'sail'), bucketOf(row, 'sea'), bucketOf(row, 'time'))
+    // The verdict is part of the key, and is computed here **per row** rather than per slice,
+    // because it is not a function of the sail alone: two rows carrying a sail of the same name
+    // from two **Crossover Chart Versions** are one bucket to the filter and two different
+    // comparisons to the chart. Keying on it is what keeps a slice's verdict true of every row in
+    // it, which is what lets `cellTotals` tally verdicts by slice at all.
+    const key = sliceKey(
+      bucketOf(row, 'sail'),
+      bucketOf(row, 'sea'),
+      bucketOf(row, 'time'),
+      verdictOf(row, lookup.recommendAt(at.row, at.column), chartVersionId)
+    )
     const held = slices.get(key) ?? []
     held.push(row)
     slices.set(key, held)
@@ -474,13 +535,13 @@ export function getSailSelectionData(
         recommendation,
         slices: [...(grouped.get(cellKey(row, column)) ?? NO_SLICES).entries()].map(
           ([key, held]): SailSelectionSlice => {
-            const [sail, sea, time] = key.split('\u0000')
+            const [sail, sea, time, verdict] = key.split('\u0000')
 
             return {
               sail,
               sea,
               time,
-              verdict: verdictOf(sail, recommendation),
+              verdict: verdict as CellVerdict,
               efficiency: sumEfficiency(held),
               race_ids: [...new Set(held.map((each) => each.race_id))],
             }
@@ -508,23 +569,30 @@ const NO_VERDICTS: Record<CellVerdict, number> = {
   differs: 0,
   'off-chart': 0,
   'not-recorded': 0,
+  'other-version': 0,
 }
 
 /**
  * The cell's own reading of its verdict tallies.
  *
- * Off-chart rows are never read as disagreement, which is why they are consulted last: a cell
- * holding agreeing rows and off-chart rows agrees, as far as anything can be said about it. The
- * fifth state is reserved and empty in this archive, because the only unnameable sail it holds was
- * flown below the chart's first column and reaches no cell (ADR 0030).
+ * **The two real verdicts win.** A cell holding agreeing rows and unjudgeable ones agrees, as far
+ * as anything can be said about it — which is why the three non-verdicts are consulted last, and
+ * why `off-chart` can never tip a cell into reading as disagreement (ADR 0023).
+ *
+ * Among those three, the ones where something *was* written down come first: "the record is there
+ * and the comparison is not" is a different and more surprising thing to be told than "nobody
+ * wrote it down", which 31 of this archive's reached cells say already. Both of the first two are
+ * empty today — the only unnameable sail the archive holds was flown below the chart's first
+ * column and reaches no cell, and the boat has one Crossover Chart Version (ADR 0030, ADR 0038).
  */
 export function cellAgreement(verdicts: Record<CellVerdict, number>, rows: number): CellAgreement {
   if (rows === 0) return 'no-rows'
   if (verdicts.agrees > 0 && verdicts.differs > 0) return 'mixed'
   if (verdicts.agrees > 0) return 'agrees'
   if (verdicts.differs > 0) return 'differs'
+  if (verdicts['off-chart'] > 0) return 'off-chart'
 
-  return verdicts['off-chart'] > 0 ? 'off-chart' : 'not-recorded'
+  return verdicts['other-version'] > 0 ? 'other-version' : 'not-recorded'
 }
 
 /**

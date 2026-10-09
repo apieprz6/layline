@@ -47,6 +47,20 @@ export interface MatchableSource extends QualityAssessableRow {
   twa: string | null
 }
 
+/**
+ * The Race a row belongs to, as building one reads it.
+ *
+ * `crossover_chart_version_id` is the vocabulary its **Sail Configurations** are written in, and
+ * travels onto every row because agreement is an integer comparison valid only inside one Version
+ * (ADR 0038, ADR 0023). Optional, because a caller with no Boat Setup in hand — a suite reading
+ * the owner's files, a Race that records none — is the ordinary case rather than an error.
+ */
+export interface BuildableRace {
+  id: string
+  window: RaceWindow
+  crossover_chart_version_id?: string | null
+}
+
 /** An unscored row: what a Race with no **Polar** pointer, or a channel-less row, answers with. */
 const NO_EFFICIENCY = (row_index: number): RowEfficiency => ({
   row_index,
@@ -69,9 +83,17 @@ function sailInForce(annotations: RaceAnnotations, rowTime: string): RowSail {
   const entry = annotationInForce(annotations.sails, rowTime)
   if (entry === null) return { recorded: 'not-recorded' }
 
-  return entry.label === null
+  // Both halves travel, and they are read for different things: the **number** is what agreement
+  // is compared on (ADR 0038) and the **label** is what a filter chip groups on and a screen
+  // prints. A Configuration naming a Definition always has both — the database holds it to the
+  // Version's own definitions — so a missing number is the note-only state and not a half-entry.
+  return entry.label === null || entry.definition_number === null
     ? { recorded: 'note-only' }
-    : { recorded: 'definition', label: entry.label }
+    : {
+        recorded: 'definition',
+        definition_number: entry.definition_number,
+        label: entry.label,
+      }
 }
 
 /** Seconds past midnight in the recording's own frame, which is the `time` dimension's axis. */
@@ -97,7 +119,7 @@ function secondsIntoDay(rowTime: string): number {
  */
 export function buildMatchableRows<Row extends MatchableSource>(
   transcription: readonly Row[],
-  race: { id: string; window: RaceWindow },
+  race: BuildableRace,
   annotations: RaceAnnotations,
   targets: PolarTargets | null
 ): MatchableRow[] {
@@ -131,5 +153,6 @@ export function buildMatchableRows<Row extends MatchableSource>(
     interval_seconds: intervals[index],
     sog: channelValue(row.sog),
     efficiency: targets === null ? NO_EFFICIENCY(row.row_index) : computeRowEfficiency(row, targets),
+    crossover_chart_version_id: race.crossover_chart_version_id ?? null,
   }))
 }
