@@ -21,7 +21,7 @@
  * **Each legend changes its words after dark**, because each scale loses something different then,
  * and the one thing none of them may do is keep the daylight sentence.
  *
- * **A ratio and a reading are gated differently** (ADR 0037): the parked row has no percent of
+ * **A ratio and a reading are gated differently** (ADR 0038): the parked row has no percent of
  * target and does have a speed over the ground, and the picture has to show both of those facts.
  */
 
@@ -208,7 +208,7 @@ describe('the track, drawn', () => {
 
     // Testimony is neither measured nor computed, and on a screen where six scales spend every hue
     // the design system has, the only honest way to say "a different kind of thing" is to stop
-    // using hue for it (ADR 0008's Provenance, ADR 0037).
+    // using hue for it (ADR 0008's Provenance, ADR 0038).
     const sail = screen.getByTestId('track-testimony-sail')
     expect(sail).toBeInTheDocument()
     expect(sail.querySelector('circle')).toHaveAttribute('fill', 'var(--surface-raised)')
@@ -414,7 +414,7 @@ describe('switching what the track is coloured by', () => {
   })
 
   it('colours a parked row on a reading overlay and refuses it on a ratio', () => {
-    // ADR 0037's asymmetry, drawn: the mid-manoeuvre row has no percent of target and does have a
+    // ADR 0038's asymmetry, drawn: the mid-manoeuvre row has no percent of target and does have a
     // speed over the ground, which is simply what the GPS recorded.
     const { container } = render(<RaceTrackSection track={trackOf()} />)
 
@@ -538,7 +538,7 @@ describe('the legend beneath it', () => {
       '82 of 258 rows are drawn but not coloured.'
     )
     // 176 of 258 coloured: everything except the dead feed. And the detail says *why* a parked row
-    // keeps its colour here, rather than listing it among the exclusions (ADR 0037).
+    // keeps its colour here, rather than listing it among the exclusions (ADR 0038).
     const why = screen.getByTestId('track-counts-why')
     expect(why).toHaveTextContent(/every value is a copy of the row above/)
     expect(why).toHaveTextContent(/A parked or mid-manoeuvre row keeps its colour here/)

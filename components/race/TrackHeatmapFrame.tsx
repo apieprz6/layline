@@ -9,7 +9,7 @@
  *
  * It takes drawn geometry with each row's facts attached, and bands them through
  * `track-overlays.ts` — the same module the server tallies its counts with, so a band this draws
- * cannot be one the rules refuse (ADR 0037). The projection stays on the server: it carries
+ * cannot be one the rules refuse (ADR 0038). The projection stays on the server: it carries
  * closures and cannot be serialised at all.
  *
  * Three constraints the prototype got wrong first, each load-bearing here:

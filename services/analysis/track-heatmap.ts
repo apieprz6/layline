@@ -1,6 +1,6 @@
 /**
  * The **Race Track Heatmap**: a race's own GPS trace, drawn, with each row's figures and verdicts
- * attached (ADR 0033, as ADR 0037 amends it).
+ * attached (ADR 0033, as ADR 0038 amends it).
  *
  * The track *is* the heatmap. Every recorded row of the window is drawn, because the boat was
  * there; whether a row carries *colour* is a question each overlay answers for itself, and
@@ -13,7 +13,7 @@
  * switch that costs a round trip is not a switch — so each segment now carries its row's **values
  * and verdicts**, computed here, and both sides band them through the one shared module. The
  * client chooses which band to paint and can read a stretch out when the sailor taps it; it cannot
- * invent a band the rules refuse, because the rules are not on that side (ADR 0037).
+ * invent a band the rules refuse, because the rules are not on that side (ADR 0038).
  *
  * The projection still happens here. It carries closures and cannot be serialised at all, which is
  * also why the client only ever moves a camera over geometry it is handed.

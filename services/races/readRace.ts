@@ -89,8 +89,54 @@ interface SailEntryRow {
 
 /** One Sail Definition of the Version the Race points at, which is where the words come from. */
 interface DefinitionRow {
+  version_id: string
   number: number
   label: string
+}
+
+/** One Crossover Chart Version's own words for its sails, by Definition number. */
+export type SailDefinitionLabels = Map<number, string>
+
+/**
+ * Every named Version's Sail Definitions, in **one** request.
+ *
+ * A Sail Configuration names a Sail Definition *number*, and the words belong to the Crossover
+ * Chart Version the Race points at (ADR 0023) — so they have to be read, and read per Version
+ * rather than through the artifact's current pointer, which is the read-time resolution ADR 0012
+ * forbids. What this adds is asking for every Version at once: the archive reader has thirteen
+ * Races pointing at (today) one Version, and a query per Race was thirteen serial round trips to
+ * learn one answer.
+ *
+ * Null is a failed read and takes its caller with it, for the reason `readRaceAnnotations` returns
+ * null: a race that *was* annotated must never render as one the sailor said nothing about.
+ */
+export async function readSailDefinitions(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  versionIds: readonly (string | null)[]
+): Promise<Map<string, SailDefinitionLabels> | null> {
+  const wanted = [...new Set(versionIds.filter((id): id is string => id !== null))]
+  const byVersion = new Map<string, SailDefinitionLabels>()
+
+  if (wanted.length === 0) return byVersion
+
+  const { data, error } = await supabase
+    .from('crossover_sail_definitions')
+    .select('version_id, number, label')
+    .in('version_id', wanted)
+    .returns<DefinitionRow[]>()
+
+  if (error) {
+    console.error('Race: Sail Definition read failed:', error.message)
+    return null
+  }
+
+  for (const definition of data ?? []) {
+    const labels = byVersion.get(definition.version_id) ?? new Map<number, string>()
+    labels.set(definition.number, definition.label)
+    byVersion.set(definition.version_id, labels)
+  }
+
+  return byVersion
 }
 
 interface SeaStateEntryRow {
@@ -106,16 +152,21 @@ interface SeaStateEntryRow {
  * rendered as an empty list would put those words on a race that *was* annotated — Layline stating
  * that the sailor said nothing, which is the one thing a page about Testimony must never do.
  *
- * A Sail Configuration names a Sail Definition *number*, and the words belong to the Crossover Chart
- * Version the Race points at (ADR 0023). So the labels are read from that Version's own
- * `crossover_sail_definitions` rows in a second request rather than embedded through the composite
- * foreign key: PostgREST will not follow a two-column key, and the alternative — resolving through
- * the artifact's current pointer — is exactly the read-time resolution ADR 0012 forbids.
+ * `labels` is the words of the Crossover Chart Version this Race points at — already read, by
+ * `readSailDefinitions` — or **null** where the Race records no Version, which is a legitimate
+ * answer in which no Sail Configuration can exist (ADR 0012). Passed in rather than fetched here
+ * because every caller has more than one Race to resolve and the Versions are shared between them:
+ * `services/analysis/readArchive.ts` reads thirteen Races against one Version, and a query inside
+ * this function made that thirteen serial round trips.
+ *
+ * Exported for that reader, which resolves the same two lists onto the rows of every Race. A second
+ * copy there would be a second answer to what a sail's words are — including a second chance to
+ * render a Definition number bare, which the refusal at the bottom of this function prevents.
  */
-async function readAnnotations(
+export async function readRaceAnnotations(
   supabase: Awaited<ReturnType<typeof createClient>>,
   raceId: string,
-  chartVersionId: string | null
+  labels: SailDefinitionLabels | null
 ): Promise<RaceAnnotations | null> {
   const [sails, seaState] = await Promise.all([
     supabase
@@ -141,29 +192,12 @@ async function readAnnotations(
   }
 
   const entries = sails.data ?? []
-  const labels = new Map<number, string>()
-
-  // Asked for only when something actually names a Definition. A Race with no chart Version can hold
-  // no Configurations at all, and a race remembered entirely in notes needs no vocabulary.
-  if (chartVersionId !== null && entries.some((entry) => entry.definition_number !== null)) {
-    const { data, error } = await supabase
-      .from('crossover_sail_definitions')
-      .select('number, label')
-      .eq('version_id', chartVersionId)
-      .returns<DefinitionRow[]>()
-
-    if (error) {
-      console.error('Race: Sail Definition read failed:', error.message)
-      return null
-    }
-
-    for (const definition of data ?? []) labels.set(definition.number, definition.label)
-  }
 
   const resolved = entries.map((entry) => ({
     at: entry.at,
     definition_number: entry.definition_number,
-    label: entry.definition_number === null ? null : labels.get(entry.definition_number) ?? null,
+    label:
+      entry.definition_number === null ? null : labels?.get(entry.definition_number) ?? null,
     note: entry.note,
   }))
 
@@ -173,7 +207,7 @@ async function readAnnotations(
   // out of an integer, so the page states nothing instead.
   if (resolved.some((entry) => entry.definition_number !== null && entry.label === null)) {
     console.error(
-      `Race: a Sail Configuration names a Definition Version ${chartVersionId} did not return`
+      `Race ${raceId}: a Sail Configuration names a Sail Definition its Version did not return`
     )
     return null
   }
@@ -198,7 +232,7 @@ async function readAnnotations(
  * the oldest races in this archive predate every Boat Setup artifact the boat has, and nothing backdates
  * v1 onto them (ADR 0008).
  *
- * Two reads rather than an embed, for the same reason `readAnnotations` does two: every one of these
+ * Two reads rather than an embed, for the same reason `readRaceAnnotations` does two: every one of these
  * pointers is half of a composite key with a constant `kind` tag column, and PostgREST will not follow a
  * two-column key.
  *
@@ -330,12 +364,25 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
   // race here for you", which is what the page says.
   if (!race) return null
 
-  const rows = await readRecordingRows(supabase, race.recordings.id, race.recordings.row_count)
-  if (!rows) return null
+  // The Transcription and the sail vocabulary together: the words this Race's Crossover Chart
+  // Version defines are a fact about that Version and wait on no row, so asking for them beside
+  // the rows costs nothing rather than one more round trip in a chain.
+  const [rows, definitions] = await Promise.all([
+    readRecordingRows(supabase, race.recordings.id, race.recordings.row_count),
+    readSailDefinitions(supabase, [race.crossover_chart_version_id]),
+  ])
+
+  if (!rows || !definitions) return null
 
   // All-or-nothing, like the Transcription: a page that could not read the Testimony would otherwise
   // state that none was given.
-  const annotations = await readAnnotations(supabase, race.id, race.crossover_chart_version_id)
+  const annotations = await readRaceAnnotations(
+    supabase,
+    race.id,
+    race.crossover_chart_version_id === null
+      ? null
+      : definitions.get(race.crossover_chart_version_id) ?? new Map()
+  )
   if (!annotations) return null
 
   try {

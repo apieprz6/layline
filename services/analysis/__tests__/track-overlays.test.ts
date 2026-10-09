@@ -1,6 +1,6 @@
 /**
  * The six scales the **Race Track Heatmap** can colour a race by, and the two different gates they
- * apply to a row (ADR 0037).
+ * apply to a row (ADR 0038).
  *
  * The claim this suite exists for is the asymmetry, because it is the one a future reader will be
  * tempted to "fix": **a ratio and a reading are not gated alike.** ADR 0025 keeps Low-Speed and
@@ -182,7 +182,7 @@ describe('which rows an overlay may colour', () => {
     readings.forEach((overlay) => expect(isRatioOverlay(overlay)).toBe(false))
     // Sail agreement is not a ratio — it cannot be Filler-Anchored, and it carries no percentage —
     // and it *is* gated like one, because a manoeuvre's TWA sweeps through head to wind and the
-    // chart's answer there is to a question nobody asked (ADR 0030, ADR 0037).
+    // chart's answer there is to a question nobody asked (ADR 0030, ADR 0038).
     expect(isRatioOverlay('sail')).toBe(false)
     expect(overlayGate('sail')).toBe('countable')
     ratios.forEach((overlay) => expect(overlayGate(overlay)).toBe('countable'))

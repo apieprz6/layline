@@ -149,7 +149,7 @@ describeSeason('Chicago–Waukegan, the race a quarter of which is scoreable', (
   })
 
   it('colours more of the same race on a channel overlay than on a ratio', () => {
-    // The asymmetry ADR 0037 settles, measured. Speed over the ground is a *reading*: a parked or
+    // The asymmetry ADR 0038 settles, measured. Speed over the ground is a *reading*: a parked or
     // mid-manoeuvre row's figure is simply what the GPS recorded, so the only rows it cannot
     // colour are the dead feed and the blank channels — where percent of target must also drop the
     // 23 Low-Speed and 13 in-manoeuvre rows ADR 0025 excludes from every performance metric.

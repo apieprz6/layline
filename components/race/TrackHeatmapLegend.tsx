@@ -267,7 +267,7 @@ function headlineCount(
  * Three different sentences, because the overlays do not exclude the same rows: a ratio and sail
  * agreement are claims about how the boat was sailed and carry ADR 0025 whole, while a reading
  * excludes only the dead feed, since a parked boat's speed over the ground is simply what the GPS
- * recorded (ADR 0037).
+ * recorded (ADR 0038).
  */
 function countDetail(
   overlay: TrackOverlay,

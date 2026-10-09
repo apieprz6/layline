@@ -85,25 +85,38 @@ async function readRecordingPages(
   rowCount: number,
   select: string
 ): Promise<Record<string, unknown>[] | null> {
+  // Every page at once, not one after another. How many there are is arithmetic — the Recording's
+  // own `row_count` is a fact about the file, written once and never updated, which is the same
+  // thing that makes the check below trustworthy — so nothing has to be fetched to learn where the
+  // next range starts. A loop that waited for page 1 to find out whether to ask for page 2 turned
+  // one recording's read into as many serial round trips as it has thousands of rows, and against
+  // a hosted database a round trip is the whole cost of this function.
+  const pages = Math.ceil(rowCount / PAGE_ROWS)
+
+  const results = await Promise.all(
+    Array.from({ length: pages }, (_, page) =>
+      supabase
+        .from('recording_rows')
+        .select(select)
+        .eq('recording_id', recordingId)
+        .order('row_index', { ascending: true })
+        .range(page * PAGE_ROWS, (page + 1) * PAGE_ROWS - 1)
+        .returns<Record<string, unknown>[]>()
+    )
+  )
+
   const rows: Record<string, unknown>[] = []
 
-  while (rows.length < rowCount) {
-    const { data, error } = await supabase
-      .from('recording_rows')
-      .select(select)
-      .eq('recording_id', recordingId)
-      .order('row_index', { ascending: true })
-      .range(rows.length, rows.length + PAGE_ROWS - 1)
-      .returns<Record<string, unknown>[]>()
-
+  // Concatenated in page order, which is why the pages are requested by index rather than by
+  // where the last one ended: `Promise.all` keeps the order of its inputs whatever order the
+  // responses arrive in, and each page is itself ordered by `row_index`, so the file reassembles.
+  for (const { data, error } of results) {
     if (error) {
       console.error('Race: Transcription read failed:', error.message)
       return null
     }
 
-    if (!data || data.length === 0) break
-
-    rows.push(...data)
+    if (data) rows.push(...data)
   }
 
   if (rows.length !== rowCount) {

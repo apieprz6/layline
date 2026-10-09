@@ -1,4 +1,4 @@
-# ADR 0037: The Track Carries Six Overlays, and a Reading Is Gated Differently from a Ratio
+# ADR 0038: The Track Carries Six Overlays, and a Reading Is Gated Differently from a Ratio
 
 ## Status
 
@@ -11,9 +11,13 @@ Amends ADR 0033 in two places — its single ramp, and its "the client gets draw
 rule — and extends ADR 0025's Countable rule to a case it was not written for. Does not touch ADR
 0036's per-cell trust, ADR 0028's lookup rules, or ADR 0009's stored-payload rule.
 
-Numbered 0037 as the next free number; this repo's decision log records three concurrent claims on
-0031 and one on 0035, so a later reader finding another 0037 should assume a collision rather than a
-contradiction.
+Numbered **0038, not 0037**: this was written as 0037 and
+[LAY-155](https://linear.app/layline-sailing/issue/LAY-155) landed on `main` with that number first,
+for the **Coverage Ledger**. Renumbered here on the merge, following what this log already does
+every time it happens — ADR 0033 records three concurrent claims on 0031 and ADR 0036 one on 0035 —
+and by the same tie-break: the number that has already shipped to `main`, and that shipped code
+greps for, is the one that does not move. The two topics do not overlap, so there was nothing to
+reconcile beyond the number.
 
 ## Context
 

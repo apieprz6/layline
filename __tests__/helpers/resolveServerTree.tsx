@@ -30,14 +30,38 @@ export async function resolveServerTree(node: ReactNode): Promise<ReactNode> {
   }
 
   // Anything else — a host element, a Suspense boundary, a Client Component — keeps its
-  // own type, but its children may still hold something async.
-  if (element.props?.children === undefined) return element
+  // own type, but its props may still hold something async. Every element-valued prop, not
+  // only `children`: a Client Component handed a Server Component as a plain prop is how a
+  // tab's content gets its own `<Suspense>` boundary without the tab strip waiting on it
+  // (`/boat-performance`), and the server resolves an element wherever in the tree it sits.
+  const resolved = await resolveElementProps(element.props as Record<string, unknown>)
+
+  if (element.props?.children === undefined) {
+    return Object.keys(resolved).length === 0 ? element : cloneElement(element, resolved)
+  }
 
   return cloneElement(
     element,
-    undefined,
+    resolved,
     ...Children.toArray(await resolveServerTree(element.props.children))
   )
+}
+
+/** Every prop other than `children` that holds an element, resolved. Empty when none does. */
+async function resolveElementProps(
+  props: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {}
+
+  for (const [name, value] of Object.entries(props ?? {})) {
+    if (name === 'children') continue
+    const holdsElement = Array.isArray(value) ? value.some(isValidElement) : isValidElement(value)
+    if (!holdsElement) continue
+
+    out[name] = await resolveServerTree(value as ReactNode)
+  }
+
+  return out
 }
 
 /**

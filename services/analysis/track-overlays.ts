@@ -6,7 +6,7 @@
  * the client a colour per segment so that nothing on the far side could re-decide what a row
  * meant. Six overlays over seventeen hundred rows cannot each be precomputed into that payload,
  * and a switch that costs a round trip is not a switch, so the rule is amended rather than evaded
- * (ADR 0037): the server computes each row's **values and verdicts**, and both sides band them
+ * (ADR 0038): the server computes each row's **values and verdicts**, and both sides band them
  * *through this module*. The client picks which band to paint; it cannot invent one the rules
  * refuse, because the rules are here and nowhere else.
  *
@@ -122,7 +122,7 @@ export function isRatioOverlay(overlay: TrackOverlay): boolean {
 }
 
 /**
- * Which rows an overlay may colour at all (ADR 0025, ADR 0037).
+ * Which rows an overlay may colour at all (ADR 0025, ADR 0038).
  *
  * `countable` is the performance-metric gate: not **Frozen**, not **Low-Speed**, not inside a
  * **Maneuver Window**. The two ratios need it, and so does sail agreement — a manoeuvre's `TWA`

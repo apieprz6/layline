@@ -196,7 +196,7 @@ describe('.theme-nightvision CSS token overrides', () => {
     })
 
     /**
-     * The three scales ADR 0037 adds beside the ratio ramp.
+     * The three scales ADR 0038 adds beside the ratio ramp.
      *
      * Every band of every overlay has to be declared in both themes, or that overlay keeps its
      * daylight hues on a near-black screen — a chart escaping the theme, which is the one thing

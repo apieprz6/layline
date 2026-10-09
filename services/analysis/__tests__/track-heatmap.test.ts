@@ -286,7 +286,7 @@ describe('a race’s track, drawn', () => {
     ).toBe(counts?.rows)
 
     // …and so does a reading, by *fewer* of them: a parked or mid-manoeuvre row's speed over the
-    // ground is simply what the GPS recorded, so only the dead feed is excluded (ADR 0037).
+    // ground is simply what the GPS recorded, so only the dead feed is excluded (ADR 0038).
     const sog = counts?.overlays.sog
     expect(sog).toEqual({ scored: 5, flagged: 0, without_value: 0 })
     expect((sog?.scored ?? 0) + (sog?.without_value ?? 0) + (counts?.frozen ?? 0)).toBe(
