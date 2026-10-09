@@ -65,6 +65,39 @@ export function vmgKnots(speed: number, twa: number): number {
 }
 
 /**
+ * The rectangle a **Polar** can answer inside: its two axes' own bounds.
+ *
+ * Which is the whole of ADR 0028's out-of-range rule stated as a shape, and the only part of a
+ * Polar a screen needs in order to say that a region of some *other* grid can never carry a
+ * figure. The **Sail Selection Screen** asks exactly that: this boat's **Crossover Chart** has 25
+ * and 30 knot columns and the certificate structurally stops at 24 (Rule 402.2), so those two
+ * columns can never hold a percent of **Target Speed**, however much racing is logged (ADR 0030).
+ *
+ * Bounds and not the axes themselves, because the question is about domain and not about cells: a
+ * screen handed the axes would be tempted to resample one grid onto the other, which ADR 0028
+ * forbids in both directions.
+ */
+export interface PolarDomain {
+  twa_from: number
+  twa_to: number
+  tws_from: number
+  tws_to: number
+}
+
+/** A Polar's own domain, or null where either axis is empty and there is no rectangle at all. */
+export function polarDomain(payload: PolarPayload): PolarDomain | null {
+  const { twa_axis, tws_axis } = payload
+  if (twa_axis.length === 0 || tws_axis.length === 0) return null
+
+  return {
+    twa_from: twa_axis[0],
+    twa_to: twa_axis[twa_axis.length - 1],
+    tws_from: tws_axis[0],
+    tws_to: tws_axis[tws_axis.length - 1],
+  }
+}
+
+/**
  * One Polar, classified and ready to be asked about a row.
  *
  * An object rather than two free functions taking a payload, so the grid is walked once per Polar

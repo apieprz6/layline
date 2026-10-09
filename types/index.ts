@@ -2205,7 +2205,28 @@ export interface AnalysisFilter {
  * switch.
  */
 export type RowSail =
-  | { recorded: 'definition'; label: string }
+  | {
+      recorded: 'definition'
+      /**
+       * The **Sail Definition** number, which is what agreement is compared on.
+       *
+       * ADR 0038's rule, and it is the number and never the label: a Configuration names a
+       * Definition *number* of the Version its Race points at and so does the chart's own cell
+       * (ADR 0023), where matching on names would make "Main + A2" and "Main+A2" two different
+       * sails. The number is only meaningful **within one Version**, which is why
+       * `MatchableRow.crossover_chart_version_id` travels beside it.
+       */
+      definition_number: number
+      /**
+       * The same sail in the chart Version's own words.
+       *
+       * Carried for reading and for bucketing, never for comparing. The **Analysis Filter**'s
+       * `sail` dimension groups on this rather than on the number, and for the opposite reason:
+       * a chip spans Versions, and the label is the only thing two Versions can be grouped on
+       * (`services/analysis/filter.ts`).
+       */
+      label: string
+    }
   | { recorded: 'note-only' }
   | { recorded: 'not-recorded' }
 
@@ -2250,6 +2271,19 @@ export interface MatchableRow {
   sog: number | null
   /** This row scored against the **Polar** its own Race was sailed under (ADR 0012). */
   efficiency: RowEfficiency
+  /**
+   * The **Crossover Chart Version** this row's Race was sailed under, or null where it records none.
+   *
+   * Which is the vocabulary `sail.definition_number` is written in, and so the one thing that makes
+   * an agreement comparison valid: ADR 0038 compares the number a Configuration names against the
+   * number a chart cell holds, and those are only the same vocabulary inside one Version (ADR
+   * 0023). The **Sail Selection Screen** draws one Version's grid and lays a whole season over it,
+   * so without this it could not tell a row it may judge from one it may not.
+   *
+   * Null is ordinary rather than a defect: nine of this archive's races predate every Boat Setup
+   * artifact the boat has, and a Race with no Version can hold no Sail Configurations either.
+   */
+  crossover_chart_version_id: string | null
 }
 
 /**

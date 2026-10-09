@@ -237,6 +237,74 @@ export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate
 }
 
 /**
+ * Every **Countable** row an aggregate accounted for.
+ *
+ * The three tallies partition them — summed, left out for want of an interval, left out for want
+ * of a target — which is the property `sumEfficiency` maintains so that no row can leave a figure
+ * and be tallied nowhere (ADR 0025). Read through this rather than re-counted from the rows, so a
+ * caller holding only the sums can still say how much sailing is behind them.
+ */
+export function countableRows(aggregate: EfficiencyAggregate): number {
+  return aggregate.rows + aggregate.rows_without_interval + aggregate.rows_without_target
+}
+
+/**
+ * Several aggregates added into one: the "sums travel" rule made a function.
+ *
+ * Every field of an `EfficiencyAggregate` except the two ratios is a sum, so adding them and
+ * re-dividing gives exactly what summing the underlying rows in one pass would have given. The two
+ * ratios are **recomputed and never averaged**, which is the whole point — ADR 0036 rules out a
+ * mean of ratios, and this is the only arithmetic that lets a figure be re-aggregated afterwards.
+ *
+ * The **Sail Selection Screen** is what needs it: its data function returns one aggregate per
+ * (sail, Sea State, time of day) slice of a cell, and the cell's own figure is those slices added
+ * up (ADR 0030). A narrowing that drops a slice re-reads the figure from the rest rather than
+ * re-querying the archive.
+ *
+ * `services/analysis/__tests__/efficiency.test.ts` holds this to `sumEfficiency` over the
+ * concatenated rows, which is the guard against a field added to the shape and forgotten here.
+ */
+export function mergeEfficiency(parts: readonly EfficiencyAggregate[]): EfficiencyAggregate {
+  const totals = {
+    rows: 0,
+    filler_anchored_rows: 0,
+    vmg_rows: 0,
+    vmg_filler_anchored_rows: 0,
+    rows_without_interval: 0,
+    rows_without_target: 0,
+    elapsed_seconds: 0,
+    actual_distance_nm: 0,
+    target_distance_nm: 0,
+    actual_vmg_distance_nm: 0,
+    target_vmg_distance_nm: 0,
+  }
+
+  for (const part of parts) {
+    totals.rows += part.rows
+    totals.filler_anchored_rows += part.filler_anchored_rows
+    totals.vmg_rows += part.vmg_rows
+    totals.vmg_filler_anchored_rows += part.vmg_filler_anchored_rows
+    totals.rows_without_interval += part.rows_without_interval
+    totals.rows_without_target += part.rows_without_target
+    totals.elapsed_seconds += part.elapsed_seconds
+    totals.actual_distance_nm += part.actual_distance_nm
+    totals.target_distance_nm += part.target_distance_nm
+    totals.actual_vmg_distance_nm += part.actual_vmg_distance_nm
+    totals.target_vmg_distance_nm += part.target_vmg_distance_nm
+  }
+
+  return {
+    ...totals,
+    polar_efficiency:
+      totals.target_distance_nm > 0 ? totals.actual_distance_nm / totals.target_distance_nm : null,
+    vmg_efficiency:
+      totals.target_vmg_distance_nm > 0
+        ? totals.actual_vmg_distance_nm / totals.target_vmg_distance_nm
+        : null,
+  }
+}
+
+/**
  * A race's or a season's figure: total distance over total target-implied distance.
  *
  * Hand this **every** row in the window, Countable or not, with its verdict on it — the intervals

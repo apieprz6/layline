@@ -8,12 +8,52 @@
  * Not a `.test.ts`, so Jest collects the suites and not this.
  */
 
-import type { AnalysisArchiveRace, MatchableRow, RowSail } from '@/types'
+import type { PolarDomain } from '@/services/analysis/polar-targets'
+import type { AnalysisArchiveRace, CrossoverChartPayload, MatchableRow, RowSail } from '@/types'
+
+/**
+ * The **Crossover Chart Version** every fixture row was sailed under, which is `CHART`'s own.
+ *
+ * It has to be stated rather than left null, because agreement is an integer comparison valid only
+ * inside one Version (ADR 0038): a row whose Race points at some other Version is a row the Sail
+ * Selection Screen may place on this grid and may not judge against it.
+ */
+export const CHART_VERSION = 'chart-version-1'
 
 export const VOCABULARY = {
   /** `Reef + Jib 2` is in the chart and in no race — the disabled chip ADR 0014 asks for. */
   sails: ['Main + Jib 1', 'Main + Jib 2', 'Reef + Jib 2'],
   months: ['2026-06', '2026-07'],
+}
+
+/**
+ * A six-cell **Crossover Chart** carrying the same three sails the vocabulary does.
+ *
+ * Two angles and three wind speeds, chosen so the fixture rows below land in three different cells
+ * and so one wind-speed column (16 kt) sits past `POLAR_RANGE`'s own last — which is the shape of
+ * this boat's real chart against its real certificate, and the only way to render the cells that
+ * can never carry a percent of target.
+ */
+export const CHART: CrossoverChartPayload = {
+  twa_axis: [40, 90],
+  tws_axis: [4, 10, 16],
+  cells: [
+    [1, 1, 2],
+    [1, 4, 4],
+  ],
+  sail_definitions: [
+    { number: 1, label: 'Main + Jib 1' },
+    { number: 2, label: 'Main + Jib 2' },
+    { number: 4, label: 'Reef + Jib 2' },
+  ],
+}
+
+/** A Polar that stops at 14 knots, so the chart's 16 kt column is past its last (ADR 0028). */
+export const POLAR_RANGE: PolarDomain = {
+  twa_from: 30,
+  twa_to: 180,
+  tws_from: 4,
+  tws_to: 14,
 }
 
 export const RACES: AnalysisArchiveRace[] = [
@@ -36,7 +76,8 @@ export function matchableRow(over: Partial<MatchableRow> = {}): MatchableRow {
     tws: 11,
     twa: 42,
     sea_state: 'calm',
-    sail: { recorded: 'definition', label: 'Main + Jib 1' } satisfies RowSail,
+    crossover_chart_version_id: CHART_VERSION,
+    sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' } satisfies RowSail,
     countable: true,
     interval_seconds: 60,
     sog,

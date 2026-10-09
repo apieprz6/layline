@@ -28,6 +28,9 @@ const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, {
   months: ['2026-06'],
 })
 
+/** The Crossover Chart Version these rows were sailed under: the vocabulary their sail numbers are in. */
+const CHART_VERSION = 'chart-version-1'
+
 let nextIndex = 0
 
 function row(over: Partial<MatchableRow> = {}): MatchableRow {
@@ -40,7 +43,8 @@ function row(over: Partial<MatchableRow> = {}): MatchableRow {
     tws: 11,
     twa: 42,
     sea_state: 'calm',
-    sail: { recorded: 'definition', label: 'Main + Jib 1' },
+    crossover_chart_version_id: CHART_VERSION,
+    sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' },
     countable: true,
     interval_seconds: 60,
     sog: 6,

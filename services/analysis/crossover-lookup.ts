@@ -33,8 +33,34 @@
 
 import type { CrossoverChartPayload, CrossoverSailDefinition, SailRecommendation } from '@/types'
 
+/**
+ * Which cell of the chart a point lands in: the grid indices, and the axis values they stand for.
+ *
+ * The indices are what the **Sail Selection Screen** needs and the axis values are what a sentence
+ * about the cell needs, so both travel together — a cell identified as `(row 4, column 7)` cannot
+ * be printed, and one identified as `(55°, 16 kt)` cannot be looked up in `cells` without redoing
+ * the floor search that just ran.
+ */
+export interface CrossoverCell {
+  row: number
+  column: number
+  /** The chart's own TWA the floor landed on. */
+  twa: number
+  /** The chart's own TWS the floor landed on. */
+  tws: number
+}
+
 /** One Crossover Chart, with its definitions resolved, ready to be asked about a row. */
 export interface CrossoverLookup {
+  /**
+   * Which cell this angle and wind speed fall in, or null below either axis.
+   *
+   * Separate from `recommend` because a cell and a recommendation are not the same answer: the
+   * **Sail Selection Screen** lays a season of rows onto the grid, and a row belongs in its cell
+   * whether or not that cell's sail number resolves to a **Sail Definition** this Version still
+   * names. Floored on both axes, which is the one rule both this and `recommend` read (ADR 0028).
+   */
+  cell(twa: number, tws: number): CrossoverCell | null
   /**
    * What the chart calls for at this angle and wind speed, or null below either of its axes.
    *
@@ -42,6 +68,13 @@ export interface CrossoverLookup {
    * boat, so the magnitude is what is looked up.
    */
   recommend(twa: number, tws: number): SailRecommendation | null
+  /**
+   * What one cell of the grid calls for, by index, or null where its sail names no Definition.
+   *
+   * The grid-drawing half of `recommend`: a screen that walks all 338 cells has the indices in
+   * hand already and must not floor its way back to them.
+   */
+  recommendAt(row: number, column: number): SailRecommendation | null
 }
 
 /**
@@ -67,12 +100,21 @@ export function crossoverLookup(payload: CrossoverChartPayload): CrossoverLookup
     sail_definitions.map((sail) => [sail.number, sail])
   )
 
-  return {
-    recommend(twa, tws) {
+  const lookup: CrossoverLookup = {
+    cell(twa, tws) {
       const row = floorOn(twa_axis, Math.abs(twa))
       const column = floorOn(tws_axis, tws)
       if (row === -1 || column === -1) return null
 
+      return { row, column, twa: twa_axis[row], tws: tws_axis[column] }
+    },
+
+    recommend(twa, tws) {
+      const at = lookup.cell(twa, tws)
+      return at === null ? null : lookup.recommendAt(at.row, at.column)
+    },
+
+    recommendAt(row, column) {
       const called = cells[row]?.[column]
       if (called === undefined) return null
 
@@ -82,4 +124,6 @@ export function crossoverLookup(payload: CrossoverChartPayload): CrossoverLookup
       return { definition, chart_twa: twa_axis[row], chart_tws: tws_axis[column] }
     },
   }
+
+  return lookup
 }
