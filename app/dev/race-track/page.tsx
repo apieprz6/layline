@@ -30,9 +30,17 @@ import type { ReactElement } from 'react'
 import RaceTrackSection from '@/components/race/RaceTrackSection'
 import { spacing } from '@/lib/utils/design'
 import { polarTargets } from '@/services/analysis/polar-targets'
+import { crossoverLookup } from '@/services/analysis/crossover-lookup'
+import { compareSailToChart } from '@/services/analysis/sail-agreement'
 import { raceTrackHeatmap } from '@/services/analysis/track-heatmap'
 
-import { HARNESS_POLAR, HARNESS_TESTIMONY, harnessRows } from './fixture'
+import {
+  HARNESS_CHART,
+  HARNESS_POLAR,
+  HARNESS_SAILS,
+  HARNESS_TESTIMONY,
+  harnessRows,
+} from './fixture'
 
 /** So the env guard is read per request rather than baked into a build. */
 export const dynamic = 'force-dynamic'
@@ -40,7 +48,18 @@ export const dynamic = 'force-dynamic'
 export default function RaceTrackHarnessPage(): ReactElement {
   if (process.env.LAYLINE_TRACK_HARNESS !== '1') notFound()
 
-  const heatmap = raceTrackHeatmap(harnessRows(), polarTargets(HARNESS_POLAR), {
+  // The chart verdict is attached by the caller on the real page too (`readRaceTrack`), because it
+  // is resolved against the Race's own Crossover Chart Version and its own Testimony.
+  const chart = { lookup: crossoverLookup(HARNESS_CHART), entries: HARNESS_SAILS }
+  const rows = harnessRows().map((row) => ({
+    ...row,
+    sail: compareSailToChart(
+      { row_time: row.row_time, twa: Number(row.twa), tws: Number(row.tws) },
+      chart
+    ),
+  }))
+
+  const heatmap = raceTrackHeatmap(rows, polarTargets(HARNESS_POLAR), {
     annotations: HARNESS_TESTIMONY,
   })
 

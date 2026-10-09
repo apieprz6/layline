@@ -154,6 +154,28 @@ jest.mock('@/lib/supabase/server', () => ({
 let polarPayload: { twa_axis: number[]; tws_axis: number[]; boat_speed: number[][] } | null = null
 let polarIdAsked: string | null = null
 
+/**
+ * The Crossover Chart the sail-agreement overlay compares against, and the id asked for.
+ *
+ * Mocked at the reader, like the Polar: what matters here is that the id the **Race** holds is the
+ * id this page asks for — never the chart in force now, which would re-score a 2024 race against a
+ * vocabulary written after it (ADR 0012).
+ */
+let chartPayload: {
+  twa_axis: number[]
+  tws_axis: number[]
+  cells: number[][]
+  sail_definitions: { number: number; label: string }[]
+} | null = null
+let chartIdAsked: string | null = null
+
+jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
+  readCrossoverChartVersion: async (versionId: string) => {
+    chartIdAsked = versionId
+    return chartPayload === null ? null : { payload: chartPayload }
+  },
+}))
+
 jest.mock('@/services/boat/readPolarVersions', () => ({
   readPolarVersion: async (versionId: string) => {
     polarIdAsked = versionId
@@ -292,6 +314,22 @@ describe('readRace', () => {
       ],
     }
     polarIdAsked = null
+    // One crossover at 12 knots: Jib 1 below it, Jib 3 above. The fixture's rows log 11 knots, so
+    // a race whose Testimony says Jib 1 agrees with the chart.
+    chartPayload = {
+      twa_axis: [40, 90, 135],
+      tws_axis: [6, 12],
+      cells: [
+        [1, 3],
+        [1, 3],
+        [1, 3],
+      ],
+      sail_definitions: [
+        { number: 1, label: 'Main + Jib 1' },
+        { number: 3, label: 'Main + Jib 3' },
+      ],
+    }
+    chartIdAsked = null
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -735,6 +773,34 @@ describe('readRace', () => {
       expect(polarIdAsked).toBe('polar-v2')
     })
 
+    it('compares the sails against the Crossover Chart Version the Race holds, by id', async () => {
+      // The same rule for the other artifact: one vocabulary, and it is the one this Race points
+      // at (ADR 0012, ADR 0023).
+      sailEntries = [{ at: '2026-08-22T11:00:00', definition_number: 1, note: null }]
+
+      const track = (await readRace('race-1'))?.track
+
+      expect(chartIdAsked).toBe('chart-v1')
+      // Three Countable rows in the window, all of them carrying Jib 1 in 11 knots, which is what
+      // the chart calls for there.
+      expect(track?.heatmap?.counts.overlays.sail.scored).toBe(3)
+      expect(track?.heatmap?.counts.overlays.sail.without_value).toBe(0)
+    })
+
+    it('says a race with no Crossover Chart Version has no verdict rather than a disagreement', async () => {
+      raceMaybeSingle.mockResolvedValue({
+        data: raceRow({ crossover_chart_version_id: null }),
+        error: null,
+      })
+
+      const track = (await readRace('race-1'))?.track
+
+      expect(chartIdAsked).toBeNull()
+      expect(track?.heatmap?.counts.overlays.sail.scored).toBe(0)
+      // An absence, and never a red stretch of track: a race with no chart disagrees with nothing.
+      expect(track?.heatmap?.counts.overlays.sail.without_value).toBe(3)
+    })
+
     it('draws the track of a race that records no Polar, and colours none of it', async () => {
       raceMaybeSingle.mockResolvedValue({
         data: raceRow({ polar_version_id: null }),
@@ -750,7 +816,10 @@ describe('readRace', () => {
       expect(track?.heatmap?.counts.overlays.target_speed.scored).toBe(0)
       // And not reported as rows the Polar could not answer for, which would blame the certificate
       // for a pointer nobody set.
-      expect(track?.heatmap?.counts.overlays.target_speed.without_value).toBe(0)
+      // Counted as an absence — there was nothing to compare against — which keeps every
+      // overlay's tallies adding up to the race. That it is not the certificate's fault is what
+      // the legend's own sentence says.
+      expect(track?.heatmap?.counts.overlays.target_speed.without_value).toBe(3)
       // And the channel overlays are untouched by a pointer nobody set: a recorded speed does not
       // depend on a certificate (ADR 0037).
       expect(track?.heatmap?.counts.overlays.sog.scored).toBe(3)

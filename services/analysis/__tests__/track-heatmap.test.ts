@@ -246,7 +246,10 @@ describe('a race’s track, drawn', () => {
 
     expect(bandsOf(heatmap, 'target_speed', false).every((band) => band === null)).toBe(true)
     expect(heatmap?.counts.overlays.target_speed.scored).toBe(0)
-    expect(heatmap?.counts.overlays.target_speed.without_value).toBe(0)
+    // Counted as an absence — there was nothing to compare against — which keeps the arithmetic
+    // whole. That it is *not* the certificate's fault is said by the legend's own sentence for a
+    // race with no Polar Version, which `RaceTrackSection.test.tsx` pins.
+    expect(heatmap?.counts.overlays.target_speed.without_value).toBe(3)
   })
 
   it('accounts for every row it was given, in one tally each', () => {
@@ -414,6 +417,34 @@ describe('Testimony on the map', () => {
 
     expect(heatmap?.annotations).toHaveLength(1)
     expect(heatmap?.counts.annotations_not_placed).toBe(0)
+  })
+
+  it('lifts a second marker off a fix it would otherwise hide', () => {
+    // A sail change and a sea state recorded seconds apart land on the same fix, and a disc
+    // exactly over another is a marker that hides a marker. The first keeps the fix; the second is
+    // lifted, and the frame draws a leader line back down to it.
+    const heatmap = raceTrackHeatmap(rows, TARGETS, {
+      annotations: [
+        { at: stamp(2), lane: 'sail', label: 'Main + A2' },
+        { at: stamp(2), lane: 'sea', label: 'Moderate' },
+        { at: stamp(2), lane: 'sail', label: 'Main + Jib 1' },
+      ],
+    })
+
+    expect(heatmap?.annotations.map((each) => each.dy)).toEqual([0, -19, -38])
+    // All three still name the same place, because the offset is a drawing and not a claim.
+    expect(new Set(heatmap?.annotations.map((each) => `${each.x},${each.y}`)).size).toBe(1)
+  })
+
+  it('leaves a marker with a fix to itself exactly on it', () => {
+    const heatmap = raceTrackHeatmap(rows, TARGETS, {
+      annotations: [
+        { at: stamp(0), lane: 'sail', label: 'Main + Jib 1' },
+        { at: stamp(4), lane: 'sea', label: 'Smooth' },
+      ],
+    })
+
+    expect(heatmap?.annotations.map((each) => each.dy)).toEqual([0, 0])
   })
 
   it('draws nothing where nobody wrote anything down', () => {

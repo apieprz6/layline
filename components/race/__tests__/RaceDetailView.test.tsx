@@ -79,6 +79,9 @@ const ON_THE_PACE: TrackRowFacts = {
   vmg_efficiency: 0.93,
   filler_anchored: false,
   excluded: null,
+  sail_agreement: 'agrees',
+  sail_flown: 'Main + Jib 1',
+  sail_recommended: 'Main + Jib 1',
 }
 
 const PARKED: TrackRowFacts = {
@@ -117,7 +120,7 @@ const TRACK: RaceTrack = {
         sog: { scored: 2, flagged: 0, without_value: 0 },
         tws: { scored: 2, flagged: 0, without_value: 0 },
         twa: { scored: 2, flagged: 0, without_value: 0 },
-        cog: { scored: 2, flagged: 0, without_value: 0 },
+        sail: { scored: 2, flagged: 0, without_value: 0 },
       },
     },
   },

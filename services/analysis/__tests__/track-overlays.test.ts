@@ -17,6 +17,7 @@ import {
   TRACK_OVERLAYS,
   TRACK_SCALES,
   isRatioOverlay,
+  overlayGate,
   overlayBand,
   overlayColour,
   overlayPaint,
@@ -40,6 +41,9 @@ function facts(over: Partial<TrackRowFacts> = {}): TrackRowFacts {
     vmg_efficiency: 0.93,
     filler_anchored: false,
     excluded: null,
+    sail_agreement: 'agrees',
+    sail_flown: 'Main + Jib 1',
+    sail_recommended: 'Main + Jib 1',
     ...over,
   }
 }
@@ -49,10 +53,10 @@ describe('the scales', () => {
     expect(TRACK_OVERLAYS).toEqual([
       'target_speed',
       'target_vmg',
+      'sail',
       'sog',
       'tws',
       'twa',
-      'cog',
     ])
     TRACK_OVERLAYS.forEach((overlay) => {
       expect(TRACK_SCALES[overlay].overlay).toBe(overlay)
@@ -124,14 +128,25 @@ describe('the scales', () => {
     expect(overlayBand('twa', 170)).toBe('track-stbd-3')
   })
 
-  it('draws a course as four quadrants, with north straddling zero', () => {
-    // Deliberately coarse: a heading is cyclic, and Layline has no cyclic palette that could
-    // survive a theme which collapses every hue to one.
-    expect(overlayBand('cog', 0)).toBe('track-cog-n')
-    expect(overlayBand('cog', 350)).toBe('track-cog-n')
-    expect(overlayBand('cog', 90)).toBe('track-cog-e')
-    expect(overlayBand('cog', 180)).toBe('track-cog-s')
-    expect(overlayBand('cog', 270)).toBe('track-cog-w')
+  it('paints sail agreement from the verdict, not from a number', () => {
+    // The one categorical overlay: two bands, read off the comparison the server made against the
+    // Race's own chart Version. Green agrees, red differs — and a difference is not a fault.
+    expect(overlayPaint('sail', facts({ sail_agreement: 'agrees' }), true).band).toBe('track-agree')
+    expect(overlayPaint('sail', facts({ sail_agreement: 'differs' }), true).band).toBe(
+      'track-differ'
+    )
+  })
+
+  it('keeps the four ways there is no sail verdict apart', () => {
+    // A gap in the archive, a sail the chart cannot name, and the edge of the chart are different
+    // facts, and the readout says each of them in its own words.
+    const reasons = ['no_chart_version', 'no_sail_recorded', 'sail_unnamed', 'no_chart_cell'] as const
+
+    reasons.forEach((reason) => {
+      const paint = overlayPaint('sail', facts({ sail_agreement: reason }), true)
+      expect(paint.band).toBeNull()
+      expect(paint.not_scored).toBe(reason)
+    })
   })
 
   it('carries a standing caveat on Target VMG and on every wind figure', () => {
@@ -153,17 +168,25 @@ describe('the scales', () => {
     expect(overlayValue('sog', row)).toBe(row.sog)
     expect(overlayValue('tws', row)).toBe(row.tws)
     expect(overlayValue('twa', row)).toBe(row.twa)
-    expect(overlayValue('cog', row)).toBe(row.cog)
+    // Categorical: there is no number to band, and `overlayPaint` reads the verdict instead.
+    expect(overlayValue('sail', row)).toBeNull()
   })
 })
 
 describe('which rows an overlay may colour', () => {
-  const readings: TrackOverlay[] = ['sog', 'tws', 'twa', 'cog']
+  const readings: TrackOverlay[] = ['sog', 'tws', 'twa']
   const ratios: TrackOverlay[] = ['target_speed', 'target_vmg']
 
   it('agrees with ADR 0025 about which overlays are performance metrics', () => {
     ratios.forEach((overlay) => expect(isRatioOverlay(overlay)).toBe(true))
     readings.forEach((overlay) => expect(isRatioOverlay(overlay)).toBe(false))
+    // Sail agreement is not a ratio — it cannot be Filler-Anchored, and it carries no percentage —
+    // and it *is* gated like one, because a manoeuvre's TWA sweeps through head to wind and the
+    // chart's answer there is to a question nobody asked (ADR 0030, ADR 0037).
+    expect(isRatioOverlay('sail')).toBe(false)
+    expect(overlayGate('sail')).toBe('countable')
+    ratios.forEach((overlay) => expect(overlayGate(overlay)).toBe('countable'))
+    readings.forEach((overlay) => expect(overlayGate(overlay)).toBe('feed-alive'))
   })
 
   it('refuses a Frozen row on every overlay, readings included', () => {
@@ -185,6 +208,7 @@ describe('which rows an overlay may colour', () => {
 
     expect(overlayPaint('target_speed', parked, true).not_scored).toBe('low_speed')
     expect(overlayPaint('target_vmg', parked, true).not_scored).toBe('low_speed')
+    expect(overlayPaint('sail', parked, true).not_scored).toBe('low_speed')
     expect(overlayPaint('sog', parked, true).band).toBe('track-speed-1')
     expect(overlayPaint('tws', parked, true).band).toBe('wind-medium')
   })

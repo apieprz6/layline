@@ -251,6 +251,15 @@ function countSentence(
 
   const sentences: string[] = []
 
+  if (overlay === 'sail') {
+    // A difference is a decision somebody made on the water, and the legend says so where the
+    // sailor is reading the colours rather than only in an ADR.
+    sentences.push(
+      `${counts.overlays.sail.scored} rows carry a verdict: green where what was up matches the ` +
+        'chart, red where the two records differ — which is a difference and not a fault.'
+    )
+  }
+
   if (ratio && scoring === 'no-polar-version') {
     sentences.push(
       `This race records no Polar Version, so none of its ${rows} rows carries a percent of ` +
@@ -271,15 +280,27 @@ function countSentence(
         : `${rows - scored} of ${rows} rows carry no ${TRACK_SCALES[overlay].title.toLowerCase()}.`
     )
 
-    sentences.push(
-      ratio
-        ? `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
-            `${without_value} are in range of nothing the Polar can answer.`
-        : // A reading is not a performance metric, so only the dead feed is excluded here — a parked
-          // boat's speed over the ground is simply what the GPS measured (ADR 0037).
-          `${frozen} sat inside a dropout, where every value is a copy of the row above, and ` +
-            `${without_value} left this channel blank.`
-    )
+    if (ratio) {
+      sentences.push(
+        `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
+          `${without_value} are in range of nothing the Polar can answer.`
+      )
+    } else if (overlay === 'sail') {
+      // Gated like a performance metric — a manoeuvre's TWA sweeps through head to wind, and the
+      // chart's answer there is to a question nobody asked — and its absences are its own four.
+      sentences.push(
+        `${frozen} sat inside a dropout, ${parked} were parked or mid-manoeuvre, and ` +
+          `${without_value} have nothing to compare: no chart recorded, no sail written down, a ` +
+          'sail the chart does not name, or an angle below its own axes.'
+      )
+    } else {
+      // A reading is not a performance metric, so only the dead feed is excluded here — a parked
+      // boat's speed over the ground is simply what the GPS measured (ADR 0037).
+      sentences.push(
+        `${frozen} sat inside a dropout, where every value is a copy of the row above, and ` +
+          `${without_value} left this channel blank.`
+      )
+    }
   }
 
   if (noFix > 0) {

@@ -1732,7 +1732,7 @@ export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
  * Low-Speed and mid-manoeuvre rows from a metric and has nothing to say about a channel.
  * `services/analysis/track-overlays.ts` holds every scale and every gate.
  */
-export type TrackOverlay = 'target_speed' | 'target_vmg' | 'sog' | 'tws' | 'twa' | 'cog'
+export type TrackOverlay = 'target_speed' | 'target_vmg' | 'sail' | 'sog' | 'tws' | 'twa'
 
 /**
  * A band, named as the design token that paints it.
@@ -1757,7 +1757,8 @@ export type TrackBandToken =
   | `wind-${'light' | 'medium' | 'heavy' | 'storm'}`
   | `track-port-${1 | 2 | 3}`
   | `track-stbd-${1 | 2 | 3}`
-  | `track-cog-${'n' | 'e' | 's' | 'w'}`
+  | 'track-agree'
+  | 'track-differ'
 
 /**
  * Why a drawn row carries no colour — the state, never a bare null.
@@ -1786,6 +1787,32 @@ export type TrackNotScored =
   /** The race records no **Polar Version** at all, so there is nothing to be a percent of. */
   | 'no_polar_version'
   /** A channel overlay whose own channel this row left blank. Not an exclusion — an absence. */
+  | 'no_reading'
+  /** The race records no **Crossover Chart Version**, so it has no sail vocabulary at all. */
+  | 'no_chart_version'
+  /** Nobody wrote down what was flying here. An empty list is legal and ordinary (ADR 0010). */
+  | 'no_sail_recorded'
+  /** What was flying is a note rather than a **Sail Definition**: no integer to compare. */
+  | 'sail_unnamed'
+  /** Below one of the chart's own axes, where a floor lookup has no floor (ADR 0028). */
+  | 'no_chart_cell'
+
+/**
+ * Whether what was flying matched the **Crossover Chart**, or which of five reasons there is no
+ * verdict.
+ *
+ * A disagreement is not a fault: a boat carrying the A2 through a lull the chart would have reefed
+ * for is a decision somebody made on the water. `services/analysis/sail-agreement.ts` decides it,
+ * and the four "no verdict" members are kept apart because they are different facts — a gap in the
+ * archive, a sail the chart cannot name, and the edge of the chart are not one shrug.
+ */
+export type SailAgreement =
+  | 'agrees'
+  | 'differs'
+  | 'no_chart_version'
+  | 'no_sail_recorded'
+  | 'sail_unnamed'
+  | 'no_chart_cell'
   | 'no_reading'
 
 /** What a row makes of one overlay: a band, or the reason there is none. */
@@ -1828,8 +1855,20 @@ export interface TrackRowFacts {
   tws: number | null
   /** Signed, −180..180, positive = starboard. Computed, like every wind figure. */
   twa: number | null
-  /** Course over the ground, degrees true. Position-Derived. */
+  /** Course over the ground, degrees true. Position-Derived. Read out, not an overlay of its own. */
   cog: number | null
+  /**
+   * The chart's verdict on this row: what was flying, what was suggested, and whether they agree.
+   *
+   * Decided on the server, like every other figure here, because it is resolved against the
+   * **Crossover Chart Version** the Race points at — the one vocabulary either side may speak
+   * (ADR 0023) — and nothing on the client may look a Sail Definition up afresh (ADR 0012).
+   */
+  sail_agreement: SailAgreement
+  /** What the sailor said was up, in that Version's own words. Null where none was named. */
+  sail_flown: string | null
+  /** What the chart calls for here. Null where it cannot answer. */
+  sail_recommended: string | null
   /** What the Polar says the boat could have done here, in knots. Null where it cannot answer. */
   target_speed: number | null
   /** `SOG` over **Target Speed** (ADR 0027). */
@@ -1936,6 +1975,16 @@ export interface TrackAnnotation {
    * and a screen that cannot say so is placing Testimony more precisely than the track supports.
    */
   gap_seconds: number
+  /**
+   * How far the marker is drawn from that fix, in frame units, so two on one fix stay legible.
+   *
+   * A sail change and a sea state recorded a few seconds apart land on the same fix, and one disc
+   * exactly over another is a marker that hides a marker. So they fan upward from the fix and the
+   * frame draws a leader line back to it — which is what keeps the offset honest: `x`/`y` stay the
+   * place, and the line says the disc has been moved off it. Zero for a marker with the fix to
+   * itself.
+   */
+  dy: number
 }
 
 /**

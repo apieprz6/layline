@@ -23,12 +23,18 @@
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
-import { readableRows } from '@/services/analysis/readable-rows'
+import { channelValue, readableRows } from '@/services/analysis/readable-rows'
+import { crossoverLookup } from '@/services/analysis/crossover-lookup'
+import {
+  compareSailToChart,
+  type SailChartContext,
+} from '@/services/analysis/sail-agreement'
 import {
   raceTrackHeatmap,
   type TrackAnnotationInput,
   type TrackHeatmapRow,
 } from '@/services/analysis/track-heatmap'
+import { readCrossoverChartVersion } from '@/services/boat/readCrossoverChartVersions'
 import { readPolarVersion } from '@/services/boat/readPolarVersions'
 import type { RecordedRow } from '@/services/races/recording-rows'
 import type { RaceWindow } from '@/services/recordings/row-quality'
@@ -78,16 +84,77 @@ function testimony(annotations: RaceAnnotations): TrackAnnotationInput[] {
   ]
 }
 
+/**
+ * The chart's verdict on every row, attached to the rows themselves.
+ *
+ * Resolved here rather than in `services/analysis/track-heatmap.ts` because it reads two things
+ * that belong to the **Race**: the **Crossover Chart Version** it points at, which owns the only
+ * sail vocabulary either side may speak (ADR 0023), and the sailor's own **Sail Configurations**.
+ * The rule for what counts as agreement is `compareSailToChart`'s; this only supplies it with the
+ * two records.
+ *
+ * Null `chart` — a race that records no chart Version — is the ordinary state of this archive's
+ * older races, and every row then carries `no_chart_version` rather than a false disagreement.
+ */
+function withSailAgreement(
+  rows: readonly TrackHeatmapRow[],
+  chart: SailChartContext | null
+): TrackHeatmapRow[] {
+  return rows.map((row) => ({
+    ...row,
+    sail: compareSailToChart(
+      { row_time: row.row_time, twa: channelValue(row.twa), tws: channelValue(row.tws) },
+      chart
+    ),
+  }))
+}
+
+/**
+ * The Race's own Crossover Chart, with the Testimony to compare against it, or null.
+ *
+ * By the id the Race holds, like the Polar — never the chart in force now, which would re-score a
+ * 2024 race against a vocabulary written after it (ADR 0012). A Version that cannot be read is
+ * logged and treated as none: the track is still true, and the overlay says there is no verdict
+ * rather than inventing one.
+ */
+async function sailChart(
+  chartVersionId: string | null,
+  annotations: RaceAnnotations
+): Promise<SailChartContext | null> {
+  if (chartVersionId === null) return null
+
+  const chart = await readCrossoverChartVersion(chartVersionId)
+
+  if (chart === null) {
+    console.error(
+      `Race: the Crossover Chart Version ${chartVersionId} this race names could not be read`
+    )
+    return null
+  }
+
+  return {
+    lookup: crossoverLookup(chart.payload),
+    entries: annotations.sails.map((entry) => ({
+      at: entry.at,
+      definition_number: entry.definition_number,
+      label: entry.label,
+    })),
+  }
+}
+
 export async function readRaceTrack(
   rows: readonly RecordedRow[],
   quality: TranscriptionQuality,
   window: RaceWindow,
   /** The **Polar Version** the Race holds. Null is a legitimate answer, and nine races give it. */
   polarVersionId: string | null,
-  /** What the sailor said, to be drawn where they said it happened. */
-  annotations: RaceAnnotations
+  /** What the sailor said, to be drawn where they said it happened and compared with the chart. */
+  annotations: RaceAnnotations,
+  /** The **Crossover Chart Version** the Race holds, which owns the one sail vocabulary. */
+  crossoverChartVersionId: string | null
 ): Promise<RaceTrack> {
-  const drawable = trackRows(rows, quality, window)
+  const chart = await sailChart(crossoverChartVersionId, annotations)
+  const drawable = withSailAgreement(trackRows(rows, quality, window), chart)
   const placed = { annotations: testimony(annotations) }
 
   if (polarVersionId === null) {

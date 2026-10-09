@@ -51,6 +51,9 @@ const ON_THE_PACE: TrackRowFacts = {
   vmg_efficiency: 1.04,
   filler_anchored: false,
   excluded: null,
+  sail_agreement: 'agrees',
+  sail_flown: 'Main + Jib 1',
+  sail_recommended: 'Main + Jib 1',
 }
 
 /** Sailed tighter than the certificate measures, so its target came off a manufactured cell. */
@@ -93,7 +96,7 @@ const COUNTS: RaceTrackHeatmap['counts'] = {
     sog: { scored: 176, flagged: 0, without_value: 0 },
     tws: { scored: 170, flagged: 0, without_value: 6 },
     twa: { scored: 170, flagged: 0, without_value: 6 },
-    cog: { scored: 176, flagged: 0, without_value: 0 },
+    sail: { scored: 120, flagged: 0, without_value: 38 },
   },
 }
 
@@ -116,8 +119,9 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
     ],
     // What the sailor said, where they said it happened: a sail change and a sea state.
     annotations: [
-      { x: 40, y: 40, lane: 'sail', label: 'Main + A2', at: '2026-06-20T16:04:30', gap_seconds: 0 },
-      { x: 80, y: 90, lane: 'sea', label: 'Moderate', at: '2026-06-20T16:05:00', gap_seconds: 95 },
+      { x: 40, y: 40, lane: 'sail', label: 'Main + A2', at: '2026-06-20T16:04:30', gap_seconds: 0, dy: 0 },
+      // Recorded seconds after the sail change, so it lands on the same fix and is lifted clear.
+      { x: 40, y: 40, lane: 'sea', label: 'Moderate', at: '2026-06-20T16:04:40', gap_seconds: 10, dy: -19 },
     ],
     counts: COUNTS,
     ...over,
@@ -336,6 +340,46 @@ describe('the track, drawn', () => {
 })
 
 describe('switching what the track is coloured by', () => {
+  it('paints sail agreement green and red, and says a difference is not a fault', async () => {
+    const { container } = render(<RaceTrackSection track={trackOf()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sail vs chart' }))
+
+    // The fixture's rows agree, bar the parked one, which this overlay cannot read either — it is
+    // gated like a performance metric, because a manoeuvre's TWA sweeps through head to wind.
+    expect(strokes(container)).toContain('var(--track-agree)')
+    expect(screen.getByTestId('track-counts')).toHaveTextContent(
+      /green where what was up matches the chart, red where the two records differ/
+    )
+    expect(screen.getByTestId('track-counts')).toHaveTextContent(/a difference and not a fault/)
+  })
+
+  it('says which of the four ways a row has no sail verdict, in the readout’s words', async () => {
+    render(
+      <RaceTrackSection
+        track={trackOf({
+          heatmap: heatmapOf({
+            segments: [
+              {
+                points: '10.0,10.0 40.0,40.0',
+                x1: 10,
+                y1: 10,
+                x2: 40,
+                y2: 40,
+                row: { ...ON_THE_PACE, sail_agreement: 'sail_unnamed', sail_recommended: null },
+              },
+            ],
+          }),
+        })}
+      />
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sail vs chart' }))
+
+    // Not a dash: a sail the chart cannot name is a different fact from a chart that cannot answer.
+    expect(screen.getByTestId('track-counts')).toHaveTextContent(/a sail the chart does not name/)
+  })
+
   it('offers all six overlays, opening on percent of target', () => {
     render(<RaceTrackSection track={trackOf()} />)
 
@@ -345,6 +389,9 @@ describe('switching what the track is coloured by', () => {
       'aria-pressed',
       'true'
     )
+    // Course is gone: a cyclic quantity drawn as quadrants was coarse, and the owner did not want
+    // it. `COG` is still a figure in the readout, where it costs nothing and reads honestly.
+    expect(screen.queryByRole('button', { name: 'Course' })).not.toBeInTheDocument()
   })
 
   it('repaints the track on the new scale, and nothing else moves', async () => {

@@ -54,7 +54,7 @@ ground is a fact about the boat, not a claim about how well it was sailed.
 | `SOG` | knots | sequential, one hue | `--track-speed-1` … `-5` |
 | `TWS` | knots | **the wind bands** | `--wind-light` … `--wind-storm` |
 | `TWA` | signed angle | diverging by tack, depth for the angle | `--track-port-1..3`, `--track-stbd-1..3` |
-| `COG` | course | four compass quadrants | `--track-cog-n/e/s/w` |
+| sails vs the **Crossover Chart** | categorical | green agrees, red differs | `--track-agree`, `--track-differ` |
 
 Four of those rows carry an argument:
 
@@ -73,11 +73,32 @@ identically, which erases the thing a sailor is actually looking for; the arms a
 `--tack-port`/`--tack-starboard` hues, so a port leg here is the colour port is everywhere else in
 Layline.
 
-**`COG` is drawn as quadrants, and the legend says so.** A course is cyclic and Layline has no cyclic
-palette. One could be built, and it would be a lie after dark: `.theme-nightvision` collapses every
-hue, and a hue wheel has no honest collapse — north and south would become one colour while the
-legend claimed a bearing. Four quadrants are coarse, true, and survive the theme, because four steps
-are what one red depth ramp can keep apart.
+**Sail chart agreement is categorical, and green/red is the one place those hues mean what everyone
+expects.** It answers a question the other five cannot: *where do the two records of this race
+disagree with each other?* — the **Sail Configurations** the sailor wrote down against what the
+**Crossover Chart** calls for at each row's own angle and wind speed. **Cell Agreement** already
+counts that comparison per chart cell (ADR 0030); this is the same comparison at the grain the map
+draws, through the same `crossoverLookup`, so the two cannot disagree.
+
+Agreement is an integer comparison in one vocabulary — a Configuration names a **Sail Definition**
+number of the Version the Race points at, and so does the chart's cell (ADR 0023) — never a match on
+names, which would make "Main + A2" and "Main+A2" two different sails. And a *difference is not a
+fault*: a boat carrying the A2 through a lull the chart would have reefed for is a decision somebody
+made on the water, often a good one. The legend says that where the sailor is reading the colours.
+
+Its red is its own token rather than `--state-danger`, because that hex is `--wind-storm`'s and so
+the **Dropout** ring's: a disagreeing stretch and a dead feed must not be the same colour on one map.
+
+There are **four ways to have no verdict**, and they are kept apart because a single "no" would
+flatten a decision, a gap in the archive and the edge of the chart into one shrug: the Race records
+no chart Version at all (and so can hold no Configurations either); nobody wrote down what was
+flying; what was flying is a note rather than a Definition, so there is no integer to compare; or the
+row sits below one of the chart's own axes, where a floor lookup has no floor (ADR 0028).
+
+What was flying *at a given row* is resolved through ADR 0010's own rule, `entryInForce`, including
+its load-bearing half — the earliest testimony carries **backwards**, because the sails were up
+before the sailor got round to saying so. The amend flow's charts resolve through the same function,
+so one race cannot read two ways on two screens.
 
 ### A reading is gated differently from a ratio, and that asymmetry is deliberate
 
@@ -162,6 +183,14 @@ system has, the only honest way to say "a different kind of thing" is to stop us
 in the page's own surface, outlined and glyphed in the text colour, drawn over the measurement rather
 than under it.
 
+**Two on one fix fan out, with a leader line back to it.** A sail change and a sea state recorded
+seconds apart land on the same fix, and a disc exactly over another is a marker that hides a marker.
+Each after the first is lifted clear in screen units — the pile is a drawing problem, not a
+geographic one — the fix itself stays marked, and a dashed line joins the two, which is what keeps
+the offset honest: the position is still the position, and the line says the disc has been moved off
+it. Each label sits *beside* its own disc rather than above it, because above meant a lifted disc
+landed on the label of the one below.
+
 **An annotation is placed at the nearest fix in time, and only within two minutes of it.** The rows
 are event-triggered and unevenly spaced, so the nearest fix to a sail change can be a minute away —
 the gap therefore travels with the placed marker, because "here" and "near here" are different claims
@@ -181,8 +210,8 @@ exists for.
 
 ## Consequences
 
-- **Fifteen new tokens**, each with a declared night-vision mapping: five sequential, six for the
-  tack pair, four for the quadrants. The sequential and tack ramps are monotone in OKLab lightness
+- **Thirteen new tokens**, each with a declared night-vision mapping: five sequential, six for the
+  tack pair, two for agreement. The sequential and tack ramps are monotone in OKLab lightness
   with adjacent ΔL ≥ 0.069 and light ends above 2:1 against the sand surface; the quadrants are
   categorical, each above 3.2:1, with their lightness spread as well so they survive a colour-blind
   reader. There is deliberately no `--track-wind-*` family: `TWS` reads the wind bands directly.
@@ -211,9 +240,17 @@ exists for.
 - **One ramp for everything, with the legend relabelled per overlay.** Cheapest by far, and it would
   draw a boat speed as if 6 knots were a midpoint of something. A scale's shape is a claim; four of
   these quantities make four different claims.
-- **A cyclic hue wheel for `COG`.** It is the correct encoding for a cyclic quantity and it cannot
-  survive a theme that collapses hue, which this product has and uses on the water at night. Four
-  quadrants are honest in both themes.
+- **A `COG` overlay.** Built first, as four compass quadrants — a course is cyclic, and a hue wheel
+  could not survive a theme that collapses hue, so quadrants were the honest reduction. Cut on the
+  owner's word after using it: the track's own shape already says which way the boat was going, so
+  the overlay spent four tokens restating the picture. `COG` remains a figure in the readout, where
+  it costs nothing.
+- **Gating sail agreement like a reading**, so that every row with a recorded sail gets a verdict.
+  Rejected: a manoeuvre's `TWA` sweeps through head to wind, so the chart's recommendation mid-tack
+  answers a question nobody asked, and **Cell Agreement** counts the same comparison over Countable
+  rows (ADR 0030). Two screens disagreeing about which rows count is worse than a shorter answer.
+- **Matching sails on their names.** One typo in a note, or one chart relabelled, and a race's
+  agreement flips. The Definition number is the identity (ADR 0023).
 - **Precomputing all six overlays' bands on the server**, keeping ADR 0033's rule literally. Six
   bands plus six reasons per row is a bigger payload than the row's own facts, and it still would not
   give the tap its readout — so it costs more and buys less than the shared module.

@@ -207,7 +207,8 @@ describe('.theme-nightvision CSS token overrides', () => {
         ...[1, 2, 3, 4, 5].map((step) => `--track-speed-${step}`),
         ...[1, 2, 3].map((step) => `--track-port-${step}`),
         ...[1, 2, 3].map((step) => `--track-stbd-${step}`),
-        ...['n', 'e', 's', 'w'].map((point) => `--track-cog-${point}`),
+        '--track-agree',
+        '--track-differ',
       ]
 
       scales.forEach((token) => {
@@ -240,12 +241,21 @@ describe('.theme-nightvision CSS token overrides', () => {
       })
     })
 
-    it('keeps four quadrants apart after dark, which is what four steps are for', () => {
-      const depth = ['n', 'e', 's', 'w'].map((point) =>
-        redChannelBrightness(getPropertyValue(nightvision, `--track-cog-${point}`)!)
-      )
+    it('keeps agreement and difference apart after dark, with the difference brighter', () => {
+      // Two steps is the least a ramp can hold, and which way round matters: a difference between
+      // the two records is the thing worth noticing on a dark boat.
+      const agree = lightness(getPropertyValue(nightvision, '--track-agree')!)
+      const differ = lightness(getPropertyValue(nightvision, '--track-differ')!)
 
-      expect(new Set(depth).size).toBe(4)
+      expect(differ).toBeGreaterThan(agree)
+    })
+
+    it('does not paint a difference in the Dropout ring’s own red', () => {
+      // --wind-storm rings every Frozen row and dashes every bridge. A disagreeing stretch sharing
+      // that colour would make a dead feed and a sail decision the same thing on one map.
+      expect(getPropertyValue(root, '--track-differ')).not.toBe(
+        getPropertyValue(root, '--wind-storm')
+      )
     })
 
     it('spends the wind-speed tokens on no scale of its own', () => {

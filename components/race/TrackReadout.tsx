@@ -54,6 +54,10 @@ const WHY: Record<string, string> = {
   no_target: 'the Polar has no answer at this angle and wind speed',
   no_polar_version: 'this race records no Polar Version, so there is nothing to compare against',
   no_reading: 'the recording left this channel blank',
+  no_chart_version: 'this race records no Crossover Chart Version, so it has no sail vocabulary',
+  no_sail_recorded: 'nobody wrote down what was flying here',
+  sail_unnamed: 'what was flying was recorded as a note rather than one of the chart’s own sails',
+  no_chart_cell: 'this angle and wind speed sit below the chart’s own axes',
 }
 
 export default function TrackReadout({
@@ -208,6 +212,8 @@ export default function TrackReadout({
           <>
             <Fact label="% of target">{percent(row.polar_efficiency)}</Fact>
             <Fact label="COG (GPS)">{degrees(row.cog)}</Fact>
+            <Fact label="Sails flown">{row.sail_flown ?? '—'}</Fact>
+            <Fact label="Chart calls for">{row.sail_recommended ?? '—'}</Fact>
             <Fact label="Target VMG (est.)">{knots(row.target_vmg)}</Fact>
             <Fact label="% of target VMG">{percent(row.vmg_efficiency)}</Fact>
           </>
@@ -264,8 +270,12 @@ function headlineValue(overlay: TrackOverlay, row: TrackRowFacts): string {
       return `${knots(row.tws)} of true wind`
     case 'twa':
       return `${degrees(row.twa)} true wind angle, ${tackOf(row.twa)}`
-    case 'cog':
-      return `${degrees(row.cog)} over the ground`
+    case 'sail':
+      // What was up and what was suggested, side by side — the comparison *is* the headline, and
+      // "agreed" with nothing beside it would be a verdict the sailor cannot check.
+      return row.sail_agreement === 'agrees'
+        ? `${row.sail_flown ?? 'what was up'} — as the chart calls for`
+        : `${row.sail_flown ?? 'what was up'} · chart: ${row.sail_recommended ?? '—'}`
   }
 }
 

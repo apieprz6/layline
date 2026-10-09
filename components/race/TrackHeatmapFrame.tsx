@@ -471,43 +471,75 @@ export default function TrackHeatmapFrame({
                 camera, so Testimony sits over the measurement rather than under it: on a map an
                 annotation is a *place*, and a sail change hidden beneath a fat track tells nobody
                 anything. */}
-            {annotations.map((annotation, index) => (
-              <g key={`testimony-${index}`} data-testid={`track-testimony-${annotation.lane}`}>
-                <circle
-                  cx={annotation.x}
-                  cy={annotation.y}
-                  r={TESTIMONY.radius / zoom}
-                  fill={TESTIMONY.fill}
-                  stroke={TESTIMONY.stroke}
-                  strokeWidth={TESTIMONY.width}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <text
-                  x={annotation.x}
-                  y={annotation.y + 3 / zoom}
-                  textAnchor="middle"
-                  fontSize={9 / zoom}
-                  fontWeight="700"
-                  fontFamily="var(--font-mono)"
-                  fill={TESTIMONY.glyph}
-                >
-                  {testimonyGlyph(annotation.lane)}
-                </text>
-                <text
-                  x={annotation.x}
-                  y={annotation.y - 10 / zoom}
-                  textAnchor="middle"
-                  fontSize={8 / zoom}
-                  fontFamily="var(--font-mono)"
-                  fill="var(--text-secondary)"
-                  stroke="var(--surface-base)"
-                  strokeWidth={2.4 / zoom}
-                  paintOrder="stroke"
-                >
-                  {annotation.label}
-                </text>
-              </g>
-            ))}
+            {annotations.map((annotation, index) => {
+              // Two recorded seconds apart land on one fix, so each after the first is lifted off
+              // the pile — in *screen* units, dividing the zoom out, since the pile is a drawing
+              // problem and not a geographic one. The leader line back to the fix is what keeps
+              // that honest: the disc has been moved, and the line says where from.
+              const lift = annotation.dy / zoom
+              const cy = annotation.y + lift
+              const rightThird = annotation.x * zoom + view.tx > (width * 2) / 3
+
+              return (
+                <g key={`testimony-${index}`} data-testid={`track-testimony-${annotation.lane}`}>
+                  {annotation.dy !== 0 && (
+                    <line
+                      x1={annotation.x}
+                      y1={annotation.y}
+                      x2={annotation.x}
+                      y2={cy}
+                      stroke={TESTIMONY.stroke}
+                      strokeWidth="1"
+                      strokeDasharray="2 2"
+                      opacity="0.5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                  {/* The fix itself, so a lifted marker still shows the place it is about. */}
+                  {annotation.dy !== 0 && (
+                    <circle cx={annotation.x} cy={annotation.y} r={1.6 / zoom} fill={TESTIMONY.stroke} />
+                  )}
+                  <circle
+                    cx={annotation.x}
+                    cy={cy}
+                    r={TESTIMONY.radius / zoom}
+                    fill={TESTIMONY.fill}
+                    stroke={TESTIMONY.stroke}
+                    strokeWidth={TESTIMONY.width}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text
+                    x={annotation.x}
+                    y={cy + 3 / zoom}
+                    textAnchor="middle"
+                    fontSize={9 / zoom}
+                    fontWeight="700"
+                    fontFamily="var(--font-mono)"
+                    fill={TESTIMONY.glyph}
+                  >
+                    {testimonyGlyph(annotation.lane)}
+                  </text>
+                  {/* Beside the disc, not above it. Above was fine for one marker and unreadable
+                      for two: a lifted disc landed on the label of the one below it. Beside, each
+                      label is as far from its neighbour as the discs are. It flips to the left of
+                      the disc in the right-hand third of the frame, where it would otherwise run
+                      off the edge. */}
+                  <text
+                    x={annotation.x + ((rightThird ? -1 : 1) * (TESTIMONY.radius + 3)) / zoom}
+                    y={cy + 3 / zoom}
+                    textAnchor={rightThird ? 'end' : 'start'}
+                    fontSize={8 / zoom}
+                    fontFamily="var(--font-mono)"
+                    fill="var(--text-secondary)"
+                    stroke="var(--surface-base)"
+                    strokeWidth={2.4 / zoom}
+                    paintOrder="stroke"
+                  >
+                    {annotation.label}
+                  </text>
+                </g>
+              )
+            })}
 
             {/* ADR 0014 makes ringing Frozen rows an obligation of every map in Layline, and the
                 track is already drawn broken into and out of them. The bridge above is the rest of

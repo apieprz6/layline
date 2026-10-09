@@ -58,6 +58,9 @@ function facts(over: Partial<TrackRowFacts> = {}): TrackRowFacts {
     vmg_efficiency: 1.04,
     filler_anchored: false,
     excluded: null,
+    sail_agreement: 'agrees',
+    sail_flown: 'Main + Jib 1',
+    sail_recommended: 'Main + Jib 1',
     ...over,
   }
 }

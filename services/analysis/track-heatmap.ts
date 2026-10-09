@@ -39,6 +39,7 @@ import { notCountableReason } from '@/services/analysis/countable'
 import { computeRowEfficiency } from '@/services/analysis/efficiency'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
 import { channelValue } from '@/services/analysis/readable-rows'
+import type { SailComparison } from '@/services/analysis/sail-agreement'
 import { TRACK_OVERLAYS, overlayPaint } from '@/services/analysis/track-overlays'
 import type { TrackBox } from '@/services/recordings/track-projection'
 import { projectTrack, type TrackProjection } from '@/services/recordings/track-projection'
@@ -71,6 +72,14 @@ import type {
 export interface TrackHeatmapRow extends AnalysisRow {
   latitude: string | null
   longitude: string | null
+  /**
+   * The chart's verdict on this row, resolved by the caller.
+   *
+   * Decided in `services/races/`, not here, because it is resolved against the **Crossover Chart
+   * Version** the Race points at and against the sailor's own Testimony — two things this module
+   * has no business knowing about. It arrives as a verdict and is carried through.
+   */
+  sail?: SailComparison
   /** Knots over the ground: the efficiency numerator (ADR 0027), and the `SOG` overlay. */
   sog: string | null
   /** Course over the ground, degrees true: the `COG` overlay. */
@@ -105,6 +114,29 @@ export interface TrackAnnotationInput {
  * above the Transcription boundary either way.
  */
 const PLACEABLE_SECONDS = 120
+
+/**
+ * How near two markers may land before they are treated as one pile, in frame units.
+ *
+ * A disc is 7 units across, so anything inside this would overlap something.
+ */
+const COLLIDE_UNITS = 9
+
+/**
+ * How far each marker after the first is lifted off the pile, in frame units.
+ *
+ * Enough to clear a 7-unit disc and its own label beside it, with air between the two.
+ */
+const FAN_UNITS = 19
+
+/**
+ * ADR 0025's three, which are the only reasons that are *exclusions* rather than absences.
+ *
+ * Everything else an overlay cannot colour — the Polar off its axis, a blank channel, no chart
+ * recorded, no sail written down — is a want of a value, and counting the two apart is what makes
+ * every overlay's tallies add up to the race.
+ */
+const EXCLUSIONS = ['frozen', 'low_speed', 'maneuver_window'] as const
 
 /** Where a fix lands in the frame. */
 function at(projection: TrackProjection, lat: number, lon: number): { x: number; y: number } {
@@ -150,6 +182,11 @@ function factsOf(row: TrackHeatmapRow, targets: PolarTargets | null): TrackRowFa
     // `notCountableReason`'s own answer, assigned straight across — which is what keeps the map's
     // vocabulary from drifting from the rest of the app's.
     excluded: notCountableReason(row),
+    // A row with no comparison attached is one on a race that records no chart Version, which is
+    // the ordinary state of this archive's older races.
+    sail_agreement: row.sail?.agreement ?? 'no_chart_version',
+    sail_flown: row.sail?.flown ?? null,
+    sail_recommended: row.sail?.recommended ?? null,
   }
 }
 
@@ -171,7 +208,7 @@ function emptyCounts(rows: number): TrackHeatmapCounts {
       sog: emptyOverlayCounts(),
       tws: emptyOverlayCounts(),
       twa: emptyOverlayCounts(),
-      cog: emptyOverlayCounts(),
+      sail: emptyOverlayCounts(),
     },
   }
 }
@@ -190,7 +227,12 @@ function tally(counts: TrackHeatmapCounts, facts: TrackRowFacts, hasPolar: boole
     if (paint.band !== null) {
       tallies.scored += 1
       if (paint.flagged) tallies.flagged += 1
-    } else if (paint.not_scored === 'no_target' || paint.not_scored === 'no_reading') {
+    } else if (!EXCLUSIONS.includes(paint.not_scored as (typeof EXCLUSIONS)[number])) {
+      // Everything that is not one of ADR 0025's exclusions is an *absence*: the Polar off its
+      // axis, a blank channel, no chart recorded, no sail written down. Counting them together is
+      // what makes `scored + without_value + the exclusions this overlay applies` add up to the
+      // race on every overlay — and a row that left a figure and is tallied nowhere is the silent
+      // omission that count exists to prevent.
       tallies.without_value += 1
     }
   }
@@ -387,6 +429,14 @@ function placeAnnotations(
 
     const fix = fixes[nearestIndex]
     const where = at(projection, fix.latitude as number, fix.longitude as number)
+    // How many are already on this spot: a sail change and a sea state recorded seconds apart land
+    // on the same fix, and a disc exactly over another is a marker that hides a marker. Each after
+    // the first is lifted, and the frame draws a leader line back down to the fix — so the offset
+    // is visible as an offset rather than as a different place.
+    const stacked = placed.filter(
+      (already) => Math.hypot(already.x - where.x, already.y - where.y) < COLLIDE_UNITS
+    ).length
+
     placed.push({
       x: where.x,
       y: where.y,
@@ -394,6 +444,9 @@ function placeAnnotations(
       label: annotation.label,
       at: annotation.at,
       gap_seconds: nearestGap,
+      // Guarded against `-0`, which `0 * -17` produces and which has no business crossing a
+      // serialisation boundary as a coordinate.
+      dy: stacked === 0 ? 0 : -(stacked * FAN_UNITS),
     })
   }
 

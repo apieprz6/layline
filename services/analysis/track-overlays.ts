@@ -68,7 +68,7 @@ export interface TrackBandStep {
 }
 
 /** How a scale behaves, which decides what its legend has to say after dark. */
-export type TrackScaleKind = 'diverging' | 'sequential' | 'tack' | 'quadrant'
+export type TrackScaleKind = 'diverging' | 'sequential' | 'tack' | 'categorical'
 
 export interface TrackScale {
   overlay: TrackOverlay
@@ -105,14 +105,34 @@ export function overlayValue(overlay: TrackOverlay, row: TrackRowFacts): number 
       return row.tws
     case 'twa':
       return row.twa
-    case 'cog':
-      return row.cog
+    case 'sail':
+      // Categorical: there is no number to band. `overlayPaint` reads the verdict itself.
+      return null
   }
 }
 
-/** Whether an overlay is a performance metric, which is what decides its row gate (ADR 0025). */
+/**
+ * Whether an overlay is a *ratio* — a percent of something the Polar says.
+ *
+ * Only these two can be **Filler-Anchored**, because that flag is a property of the comparison
+ * (ADR 0036), and only these two carry a percentage for the legend to talk about.
+ */
 export function isRatioOverlay(overlay: TrackOverlay): boolean {
   return overlay === 'target_speed' || overlay === 'target_vmg'
+}
+
+/**
+ * Which rows an overlay may colour at all (ADR 0025, ADR 0037).
+ *
+ * `countable` is the performance-metric gate: not **Frozen**, not **Low-Speed**, not inside a
+ * **Maneuver Window**. The two ratios need it, and so does sail agreement — a manoeuvre's `TWA`
+ * sweeps through head to wind, so the chart's recommendation mid-tack is an answer to a question
+ * nobody asked, and **Cell Agreement** is counted over Countable rows for the same reason
+ * (ADR 0030). The four channel overlays need only a live feed, because a parked boat's speed over
+ * the ground is simply what the GPS recorded.
+ */
+export function overlayGate(overlay: TrackOverlay): 'countable' | 'feed-alive' {
+  return isRatioOverlay(overlay) || overlay === 'sail' ? 'countable' : 'feed-alive'
 }
 
 /**
@@ -196,22 +216,23 @@ const TWA_BANDS: readonly TrackBandStep[] = [
 ]
 
 /**
- * Course over the ground, as four compass quadrants.
+ * Sail chart agreement: did what was flying match what the chart called for?
  *
- * Deliberately coarse. A heading is cyclic, and a cyclic quantity needs a palette whose ends meet
- * — which the design system does not have, and which could not survive `.theme-nightvision`
- * anyway, since four quadrants are the most one red depth ramp can keep apart. So the overlay
- * states quadrants and the legend says that is what it is, rather than drawing 360 degrees of hue
- * and letting the sailor believe the colour is a bearing.
+ * Two values, so two bands — this is the one categorical overlay, and its "scale" is a pair rather
+ * than a ramp. Green for agreement and red for a difference, which is the one place on this screen
+ * those two conventional hues mean what everyone expects them to.
  *
- * North straddles 0°, so it is checked by its two halves and the walk starts at 45°.
+ * A difference is **not a fault**, and the legend says so: a boat carrying the A2 through a lull
+ * the chart would have reefed for is a decision somebody made on the water, often a good one. What
+ * the overlay answers is *where the two records differ*, which is a question about the chart as much
+ * as about the sailing.
+ *
+ * The bands are read off the verdict rather than off a number, so `below` is unused here — a
+ * categorical quantity has no edges. `overlayPaint` reads `sail_agreement` directly for this one.
  */
-const COG_BANDS: readonly TrackBandStep[] = [
-  { band: 'track-cog-n', below: 45, tick: '0', label: 'northerly, 315–45°' },
-  { band: 'track-cog-e', below: 135, tick: '45', label: 'easterly, 45–135°' },
-  { band: 'track-cog-s', below: 225, tick: '135', label: 'southerly, 135–225°' },
-  { band: 'track-cog-w', below: 315, tick: '225', label: 'westerly, 225–315°' },
-  { band: 'track-cog-n', below: Infinity, tick: '315', label: 'northerly, 315–45°' },
+const SAIL_BANDS: readonly TrackBandStep[] = [
+  { band: 'track-agree', below: Infinity, tick: 'agreed', label: 'what was up matches the chart' },
+  { band: 'track-differ', below: Infinity, tick: 'differed', label: 'the two records differ' },
 ]
 
 export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
@@ -278,15 +299,19 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     caveat:
       'Every wind figure here was computed by qtVlm from the boat’s instruments, not read off the masthead.',
   },
-  cog: {
-    overlay: 'cog',
-    chip: 'Course',
-    title: 'Course over the ground (COG)',
-    unit: '°',
-    kind: 'quadrant',
-    bands: COG_BANDS,
-    day: 'Four quadrants, not a bearing: north, east, south, west.',
-    night: 'The same four quadrants, by depth rather than by hue.',
+  sail: {
+    overlay: 'sail',
+    chip: 'Sail vs chart',
+    title: 'Sails flown vs the Crossover Chart',
+    unit: null,
+    kind: 'categorical',
+    bands: SAIL_BANDS,
+    day:
+      'Green where what was up matches the chart, red where the two records differ — which is a ' +
+      'difference and not a fault.',
+    night:
+      'After dark the two are told apart by depth: the brighter stretches are where what was up ' +
+      'and what the chart called for differ.',
   },
 }
 
@@ -294,10 +319,10 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
 export const TRACK_OVERLAYS: readonly TrackOverlay[] = [
   'target_speed',
   'target_vmg',
+  'sail',
   'sog',
   'tws',
   'twa',
-  'cog',
 ]
 
 /** A band as the colour to draw it in. A token, never a hex, so the theme stays in charge. */
@@ -334,10 +359,24 @@ export function overlayPaint(
   // The one exclusion every overlay keeps: a Frozen row's values are the row above's, verbatim.
   if (row.excluded === 'frozen') return unscored('frozen')
 
-  if (isRatioOverlay(overlay)) {
-    // A performance metric, so ADR 0025's rule applies in full.
+  if (overlayGate(overlay) === 'countable') {
+    // ADR 0025's rule in full, for the overlays that are claims about how the boat was sailed.
     if (row.excluded !== null) return unscored(row.excluded)
-    if (!hasPolar) return unscored('no_polar_version')
+  }
+
+  if (isRatioOverlay(overlay) && !hasPolar) return unscored('no_polar_version')
+
+  if (overlay === 'sail') {
+    // Categorical, and decided on the server against the Race's own chart Version (ADR 0023): the
+    // verdict is read, never recomputed here, and its four "no verdict" members are reasons in
+    // their own right.
+    if (row.sail_agreement === 'agrees') {
+      return { band: 'track-agree', not_scored: null, flagged: false }
+    }
+    if (row.sail_agreement === 'differs') {
+      return { band: 'track-differ', not_scored: null, flagged: false }
+    }
+    return unscored(row.sail_agreement)
   }
 
   const value = overlayValue(overlay, row)

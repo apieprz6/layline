@@ -42,11 +42,7 @@ import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { readableRows } from '@/services/analysis/readable-rows'
-import {
-  TRACK_OVERLAYS,
-  isRatioOverlay,
-  overlayPaint,
-} from '@/services/analysis/track-overlays'
+import { TRACK_OVERLAYS, overlayGate, overlayPaint } from '@/services/analysis/track-overlays'
 import {
   dropoutDuration,
   raceTrackHeatmap,
@@ -133,6 +129,23 @@ describeSeason('Chicago–Waukegan, the race a quarter of which is scoreable', (
     const { scored, without_value } = whole().counts.overlays.target_speed
 
     expect(scored + frozen + low_speed + maneuver_window + without_value).toBe(rows)
+  })
+
+  it('measures what this archive can say about sails against the chart', () => {
+    // No race in the archive carries both a Crossover Chart Version pointer *and* Sail
+    // Configurations through `trackRows` here — this suite builds rows from the files alone, with
+    // no Race row behind them — so every row reads `no_chart_version`, which is the honest answer
+    // to "what did the chart say" when nothing says which chart. The comparison itself is pinned
+    // in `sail-agreement.test.ts`, and the wiring in `readRace.test.ts`.
+    expect(whole().counts.overlays.sail.scored).toBe(0)
+    // Counted as an absence rather than an exclusion, so the overlay still accounts for every
+    // Countable row of the race.
+    expect(whole().counts.overlays.sail.without_value).toBe(
+      whole().counts.rows -
+        whole().counts.frozen -
+        whole().counts.low_speed -
+        whole().counts.maneuver_window
+    )
   })
 
   it('colours more of the same race on a channel overlay than on a ratio', () => {
@@ -231,7 +244,8 @@ describeSeason('every race in the archive', () => {
         const { scored, without_value } = heatmap.counts.overlays[overlay]
         // A ratio overlay also excludes ADR 0025's two; a reading excludes only the dead feed. So
         // what every overlay must account for is the same rows, by whichever of its own reasons.
-        const excluded = isRatioOverlay(overlay) ? frozen + low_speed + maneuver_window : frozen
+        const excluded =
+          overlayGate(overlay) === 'countable' ? frozen + low_speed + maneuver_window : frozen
 
         expect({ filename, overlay, tallied: scored + without_value + excluded }).toEqual({
           filename,

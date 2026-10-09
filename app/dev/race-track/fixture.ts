@@ -14,7 +14,7 @@
  */
 
 import type { TrackAnnotationInput, TrackHeatmapRow } from '@/services/analysis/track-heatmap'
-import type { PolarPayload } from '@/types'
+import type { CrossoverChartPayload, PolarPayload } from '@/types'
 
 /**
  * A grid whose lightest two angles are a manufactured ramp, so a row sailed at 45° is
@@ -116,9 +116,40 @@ function courseOf(leg: Leg): string {
  * Testimony sitting over the measurement — which is the thing only a browser can judge.
  */
 export const HARNESS_TESTIMONY: TrackAnnotationInput[] = [
-  { at: stamp(2), lane: 'sail', label: 'Main + Jib 1', },
+  { at: stamp(2), lane: 'sail', label: 'Main + Jib 1' },
+  // Recorded a few seconds apart, so the two land on one fix — which is the collision the markers
+  // have to survive, and the reason the second is lifted with a leader line back down.
   { at: stamp(26), lane: 'sea', label: 'Moderate' },
-  { at: stamp(48), lane: 'sail', label: 'Main + A2' },
+  { at: stamp(26), lane: 'sail', label: 'Main + A2' },
+  { at: stamp(48), lane: 'sea', label: 'Rough' },
+]
+
+/**
+ * A chart with one crossover, so the harness shows both verdicts.
+ *
+ * Jib 1 below 12 knots and Jib 3 above it. The fixture sails in 10 knots throughout and the sailor
+ * recorded Jib 1 first and the A2 later, so the track reads as agreement up to the second sail
+ * change and a difference after it.
+ */
+export const HARNESS_CHART: CrossoverChartPayload = {
+  twa_axis: [40, 90, 135],
+  tws_axis: [6, 12],
+  cells: [
+    [1, 3],
+    [1, 3],
+    [4, 3],
+  ],
+  sail_definitions: [
+    { number: 1, label: 'Main + Jib 1' },
+    { number: 3, label: 'Main + Jib 3' },
+    { number: 4, label: 'Main + A2' },
+  ],
+}
+
+/** The Sail Configurations the harness compares against that chart, in its own words. */
+export const HARNESS_SAILS = [
+  { at: stamp(2), definition_number: 1, label: 'Main + Jib 1' },
+  { at: stamp(26), definition_number: 4, label: 'Main + A2' },
 ]
 
 export function harnessRows(): TrackHeatmapRow[] {

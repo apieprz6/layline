@@ -126,13 +126,12 @@
   --track-stbd-2: #1E8E5A;    /* reaching, starboard */
   --track-stbd-3: #0F5436;    /* running, starboard */
 
-  /* Course over the ground, as four compass quadrants. Categorical, so these vary by hue first —
-     four distinct hues, each at 3.2:1 or better against the sand surface, with their lightness
-     spread as well so the four stay apart for a colour-blind reader. */
-  --track-cog-n: #00524A;     /* northerly, 315–45° */
-  --track-cog-e: #3C82E8;     /* easterly, 45–135° */
-  --track-cog-s: #B05A00;     /* southerly, 135–225° */
-  --track-cog-w: #7B23A8;     /* westerly, 225–315° */
+  /* Sail chart agreement: did what was up match what the chart called for? The one categorical
+     overlay, and the one place on this screen where green/red mean what everybody expects. Not
+     --state-success/--state-danger, whose red is --wind-storm's and so the Dropout ring's: a
+     disagreeing stretch and a dead feed must not be the same colour on the same map. */
+  --track-agree:  #0B6E4F;    /* what was up matches the chart */
+  --track-differ: #A3121C;    /* the two records differ — a difference, not a fault */
 
   /* Semantic — UI states */
   --state-success: #007A2F;
@@ -465,10 +464,11 @@
   --track-stbd-2: #C00000;
   --track-stbd-3: #8E0000;
 
-  --track-cog-n: #FFB3B3;
-  --track-cog-e: #E82626;
-  --track-cog-s: #C00000;
-  --track-cog-w: #8E0000;
+  /* Agreement after dark: the difference is the brighter of the two, because a difference is the
+     thing worth noticing. Not --text-primary's own #FF4444, which would make the track read as
+     type. */
+  --track-agree:  #8E1010;
+  --track-differ: #FF2222;
 
   --state-success: #AA2222;
   --state-warning: #CC3300;
