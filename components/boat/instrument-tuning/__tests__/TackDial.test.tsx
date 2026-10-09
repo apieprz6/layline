@@ -41,13 +41,26 @@ function season() {
 }
 
 /**
- * A Race chip, by what it prints.
+ * Picking a Race, which is a dropdown and not a chip.
  *
- * Its date and nothing else, because thirteen named Races is a rail no 390px screen can show. What
- * the chip abbreviates is on its own `title`, which is what the next test asserts.
+ * The levels are a short fixed set and stay chips; the Races are the list that grows, so they are
+ * one control whose size does not.
  */
-function raceChip(label: string): HTMLElement {
-  return screen.getByRole('button', { name: label })
+async function pickRace(label: string): Promise<void> {
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /Which Race/ }), label)
+}
+
+/**
+ * The levels, in the order the rail prints them.
+ *
+ * Read out of the rail's own `group` and not off every `aria-pressed` button on screen: the pair
+ * list beneath the dial is pressable too, and a looser query counted its rows as chips.
+ */
+function levelChips(): (string | null)[] {
+  const rail = screen.queryByRole('group', { name: /Which Races the dial is drawing/ })
+  return rail === null
+    ? []
+    : [...rail.querySelectorAll('button')].map((chip) => chip.textContent)
 }
 
 function renderDial(over: Partial<Parameters<typeof TackDial>[0]> = {}) {
@@ -231,22 +244,62 @@ describe('whose Calibration Eras the chips are cut on', () => {
 })
 
 describe('the chip rail', () => {
-  it('prints a Race as its date, and keeps its name on the chip', () => {
+  it('keeps the Races out of the chips, so the rail does not grow with the archive', () => {
     renderDial()
 
-    // Condensed, not lost: the name is a tooltip away, and the readout prints it in full the
-    // moment the Race is picked.
-    expect(raceChip('3 Jun · 2')).toHaveAttribute('title', '3 Jun · Beer-can · 2 Tack Pairs')
+    // Two levels, and no Race among them. A rail that listed Races was a sideways scroll, then
+    // three wrapped lines of dates; at thirty Races either is a rail with a chart somewhere under
+    // it.
+    expect(levelChips()).toEqual(['Season · 2 Races', 'Since 4 Jul'])
   })
 
-  it('offers the levels and the Races as separate rows, so neither wraps into the other', () => {
-    const { container } = renderDial()
-    const rows = container.querySelectorAll('[role="group"] > div')
+  it('offers every Race in one control, named in full', () => {
+    renderDial()
 
-    // Two rows, and the split is `startsRow` rather than wherever the window happens to wrap.
-    expect(rows).toHaveLength(2)
-    expect(rows[0].textContent).toContain('Season')
-    expect(rows[1].textContent).not.toContain('Season')
+    const picker = screen.getByRole('combobox', { name: /Which Race/ })
+    // Named in full here, where there is room for it — the chips had to abbreviate to a date. The
+    // resting option is a phrase about Races, not the level's own name: a `select` shows whichever
+    // option is selected, so naming the level here read "Race This Era · since 1 Aug" closed.
+    expect([...picker.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      'All Races',
+      '10 Jul · Verve Cup · 2 Tack Pairs',
+      '3 Jun · Beer-can · 2 Tack Pairs',
+    ])
+  })
+
+  it('offers a Race it has nothing to draw for, with the reason in its own option', () => {
+    const races = season()
+    renderDial({
+      season: asymmetryEra(races, {
+        excluded: [
+          {
+            ok: false,
+            race_id: 'race-drifter',
+            window_start: '2026-07-24 19:00:00',
+            reason: 'no-pairs',
+            segment_count: 3,
+          },
+        ],
+      }),
+    })
+
+    // Offered and not disabled: absence is an answer, and picking it is how a sailor asks for the
+    // reason (ADR 0012). A `select` cannot draw the dashed border a chip did, so the reason rides
+    // in the label.
+    const option = screen.getByRole('option', {
+      name: '24 Jul — no two steady segments on opposite tacks close enough together',
+    })
+    expect(option).not.toBeDisabled()
+  })
+
+  it('returns to the season when the picker is cleared', async () => {
+    renderDial()
+
+    await pickRace('3 Jun · Beer-can · 2 Tack Pairs')
+    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(4)
+
+    await pickRace('All Races')
+    expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(8)
   })
 
   it('offers no Era chip for a channel nothing was ever recorded against', () => {
@@ -255,10 +308,10 @@ describe('the chip rail', () => {
     // there is none of, and selected exactly what the chip beside it already did.
     renderDial({ eras: [asymmetryEra(season(), { era: era('AWA') })], compassEras: [] })
 
-    const [levels] = screen.getByRole('group', { name: /drawing/ }).children
-    expect([...levels.querySelectorAll('button')].map((chip) => chip.textContent)).toEqual([
-      'Season · 2 Races',
-    ])
+    // One chip left, which is worth keeping: it names what is drawn, and it is the way back from a
+    // picked Race. Thirteen Races were not worth a chip each; one level is.
+    expect(levelChips()).toEqual(['Season · 2 Races'])
+    expect(screen.getByRole('combobox', { name: /Which Race/ })).toHaveValue('')
   })
 
   it('names an opening Era by the act that closed it', () => {
@@ -286,12 +339,9 @@ describe('the chip rail', () => {
       compassEras: [],
     })
 
-    const [levels] = screen.getByRole('group', { name: /drawing/ }).children
-    const chips = [...levels.querySelectorAll('button')].map((chip) => chip.textContent)
-
     // The service hands Eras over oldest first, because that is the order a season is computed in
     // and not the order it is read in. The Era the boat is in now comes first.
-    expect(chips).toEqual(['Season · 2 Races', 'Since 4 Jul', 'Before 4 Jul'])
+    expect(levelChips()).toEqual(['Season · 2 Races', 'Since 4 Jul', 'Before 4 Jul'])
   })
 })
 
@@ -318,7 +368,7 @@ describe('the three levels', () => {
   it('offers one Race, and drops the pairs of every other', async () => {
     renderDial()
 
-    await userEvent.click(raceChip('3 Jun · 2'))
+    await pickRace('3 Jun · Beer-can · 2 Tack Pairs')
 
     // Two pairs, four dots.
     expect(screen.getAllByTestId('tack-pair-dot')).toHaveLength(4)
@@ -328,7 +378,7 @@ describe('the three levels', () => {
     const { container } = renderDial()
 
     const greyBefore = container.querySelectorAll('[stroke="var(--text-muted)"]').length
-    await userEvent.click(raceChip('3 Jun · 2'))
+    await pickRace('3 Jun · Beer-can · 2 Tack Pairs')
 
     expect(container.querySelectorAll('[stroke="var(--text-muted)"]').length).toBeGreaterThan(
       greyBefore
@@ -361,7 +411,7 @@ describe('the three levels', () => {
       }),
     })
 
-    await userEvent.click(raceChip('24 Jul'))
+    await pickRace('24 Jul — no two steady segments on opposite tacks close enough together')
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent(
       'paired no tacks — no two steady segments on opposite tacks close enough together'
@@ -423,7 +473,7 @@ describe('the figure, and the one figure there is never', () => {
   it('says the comparison cannot be made at all where one point of sail has no pairs', async () => {
     renderDial()
 
-    await userEvent.click(raceChip('3 Jun · 2'))
+    await pickRace('3 Jun · Beer-can · 2 Tack Pairs')
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent(
       'No downwind pairs here, so the check that separates a vane set off-centre from everything else cannot be made.'
@@ -439,7 +489,7 @@ describe('the figure, and the one figure there is never', () => {
       '1 Tack Pair downwind, against 3 upwind'
     )
 
-    await userEvent.click(raceChip('3 Jun · 2'))
+    await pickRace('3 Jun · Beer-can · 2 Tack Pairs')
 
     expect(screen.getByTestId('coverage-verdict')).toHaveTextContent(
       'no Tack Pair downwind, against 2 upwind'

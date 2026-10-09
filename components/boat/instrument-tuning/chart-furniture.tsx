@@ -186,23 +186,9 @@ export function Segmented<Key extends string>({
 
 export interface ChipOption {
   id: string
-  /**
-   * What the chip prints, kept as short as it can be.
-   *
-   * A Race is a date here and not its name: thirteen named Races is a rail no 390px screen can
-   * show, and the name is on the chip's own tooltip and in the readout the moment it is picked.
-   */
   label: string
   /** The whole of what `label` abbreviates, for the tooltip. Defaults to `label`. */
   title?: string
-  /**
-   * Starts a new line, so one wrapped group can hold two kinds of thing.
-   *
-   * The levels a chart is read at and the Races behind them are two different choices sharing one
-   * control, and wrapping them into one paragraph of chips made the boundary between them a
-   * function of the window width.
-   */
-  startsRow?: boolean
   /**
    * Why this chip has nothing to draw, where it has nothing to draw.
    *
@@ -214,17 +200,16 @@ export interface ChipOption {
 }
 
 /**
- * The level rail: which Era, or which Race, the chart is drawing.
+ * The level rail: which Era the chart is drawing.
  *
- * **Wraps rather than scrolling sideways.** It scrolled first, on the reasoning that thirteen
- * wrapped Races would push the chart down a 390px screen — but a sideways scroll hides the last
- * chip behind a gesture nothing on screen advertises, and the chips it hid were the Races, which
- * are the ones a sailor goes looking for. Shortening what a chip prints bought back more height
- * than the scroll ever did: a Race is its date, four characters, so the whole archive is three
- * lines rather than thirteen off the side.
+ * **Levels only, and never the Races.** A chart's levels are a short, fixed set — the season, an
+ * Era or two — so they are worth one tap each and they stay the same size as the archive grows.
+ * The Races are not: they were a sideways scroll that hid its own last chip, then three wrapped
+ * lines of dates, and at thirty Races either is a rail with a chart somewhere under it. They are a
+ * `ChipPicker` now.
  *
- * Laid out as a grid of rows rather than one wrapped flow, so the levels and the Races stay
- * visually separate however wide the window is (`startsRow`).
+ * A lone level still gets a chip. It names what is drawn, and it is the way back from a picked
+ * Race — which is worth one chip, where thirteen Races were not.
  */
 export function Chips({
   options,
@@ -236,65 +221,142 @@ export function Chips({
   value: string
   onChange: (id: string) => void
   label: string
-}): ReactElement {
+}): ReactElement | null {
+  if (options.length === 0) return null
+
   return (
     <div
       role="group"
       aria-label={label}
-      style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px' }}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 0 0' }}
     >
-      {rowsOf(options).map((row, index) => (
-        <div key={index} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {row.map((option) => {
-            const on = option.id === value
-            return (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => onChange(option.id)}
-                // What the chip abbreviates. A Race is named by whatever the sailor called it, and
-                // "Verve Cup Regatta Race 3" is a chip three times the width of the rail.
-                title={option.title ?? option.label}
-                style={{
-                  flexShrink: 0,
-                  maxWidth: 170,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  border: `1px ${option.emptyReason ? 'dashed' : 'solid'} var(--surface-border)`,
-                  borderRadius: 'var(--radius-full)',
-                  padding: '4px 9px',
-                  fontSize: 10.5,
-                  background: on ? 'var(--text-primary)' : 'transparent',
-                  color: on
-                    ? 'var(--text-inverse)'
-                    : option.emptyReason
-                      ? 'var(--text-muted)'
-                      : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {option.label}
-              </button>
-            )
-          })}
-        </div>
-      ))}
+      {options.map((option) => {
+        const on = option.id === value
+        return (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(option.id)}
+            title={option.title ?? option.label}
+            style={{
+              ...PILL_BASE,
+              borderStyle: option.emptyReason ? 'dashed' : 'solid',
+              background: on ? 'var(--text-primary)' : 'transparent',
+              color: on
+                ? 'var(--text-inverse)'
+                : option.emptyReason
+                  ? 'var(--text-muted)'
+                  : 'var(--text-secondary)',
+            }}
+          >
+            {option.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-/** The options split where one asks to start a row. The first chip starts the first row. */
-function rowsOf(options: readonly ChipOption[]): ChipOption[][] {
-  const rows: ChipOption[][] = []
+/**
+ * One Race out of however many there are, as a pill-shaped dropdown.
+ *
+ * A dropdown and not chips because this list is the one that grows. Thirteen Races is three wrapped
+ * lines of dates above the chart; thirty is six, and the chart is what the screen is for. A `select`
+ * is the same size at both, and at 390px a native one opens the platform's own picker — a full-height
+ * scrollable list with type-ahead, which no chip rail of ours is going to beat.
+ *
+ * Native rather than a custom popover for that reason and two more: it is keyboard- and
+ * screen-reader-complete without any of it being written here, and it cannot be clipped by the card
+ * it sits in.
+ *
+ * **A Race the chart has nothing to draw for is still offered**, with the reason in its own label
+ * rather than as a dashed border a `select` cannot draw. Absence is an answer and picking it is how
+ * a sailor asks for the reason (ADR 0012); disabling the option would answer by refusing to.
+ */
+export function ChipPicker({
+  label,
+  resting,
+  options,
+  value,
+  onChange,
+}: {
+  /** What the control is for, since the resting label alone does not say. */
+  label: string
+  /**
+   * What the control reads with no Race picked.
+   *
+   * A phrase about Races and not the level's own name: a `select` shows its selected option, so
+   * naming the level here read "Race This Era · since 1 Aug" in the closed state. The chips name
+   * the level; this names what the picker is not doing.
+   */
+  resting: string
+  options: readonly ChipOption[]
+  /** The picked Race's id, or `''` for none. */
+  value: string
+  /** `''` means "no single Race"; the chart returns to its own default level. */
+  onChange: (id: string) => void
+}): ReactElement | null {
+  if (options.length === 0) return null
 
-  for (const option of options) {
-    if (rows.length === 0 || option.startsRow === true) rows.push([option])
-    else rows[rows.length - 1].push(option)
-  }
+  return (
+    <label
+      style={{
+        ...PILL_BASE,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        maxWidth: '100%',
+        marginTop: 4,
+        background: value === '' ? 'transparent' : 'var(--text-primary)',
+        color: value === '' ? 'var(--text-secondary)' : 'var(--text-inverse)',
+      }}
+    >
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        style={{
+          appearance: 'none',
+          border: 'none',
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          cursor: 'pointer',
+          maxWidth: 170,
+          textOverflow: 'ellipsis',
+        }}
+      >
+        <option value="">{resting}</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.emptyReason === undefined
+              ? option.label
+              : `${option.label} — ${option.emptyReason}`}
+          </option>
+        ))}
+      </select>
+      <span aria-hidden style={{ opacity: 0.7, fontSize: 8 }}>
+        ▾
+      </span>
+    </label>
+  )
+}
 
-  return rows
+/** What a chip and the picker share, so the two read as one rail. */
+const PILL_BASE: CSSProperties = {
+  flexShrink: 0,
+  maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: 'var(--surface-border)',
+  borderRadius: 'var(--radius-full)',
+  padding: '4px 9px',
+  fontSize: 10.5,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
 }
 
 /**

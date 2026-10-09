@@ -84,7 +84,10 @@ describe('the Strip | Rose toggle', () => {
     const races = twoRaces()
     renderChart({ era: headingEra(races), previous: headingEra([races[0]]) })
 
-    await userEvent.click(screen.getByRole('button', { name: '+ 17 Jul' }))
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /Which Race/ }),
+      '17 Jul · Verve Cup'
+    )
     await userEvent.click(screen.getByRole('radio', { name: 'Rose' }))
 
     // One polyline per unbroken run of the curve, so the rose draws at least one.
@@ -157,10 +160,19 @@ describe('what the chart says it does not know', () => {
       }),
     })
 
-    const chip = screen.getByRole('button', { name: '+ 24 Jul' })
-    await userEvent.click(chip)
+    // Offered and not disabled: absence is an answer, and picking it is how a sailor asks for the
+    // reason (ADR 0012). A `select` cannot draw the dashed border a chip did, so the reason rides
+    // in the option's own label.
+    const option = screen.getByRole('option', {
+      name: '24 Jul — no curve, only 3 rows read',
+    })
+    expect(option).not.toBeDisabled()
 
-    // Pickable, not disabled: absence is an answer, and the answer is the reason (ADR 0012).
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /Which Race/ }),
+      '24 Jul — no curve, only 3 rows read'
+    )
+
     expect(screen.getByTestId('compass-chart')).toHaveTextContent(
       'produced no curve — only 3 rows this check could read'
     )

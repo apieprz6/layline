@@ -38,6 +38,7 @@ import {
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
+  ChipPicker,
   LINEAR,
   LINEAR_PLOT_WIDTH,
   TUNING_CHART_HEIGHT,
@@ -107,25 +108,26 @@ export default function CompassChart({
   const overlaidRace = era.races.find((race) => race.race_id === overlay) ?? null
   const excludedRace = era.excluded.find((race) => race.race_id === overlay) ?? null
 
-  // Two rows: what the curve is drawn over, then what may be drawn on top of it. Races newest
-  // first, which is the order a sailor looks for one in.
-  const chips: ChipOption[] = [
+  // What the curve is drawn against: this Era, or this Era with the one before it dashed over the
+  // top. Two chips at most, and one where there is no Era before this.
+  const levels: ChipOption[] = [
     { id: NO_OVERLAY, label: `This Era · ${eraLabel(era.era)}` },
     ...(previous === null
       ? []
       : [{ id: PREVIOUS_ERA, label: `+ before ${shortDate(era.era.from_date ?? '')}` }]),
-    ...[...era.races].reverse().map((race, index) => ({
+  ]
+
+  // And one Race, out of however many the Era holds. Newest first, which is the order a sailor
+  // looks for one in.
+  const raceOptions: ChipOption[] = [
+    ...[...era.races].reverse().map((race) => ({
       id: race.race_id,
-      label: `+ ${shortDate(race.window_start)}`,
-      title: raceLabel(labels, race.race_id, race.window_start),
-      startsRow: index === 0,
+      label: raceLabel(labels, race.race_id, race.window_start),
     })),
-    ...[...era.excluded].reverse().map((race, index) => ({
+    ...[...era.excluded].reverse().map((race) => ({
       id: race.race_id,
-      label: `+ ${shortDate(race.window_start)}`,
-      title: raceLabel(labels, race.race_id, race.window_start),
-      emptyReason: `only ${rowsPhrase(race.row_count)} this check could read`,
-      startsRow: era.races.length === 0 && index === 0,
+      label: raceLabel(labels, race.race_id, race.window_start),
+      emptyReason: `no curve, only ${rowsPhrase(race.row_count)} read`,
     })),
   ]
 
@@ -167,9 +169,16 @@ export default function CompassChart({
 
       <Chips
         label="What to draw over this Era's curve"
-        options={chips}
+        options={levels}
         value={overlay}
         onChange={setOverlay}
+      />
+      <ChipPicker
+        label="Which Race to lift out of this Era's curve"
+        resting="No Race overlaid"
+        options={raceOptions}
+        value={overlaidRace?.race_id ?? excludedRace?.race_id ?? ''}
+        onChange={(id) => setOverlay(id === '' ? NO_OVERLAY : id)}
       />
       <CalibrationRail
         channel="HDG"

@@ -44,6 +44,7 @@ import {
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
+  ChipPicker,
   Chips,
   Coverage,
   Note,
@@ -160,7 +161,9 @@ export default function TackDial({
   // Two rows: the levels, then the Races. Both **newest first** — the Era a sailor wants is the one
   // the boat is in now, and `awaAsymmetryByEra` hands them over oldest first because that is the
   // order a season is computed in, not the order it is read in.
-  const chips: ChipOption[] = [
+  // The levels, newest first — the Era a sailor wants is the one the boat is in now, and
+  // `awaAsymmetryByEra` hands them over in the order a season is computed in rather than read in.
+  const levels: ChipOption[] = [
     { id: SEASON, label: `Season · ${racesPhrase(season.race_count)}` },
     ...[...eras]
       .reverse()
@@ -174,20 +177,19 @@ export default function TackDial({
           (candidate.era.from_date === null || !ownBoundaries.has(candidate.era.from_date))
       )
       .map((candidate) => eraChip(candidate, 'HDG')),
-    ...[...season.races].reverse().map((measured, index) => ({
+  ]
+
+  const raceOptions: ChipOption[] = [
+    ...[...season.races].reverse().map((measured) => ({
       id: measured.race_id,
       // The pair count rides along, because how much a Race rests on is the first thing to know
       // about it here and two pairs reads very differently from twelve.
-      label: `${shortDate(measured.window_start)} · ${measured.pairs.length}`,
-      title: `${raceLabel(labels, measured.race_id, measured.window_start)} · ${tackPairs(measured.pairs.length)}`,
-      startsRow: index === 0,
+      label: `${raceLabel(labels, measured.race_id, measured.window_start)} · ${tackPairs(measured.pairs.length)}`,
     })),
-    ...[...season.excluded].reverse().map((missing, index) => ({
+    ...[...season.excluded].reverse().map((missing) => ({
       id: missing.race_id,
-      label: shortDate(missing.window_start),
-      title: raceLabel(labels, missing.race_id, missing.window_start),
+      label: raceLabel(labels, missing.race_id, missing.window_start),
       emptyReason: reasonWords(missing),
-      startsRow: season.races.length === 0 && index === 0,
     })),
   ]
 
@@ -213,12 +215,22 @@ export default function TackDial({
     <div data-testid="tack-dial">
       <Chips
         label="Which Races the dial is drawing"
-        options={chips}
+        options={levels}
         value={level}
         onChange={(id) => {
           setLevel(id)
           // A pair from a Race no longer drawn would stay named in the readout while its dot had
           // gone from the dial.
+          setPicked(null)
+        }}
+      />
+      <ChipPicker
+        label="Which Race the dial is drawing"
+        resting="All Races"
+        options={raceOptions}
+        value={race?.race_id ?? excluded?.race_id ?? ''}
+        onChange={(id) => {
+          setLevel(id === '' ? SEASON : id)
           setPicked(null)
         }}
       />

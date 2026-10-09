@@ -48,6 +48,11 @@ function byMethod() {
   }
 }
 
+/** Picking a Race, which is a dropdown here and not a chip. */
+async function pickRace(label: string): Promise<void> {
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /Which Race/ }), label)
+}
+
 function renderChart(over: Partial<Parameters<typeof SpeedCheckChart>[0]> = {}) {
   return render(
     <SpeedCheckChart
@@ -89,7 +94,7 @@ describe('the Scatter | Gap-by-speed toggle', () => {
 
     expect(screen.getAllByTestId('fitted-line')).toHaveLength(1)
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
+    await pickRace('3 Jun · Beer-can')
 
     // Two lines, not one replaced by the other: the question a picked Race asks is how far it sits
     // from the season, and a chart with only the amber line answers a different one.
@@ -115,13 +120,11 @@ describe('the Scatter | Gap-by-speed toggle', () => {
   it('carries the picked Race across the toggle too', async () => {
     renderChart()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
+    await pickRace('3 Jun · Beer-can')
     await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
 
-    expect(screen.getByRole('button', { name: '3 Jun' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
+    // The picker keeps its Race across the toggle, which is the state the two views share.
+    expect(screen.getByRole('combobox', { name: /Which Race/ })).toHaveValue('race-june')
   })
 })
 
@@ -186,7 +189,7 @@ describe('what a tapped band says', () => {
   it('says a picked Race never sailed a band, without a double negative', async () => {
     renderChart()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
+    await pickRace('3 Jun · Beer-can')
     fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
 
     const readout = screen.getByTestId('chart-readout')
@@ -216,7 +219,10 @@ describe('a Race with no line of its own', () => {
     ]
     renderChart({ byMethod: { orthogonal: speedEra(races), 'sog-on-stw': speedEra(races) } })
 
-    await userEvent.click(screen.getByRole('button', { name: '10 Jul' }))
+    // The reason rides in the option's own label, where a chip had a dashed border.
+    await pickRace(
+      '10 Jul · Verve Cup — under 3 kt of SOG between its slowest row and its fastest'
+    )
 
     const chart = screen.getByTestId('speed-check-chart')
     expect(chart).toHaveTextContent(

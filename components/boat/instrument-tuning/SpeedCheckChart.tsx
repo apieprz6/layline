@@ -47,6 +47,7 @@ import {
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
+  ChipPicker,
   Chips,
   Coverage,
   Figure,
@@ -69,7 +70,6 @@ import {
   raceLabel,
   races as racesPhrase,
   rows as rowsPhrase,
-  shortDate,
   signedKnots,
   type RaceLabels,
 } from './chart-text'
@@ -150,17 +150,14 @@ export default function SpeedCheckChart({
     )
   )
 
-  // The level, then the Races on their own row, newest first.
-  const chips: ChipOption[] = [
-    { id: SEASON, label: `Season · ${racesPhrase(era.races.length)}` },
-    ...[...era.races].reverse().map((candidate, index) => ({
-      id: candidate.race_id,
-      label: shortDate(candidate.sailed_at),
-      title: raceLabel(labels, candidate.race_id, candidate.sailed_at),
-      emptyReason: candidate.fit.fitted ? undefined : REASON_WORDS[candidate.fit.reason],
-      startsRow: index === 0,
-    })),
-  ]
+  // One level, so `Chips` draws nothing and the picker's resting label names it. One Race out of
+  // however many the Era holds, newest first.
+  const season = `Season · ${racesPhrase(era.races.length)}`
+  const raceOptions: ChipOption[] = [...era.races].reverse().map((candidate) => ({
+    id: candidate.race_id,
+    label: raceLabel(labels, candidate.race_id, candidate.sailed_at),
+    emptyReason: candidate.fit.fitted ? undefined : REASON_WORDS[candidate.fit.reason],
+  }))
 
   const railRaces: RailRace[] = era.races.map((candidate) => ({
     race_id: candidate.race_id,
@@ -208,9 +205,16 @@ export default function SpeedCheckChart({
 
       <Chips
         label="Which Races the chart is drawing"
-        options={chips}
+        options={[{ id: SEASON, label: season }]}
         value={raceId}
         onChange={setRaceId}
+      />
+      <ChipPicker
+        label="Which Race the chart is lifting out"
+        resting="All Races"
+        options={raceOptions}
+        value={raceId === SEASON ? '' : raceId}
+        onChange={(id) => setRaceId(id === '' ? SEASON : id)}
       />
       <CalibrationRail
         channel="STW"
