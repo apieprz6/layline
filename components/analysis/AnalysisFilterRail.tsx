@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type ReactElement } from 'react'
 import { NOTE_STYLE, PILL_COUNT_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
+import { describeDuration } from '@/services/recordings/coverage'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import {
@@ -287,11 +288,15 @@ function BucketChip({
   // The distinction ADR 0029 wants and a bare `0` cannot make: "this boat has a sail it has never
   // raced" reads nothing like "the other chips you tapped left this one empty", and a sailor has
   // to be able to tell whether tapping it would ever have shown anything.
+  //
+  // "Matches" rather than "rows", for the reason nothing else on these screens says row either: it
+  // is the database's unit, not a sailor's. The chip's own visible number needs no noun at all —
+  // this is what a screen reader hears in its place.
   const emptiness = neverRaced
-    ? 'no rows anywhere in the archive'
+    ? 'no matches anywhere in the archive'
     : rows === 0
-      ? `no rows under this narrowing, ${inArchive} in the archive`
-      : `${rows} row${rows === 1 ? '' : 's'}`
+      ? `no matches under this narrowing, ${inArchive} in the archive`
+      : `${rows} match${rows === 1 ? '' : 'es'}`
 
   return (
     <button
@@ -431,7 +436,7 @@ function RaceRange({
                 color: 'var(--text-muted)',
               }}
             >
-              {race.rows}
+              {describeDuration(race.seconds)}
             </span>
           </button>
         )

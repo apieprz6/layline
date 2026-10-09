@@ -2,40 +2,56 @@
 
 import type { ReactElement } from 'react'
 import { radius, spacing } from '@/lib/utils/design'
-import { gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
-import { countOf } from '@/services/analysis/figures'
+import {
+  countableSentence,
+  gapSentence,
+  ledgerHeadline,
+} from '@/services/analysis/coverage-ledger'
+import { describeDuration } from '@/services/recordings/coverage'
 import type { CoverageLedger, RecordedRowsState } from '@/types'
 
 interface CoverageLedgerPanelProps {
   ledger: CoverageLedger
   /** Read from the buckets currently selected, never held beside them (ADR 0029). */
   recordedRows: RecordedRowsState
+  /**
+   * What the switch is called, which names the dimensions it acts on.
+   *
+   * Passed in rather than written here because it is derived from the screen's own dimension
+   * registry — `recordedRowsLabel` — so a screen offering fewer dimensions gets a label that is
+   * still true about what the switch will do.
+   */
+  recordedRowsLabel: string
   onRecordedRowsChange: (include: boolean) => void
 }
 
 /**
  * The **Coverage Ledger**, under the rail, permanently.
  *
- * It states what is matched — rows, and how many **Races** they come from — and then how much of
- * that rests on rows nobody annotated. It is **not** a warning that appears when something looks
+ * It states what is matched — how many **Races**, and how much sailing — and then how much of that
+ * rests on sailing nobody annotated. It is **not** a warning that appears when something looks
  * wrong: half this archive carries no **Sea State** and no **Sail Configuration**, and a figure
  * that only surfaced on narrowing would teach a sailor nothing about the archive they are
  * reasoning about (ADR 0029). Which is also why it has no empty state — an archive with nothing
  * missing says so in a sentence rather than by the panel disappearing.
  *
- * It carries the one switch that admits or excludes unrecorded rows across every dimension at
- * once. The switch is **derived**: its checked state is read from the buckets currently selected,
- * so it and a per-dimension **Not recorded** chip are two controls over one piece of state and
- * cannot disagree. A mixed reading is shown as mixed rather than rounded to on or off, because
- * rounding it would make the ledger lie about one of the dimensions.
+ * **It counts in time and never in rows.** A row count is the database's unit, not a sailor's:
+ * "812 rows" cannot be held against anything, which is the argument the Race list already makes
+ * for stating a duration (ADR 0009), and because qtVlm logs on events rather than on a clock the
+ * count is not even proportional to the afternoon it describes.
+ *
+ * It carries the one switch that admits or excludes unannotated sailing. The switch is **derived**:
+ * its checked state is read from the buckets currently selected, so it and a per-dimension **Not
+ * recorded** chip are two controls over one piece of state and cannot disagree. A mixed reading is
+ * shown as mixed rather than rounded to on or off, because rounding it would make the ledger lie
+ * about one of the dimensions.
  */
 export default function CoverageLedgerPanel({
   ledger,
   recordedRows,
+  recordedRowsLabel,
   onRecordedRowsChange,
 }: CoverageLedgerPanelProps): ReactElement {
-  const excluded = ledger.matched_rows - ledger.countable_rows
-
   return (
     <div
       data-testid="coverage-ledger"
@@ -63,10 +79,10 @@ export default function CoverageLedgerPanel({
         }}
       >
         {ledgerHeadline(ledger)}
-        {ledger.matched_rows < ledger.total_rows && (
+        {ledger.matched_seconds < ledger.total_seconds && (
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
             {' '}
-            of {countOf(ledger.total_rows)}
+            of {describeDuration(ledger.total_seconds)}
           </span>
         )}
       </div>
@@ -77,16 +93,13 @@ export default function CoverageLedgerPanel({
           because matching and counting are independent questions (ADR 0026) — a row excluded by
           ADR 0025 still matched the filter, and a ledger that quietly reported only the countable
           rows would make the Not recorded share below it a share of a different number. */}
-      <div style={{ color: 'var(--text-muted)' }}>
-        {countOf(ledger.countable_rows)} of those may be read by a figure
-        {excluded > 0 && `; ${countOf(excluded)} are frozen, low-speed or mid-maneuver`}.
-      </div>
+      <div style={{ color: 'var(--text-muted)' }}>{countableSentence(ledger)}</div>
 
       {ledger.gaps.length === 0 ? (
         <div style={{ color: 'var(--text-muted)' }}>
           {ledger.matched_rows === 0
             ? 'Nothing matches this narrowing.'
-            : 'Every row shown carries every annotation.'}
+            : 'All of it carries every annotation.'}
         </div>
       ) : (
         ledger.gaps.map((gap) => (
@@ -118,7 +131,9 @@ export default function CoverageLedgerPanel({
           onChange={(event) => onRecordedRowsChange(event.target.checked)}
           style={{ width: 16, height: 16, accentColor: 'var(--blue-500)' }}
         />
-        Include rows with nothing recorded
+        {/* Names the annotations it acts on rather than saying "nothing recorded", which left a
+            sailor guessing what they were admitting or turning away. */}
+        {recordedRowsLabel}
       </label>
     </div>
   )

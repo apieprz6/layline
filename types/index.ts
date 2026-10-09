@@ -1781,19 +1781,25 @@ export interface AnalysisDimensionSpec {
    */
   continuous: boolean
   /**
-   * Whether a row can lack a value for this dimension **at all**.
+   * What a sailor would go and **write down** to fill this dimension's **Not recorded** bucket, in
+   * their own words — or null where its absence is not something anybody could have recorded.
    *
-   * False for the two dimensions read off a row's own timestamp: every **Recording Row** has a
-   * time, so their **Not recorded** bucket is structurally empty and renders disabled — ADR 0014's
-   * treatment, with a footnote saying why it can never fill rather than leaving a sailor to
-   * wonder.
+   * The line between the two is **Testimony** (ADR 0008). A row with no **Sea State** or no
+   * **Sail Configuration** is a race nobody annotated, and the sailor can fix it; a row with no
+   * `TWS` is a gap in what the instruments logged, and no amount of annotating will fill it. Only
+   * the first kind is named here.
    *
-   * It exists because the **Coverage Ledger**'s switch enumerates: excluding the unrecorded rows
-   * means selecting every real value on each dimension that has a record bucket (ADR 0029), and
-   * doing that to a dimension whose record bucket can never hold a row would light every chip on
-   * it and add every one to the URL to narrow away nothing.
+   * It carries a word rather than a flag because it is what the **Coverage Ledger**'s switch is
+   * *called*: "Include sailing with no sea state or sail recorded" has to list what it means, and
+   * a label that said "nothing recorded" left a sailor guessing what they were admitting. Deriving
+   * the label from this keeps it correct on the screens that offer fewer dimensions — the
+   * **Sail Selection Screen** has no "sail used", so its switch names the Sea State alone.
+   *
+   * It is also what scopes the switch, which is ADR 0029's own scope restored: the switch
+   * enumerates every real value on each dimension it acts on, and doing that to `when` would light
+   * every month chip to exclude rows that cannot exist.
    */
-  absence_possible: boolean
+  annotation: string | null
 }
 
 /** An inclusive span of days, `YYYY-MM-DD`, in the **Recording**'s own naive frame. */
@@ -1890,8 +1896,14 @@ export interface AnalysisArchiveRace {
   title: string | null
   /** The Race Window's own start day, `YYYY-MM-DD`, in the Recording's naive frame. */
   day: string
-  /** How many of this Race's rows are in the row set — the figure the Race list prints. */
-  rows: number
+  /**
+   * Measured seconds of sailing this Race contributed, which is what the Race list prints.
+   *
+   * A duration and not a row count, for the reason the **Coverage Ledger** is: "1,743" beside a
+   * race name cannot be held against anything, where "1h 12m" can be held against the afternoon
+   * (ADR 0009, ADR 0037).
+   */
+  seconds: number
 }
 
 /**
@@ -1907,11 +1919,11 @@ export type RecordedRowsState = 'included' | 'excluded' | 'mixed'
 /** One dimension's line in a **Coverage Ledger**: how much of the match rests on no annotation. */
 export interface CoverageLedgerGap {
   dimension: AnalysisDimension
-  /** The dimension's own label, so a renderer need not carry the registry to print a sentence. */
+  /** What is missing, named as the thing rather than as the chip it is filtered by. */
   label: string
-  /** Matched rows whose value for this dimension was never recorded. */
-  rows: number
-  /** Those rows as a fraction of the matched rows, or null where nothing matched. */
+  /** Measured seconds of sailing whose value for this dimension was never recorded. */
+  seconds: number
+  /** Those seconds as a fraction of the matched seconds, or null where none were measured. */
   share: number | null
 }
 
@@ -1926,14 +1938,34 @@ export interface CoverageLedgerGap {
  * sailor reads is *how much of the archive* they are looking at.
  */
 export interface CoverageLedger {
+  /**
+   * Measured seconds of sailing the filter admits, and the archive's own total.
+   *
+   * **Time and not a row count, deliberately.** A row count cannot be held against a sailor's
+   * memory of the afternoon — the same argument the Race list already makes for stating a duration
+   * (ADR 0009) — and here it is worse than unhelpful: qtVlm logs on events rather than on a clock,
+   * so 812 rows is twenty minutes on one recording and four hours on another. Summed from each
+   * row's own measured interval, which is also what weights every figure beside this.
+   *
+   * It is a floor, not the wall clock: the last row of each window has no measured interval
+   * (`rowIntervalSeconds`), so a handful of rows a season contribute nothing. Say "4h 12m", never
+   * "exactly".
+   */
+  matched_seconds: number
+  total_seconds: number
+  /** Of those seconds, the ones that are **Countable** — what every figure on the screen is over. */
+  countable_seconds: number
+  /**
+   * Matched rows, kept for one job: telling "nothing matched" from "matched, but measured nothing".
+   *
+   * Not for display. A row whose interval could not be measured still matched the filter, so a
+   * screen that tested `matched_seconds === 0` would call a real match an empty one.
+   */
   matched_rows: number
-  total_rows: number
   /** Races at least one matched row comes from — grouped from matched rows, never filtered at. */
   matched_races: number
   total_races: number
-  /** Matched rows that are **Countable**, which is what every figure on the screen is over. */
-  countable_rows: number
-  /** One line per dimension that has rows with nothing recorded. Empty when none has. */
+  /** One line per dimension with sailing nobody annotated. Empty when none has. */
   gaps: CoverageLedgerGap[]
 }
 

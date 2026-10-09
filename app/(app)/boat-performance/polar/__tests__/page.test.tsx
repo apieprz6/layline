@@ -68,7 +68,9 @@ describe('/boat-performance/polar', () => {
   it('opens on the whole archive when the URL says nothing', async () => {
     await renderPage()
 
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4 rows · 2 of 2 races')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent(
+      '2 of 2 races · 4m recorded'
+    )
     expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Any')
   })
 
@@ -76,27 +78,27 @@ describe('/boat-performance/polar', () => {
     await renderPage({ wind: 'heavy' })
 
     expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Heavy (16–22 kt)')
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2m recorded')
   })
 
   it('reads a repeated param as a multi-select', async () => {
     await renderPage({ wind: ['light', 'heavy'] })
 
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('3 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('3m recorded')
   })
 
   it('drops a bucket id this build does not know rather than narrowing to nothing', async () => {
     await renderPage({ wind: 'hurricane' })
 
     expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Any')
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4m recorded')
   })
 
   it('reads a sail bucket named in the Crossover Chart’s own words', async () => {
     await renderPage({ sail: 'Main + Jib 1' })
 
     expect(screen.getByTestId('filter-chip-sail')).toHaveTextContent('Main + Jib 1')
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2m recorded')
   })
 
   it('says the archive could not be read, which is not the same as having no races', async () => {

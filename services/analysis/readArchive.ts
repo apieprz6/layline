@@ -343,7 +343,7 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
       id: race.id,
       title: race.title,
       day: race.window_start.slice(0, 10),
-      rows: resolved[index].length,
+      seconds: resolved[index].reduce((total, row) => total + (row.interval_seconds ?? 0), 0),
     })),
   }
 }

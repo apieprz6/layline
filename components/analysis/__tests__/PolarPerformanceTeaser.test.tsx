@@ -10,7 +10,7 @@ function aggregate(over: Partial<EfficiencyAggregate> = {}): EfficiencyAggregate
     vmg_filler_anchored_rows: 0,
     rows_without_interval: 5,
     rows_without_target: 61,
-    elapsed_seconds: 60_000,
+    elapsed_seconds: 10_860,
     actual_distance_nm: 95,
     target_distance_nm: 100,
     polar_efficiency: 0.95,
@@ -52,14 +52,12 @@ describe('the Overall tab’s hero card', () => {
   it('states its own coverage, so the figure has rows behind it', () => {
     render(<PolarPerformanceTeaser races={5} efficiency={aggregate()} />)
 
-    // "Scored", not "countable": `EfficiencyAggregate.rows` counts the Countable rows that carried
-    // *both* an interval and a target, and 66 more here carried one or the other.
+    // In time, and "scored" rather than "countable": this is the sailing that carried *both* a
+    // measured interval and a Target Speed, which is less than the whole of the five races.
     expect(screen.getByTestId('polar-performance-teaser')).toHaveTextContent(
-      '812 rows scored across 5 races'
+      '3h 1m scored across 5 races'
     )
-    expect(screen.getByTestId('polar-performance-teaser').textContent).not.toMatch(
-      /countable rows/
-    )
+    expect(screen.getByTestId('polar-performance-teaser').textContent).not.toMatch(/\brows?\b/i)
   })
 
   it('flags a filler-anchored share rather than withholding the figure', () => {
@@ -67,7 +65,7 @@ describe('the Overall tab’s hero card', () => {
 
     expect(screen.getByTestId('polar-performance-teaser')).toHaveTextContent('95.0%')
     expect(screen.getByTestId('polar-performance-teaser')).toHaveTextContent(
-      '25% of them filler-anchored'
+      '25% of it filler-anchored'
     )
   })
 
@@ -86,7 +84,8 @@ describe('the Overall tab’s hero card', () => {
     )
 
     const card = screen.getByTestId('polar-performance-teaser')
-    expect(card).toHaveTextContent('No row in these races could be scored against the Polar.')
+    expect(card).toHaveTextContent('Nothing in these races could be scored against the Polar.')
+    expect(card.textContent).not.toMatch(/\brows?\b/i)
     expect(card.textContent).not.toMatch(/—/)
   })
 

@@ -189,16 +189,16 @@ export function analysisDimensions(
   const specs: Record<AnalysisDimension, AnalysisDimensionSpec> = {
     wind: {
       id: 'wind',
+      annotation: null,
       label: 'Wind speed',
       continuous: false,
-      absence_possible: true,
       buckets: [...WIND_BANDS.map(plain), notRecorded()],
     },
     pos: {
       id: 'pos',
+      annotation: null,
       label: 'Point of sail',
       continuous: false,
-      absence_possible: true,
       buckets: [
         {
           ...plain(POINTS_OF_SAIL[0]),
@@ -210,9 +210,9 @@ export function analysisDimensions(
     },
     sail: {
       id: 'sail',
+      annotation: 'sail',
       label: 'Sail used',
       continuous: false,
-      absence_possible: true,
       buckets: [
         notRecorded(),
         {
@@ -229,9 +229,9 @@ export function analysisDimensions(
     },
     sea: {
       id: 'sea',
+      annotation: 'sea state',
       label: 'Sea state',
       continuous: false,
-      absence_possible: true,
       buckets: [
         notRecorded(),
         ...SEA_STATES.map((each) => plain({ id: each.value, label: `${each.label} (${each.height})` })),
@@ -239,9 +239,9 @@ export function analysisDimensions(
     },
     time: {
       id: 'time',
+      annotation: null,
       label: 'Time of day',
       continuous: false,
-      absence_possible: false,
       buckets: [
         {
           ...plain({ id: 'day', label: 'Day' }),
@@ -256,9 +256,9 @@ export function analysisDimensions(
     },
     when: {
       id: 'when',
+      annotation: null,
       label: 'When',
       continuous: true,
-      absence_possible: false,
       buckets: [
         ...vocabulary.months.map((id) => plain({ id, label: monthLabel(id) })),
         notRecorded(ALWAYS_RECORDED),
@@ -481,18 +481,49 @@ export function summariseDimension(
 }
 
 /**
- * The dimensions the switch acts on: those with a record bucket a row can actually land in.
+ * The dimensions the switch acts on: the ones whose absence is **Testimony**.
  *
- * `absence_possible` is what keeps `time` and `when` out of it. Both have a **Not recorded** chip,
- * because every dimension does, but every row has a timestamp — so enumerating their real values
- * would light every chip on two dimensions and write every one into the URL to narrow away nothing.
+ * `annotation` is the test, which is ADR 0029's own scope and narrower than "has a record bucket"
+ * — every dimension has one of those. Two reasons it is the right line:
+ *
+ *   - **A sailor can act on it.** No **Sea State** means a race nobody annotated, and they can go
+ *     and annotate it; no `TWS` means the instruments logged nothing, and no annotating will fill
+ *     it. One switch over both would promise something it cannot deliver.
+ *   - **The switch can then say what it means.** "Include sailing with no sea state or sail
+ *     recorded" lists the dimensions it acts on; a switch that also silently narrowed wind speed
+ *     and point of sail could not be labelled honestly in the width of a checkbox.
+ *
+ * The gaps the switch leaves alone are not hidden: the **Coverage Ledger** states every one of
+ * them, and each dimension keeps its own **Not recorded** chip for isolating it.
  */
 function withRecordBuckets(
   dimensions: readonly AnalysisDimensionSpec[]
 ): AnalysisDimensionSpec[] {
   return dimensions.filter(
-    (each) => each.absence_possible && each.buckets.some((bucket) => bucket.about_the_record)
+    (each) => each.annotation !== null && each.buckets.some((bucket) => bucket.about_the_record)
   )
+}
+
+/**
+ * What the **Coverage Ledger**'s switch is called, on this screen.
+ *
+ * Built from the dimensions rather than written out, so it stays true where a screen offers fewer:
+ * the **Sail Selection Screen** has no "sail used" and its switch names the Sea State alone
+ * (ADR 0029, ADR 0030). "Sailing" and not "rows", because this screen counts in time.
+ */
+export function recordedRowsLabel(dimensions: readonly AnalysisDimensionSpec[]): string {
+  const annotations = withRecordBuckets(dimensions).flatMap((each) =>
+    each.annotation === null ? [] : [each.annotation]
+  )
+
+  if (annotations.length === 0) return 'Include sailing with nothing recorded'
+
+  const listed =
+    annotations.length === 1
+      ? annotations[0]
+      : `${annotations.slice(0, -1).join(', ')} or ${annotations[annotations.length - 1]}`
+
+  return `Include sailing with no ${listed} recorded`
 }
 
 const bucketIds = (dimension: AnalysisDimensionSpec, aboutTheRecord: boolean): string[] =>

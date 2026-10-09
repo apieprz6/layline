@@ -17,8 +17,8 @@ export const VOCABULARY = {
 }
 
 export const RACES: AnalysisArchiveRace[] = [
-  { id: 'july', title: 'Beer can — 1 Jul', day: '2026-07-01', rows: 2 },
-  { id: 'june', title: null, day: '2026-06-03', rows: 2 },
+  { id: 'july', title: 'Beer can — 1 Jul', day: '2026-07-01', seconds: 120 },
+  { id: 'june', title: null, day: '2026-06-03', seconds: 120 },
 ]
 
 let nextIndex = 0

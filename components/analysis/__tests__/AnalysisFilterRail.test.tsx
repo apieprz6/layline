@@ -101,16 +101,18 @@ describe('the buckets inside one dimension', () => {
 
     await user.click(chip('wind'))
     // Storm: no row in the archive is in it, and none ever was.
-    expect(bucket('storm')).toHaveAccessibleName(/no rows anywhere in the archive/)
+    expect(bucket('storm')).toHaveAccessibleName(/no matches anywhere in the archive/)
     // Heavy: two rows in the archive, both of them in the unannotated July race.
-    expect(bucket('heavy')).toHaveAccessibleName(/no rows under this narrowing, 2 in the archive/)
+    expect(bucket('heavy')).toHaveAccessibleName(
+      /no matches under this narrowing, 2 in the archive/
+    )
   })
 
-  it('says how many rows a bucket holds when it holds any', async () => {
+  it('says how much a bucket holds when it holds any, without naming a database row', async () => {
     const { user } = renderRail()
 
     await user.click(chip('sea'))
-    expect(bucket('calm')).toHaveAccessibleName('Calm (0–1 ft) — 2 rows')
+    expect(bucket('calm')).toHaveAccessibleName('Calm (0–1 ft) — 2 matches')
   })
 
   it('keeps a selected bucket operable even once its count has fallen to nothing', async () => {
@@ -187,11 +189,13 @@ describe('the when dimension’s Race range', () => {
     const { user } = renderRail()
 
     await user.click(chip('when'))
-    const rows = screen.getAllByTestId('race-range-row')
-    expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Beer can — 1 Jul')
+    const listed = screen.getAllByTestId('race-range-row')
+    expect(listed).toHaveLength(2)
+    expect(listed[0]).toHaveTextContent('Beer can — 1 Jul')
     // An untitled race is normal (ADR 0010) and is not named for the sailor.
-    expect(rows[1]).toHaveTextContent('Untitled race')
+    expect(listed[1]).toHaveTextContent('Untitled race')
+    // And each race states a duration rather than a row count.
+    expect(listed[0]).toHaveTextContent('2m')
   })
 
   it('offers no Race range on a dimension that is not continuous', async () => {

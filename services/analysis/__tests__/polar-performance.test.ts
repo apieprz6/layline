@@ -98,7 +98,7 @@ describe('Polar Efficiency and VMG Efficiency over a matched set', () => {
     // The ledger still counts it as matched, because matching and counting are different
     // questions (ADR 0026).
     expect(data.ledger.matched_rows).toBe(2)
-    expect(data.ledger.countable_rows).toBe(1)
+    expect(data.ledger.countable_seconds).toBe(60)
   })
 
   it('excludes the rows a narrowing excluded', () => {

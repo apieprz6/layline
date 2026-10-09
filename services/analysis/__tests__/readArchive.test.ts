@@ -275,11 +275,13 @@ describe('what the read returns', () => {
     expect(archive?.rows.slice(0, 4).map((row) => row.row_index)).toEqual([1, 2, 3, 4])
   })
 
-  it('states how many rows each race contributed', async () => {
+  it('states how much sailing each race contributed, measured rather than counted', async () => {
     pages.open()
     const archive = await readAnalysisArchive()
 
-    expect(archive?.races.every((race) => race.rows === 4)).toBe(true)
+    // Four rows a minute apart: three measured intervals of 60 s, and the last row of the window
+    // has none (`rowIntervalSeconds`), so a race reads 3m rather than 4.
+    expect(archive?.races.every((race) => race.seconds === 180)).toBe(true)
     expect(archive?.rows).toHaveLength(12)
   })
 

@@ -2,8 +2,9 @@ import Link from 'next/link'
 import type { ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf, efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
+import { describeDuration } from '@/services/recordings/coverage'
 import type { EfficiencyAggregate } from '@/types'
 
 /** How many races the teaser looks back over. Said in the card, never implied. */
@@ -60,7 +61,7 @@ export default function PolarPerformanceTeaser({
         >
           {races === 0
             ? 'No race has been uploaded yet.'
-            : 'No row in these races could be scored against the Polar.'}
+            : 'Nothing in these races could be scored against the Polar.'}
         </span>
       ) : (
         <span
@@ -82,12 +83,17 @@ export default function PolarPerformanceTeaser({
       )}
 
       {/* The teaser states its own coverage, like every other card that headlines a figure: a
-          number with no rows behind it cannot be argued with. "Scored" and not "countable" —
-          `EfficiencyAggregate.rows` is the Countable rows that carried *both* a measured interval
-          and a Target Speed, which is fewer, and the detail screen is where that is broken out. */}
+          figure with nothing stated behind it cannot be argued with.
+
+          In **time**, not rows, for the reason the ledger is: "812 rows" cannot be held against a
+          sailor's memory of the afternoon (ADR 0009), and because qtVlm logs on events rather than
+          on a clock the count is not even proportional to one. "Scored" is doing work too — this is
+          the sailing that carried both a measured interval and a Target Speed, which is less than
+          the whole of the five races, and the detail screen is where that is broken out. */}
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        {countOf(efficiency.rows)} rows scored across {races} race{races === 1 ? '' : 's'}
-        {filler !== null && filler > 0 && `, ${sharePercent(filler)} of them filler-anchored`}. Tap
+        {describeDuration(efficiency.elapsed_seconds)} scored across {races} race
+        {races === 1 ? '' : 's'}
+        {filler !== null && filler > 0 && `, ${sharePercent(filler)} of it filler-anchored`}. Tap
         for the whole archive, filterable.
       </span>
     </Link>

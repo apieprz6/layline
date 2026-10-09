@@ -6,9 +6,14 @@ import { NOTE_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
 import CoverageLedgerPanel from '@/components/analysis/CoverageLedgerPanel'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf, efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import { filterToSearchParams } from '@/services/analysis/filter-url'
-import { EMPTY_FILTER, recordedRowsState, setRecordedRows } from '@/services/analysis/filter'
+import {
+  EMPTY_FILTER,
+  recordedRowsLabel,
+  recordedRowsState,
+  setRecordedRows,
+} from '@/services/analysis/filter'
 import type { PolarPerformanceBand } from '@/services/analysis/polar-performance'
 import {
   fillerAnchoredShare,
@@ -16,6 +21,7 @@ import {
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
+import { describeDuration } from '@/services/recordings/coverage'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -64,7 +70,7 @@ export default function PolarPerformanceContent({
   const [filter, setFilter] = useState<AnalysisFilter>(initialFilter)
 
   const data = getPolarPerformanceData(rows, filter, dimensions)
-  const narrowed = data.ledger.matched_rows < data.ledger.total_rows
+  const narrowed = data.ledger.matched_rows < rows.length
 
   function change(next: AnalysisFilter): void {
     setFilter(next)
@@ -87,6 +93,7 @@ export default function PolarPerformanceContent({
       <CoverageLedgerPanel
         ledger={data.ledger}
         recordedRows={recordedRowsState(filter, dimensions)}
+        recordedRowsLabel={recordedRowsLabel(dimensions)}
         onRecordedRowsChange={(include) => change(setRecordedRows(filter, dimensions, include))}
       />
 
@@ -109,11 +116,14 @@ export default function PolarPerformanceContent({
       </div>
 
       <p style={NOTE_STYLE}>
-        {/* A ratio of sums, said out loud: a sailor comparing this against a per-row percentage
-            somewhere else has to be able to see why they differ (ADR 0036). */}
+        {/* A ratio of sums, said out loud: a sailor comparing this against an averaged percentage
+            somewhere else has to be able to see why they differ (ADR 0036). Stating the evidence as
+            *time* is what makes that explanation nearly self-evident — the weighting is the
+            denominator — where "across 2,316 rows, each weighted by the seconds it lasted" had to
+            spell out the weighting because the unit hid it. */}
         Both figures are total distance over total target distance across{' '}
-        {countOf(data.overall.rows)} rows, each weighted by the seconds it lasted — never an average
-        of per-row percentages. {TARGET_VMG_CAVEAT}
+        {describeDuration(data.overall.elapsed_seconds)} of scored sailing.{' '}
+        {TARGET_VMG_CAVEAT}
       </p>
 
       {data.bands.length > 0 && <BandTable bands={data.bands} />}
@@ -173,7 +183,7 @@ function Figure({
 
       {percent === null ? (
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-          No row in this match could be scored against the Polar.
+          Nothing in this match could be scored against the Polar.
         </div>
       ) : (
         <div
@@ -202,8 +212,8 @@ function Figure({
             color: 'var(--state-warning)',
           }}
         >
-          Filler-anchored: {sharePercent(filler)} of these rows are compared against a cell the
-          Polar manufactured
+          Filler-anchored: {sharePercent(filler)} of this is compared against a cell the Polar
+          manufactured rather than measured
         </div>
       )}
     </div>
@@ -269,13 +279,13 @@ function BandTable({ bands }: { bands: readonly PolarPerformanceBand[] }): React
                 color: percent === null ? 'var(--text-muted)' : 'var(--text-primary)',
               }}
             >
-              {/* Italic words rather than a dash: a band with no scorable row has no figure, and
-                  a dash reads as a value withheld (ADR 0012). */}
+              {/* Italic words rather than a dash: a band with nothing scorable in it has no
+                  figure, and a dash reads as a value withheld (ADR 0012). */}
               {percent === null ? (
-                <em style={{ color: 'var(--text-muted)' }}>no scorable row</em>
+                <em style={{ color: 'var(--text-muted)' }}>no scorable time</em>
               ) : (
                 <>
-                  {percent} · {countOf(band.efficiency.rows)} rows
+                  {percent} · {describeDuration(band.efficiency.elapsed_seconds)}
                   {band.efficiency.filler_anchored_rows > 0 && (
                     <em
                       data-testid="band-filler-anchored"

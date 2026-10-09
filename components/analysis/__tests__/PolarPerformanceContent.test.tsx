@@ -45,9 +45,20 @@ describe('the figures', () => {
     expect(screen.getByTestId('vmg-efficiency')).toHaveTextContent('83.3%')
   })
 
-  it('says it is a ratio of sums rather than letting a reader assume an average', () => {
+  it('says what the figures are a ratio of, in the unit it counts in', () => {
+    // Three Countable fixture rows at a minute each. Stating the evidence as time is also what
+    // makes the ratio-of-sums self-evident: the weighting *is* the denominator.
     renderScreen()
-    expect(screen.getByText(/never an average of per-row percentages/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/total distance over total target distance across 3m of scored sailing/)
+    ).toBeInTheDocument()
+  })
+
+  it('never says "row" anywhere a sailor can read it', () => {
+    // The whole point of the wording pass: "row" is the database's unit, not a sailor's. This is
+    // over the rendered screen rather than over one string, so a new label cannot reintroduce it.
+    renderScreen()
+    expect(document.body.textContent).not.toMatch(/\brows?\b/i)
   })
 
   it('carries Target VMG’s standing caveat beside the figure', () => {
@@ -72,7 +83,7 @@ describe('the figures', () => {
     ])
 
     expect(screen.getByTestId('polar-efficiency')).toHaveTextContent(
-      'No row in this match could be scored against the Polar.'
+      'Nothing in this match could be scored against the Polar.'
     )
     expect(screen.getByTestId('polar-efficiency').textContent).not.toMatch(/—|0\.0%/)
   })
@@ -97,7 +108,7 @@ describe('a Filler-Anchored figure is shown and flagged', () => {
 
     expect(screen.getByTestId('polar-efficiency')).toHaveTextContent('133.3%')
     expect(screen.getByTestId('polar-efficiency-filler-anchored')).toHaveTextContent(
-      /50% of these rows are compared against a cell the Polar manufactured/
+      /50% of this is compared against a cell the Polar manufactured rather than measured/
     )
   })
 
@@ -138,11 +149,14 @@ describe('a Filler-Anchored figure is shown and flagged', () => {
 })
 
 describe('the whole archive by default', () => {
-  it('opens on every row, with no recent-N window applied', () => {
+  it('opens on all of it, with no recent-N window applied', () => {
     renderScreen()
 
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4 rows · 2 of 2 races')
-    expect(screen.getByTestId('coverage-ledger-headline').textContent).not.toMatch(/of 4$/)
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent(
+      '2 of 2 races · 4m recorded'
+    )
+    // Nothing narrowed, so no "of 4m" qualifier and no way back to offer.
+    expect(screen.getByTestId('coverage-ledger-headline').textContent).not.toMatch(/of 4m/)
     expect(screen.queryByTestId('clear-filter')).not.toBeInTheDocument()
   })
 
@@ -150,7 +164,7 @@ describe('the whole archive by default', () => {
     renderScreen({ buckets: { wind: ['heavy'] }, range: null })
 
     expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Heavy (16–22 kt)')
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2m recorded of 4m')
   })
 
   it('offers the way back to the whole archive only while it is narrowed', async () => {
@@ -158,7 +172,7 @@ describe('the whole archive by default', () => {
 
     await user.click(screen.getByTestId('clear-filter'))
     expect(screen.queryByTestId('clear-filter')).not.toBeInTheDocument()
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4 rows')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4m recorded')
   })
 })
 
@@ -185,7 +199,7 @@ describe('narrowing moves the view and the URL, and never navigates', () => {
 
     // The one Light row is the half-speed one.
     expect(screen.getByTestId('polar-efficiency')).toHaveTextContent('50.0%')
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('1 row ·')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('1 of 2 races · 1m')
   })
 
   it('takes the query string back off the URL when the narrowing is undone', async () => {
@@ -212,9 +226,11 @@ describe('the ledger switch, wired to the buckets', () => {
     await user.click(screen.getByTestId('include-unrecorded'))
 
     // The two July rows carry neither annotation; the two June rows carry both.
-    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2 rows · 1 of 2 races')
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent(
+      '1 of 2 races · 2m recorded'
+    )
     expect(screen.getByTestId('coverage-ledger')).toHaveTextContent(
-      'Every row shown carries every annotation.'
+      'All of it carries every annotation.'
     )
   })
 
@@ -268,13 +284,13 @@ describe('the per-band breakdown', () => {
     ])
   })
 
-  it('says a band has no scorable row rather than printing a dash', () => {
+  it('says a band has no scorable time rather than printing a dash', () => {
     renderScreen()
 
     const storm = screen
       .getAllByTestId('band-row')
       .find((row) => row.dataset.bucket === 'storm') as HTMLElement
-    expect(within(storm).getByText('no scorable row')).toBeInTheDocument()
+    expect(within(storm).getByText('no scorable time')).toBeInTheDocument()
   })
 
   it('states each band’s own figure over its own rows', () => {
@@ -283,7 +299,7 @@ describe('the per-band breakdown', () => {
     const heavy = screen
       .getAllByTestId('band-row')
       .find((row) => row.dataset.bucket === 'heavy') as HTMLElement
-    // One of the two Heavy rows is not Countable, so the band is one row at the target.
-    expect(heavy).toHaveTextContent('100.0% · 1 rows')
+    // One of the two Heavy rows is not Countable, so the band is one minute at the target.
+    expect(heavy).toHaveTextContent('100.0% · 1m')
   })
 })
