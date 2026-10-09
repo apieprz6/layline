@@ -107,18 +107,25 @@ export default function CompassChart({
   const overlaidRace = era.races.find((race) => race.race_id === overlay) ?? null
   const excludedRace = era.excluded.find((race) => race.race_id === overlay) ?? null
 
+  // Two rows: what the curve is drawn over, then what may be drawn on top of it. Races newest
+  // first, which is the order a sailor looks for one in.
   const chips: ChipOption[] = [
     { id: NO_OVERLAY, label: `This Era · ${eraLabel(era.era)}` },
     ...(previous === null
       ? []
       : [{ id: PREVIOUS_ERA, label: `+ before ${shortDate(era.era.from_date ?? '')}` }]),
-    ...[...era.races]
-      .reverse()
-      .map((race) => ({ id: race.race_id, label: `+ ${raceLabel(labels, race.race_id, race.window_start)}` })),
-    ...[...era.excluded].reverse().map((race) => ({
+    ...[...era.races].reverse().map((race, index) => ({
       id: race.race_id,
-      label: `+ ${raceLabel(labels, race.race_id, race.window_start)}`,
+      label: `+ ${shortDate(race.window_start)}`,
+      title: raceLabel(labels, race.race_id, race.window_start),
+      startsRow: index === 0,
+    })),
+    ...[...era.excluded].reverse().map((race, index) => ({
+      id: race.race_id,
+      label: `+ ${shortDate(race.window_start)}`,
+      title: raceLabel(labels, race.race_id, race.window_start),
       emptyReason: `only ${rowsPhrase(race.row_count)} this check could read`,
+      startsRow: era.races.length === 0 && index === 0,
     })),
   ]
 

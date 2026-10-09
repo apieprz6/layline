@@ -26,12 +26,23 @@ import type {
 
 export const BIN_COUNT = 36
 
-export function era(channel: CalibrationEra['channel'], from_date: string | null = null): CalibrationEra {
+/**
+ * One Era.
+ *
+ * `until_date` is worth passing: a real opening Era with another Era after it is bounded at its far
+ * end, and that date is what names it ("Before 4 Jul"). An Era unbounded both ways is a channel
+ * nothing was ever recorded against, which is a different thing and the chips treat it as one.
+ */
+export function era(
+  channel: CalibrationEra['channel'],
+  from_date: string | null = null,
+  until_date: string | null = null
+): CalibrationEra {
   return {
     key: `${channel}:${from_date ?? 'opening'}`,
     channel,
     from_date,
-    until_date: null,
+    until_date,
     opened_by: [],
   }
 }

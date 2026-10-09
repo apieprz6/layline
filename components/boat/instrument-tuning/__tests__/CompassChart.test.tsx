@@ -84,7 +84,7 @@ describe('the Strip | Rose toggle', () => {
     const races = twoRaces()
     renderChart({ era: headingEra(races), previous: headingEra([races[0]]) })
 
-    await userEvent.click(screen.getByRole('button', { name: '+ 17 Jul · Verve Cup' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ 17 Jul' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Rose' }))
 
     // One polyline per unbroken run of the curve, so the rose draws at least one.

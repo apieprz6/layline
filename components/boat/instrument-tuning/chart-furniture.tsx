@@ -186,7 +186,23 @@ export function Segmented<Key extends string>({
 
 export interface ChipOption {
   id: string
+  /**
+   * What the chip prints, kept as short as it can be.
+   *
+   * A Race is a date here and not its name: thirteen named Races is a rail no 390px screen can
+   * show, and the name is on the chip's own tooltip and in the readout the moment it is picked.
+   */
   label: string
+  /** The whole of what `label` abbreviates, for the tooltip. Defaults to `label`. */
+  title?: string
+  /**
+   * Starts a new line, so one wrapped group can hold two kinds of thing.
+   *
+   * The levels a chart is read at and the Races behind them are two different choices sharing one
+   * control, and wrapping them into one paragraph of chips made the boundary between them a
+   * function of the window width.
+   */
+  startsRow?: boolean
   /**
    * Why this chip has nothing to draw, where it has nothing to draw.
    *
@@ -200,8 +216,15 @@ export interface ChipOption {
 /**
  * The level rail: which Era, or which Race, the chart is drawing.
  *
- * Scrolls sideways rather than wrapping. Thirteen Races wrapped to four lines push the chart off a
- * 390px screen, and the chart is the thing being read.
+ * **Wraps rather than scrolling sideways.** It scrolled first, on the reasoning that thirteen
+ * wrapped Races would push the chart down a 390px screen — but a sideways scroll hides the last
+ * chip behind a gesture nothing on screen advertises, and the chips it hid were the Races, which
+ * are the ones a sailor goes looking for. Shortening what a chip prints bought back more height
+ * than the scroll ever did: a Race is its date, four characters, so the whole archive is three
+ * lines rather than thirteen off the side.
+ *
+ * Laid out as a grid of rows rather than one wrapped flow, so the levels and the Races stay
+ * visually separate however wide the window is (`startsRow`).
  */
 export function Chips({
   options,
@@ -218,45 +241,60 @@ export function Chips({
     <div
       role="group"
       aria-label={label}
-      style={{ display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 0 6px' }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 0 6px' }}
     >
-      {options.map((option) => {
-        const on = option.id === value
-        return (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(option.id)}
-            // A Race is named by whatever the sailor called it, and "Verve Cup Regatta Race 3"
-            // is a chip three times the width of the rail. Truncated with the whole of it on
-            // hover, rather than a rail that scrolls for a page.
-            title={option.label}
-            style={{
-              flexShrink: 0,
-              maxWidth: 170,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              border: `1px ${option.emptyReason ? 'dashed' : 'solid'} var(--surface-border)`,
-              borderRadius: 'var(--radius-full)',
-              padding: '5px 10px',
-              fontSize: 10.5,
-              background: on ? 'var(--text-primary)' : 'transparent',
-              color: on
-                ? 'var(--text-inverse)'
-                : option.emptyReason
-                  ? 'var(--text-muted)'
-                  : 'var(--text-secondary)',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {option.label}
-          </button>
-        )
-      })}
+      {rowsOf(options).map((row, index) => (
+        <div key={index} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {row.map((option) => {
+            const on = option.id === value
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange(option.id)}
+                // What the chip abbreviates. A Race is named by whatever the sailor called it, and
+                // "Verve Cup Regatta Race 3" is a chip three times the width of the rail.
+                title={option.title ?? option.label}
+                style={{
+                  flexShrink: 0,
+                  maxWidth: 170,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  border: `1px ${option.emptyReason ? 'dashed' : 'solid'} var(--surface-border)`,
+                  borderRadius: 'var(--radius-full)',
+                  padding: '4px 9px',
+                  fontSize: 10.5,
+                  background: on ? 'var(--text-primary)' : 'transparent',
+                  color: on
+                    ? 'var(--text-inverse)'
+                    : option.emptyReason
+                      ? 'var(--text-muted)'
+                      : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
+}
+
+/** The options split where one asks to start a row. The first chip starts the first row. */
+function rowsOf(options: readonly ChipOption[]): ChipOption[][] {
+  const rows: ChipOption[][] = []
+
+  for (const option of options) {
+    if (rows.length === 0 || option.startsRow === true) rows.push([option])
+    else rows[rows.length - 1].push(option)
+  }
+
+  return rows
 }
 
 /**

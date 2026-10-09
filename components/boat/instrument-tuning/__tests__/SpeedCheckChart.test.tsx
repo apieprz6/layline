@@ -89,7 +89,7 @@ describe('the Scatter | Gap-by-speed toggle', () => {
 
     expect(screen.getAllByTestId('fitted-line')).toHaveLength(1)
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
 
     // Two lines, not one replaced by the other: the question a picked Race asks is how far it sits
     // from the season, and a chart with only the amber line answers a different one.
@@ -115,10 +115,10 @@ describe('the Scatter | Gap-by-speed toggle', () => {
   it('carries the picked Race across the toggle too', async () => {
     renderChart()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
 
-    expect(screen.getByRole('button', { name: '3 Jun · Beer-can' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: '3 Jun' })).toHaveAttribute(
       'aria-pressed',
       'true'
     )
@@ -186,7 +186,7 @@ describe('what a tapped band says', () => {
   it('says a picked Race never sailed a band, without a double negative', async () => {
     renderChart()
 
-    await userEvent.click(screen.getByRole('button', { name: '3 Jun · Beer-can' }))
+    await userEvent.click(screen.getByRole('button', { name: '3 Jun' }))
     fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
 
     const readout = screen.getByTestId('chart-readout')
@@ -216,7 +216,7 @@ describe('a Race with no line of its own', () => {
     ]
     renderChart({ byMethod: { orthogonal: speedEra(races), 'sog-on-stw': speedEra(races) } })
 
-    await userEvent.click(screen.getByRole('button', { name: '10 Jul · Verve Cup' }))
+    await userEvent.click(screen.getByRole('button', { name: '10 Jul' }))
 
     const chart = screen.getByTestId('speed-check-chart')
     expect(chart).toHaveTextContent(

@@ -65,7 +65,14 @@ import {
   svgPoint,
   type ChipOption,
 } from './chart-furniture'
-import { raceLabel, races as racesPhrase, rows as rowsPhrase, signedKnots, type RaceLabels } from './chart-text'
+import {
+  raceLabel,
+  races as racesPhrase,
+  rows as rowsPhrase,
+  shortDate,
+  signedKnots,
+  type RaceLabels,
+} from './chart-text'
 
 type View = 'scatter' | 'gap'
 
@@ -143,12 +150,15 @@ export default function SpeedCheckChart({
     )
   )
 
+  // The level, then the Races on their own row, newest first.
   const chips: ChipOption[] = [
     { id: SEASON, label: `Season · ${racesPhrase(era.races.length)}` },
-    ...[...era.races].reverse().map((candidate) => ({
+    ...[...era.races].reverse().map((candidate, index) => ({
       id: candidate.race_id,
-      label: raceLabel(labels, candidate.race_id, candidate.sailed_at),
+      label: shortDate(candidate.sailed_at),
+      title: raceLabel(labels, candidate.race_id, candidate.sailed_at),
       emptyReason: candidate.fit.fitted ? undefined : REASON_WORDS[candidate.fit.reason],
+      startsRow: index === 0,
     })),
   ]
 

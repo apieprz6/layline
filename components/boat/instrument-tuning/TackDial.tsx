@@ -149,24 +149,45 @@ export default function TackDial({
 
   // `AWA`'s own boundaries, then the compass's — minus any the two share, which a Version that
   // re-typed both channels on one day produces (the owner's first Version is exactly that).
-  const ownBoundaries = new Set(eras.map((candidate) => candidate.era.from_date))
+  //
+  // Dated boundaries only. An opening Era's `null` is not a boundary two channels can share: both
+  // channels have a stretch before their own first act, and treating `null` as shared would drop
+  // the compass's before-side chip whenever the masthead had no act of its own.
+  const ownBoundaries = new Set(
+    eras.map((candidate) => candidate.era.from_date).filter((date) => date !== null)
+  )
 
+  // Two rows: the levels, then the Races. Both **newest first** — the Era a sailor wants is the one
+  // the boat is in now, and `awaAsymmetryByEra` hands them over oldest first because that is the
+  // order a season is computed in, not the order it is read in.
   const chips: ChipOption[] = [
     { id: SEASON, label: `Season · ${racesPhrase(season.race_count)}` },
-    ...eras.map((candidate) => eraChip(candidate, eras, null)),
-    ...compassEras
-      .filter((candidate) => !ownBoundaries.has(candidate.era.from_date))
-      .map((candidate) => eraChip(candidate, compassEras, 'HDG')),
-    ...[...season.races].reverse().map((measured) => ({
+    ...[...eras]
+      .reverse()
+      .filter((candidate) => !spansEverything(candidate))
+      .map((candidate) => eraChip(candidate, null)),
+    ...[...compassEras]
+      .reverse()
+      .filter(
+        (candidate) =>
+          !spansEverything(candidate) &&
+          (candidate.era.from_date === null || !ownBoundaries.has(candidate.era.from_date))
+      )
+      .map((candidate) => eraChip(candidate, 'HDG')),
+    ...[...season.races].reverse().map((measured, index) => ({
       id: measured.race_id,
-      // The pair count on the chip, because how much a Race rests on is the first thing to know
+      // The pair count rides along, because how much a Race rests on is the first thing to know
       // about it here and two pairs reads very differently from twelve.
-      label: `${raceLabel(labels, measured.race_id, measured.window_start)} · ${measured.pairs.length}`,
+      label: `${shortDate(measured.window_start)} · ${measured.pairs.length}`,
+      title: `${raceLabel(labels, measured.race_id, measured.window_start)} · ${tackPairs(measured.pairs.length)}`,
+      startsRow: index === 0,
     })),
-    ...[...season.excluded].reverse().map((missing) => ({
+    ...[...season.excluded].reverse().map((missing, index) => ({
       id: missing.race_id,
-      label: raceLabel(labels, missing.race_id, missing.window_start),
+      label: shortDate(missing.window_start),
+      title: raceLabel(labels, missing.race_id, missing.window_start),
       emptyReason: reasonWords(missing),
+      startsRow: season.races.length === 0 && index === 0,
     })),
   ]
 
@@ -283,28 +304,33 @@ function dialPairs(season: EraAwaAsymmetry): DialPair[] {
  * A borrowed Era names the channel whose act opened it, for the reason the rail's borrowed rules
  * do: an unlabelled "Since 4 Jul" beside `AWA`'s own boundaries would read as a masthead act.
  */
-function eraChip(
-  shown: EraAwaAsymmetry,
-  withinList: readonly EraAwaAsymmetry[],
-  borrowedFrom: 'HDG' | null
-): ChipOption {
+function eraChip(shown: EraAwaAsymmetry, borrowedFrom: 'HDG' | null): ChipOption {
   const suffix = borrowedFrom === null ? '' : ` · ${borrowedFrom}`
 
   return {
     id: shown.era.key,
+    // An opening Era is named by the act that *closed* it, which it carries itself. Looking that
+    // date up across the sibling Eras read as "Before the first act" whenever the Era after it
+    // held no Race and was therefore not in the list to be found.
     label:
       shown.era.from_date === null
-        ? `Before ${firstBoundary(withinList) ?? 'the first act'}${suffix}`
+        ? `Before ${shortDate(shown.era.until_date ?? '')}${suffix}`
         : `Since ${shortDate(shown.era.from_date)}${suffix}`,
     emptyReason:
       shown.upwind === null && shown.downwind === null ? 'no Tack Pair in this Era' : undefined,
   }
 }
 
-/** The first recorded act across these Eras, for the chip that names the stretch before it. */
-function firstBoundary(eras: readonly EraAwaAsymmetry[]): string | null {
-  const dated = eras.map((era) => era.era.from_date).filter((date) => date !== null)
-  return dated.length === 0 ? null : shortDate(dated[0])
+/**
+ * Whether an Era is the whole of recorded time, and so the same set of Races as the season.
+ *
+ * Unbounded both ways means nothing was ever recorded against the channel — which is the state the
+ * screen ships in — and a chip for it would sit next to "Season" selecting exactly the same Races
+ * under a different name. It was reading "Before the first act" before, about an act there is none
+ * of.
+ */
+function spansEverything(shown: EraAwaAsymmetry): boolean {
+  return shown.era.from_date === null && shown.era.until_date === null
 }
 
 function reasonWords(excluded: Extract<EraAwaAsymmetry['excluded'][number], object>): string {
