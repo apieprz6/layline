@@ -1727,6 +1727,377 @@ export interface EfficiencyAggregate {
 export interface ReadableRow extends AnalysisRow, TranscriptionChannels {}
 
 // ---------------------------------------------------------------------------
+// The Race Track Heatmap: drawn geometry, with colour only on the measurement
+// ---------------------------------------------------------------------------
+// Every shape below is what crosses from the server to the map, and it is deliberately *drawn*
+// rather than rows: the projection and the state classification stay on the server, so the client
+// can move the camera and has no ability to re-decide what a row meant (ADR 0033). It is also
+// forced — a projection carries closures and cannot be serialised at all.
+
+/**
+ * Which quantity the track is coloured by (ADR 0038).
+ *
+ * The first two are **performance metrics** and the rest are **readings**, which is not a
+ * cosmetic distinction: it decides which rows each may colour, because ADR 0025 excludes
+ * Low-Speed and mid-manoeuvre rows from a metric and has nothing to say about a channel.
+ * `services/analysis/track-overlays.ts` holds every scale and every gate.
+ */
+export type TrackOverlay = 'target_speed' | 'target_vmg' | 'sail' | 'sog' | 'tws' | 'twa'
+
+/**
+ * A band, named as the design token that paints it.
+ *
+ * A token and never a hex, so the theme stays in charge: after dark `.theme-nightvision` collapses
+ * every one of these to a red depth ramp, which is the theme's whole proposition and the reason
+ * each scale's legend must change its own *words* rather than its swatches.
+ *
+ * Five families, one per scale shape. The ratio ramp is ADR 0033's — amber below, neutral gray at
+ * the midpoint, blue above, and never the wind-speed tokens, which mean a different quantity. The
+ * `wind-*` family appears here for exactly one overlay, `TWS`, which *is* that quantity.
+ */
+export type TrackBandToken =
+  | 'track-below-3'
+  | 'track-below-2'
+  | 'track-below-1'
+  | 'track-at'
+  | 'track-above-1'
+  | 'track-above-2'
+  | 'track-above-3'
+  | `track-speed-${1 | 2 | 3 | 4 | 5}`
+  | `wind-${'light' | 'medium' | 'heavy' | 'storm'}`
+  | `track-port-${1 | 2 | 3}`
+  | `track-stbd-${1 | 2 | 3}`
+  | 'track-agree'
+  | 'track-differ'
+
+/**
+ * Why a drawn row carries no colour — the state, never a bare null.
+ *
+ * ADR 0033 requires the excluded reason to survive to the renderer as a discriminated state,
+ * because collapsing them back into "not Countable" re-loses the distinction ADR 0009 exists to
+ * protect. Several of these are *drawn* identically on purpose: geometry with no claim on it
+ * should not look like four different claims. What they must not do is become indistinguishable
+ * before they reach the thing that draws and counts them.
+ *
+ * The first three are `NotCountableReason`'s own words, verbatim, so the map cannot disagree with
+ * the rest of the app about why a row was left out. They are spelled again here rather than
+ * imported, because that type belongs to the module that decides it and `/types` does not import
+ * from `services/`; what keeps the two from drifting is that `track-heatmap.ts` assigns a
+ * `NotCountableReason` straight into this type, so a fourth reason there stops compiling here.
+ *
+ * `frozen` never reaches a drawn segment — the track breaks around a **Dropout** — and arrives
+ * instead as a ring and a bridge.
+ */
+export type TrackNotScored =
+  | 'frozen'
+  | 'low_speed'
+  | 'maneuver_window'
+  /** In range and excluded by nothing, but the Polar cannot answer: off an axis, or over an empty cell. */
+  | 'no_target'
+  /** The race records no **Polar Version** at all, so there is nothing to be a percent of. */
+  | 'no_polar_version'
+  /** A channel overlay whose own channel this row left blank. Not an exclusion — an absence. */
+  | 'no_reading'
+  /** The race records no **Crossover Chart Version**, so it has no sail vocabulary at all. */
+  | 'no_chart_version'
+  /** Nobody wrote down what was flying here. An empty list is legal and ordinary (ADR 0010). */
+  | 'no_sail_recorded'
+  /** What was flying is a note rather than a **Sail Definition**: no integer to compare. */
+  | 'sail_unnamed'
+  /** Below one of the chart's own axes, where a floor lookup has no floor (ADR 0028). */
+  | 'no_chart_cell'
+
+/**
+ * Whether what was flying matched the **Crossover Chart**, or which of five reasons there is no
+ * verdict.
+ *
+ * A disagreement is not a fault: a boat carrying the A2 through a lull the chart would have reefed
+ * for is a decision somebody made on the water. `services/analysis/sail-agreement.ts` decides it,
+ * and the four "no verdict" members are kept apart because they are different facts — a gap in the
+ * archive, a sail the chart cannot name, and the edge of the chart are not one shrug.
+ */
+export type SailAgreement =
+  | 'agrees'
+  | 'differs'
+  | 'no_chart_version'
+  | 'no_sail_recorded'
+  | 'sail_unnamed'
+  | 'no_chart_cell'
+  | 'no_reading'
+
+/** What a row makes of one overlay: a band, or the reason there is none. */
+export interface TrackPaint {
+  /** Null for a row this overlay cannot colour, which is drawn as an uncoloured hairline. */
+  band: TrackBandToken | null
+  /** Set exactly when `band` is null. */
+  not_scored: TrackNotScored | null
+  /**
+   * The figure rests on at least one of the Polar's manufactured filler cells — **Filler-Anchored**
+   * (ADR 0036).
+   *
+   * Coloured by its own percent like any other row *and* marked, because the doubt belongs on the
+   * number rather than in place of it. Only ever true on a ratio overlay: it is a property of the
+   * comparison, not of the reading.
+   */
+  flagged: boolean
+}
+
+/**
+ * Everything the map knows about one row: the values, and the verdicts on them.
+ *
+ * This is what crosses to the client, and it is the amendment ADR 0038 makes to ADR 0033's
+ * "drawn geometry, not rows". The reason that rule existed — the client must not be able to
+ * re-decide what a row meant — is kept by a different means: every value and every verdict here is
+ * computed on the server, and the banding both sides apply lives in one shared pure module. What
+ * the client gains is the ability to switch overlay without a round trip, and to read a stretch of
+ * track out when the sailor taps it, neither of which is a decision.
+ *
+ * Numbers rather than the Transcription's text, because these have been read already — by
+ * `channelValue`, which is the one place a blank becomes null rather than a zero.
+ */
+export interface TrackRowFacts {
+  row_index: number
+  /** The recording's own naive stamp, which the readout prints verbatim (ADR 0008). */
+  row_time: string
+  /** Knots over the ground. **Position-Derived**: the GPS's own figure. */
+  sog: number | null
+  /** Knots of true wind. **Computed** by qtVlm, never a masthead reading (ADR 0008). */
+  tws: number | null
+  /** Signed, −180..180, positive = starboard. Computed, like every wind figure. */
+  twa: number | null
+  /** Course over the ground, degrees true. Position-Derived. Read out, not an overlay of its own. */
+  cog: number | null
+  /**
+   * The chart's verdict on this row: what was flying, what was suggested, and whether they agree.
+   *
+   * Decided on the server, like every other figure here, because it is resolved against the
+   * **Crossover Chart Version** the Race points at — the one vocabulary either side may speak
+   * (ADR 0023) — and nothing on the client may look a Sail Definition up afresh (ADR 0012).
+   */
+  sail_agreement: SailAgreement
+  /** What the sailor said was up, in that Version's own words. Null where none was named. */
+  sail_flown: string | null
+  /** What the chart calls for here. Null where it cannot answer. */
+  sail_recommended: string | null
+  /** What the Polar says the boat could have done here, in knots. Null where it cannot answer. */
+  target_speed: number | null
+  /** `SOG` over **Target Speed** (ADR 0027). */
+  polar_efficiency: number | null
+  /** The **Target VMG** *estimate* for this leg and wind speed. Carries a standing caveat. */
+  target_vmg: number | null
+  /** **VMG** over Target VMG. */
+  vmg_efficiency: number | null
+  /** Either target read through a manufactured cell of the Polar (ADR 0036). */
+  filler_anchored: boolean
+  /**
+   * Which of ADR 0025's three exclusions applies to this row, or null where none does.
+   *
+   * `NotCountableReason`'s own words — `services/analysis/track-heatmap.ts` assigns one straight
+   * into this field, so a fourth reason there stops compiling here.
+   */
+  excluded: 'frozen' | 'low_speed' | 'maneuver_window' | null
+}
+
+/**
+ * One leg of the track: the stretch between two consecutive fixes, carrying the row it arrives at.
+ *
+ * One segment per row transition rather than one polyline per run, because the colour has to
+ * change where the boat's performance changed. No segment is emitted across a **Dropout** or a
+ * missing fix, so a stall is visible as absence rather than as a straight line through water the
+ * boat may never have crossed.
+ *
+ * The endpoints travel as numbers as well as a path string, because a tap has to find the nearest
+ * leg and parsing the string back would be the same numbers read twice.
+ */
+export interface TrackSegment {
+  /** `x1,y1 x2,y2` in the frame's own units, ready to hand to a `<polyline>`. */
+  points: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  row: TrackRowFacts
+}
+
+/**
+ * A fix with no neighbour to join: one row of track between two breaks.
+ *
+ * A run of one cannot be a polyline, and a boat that surfaced for a single fix between two
+ * Dropouts was somewhere — so it is plotted as a point rather than dropped, which is what keeps
+ * "every recorded row is drawn" true at the edges. `TrackMap` plots the same case for the same
+ * reason.
+ */
+export interface TrackPoint {
+  x: number
+  y: number
+  row: TrackRowFacts
+}
+
+/**
+ * The dashed, duration-labelled bridge across a **Dropout** — the **Dropout Bridge**.
+ *
+ * Ringing **Frozen** rows is necessary and not sufficient: a frozen run repeats one position, so
+ * 815 frozen rows on one distance race produce three rings that stack into a pixel. An ordinary
+ * line across the gap asserts a course the recording never recorded, so the gap is drawn as a gap
+ * and labelled with how long the feed was dead (ADR 0014, as ADR 0033 amends it).
+ */
+export interface DropoutBridge {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** Measured between the fixes either side, in the recording's own naive frame. */
+  seconds: number
+  /** Frozen rows the gap holds, so a screen can state the run as well as its duration. */
+  rows: number
+}
+
+/** A **Frozen** row's position — the fix it is repeating, which is where to ring. */
+export interface TrackRing {
+  cx: number
+  cy: number
+}
+
+/**
+ * One piece of **Testimony**, at the place on the water it was given about.
+ *
+ * A sail change and a sea state are what the *sailor* said, not what the instruments recorded —
+ * neither measured nor computed (CONTEXT.md's **Provenance**), so they are drawn in a treatment no
+ * band of any overlay uses. On a map an annotation is a *place*, which is the whole point of
+ * drawing them here: "the kite went up at the windward mark" is a thing a sailor can see on a
+ * track and cannot see on a clock. The amend flow's `TrackMap` places them the same way, with the
+ * same two glyphs.
+ */
+export interface TrackAnnotation {
+  x: number
+  y: number
+  /** Which kind of Testimony: a **Sail Configuration** or a **Sea State**. */
+  lane: 'sail' | 'sea'
+  /** The sailor's own words, short enough for a map. */
+  label: string
+  /** The stamp it was given about, in the recording's own naive frame. */
+  at: string
+  /**
+   * Seconds between that stamp and the fix this is drawn at.
+   *
+   * Carried rather than discarded because it is the difference between "here" and "near here": the
+   * recording is event-triggered, so the nearest fix to a 19:42 sail change can be a minute away,
+   * and a screen that cannot say so is placing Testimony more precisely than the track supports.
+   */
+  gap_seconds: number
+  /**
+   * How far the marker is drawn from that fix, in frame units, so two on one fix stay legible.
+   *
+   * A sail change and a sea state recorded a few seconds apart land on the same fix, and one disc
+   * exactly over another is a marker that hides a marker. So they fan upward from the fix and the
+   * frame draws a leader line back to it — which is what keeps the offset honest: `x`/`y` stay the
+   * place, and the line says the disc has been moved off it. Zero for a marker with the fix to
+   * itself.
+   */
+  dy: number
+}
+
+/**
+ * What the track is made of, by reason, so the proportion is stated and never inferred.
+ *
+ * A quarter of one of this archive's races is scoreable, and any design that draws only what it
+ * can colour draws a quarter of the race (ADR 0033). The legend says the count in words — *"178 of
+ * 258 rows are drawn but not scored"* — which is why these are tallied apart rather than collapsed
+ * into one "excluded" number.
+ *
+ * `frozen`, `low_speed` and `maneuver_window` are the three **Countable** exclusions in
+ * `notCountableReason`'s own order, one per row: a row holding two reasons is counted under the
+ * first, exactly as every other figure in the app counts it.
+ */
+export interface TrackHeatmapCounts {
+  /** Every recorded row of the Race Window, drawn or not. */
+  rows: number
+  /** Rows carrying a position at all. A row without one is in no part of the picture. */
+  with_fix: number
+  frozen: number
+  low_speed: number
+  maneuver_window: number
+  /**
+   * Annotations the track could not place: ones given about a time no fix of this window is near.
+   *
+   * Stated so the screen can say they exist rather than silently dropping them — the page lists
+   * every annotation above the Transcription boundary regardless, and a sail change recorded after
+   * the finish is real Testimony about a moment the track does not cover.
+   */
+  annotations_not_placed: number
+  /**
+   * What each overlay could and could not colour, since they do not agree.
+   *
+   * A Low-Speed row carries no percent of target and does carry a speed over the ground, so one
+   * tally for all six would be wrong for five of them — and the sentence under the legend is about
+   * the overlay the sailor is looking at.
+   */
+  overlays: Record<TrackOverlay, TrackOverlayCounts>
+}
+
+/** One overlay's own coverage of a race. */
+export interface TrackOverlayCounts {
+  /** Rows this overlay colours. */
+  scored: number
+  /** How many of those are **Filler-Anchored**. Stated, never used to exclude. */
+  flagged: number
+  /**
+   * Rows it leaves uncoloured for want of a value rather than by an exclusion — the Polar off its
+   * axis for a ratio, a blank channel for a reading.
+   */
+  without_value: number
+}
+
+/**
+ * One race's track, drawn into a stable frame.
+ *
+ * The frame is a fixed box whatever shape the track is, and the thin-track problem is solved by
+ * zoom and pan inside it rather than by reshaping the frame — which reflows the page between races
+ * and still cannot make a 25nm trace legible on a phone (ADR 0033).
+ */
+export interface RaceTrackHeatmap {
+  /** The frame's own units. The element is fluid; the `viewBox` keeps the projection true. */
+  width: number
+  height: number
+  /**
+   * Metres per frame unit at 1×, which is what lets the scale bar re-read its own distance at the
+   * current zoom instead of travelling with the pan and lying about it.
+   */
+  metres_per_unit: number
+  segments: TrackSegment[]
+  /** The fixes no segment could reach: a run of one, between two breaks. Usually empty. */
+  points: TrackPoint[]
+  bridges: DropoutBridge[]
+  rings: TrackRing[]
+  /** What the sailor said, where they said it happened. Empty where nobody wrote anything down. */
+  annotations: TrackAnnotation[]
+  counts: TrackHeatmapCounts
+}
+
+/**
+ * The track section of a race's page: the drawing, and what it was scored against.
+ *
+ * `scoring` is separate from the drawing because an uncoloured track has three different causes
+ * and the screen owes the sailor the right sentence for each. Grey that means "this race records
+ * no Polar Version" must not read as grey that means the boat was slow.
+ */
+export interface RaceTrack {
+  /**
+   * Null where the Race Window holds no position fix at all — a real case in this archive, and one
+   * the screen states in words, because an empty frame explains nothing (ADR 0033).
+   */
+  heatmap: RaceTrackHeatmap | null
+  /**
+   * `polar`: the race names a **Polar Version** and it was read, so the ramp means something.
+   * `no-polar-version`: it names none, which nine of this archive's races legitimately do (ADR
+   * 0012) — every row is drawn and none is coloured.
+   * `polar-unreadable`: it names one that could not be read. The track is still true; the
+   * comparison is missing, and saying so is not the same as saying none was recorded.
+   */
+  scoring: 'polar' | 'no-polar-version' | 'polar-unreadable'
+}
+
+// ---------------------------------------------------------------------------
 // The Analysis Filter and its Coverage Ledger (ADR 0026, ADR 0029)
 // ---------------------------------------------------------------------------
 // Three screens share one filter, so these shapes are central rather than beside the one
@@ -2722,6 +3093,13 @@ export interface RaceDetail {
   coverage: RaceCoverage
   /** Assessed over the whole Transcription, then filtered to the window (ADR 0009). */
   quality: TranscriptionQuality
+  /**
+   * The **Race Track Heatmap**, drawn at read against the Polar Version the race points at.
+   *
+   * Derived and stored nowhere, like coverage: moving a gate or a band edge is a redeploy rather
+   * than a migration over stale geometry (ADR 0009, ADR 0033).
+   */
+  track: RaceTrack
   findings: RaceFinding[]
   /** Testimony, as given. Either list may be empty, and the page says so in words. */
   annotations: RaceAnnotations
