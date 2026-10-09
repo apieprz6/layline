@@ -156,6 +156,7 @@ describeArchive('the Tack Dial over the owner’s season', () => {
       <TackDial
         season={season.asymmetry.season}
         eras={season.asymmetry.eras}
+        compassEras={season.asymmetry.compass_eras}
         log={LOG}
         labels={labels}
       />
@@ -200,17 +201,28 @@ describeArchive('the Tack Dial over the owner’s season', () => {
     expect(coverage).toHaveTextContent('2 Tack Pairs downwind, against 18 upwind')
   })
 
+  it('is one Era of its own, because nothing was ever recorded against the masthead', () => {
+    const { season } = archive()
+
+    // The archive's only recorded act is the compass autocompensation, so `AWA` has one Era over
+    // the whole season — and the day the owner re-types the vane offset, it will have two.
+    expect(season.asymmetry.eras).toHaveLength(1)
+    expect(season.asymmetry.eras[0].era.from_date).toBeNull()
+  })
+
   it('puts LAY-145 §2.6’s check one tap away, and the move is not compass-shaped', async () => {
     renderDial()
 
     const { season } = archive()
-    expect(season.asymmetry.eras).toHaveLength(2)
-    await userEvent.click(screen.getByRole('button', { name: 'Since 4 Jul' }))
+    // The compass's boundaries, borrowed and labelled as the compass's — offered beside `AWA`'s own
+    // rather than instead of them.
+    expect(season.asymmetry.compass_eras).toHaveLength(2)
+    await userEvent.click(screen.getByRole('button', { name: 'Since 4 Jul · HDG' }))
 
     // Across an autocompensation that moved the compass about ten degrees, the upwind Asymmetry
     // moves under a degree. The dial states the two figures; the inference is the reader's.
-    const before = season.asymmetry.eras[0].upwind?.asymmetry_deg ?? 0
-    const after = season.asymmetry.eras[1].upwind?.asymmetry_deg ?? 0
+    const before = season.asymmetry.compass_eras[0].upwind?.asymmetry_deg ?? 0
+    const after = season.asymmetry.compass_eras[1].upwind?.asymmetry_deg ?? 0
     expect(Math.abs(after - before)).toBeLessThan(1)
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('Port reads')
   })

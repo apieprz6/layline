@@ -38,7 +38,8 @@ function dial() {
   return (
     <TackDial
       season={asymmetryEra(races)}
-      eras={[asymmetryEra(races, { era: era('HDG', null) })]}
+      eras={[asymmetryEra(races, { era: era('AWA', null) })]}
+      compassEras={[asymmetryEra(races, { era: era('HDG', null) })]}
       log={LOG}
       labels={{}}
     />

@@ -11,6 +11,14 @@ import userEvent from '@testing-library/user-event'
 import TackDial from '@/components/boat/instrument-tuning/TackDial'
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 
+import { awaAsymmetryByEra } from '@/services/analysis/awa-asymmetry'
+import { calibrationEras } from '@/services/analysis/calibration-eras'
+import type {
+  CalibrationEvent,
+  InstrumentCalibrationPayload,
+  InstrumentCalibrationVersion,
+} from '@/types'
+
 import { asymmetryEra, era, event, pair, raceAsymmetry } from './fixtures'
 
 const AUTOCOMPENSATION = event('2026-07-04', ['HDG'], 'autocompensation')
@@ -38,6 +46,10 @@ function renderDial(over: Partial<Parameters<typeof TackDial>[0]> = {}) {
     <TackDial
       season={asymmetryEra(races)}
       eras={[
+        asymmetryEra([races[0]], { era: era('AWA', null) }),
+        asymmetryEra([races[1]], { era: era('AWA', '2026-07-04') }),
+      ]}
+      compassEras={[
         asymmetryEra([races[0]], { era: era('HDG', null) }),
         asymmetryEra([races[1]], { era: era('HDG', '2026-07-04') }),
       ]}
@@ -88,6 +100,123 @@ describe('what the dial draws', () => {
     renderDial()
 
     expect(screen.getAllByText('reaching · not used')).toHaveLength(2)
+  })
+})
+
+describe('whose Calibration Eras the chips are cut on', () => {
+  /**
+   * The owner's own Calibration Log, reported against the finished screen: a first Version on
+   * 4 July that recorded every channel's figures, and a second on 2 September that moved the `AWA`
+   * offset from −6° to −3° and nothing else.
+   *
+   * The dial used to chip on the **`HDG`** Eras alone, so it offered "Before / Since 4 Jul" —
+   * because the first Version happened to set `HDG offset 0°` — and hid the 2 September act
+   * entirely. That is the one act that governs this figure: a vane **Programmed Offset** is applied
+   * before a Recording is written, and it moves the two tacks' held magnitudes in opposite
+   * directions, so the Asymmetry either side of it is two different quantities. The season figure
+   * was averaging them, and the rail above the chips was already drawing a rule at 2 September that
+   * nothing could be cut on.
+   */
+  const PAYLOAD: InstrumentCalibrationPayload = {
+    AWA: { offset: -6 },
+    AWS: { multiplier: 0.9, offset: 0 },
+    STW: { multiplier: 1.05, offset: 1.05 },
+    HDG: { offset: 0 },
+  }
+
+  function ownerVersion(
+    number: number,
+    effective_from: string,
+    payload: InstrumentCalibrationPayload
+  ): InstrumentCalibrationVersion {
+    return {
+      id: `v${number}`,
+      artifact_id: 'artifact-1',
+      kind: 'instrument_calibration',
+      version_number: number,
+      effective_from,
+      recorded_at: `${effective_from}T12:00:00Z`,
+      note: null,
+      created_by: 'admin-1',
+      filename: null,
+      content_sha256: null,
+      payload,
+    }
+  }
+
+  /**
+   * The dial over that Log, with its Eras cut the way the service cuts them.
+   *
+   * `extraEvents` is for the one case the owner's Log cannot show: a compass act on a day the
+   * masthead was not touched. Their own first Version recorded both channels at once, so every
+   * boundary it has belongs to both.
+   */
+  function renderOverOwnerLog(extraEvents: CalibrationEvent[] = []) {
+    const log = buildCalibrationLog(
+      [
+        ownerVersion(1, '2026-07-04', PAYLOAD),
+        ownerVersion(2, '2026-09-02', { ...PAYLOAD, AWA: { offset: -3 } }),
+      ],
+      extraEvents
+    )
+    const races = [
+      raceAsymmetry('race-aug', '2026-08-12 19:00:00', [pair('upwind', 36, 46)]),
+      raceAsymmetry('race-sep', '2026-09-20 19:00:00', [pair('upwind', 36, 40)]),
+    ]
+    const results = races.map((measured) => ({
+      ok: true as const,
+      race_id: measured.race_id,
+      window_start: measured.window_start,
+      asymmetry: measured,
+    }))
+
+    return render(
+      <TackDial
+        season={asymmetryEra(races)}
+        eras={awaAsymmetryByEra(calibrationEras(log, 'AWA'), results)}
+        compassEras={awaAsymmetryByEra(calibrationEras(log, 'HDG'), results)}
+        log={log}
+        labels={{}}
+      />
+    )
+  }
+
+  it('offers the day the vane offset was re-typed, which is this figure’s own boundary', () => {
+    renderOverOwnerLog()
+
+    // The chip that was missing. `AWA` has three Eras over this Log — before 4 Jul, 4 Jul to
+    // 2 Sep, and since — and the two the Races fall in are offered.
+    expect(screen.getByRole('button', { name: 'Since 2 Sep' })).toBeInTheDocument()
+  })
+
+  it('still offers a compass boundary of its own, named as the compass’s', () => {
+    renderOverOwnerLog([event('2026-08-01', ['HDG'], 'autocompensation')])
+
+    // ADR 0034 asked for the cross-channel comparison and did not ask for `AWA`'s own partition to
+    // be dropped, so both are here — and a borrowed boundary says whose act it was, for the reason
+    // the rail's borrowed rules do.
+    expect(screen.getByRole('button', { name: 'Since 1 Aug · HDG' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Since 2 Sep' })).toBeInTheDocument()
+  })
+
+  it('offers a day both channels were touched once, as its own', () => {
+    renderOverOwnerLog()
+
+    // 4 July is a boundary for `AWA` *and* for `HDG`: the first Version recorded both channels'
+    // figures. One chip and not two, `AWA`'s, because the chart owns that date — the same rule the
+    // rail follows for a day it would otherwise draw two rules on.
+    expect(screen.getAllByRole('button', { name: /Since 4 Jul/ })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Since 4 Jul · HDG' })).not.toBeInTheDocument()
+  })
+
+  it('draws whichever Era is picked, from either list', async () => {
+    renderOverOwnerLog()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Since 2 Sep' }))
+
+    // One Race sailed after 2 September, and its pair held 4° apart rather than 10°.
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('Port reads 4.0° wider')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('1 Tack Pair · 1 Race')
   })
 })
 

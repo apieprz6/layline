@@ -94,6 +94,7 @@ export default function InstrumentTuningCharts({
         <TackDial
           season={season.asymmetry.season}
           eras={season.asymmetry.eras}
+          compassEras={season.asymmetry.compass_eras}
           log={log}
           labels={labels}
         />

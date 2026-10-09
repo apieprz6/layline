@@ -85,26 +85,47 @@ interface TackDialProps {
    */
   season: EraAwaAsymmetry
   /**
-   * The same season cut on the **`HDG`** Calibration Eras, oldest first.
+   * The same season cut on **`AWA`'s own** Calibration Eras, oldest first.
    *
-   * `HDG`'s and not `AWA`'s, deliberately: the check these chips exist for is whether the asymmetry
-   * moved across an autocompensation that moved the compass about ten degrees. On this archive it
-   * went −3.8° to −5.5° — which does not look compass-driven, and is one tap to see.
+   * Its own channel, because these are the boundaries that make the figure mean one thing: a vane
+   * **Programmed Offset** is applied before a Recording is written, and re-typing it moves the two
+   * tacks' held magnitudes in opposite directions, so the Asymmetry either side of that day is two
+   * different quantities.
    */
   eras: readonly EraAwaAsymmetry[]
+  /**
+   * And the same season cut on the **`HDG`** Eras, for the cross-channel check.
+   *
+   * Offered beside its own rather than instead of them (ADR 0034 asked for the compass comparison;
+   * it did not ask for `AWA`'s own partition to be dropped). A boundary that is already one of
+   * `AWA`'s is not offered twice — the same rule the rail follows, where an act the chart owns wins
+   * the date over a borrowed one.
+   */
+  compassEras: readonly EraAwaAsymmetry[]
   /** The whole Calibration Log. The rail marks `AWA`'s own acts and, muted, `HDG`'s. */
   log: readonly CalibrationLogEntry[]
   labels: RaceLabels
 }
 
-export default function TackDial({ season, eras, log, labels }: TackDialProps): ReactElement {
+export default function TackDial({
+  season,
+  eras,
+  compassEras,
+  log,
+  labels,
+}: TackDialProps): ReactElement {
   const [level, setLevel] = useState<string>(SEASON)
   const [picked, setPicked] = useState<string | null>(null)
 
   const everyPair = dialPairs(season)
   const race = season.races.find((measured) => measured.race_id === level) ?? null
   const excluded = season.excluded.find((missing) => missing.race_id === level) ?? null
-  const era = eras.find((candidate) => candidate.era.key === level) ?? null
+  // Either list: a level is an Era by its key, and the two lists' keys carry their own channel
+  // (`AWA:2026-09-02` against `HDG:2026-07-04`), so one lookup cannot find the other's Era.
+  const era =
+    eras.find((candidate) => candidate.era.key === level) ??
+    compassEras.find((candidate) => candidate.era.key === level) ??
+    null
 
   // What is on screen, as the two figures and the Races behind them. A Race and an Era both carry
   // an `AsymmetryFigure`; only the Era counts Races, so the count travels beside the figures rather
@@ -126,19 +147,16 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
           )
         : everyPair
 
+  // `AWA`'s own boundaries, then the compass's — minus any the two share, which a Version that
+  // re-typed both channels on one day produces (the owner's first Version is exactly that).
+  const ownBoundaries = new Set(eras.map((candidate) => candidate.era.from_date))
+
   const chips: ChipOption[] = [
     { id: SEASON, label: `Season · ${racesPhrase(season.race_count)}` },
-    ...eras.map((candidate) => ({
-      id: candidate.era.key,
-      label:
-        candidate.era.from_date === null
-          ? `Before ${firstBoundary(eras) ?? 'the first act'}`
-          : `Since ${shortDate(candidate.era.from_date)}`,
-      emptyReason:
-        candidate.upwind === null && candidate.downwind === null
-          ? 'no Tack Pair in this Era'
-          : undefined,
-    })),
+    ...eras.map((candidate) => eraChip(candidate, eras, null)),
+    ...compassEras
+      .filter((candidate) => !ownBoundaries.has(candidate.era.from_date))
+      .map((candidate) => eraChip(candidate, compassEras, 'HDG')),
     ...[...season.races].reverse().map((measured) => ({
       id: measured.race_id,
       // The pair count on the chip, because how much a Race rests on is the first thing to know
@@ -257,6 +275,30 @@ function dialPairs(season: EraAwaAsymmetry): DialPair[] {
       race,
     }))
   )
+}
+
+/**
+ * One Era as a chip.
+ *
+ * A borrowed Era names the channel whose act opened it, for the reason the rail's borrowed rules
+ * do: an unlabelled "Since 4 Jul" beside `AWA`'s own boundaries would read as a masthead act.
+ */
+function eraChip(
+  shown: EraAwaAsymmetry,
+  withinList: readonly EraAwaAsymmetry[],
+  borrowedFrom: 'HDG' | null
+): ChipOption {
+  const suffix = borrowedFrom === null ? '' : ` · ${borrowedFrom}`
+
+  return {
+    id: shown.era.key,
+    label:
+      shown.era.from_date === null
+        ? `Before ${firstBoundary(withinList) ?? 'the first act'}${suffix}`
+        : `Since ${shortDate(shown.era.from_date)}${suffix}`,
+    emptyReason:
+      shown.upwind === null && shown.downwind === null ? 'no Tack Pair in this Era' : undefined,
+  }
 }
 
 /** The first recorded act across these Eras, for the chip that names the stretch before it. */

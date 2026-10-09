@@ -106,13 +106,26 @@ export interface InstrumentTuningSeason {
      */
     season: EraAwaAsymmetry
     /**
-     * The same Races cut on the **`HDG`** Eras, oldest first.
+     * The same Races cut on **`AWA`'s own** Eras, oldest first.
      *
-     * `HDG`'s and not `AWA`'s, deliberately. The check these exist for is LAY-145 §2.6's: whether
-     * the Asymmetry moved across an autocompensation that moved the compass about ten degrees. On
-     * this archive it went −3.8° to −5.5°, which does not look compass-driven.
+     * Its own channel, because that is the partition that makes the figure mean one thing. An
+     * `AWA` **Programmed Offset** is applied by the display before a Recording is written, so the
+     * Asymmetry is what is left after it — and a vane offset moves the two tacks' held magnitudes
+     * in *opposite* directions, which changes the measured Asymmetry by the whole of it. A figure
+     * spanning the day that offset was re-typed is two instrument configurations averaged together,
+     * which is the one thing a Calibration Era exists to prevent.
      */
     eras: EraAwaAsymmetry[]
+    /**
+     * The same Races cut on the **`HDG`** Eras, oldest first.
+     *
+     * ADR 0034 asked for these, for LAY-145 §2.6's check: whether the Asymmetry moved across an
+     * autocompensation that moved the compass about ten degrees — on this archive it went −3.8° to
+     * −5.5°, which does not look compass-driven. They are *as well as* `eras` and not instead of
+     * them; reading that sentence as a replacement is what hid the owner's own `AWA` recalibration
+     * from the chart it governs.
+     */
+    compass_eras: EraAwaAsymmetry[]
   }
   /**
    * The paddlewheel, per `STW` Era, oldest first — fitted both ways.
@@ -168,7 +181,8 @@ export function instrumentTuningSeason<Row extends TuningRow>(
       // `calibrationEras([], 'AWA')` is one unbounded Era by construction, which is exactly "every
       // Race, whatever was done to the boat" — not a boundary invented to hold the season.
       season: eraAwaAsymmetry(calibrationEras([], 'AWA')[0], asymmetry),
-      eras: awaAsymmetryByEra(hdgEras, asymmetry),
+      eras: awaAsymmetryByEra(calibrationEras(log, 'AWA'), asymmetry),
+      compass_eras: awaAsymmetryByEra(hdgEras, asymmetry),
     },
     speed: {
       orthogonal: paddlewheelDivergence(speedRaces(races, read), log, { method: 'orthogonal' }),
