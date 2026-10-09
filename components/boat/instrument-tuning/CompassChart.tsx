@@ -34,6 +34,7 @@ import type { CalibrationLogEntry, EraHeadingBin, EraHeadingOffset, HeadingBin }
 
 import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
+  Absent,
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
@@ -42,11 +43,14 @@ import {
   TUNING_CHART_HEIGHT,
   TUNING_CHART_WIDTH,
   TUNING_VIEW_BOX,
-  Caption,
   Chips,
   Coverage,
   DetailRow,
+  Figure,
+  Figures,
   HatchDef,
+  Note,
+  Notes,
   Readout,
   Segmented,
   arrowStep,
@@ -152,9 +156,6 @@ export default function CompassChart({
             onChange={setView}
           />
         </div>
-        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>
-          same data · tap a heading
-        </span>
       </div>
 
       <Chips
@@ -185,24 +186,32 @@ export default function CompassChart({
         <Coverage statement={headingCoverage(era)} />
       </div>
 
-      <Caption>
-        The error at each {BIN_SIZE_DEG}° of heading — the resolution the fluxgate builds its own
-        deviation table at.{' '}
-        {view === 'strip'
-          ? 'Above the line reads high.'
-          : 'Outside the ring reads high, inside reads low.'}{' '}
-        Hollow: the heading rests on one Race. Hatched: no Race held {MIN_ROWS_PER_BIN} rows there,
-        and nothing is drawn across it.
-        {overlay === PREVIOUS_ERA && previous !== null && ' Dashed: the Era before this one.'}
-        {overlaidRace !== null &&
-          ` Amber: ${raceLabel(labels, overlaidRace.race_id, overlaidRace.window_start)} alone, ${Math.round(
-            overlaidRace.heading_coverage * 100
-          )}% of the rose.`}
-        {excludedRace !== null &&
-          ` ${raceLabel(labels, excludedRace.race_id, excludedRace.window_start)} produced no curve — only ${rowsPhrase(
-            excludedRace.row_count
-          )} this check could read.`}
-      </Caption>
+      {excludedRace !== null && (
+        <Absent>
+          {raceLabel(labels, excludedRace.race_id, excludedRace.window_start)} produced no curve —
+          only {rowsPhrase(excludedRace.row_count)} this check could read.
+        </Absent>
+      )}
+
+      <Notes>
+        <Note label="How to read it">
+          The error at each {BIN_SIZE_DEG}° of heading — the resolution the fluxgate builds its own
+          deviation table at.{' '}
+          {view === 'strip'
+            ? 'Above the line reads high.'
+            : 'Outside the ring reads high, inside reads low.'}{' '}
+          Hollow: the heading rests on one Race. Hatched: no Race held {MIN_ROWS_PER_BIN} rows
+          there, and nothing is drawn across it.
+          {overlay === PREVIOUS_ERA && previous !== null && ' Dashed: the Era before this one.'}
+          {overlaidRace !== null &&
+            ` Amber: ${raceLabel(labels, overlaidRace.race_id, overlaidRace.window_start)} alone, ${Math.round(
+              overlaidRace.heading_coverage * 100
+            )}% of the rose.`}
+        </Note>
+        <Note label="Caveat" tone="caveat">
+          {era.caveat}
+        </Note>
+      </Notes>
     </div>
   )
 }
@@ -211,6 +220,8 @@ export default function CompassChart({
 
 function Summary({ era }: { era: EraHeadingOffset }): ReactElement {
   const { swing } = era
+  /** Headings the curve has no reading at, which the coverage word's own share does not say. */
+  const blank = era.heading_bin_count - era.headings_covered
 
   if (swing === null) {
     return (
@@ -224,27 +235,24 @@ function Summary({ era }: { era: EraHeadingOffset }): ReactElement {
   return (
     <>
       <Big>
-        {signedDegrees(swing.highest.mean_error_deg)} heading{' '}
-        {compassPoint(swing.highest.bin_center_deg)} ·{' '}
-        {signedDegrees(swing.lowest.mean_error_deg)} heading{' '}
-        {compassPoint(swing.lowest.bin_center_deg)}
+        {signedDegrees(swing.highest.mean_error_deg)} {compassPoint(swing.highest.bin_center_deg)} ·{' '}
+        {signedDegrees(swing.lowest.mean_error_deg)} {compassPoint(swing.lowest.bin_center_deg)}
       </Big>
-      <div>
-        The error swings {swing.swing_deg.toFixed(0)}° with heading, so any single figure for this
-        compass is an average of a curve
-        {era.mean_of_races_deg === null
-          ? ''
-          : ` — ${signedDegrees(era.mean_of_races_deg)} weighting every Race equally`}
-        {era.mean_of_bins_deg === null
-          ? ''
-          : `, ${signedDegrees(era.mean_of_bins_deg)} weighting every heading equally`}
-        .{' '}
-        {/* What the curve could not be read at all. The coverage line beneath states how many
-            headings rest on two or more Races; this states how many rest on none, which is a
-            different fact and the one that says how much of the rose is simply blank. */}
-        {era.heading_bin_count - era.headings_covered > 0 &&
-          `${era.heading_bin_count - era.headings_covered} of ${era.heading_bin_count} headings were never sailed long enough to read.`}
-      </div>
+      <div>Swings {swing.swing_deg.toFixed(0)}° with heading — any one figure averages this curve.</div>
+      {/*
+        ADR 0035 demotes the mean to a secondary line that must state its own weighting. Two
+        labelled figures rather than a sentence naming both: the weighting is the whole reason
+        there are two, and a clause is where that got lost.
+      */}
+      <Figures>
+        {era.mean_of_races_deg !== null && (
+          <Figure label="mean · Races equal" value={signedDegrees(era.mean_of_races_deg)} />
+        )}
+        {era.mean_of_bins_deg !== null && (
+          <Figure label="mean · headings equal" value={signedDegrees(era.mean_of_bins_deg)} />
+        )}
+        {blank > 0 && <Figure label="headings unread" value={`${blank} of ${era.heading_bin_count}`} />}
+      </Figures>
     </>
   )
 }

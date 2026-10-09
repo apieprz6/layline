@@ -174,18 +174,21 @@ describe('what the chart leads with', () => {
     const readout = screen.getByTestId('chart-readout')
     // The compass error is a curve. A `+3.1°` headline would hide a 20° swing. 0°–10° is the mean
     // of the two Races that reached it (12 and 8), which puts the extreme at 10°–20°.
-    expect(readout).toHaveTextContent('+11.0° heading NNE')
-    expect(readout).toHaveTextContent('−9.0° heading WSW')
-    expect(readout).toHaveTextContent('The error swings 20° with heading')
+    expect(readout).toHaveTextContent('+11.0° NNE · −9.0° WSW')
+    expect(readout).toHaveTextContent('Swings 20° with heading')
   })
 
-  it('says a single figure for this compass is an average of a curve, and states each weighting', () => {
+  it('states each mean beside its own weighting, never one of them as "the" mean', () => {
     renderChart()
 
     const readout = screen.getByTestId('chart-readout')
-    expect(readout).toHaveTextContent('is an average of a curve')
-    expect(readout).toHaveTextContent('+3.1° weighting every Race equally')
-    expect(readout).toHaveTextContent('+3.6° weighting every heading equally')
+    expect(readout).toHaveTextContent('any one figure averages this curve')
+    // Two correct means of one figure (ADR 0032), each labelled by what it weights equally — a
+    // mean whose weighting is in a clause somewhere else is a mean nobody can use.
+    expect(readout).toHaveTextContent('+3.1°mean · Races equal')
+    expect(readout).toHaveTextContent('+3.6°mean · headings equal')
+    // And how much of the rose the curve has no reading at, which the coverage share does not say.
+    expect(readout).toHaveTextContent('33 of 36headings unread')
   })
 
   it('states coverage as a word with its reason, never as a verdict on the compass', () => {

@@ -27,11 +27,7 @@
 
 import { useState, type KeyboardEvent, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
-import {
-  DOWNWIND_MIN_AWA_DEG,
-  MAX_PAIR_GAP_SECONDS,
-  UPWIND_MAX_AWA_DEG,
-} from '@/services/analysis/awa-asymmetry'
+import { DOWNWIND_MIN_AWA_DEG, UPWIND_MAX_AWA_DEG } from '@/services/analysis/awa-asymmetry'
 import { ASYMMETRY_THIN_PAIRS, asymmetryCoverage } from '@/services/analysis/coverage-verdict'
 import type {
   AsymmetryFigure,
@@ -48,9 +44,10 @@ import {
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
-  Caption,
   Chips,
   Coverage,
+  Note,
+  Notes,
   Readout,
   TUNING_CHART_WIDTH,
   TUNING_CHART_HEIGHT,
@@ -213,9 +210,7 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
         ) : excluded !== null ? (
           <div>
             {raceLabel(labels, excluded.race_id, excluded.window_start)} paired no tacks —{' '}
-            {reasonWords(excluded)}. A pair needs a steady starboard segment and a steady port
-            segment at the same point of sail, no more than {MAX_PAIR_GAP_SECONDS / 60} minutes
-            apart.
+            {reasonWords(excluded)}.
           </div>
         ) : (
           <Verdict figures={figures} raceCount={raceCount} />
@@ -234,15 +229,20 @@ export default function TackDial({ season, eras, log, labels }: TackDialProps): 
         open={level !== SEASON}
       />
 
-      <Caption>
-        Dots are the apparent wind angle each tack held — starboard right, port left. The dashed ray
-        is port&rsquo;s average folded onto the starboard side: where it misses starboard&rsquo;s,
-        the wedge is how much wider one tack reads. Reaching ({UPWIND_MAX_AWA_DEG}°–
-        {DOWNWIND_MIN_AWA_DEG}°) is discarded, because a held angle there says too little about
-        where the wind is for two tacks to be compared.
-        {level !== SEASON && ' Grey rays: the whole season, for comparison.'} Every Race weighs the
-        same in an average, whatever its length.
-      </Caption>
+      <Notes>
+        <Note label="How to read it">
+          Dots are the apparent wind angle each tack held — starboard right, port left. The dashed
+          ray is port&rsquo;s average folded onto the starboard side: where it misses
+          starboard&rsquo;s, the wedge is how much wider one tack reads. Reaching (
+          {UPWIND_MAX_AWA_DEG}°–{DOWNWIND_MIN_AWA_DEG}°) is discarded, because a held angle there
+          says too little about where the wind is for two tacks to be compared.
+          {level !== SEASON && ' Grey rays: the whole season, for comparison.'} Every Race weighs
+          the same in an average, whatever its length.
+        </Note>
+        <Note label="Caveat" tone="caveat">
+          {season.caveat}
+        </Note>
+      </Notes>
     </div>
   )
 }

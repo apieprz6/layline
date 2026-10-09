@@ -32,7 +32,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
 
     const readout = page.getByTestId('compass-chart').getByTestId('chart-readout')
     // With nothing picked, the readout leads with the curve's extremes rather than a mean.
-    await expect(readout).toContainText('The error swings')
+    await expect(readout).toContainText('Swings')
 
     // The first 10° bin. Measured off the rendered box rather than hard-coded, because the SVG is
     // fixed-viewBox and fluid-width: `LINEAR.axisLeft` is 28 units of gutter and a bin is
@@ -142,9 +142,9 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
 
     await dial.getByTestId('tack-pair-dot').first().click()
 
-    // A pair, not a season: its two held angles, and which tack read wider.
-    await expect(readout).toContainText('wider')
-    await expect(readout).toContainText('starboard')
+    // A pair, not a season: its two held angles, and which tack read wider — by a real number.
+    // "0.0° wider" would satisfy a looser assertion, and did, until the fixture was fixed.
+    await expect(readout).toContainText('starboard 40.0° · port 46.0° · port 6.0° wider')
   })
 
   test('marks the Calibration Log’s dates as dashed rules on every chart', async ({ page }) => {
@@ -172,6 +172,54 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     ).toHaveAttribute('stroke', 'var(--text-muted)')
     // The paddlewheel's act is not on it: no other channel's history bears on the masthead either.
     await expect(awa).not.toContainText(day(FIXTURE_STW_ACT_DATE))
+  })
+
+  test('never blows a chart up to fill a wide window', async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1200 })
+    await gotoHydrated(page, ROUTE)
+
+    // The bug this is here for: with nothing capping the column, `width: 100%` drew each chart
+    // 1,216px across on a 1280px desktop — a 3.6x magnification of a box designed at 390px, with
+    // 32-pixel axis labels. An ultrawide window made it worse, and ran the page three screens long.
+    for (const id of ['compass-strip', 'tack-dial-svg', 'speed-scatter']) {
+      const chart = page.getByTestId(id)
+      await chart.scrollIntoViewIfNeeded()
+      const box = await chart.boundingBox()
+      expect(box, `${id} has no box`).not.toBeNull()
+      expect(box!.width, `${id} is magnified`).toBeLessThanOrEqual(460)
+    }
+
+    // And the three sit side by side rather than stacked, so the page is one screen rather than
+    // three. Measured on the cards and not on the charts inside them: the Tack Dial has no view
+    // toggle above it, so its own chart legitimately starts higher than the other two.
+    const cards = page.locator('section[aria-labelledby]')
+    await expect(cards).toHaveCount(3)
+
+    const tops = await cards.evaluateAll((nodes) =>
+      nodes.map((node) => Math.round(node.getBoundingClientRect().top))
+    )
+    expect(new Set(tops).size).toBe(1)
+  })
+
+  test('folds the prose away, and keeps the figures and the caveat one tap from the chart', async ({
+    page,
+  }) => {
+    await gotoHydrated(page, ROUTE)
+
+    const compass = page.getByTestId('compass-chart')
+
+    // Closed by default: a legend is read once and a caveat when it is doubted, and neither is the
+    // answer the screen exists to give.
+    const legend = compass.getByText('The error at each 10° of heading', { exact: false })
+    await expect(legend).toBeHidden()
+
+    await compass.getByText('How to read it').click()
+    await expect(legend).toBeVisible()
+
+    // The caveat travels with the figure, which on a 390px screen has to mean one tap and not
+    // three lines of italic prose under every chart.
+    await compass.getByText('Caveat').click()
+    await expect(compass.getByText('CTW = HDG + leeway', { exact: false })).toBeVisible()
   })
 
   test('fits every chart across the screen, without a sideways scroll', async ({ page }) => {

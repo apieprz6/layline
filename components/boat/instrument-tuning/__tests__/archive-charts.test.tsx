@@ -102,9 +102,8 @@ describeArchive('the compass chart over the owner’s season', () => {
 
     // ADR 0034's figures, reaching the readout: +12.7° heading NNE against −8.9° WSW, a 22° swing.
     const readout = screen.getByTestId('chart-readout')
-    expect(readout).toHaveTextContent('+12.7° heading NNE')
-    expect(readout).toHaveTextContent('−8.9° heading WSW')
-    expect(readout).toHaveTextContent('The error swings 22° with heading')
+    expect(readout).toHaveTextContent('+12.7° NNE · −8.9° WSW')
+    expect(readout).toHaveTextContent('Swings 22° with heading')
   })
 
   it('hatches the three headings the Era never reached, and draws no bar across them', () => {

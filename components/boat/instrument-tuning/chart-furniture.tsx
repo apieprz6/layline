@@ -228,8 +228,15 @@ export function Chips({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(option.id)}
+            // A Race is named by whatever the sailor called it, and "Verve Cup Regatta Race 3"
+            // is a chip three times the width of the rail. Truncated with the whole of it on
+            // hover, rather than a rail that scrolls for a page.
+            title={option.label}
             style={{
               flexShrink: 0,
+              maxWidth: 170,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
               border: `1px ${option.emptyReason ? 'dashed' : 'solid'} var(--surface-border)`,
               borderRadius: 'var(--radius-full)',
               padding: '5px 10px',
@@ -297,19 +304,72 @@ export function Big({ children, tone }: { children: ReactNode; tone?: string }):
   )
 }
 
-/** What the chart is, and how to read it. Under the chart, above the caveat the sheet carries. */
-export function Caption({ children }: { children: ReactNode }): ReactElement {
+/**
+ * The row of notes under a chart: what its marks mean, and what limits its figure.
+ *
+ * Folded away by default, and that is the point. Each chart used to print a five-line legend and a
+ * three-line caveat beneath it, times three charts — so the screen was mostly prose, and the
+ * figures a sailor opened it for were a minority of what was on it. A legend is read once and a
+ * caveat is read when it is doubted; neither is the answer, and neither needs to be in the way of
+ * the answer every time.
+ *
+ * Folded away, **not dropped**: every word is still in the markup, one tap from the chart it
+ * belongs to, which is what "the caveat travels with the figure" has to mean once the figure is on
+ * a 390px screen. What stays printed, always, is the figure, the readout and the coverage word
+ * with its reason.
+ */
+export function Notes({ children }: { children: ReactNode }): ReactElement {
   return (
-    <p
+    <div
       style={{
-        margin: `${spacing(2)} 0 0`,
-        fontSize: 10.5,
-        lineHeight: 1.55,
-        color: 'var(--text-secondary)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: spacing(3),
+        marginTop: spacing(2),
+        paddingTop: spacing(2),
+        borderTop: '1px solid var(--surface-divider)',
       }}
     >
       {children}
-    </p>
+    </div>
+  )
+}
+
+/** One folded note. `label` is what the sailor sees until they want the rest. */
+export function Note({
+  label,
+  tone,
+  children,
+}: {
+  label: string
+  /** A caveat is marked, so it does not read as a second legend. */
+  tone?: 'caveat'
+  children: ReactNode
+}): ReactElement {
+  return (
+    <details style={{ flex: '1 1 auto', minWidth: 0 }}>
+      <summary
+        style={{
+          fontSize: 10,
+          cursor: 'pointer',
+          color: tone === 'caveat' ? 'var(--state-warning)' : 'var(--text-accent)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {tone === 'caveat' ? '⚠ ' : 'ⓘ '}
+        {label}
+      </summary>
+      <p
+        style={{
+          margin: `${spacing(1)} 0 0`,
+          fontSize: 10.5,
+          lineHeight: 1.55,
+          color: 'var(--text-secondary)',
+        }}
+      >
+        {children}
+      </p>
+    </details>
   )
 }
 
@@ -383,6 +443,55 @@ export function HatchDef({ id }: { id: string }): ReactElement {
   )
 }
 
+/**
+ * A small figure with its label under it, for a secondary number in a readout.
+ *
+ * The label is as load-bearing as the value and sits with it, which is the whole point: ADR 0035
+ * demotes the compass's era mean to "a stated-weighting secondary line", and a mean whose weighting
+ * is in a clause somewhere else is a mean nobody can use. A row of these also survives a narrow
+ * column, where the sentence naming two of them wrapped to four lines.
+ */
+export function Figure({ label, value }: { label: string; value: string }): ReactElement {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-primary)' }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>{label}</div>
+    </div>
+  )
+}
+
+export function Figures({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div style={{ display: 'flex', gap: spacing(4), flexWrap: 'wrap', marginTop: spacing(2) }}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * Something the chart has nothing to draw for, said on the chart's own face.
+ *
+ * Not folded into a note, unlike a legend or a caveat. An absence is a *finding* — ADR 0012's rule
+ * that absence is a legitimate answer only means anything if the answer is where the figure would
+ * have been, rather than behind a disclosure the sailor has no reason to open.
+ */
+export function Absent({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <p
+      style={{
+        margin: `${spacing(2)} 0 0`,
+        fontSize: 10.5,
+        lineHeight: 1.5,
+        color: 'var(--state-warning)',
+      }}
+    >
+      {children}
+    </p>
+  )
+}
+
 /** A row of the readout: a label on the left, a mono figure hard right. */
 export function DetailRow({
   name,
@@ -417,10 +526,25 @@ const SEGMENTED_STYLE: CSSProperties = {
   overflowX: 'auto',
 }
 
+/**
+ * The widest a chart is ever drawn, whatever the window does.
+ *
+ * `width: 100%` in a column with no measure is what let these charts reach 1,216 pixels across on a
+ * desktop — a 3.6× magnification of a box designed at 390px, with 32-pixel axis labels and a page
+ * three screens long. A chart is a thing to be read at a glance, not a thing to be filled to the
+ * window: past about this width the marks stop being denser and only get bigger.
+ *
+ * The column caps itself too (`InstrumentTuningCharts` lays the three out side by side on a wide
+ * screen), so this is the belt rather than the braces — but it is the one that holds wherever a
+ * later screen puts a chart.
+ */
+export const CHART_MAX_WIDTH = 460
+
 /** Every interactive chart's own frame: focusable for the arrow keys, tappable for everything. */
 export const CHART_SVG_STYLE: CSSProperties = {
   display: 'block',
   width: '100%',
+  maxWidth: CHART_MAX_WIDTH,
   cursor: 'pointer',
   touchAction: 'manipulation',
 }

@@ -43,20 +43,24 @@ import type { CalibrationLogEntry } from '@/types'
 
 import CalibrationRail, { type RailRace } from './CalibrationRail'
 import {
+  Absent,
   Big,
   CHART_FONT,
   CHART_SVG_STYLE,
+  Chips,
+  Coverage,
+  Figure,
+  Figures,
+  HatchDef,
   LINEAR,
   LINEAR_PLOT_WIDTH,
+  Note,
+  Notes,
+  Readout,
+  Segmented,
   TUNING_CHART_HEIGHT,
   TUNING_CHART_WIDTH,
   TUNING_VIEW_BOX,
-  Caption,
-  Chips,
-  Coverage,
-  HatchDef,
-  Readout,
-  Segmented,
   arrowStep,
   svgPoint,
   type ChipOption,
@@ -76,6 +80,20 @@ const REASON_WORDS: Record<NoFitReason, string> = {
   'narrow-spread': `under ${MIN_SOG_SPREAD_KNOTS} kt of SOG between its slowest row and its fastest`,
   flat: 'the two channels never varied together, so no line through them is defined',
 }
+
+/**
+ * The `STW` caveat — the one of the three the services do not carry.
+ *
+ * The other two travel with their figures because each is about how the figure was *derived*: a
+ * compass read through `CTW`, an apparent wind recomputed by qtVlm. This one is about the venue, so
+ * no service is in a position to assert it — whether current is negligible on the COLYC race circle
+ * is a fact about Lake Michigan that the arithmetic cannot know. It lives with the chart that has
+ * to state it.
+ */
+const PADDLEWHEEL_CAVEAT =
+  'Assumes current is negligible on this venue, since a current would move SOG and leave STW ' +
+  'alone and read here as a paddlewheel error. The 1:1 line is the paddlewheel as currently ' +
+  'configured; no uncorrected reading is reconstructed.'
 
 const METHOD_WORDS: Record<OfferedFitMethod, string> = {
   orthogonal:
@@ -176,7 +194,6 @@ export default function SpeedCheckChart({
             onChange={setView}
           />
         </div>
-        <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>same rows · tap a speed</span>
       </div>
 
       <Chips
@@ -196,7 +213,7 @@ export default function SpeedCheckChart({
       {view === 'scatter' ? <Scatter {...drawn} /> : <Gap {...drawn} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing(2), marginTop: 4 }}>
-        <span style={{ fontSize: 9.5, color: 'var(--text-muted)', flexShrink: 0 }}>line fitted</span>
+        <span style={{ fontSize: 9.5, color: 'var(--text-muted)', flexShrink: 0 }}>fit</span>
         <div style={{ width: 230 }}>
           <Segmented
             label="How the line is fitted"
@@ -222,15 +239,28 @@ export default function SpeedCheckChart({
         <Coverage statement={speedCoverage(era)} />
       </div>
 
-      <Caption>
-        Dashed: the paddlewheel as configured — GPS speed equals paddlewheel speed. Blue: this
-        Era’s fit, over the speeds it was fitted on and no wider.
-        {race !== null &&
-          (race.fit.fitted
-            ? ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)}’s own line, against the Era’s.`
-            : ` ${raceLabel(labels, race.race_id, race.sailed_at)} has no line of its own — ${REASON_WORDS[race.fit.reason]}; its rows still count in the season.`)}{' '}
-        {METHOD_WORDS[method]} <BlankStw era={era} />
-      </Caption>
+      {race !== null && !race.fit.fitted && (
+        <Absent>
+          {raceLabel(labels, race.race_id, race.sailed_at)} has no line of its own —{' '}
+          {REASON_WORDS[race.fit.reason]}; its rows still count in the season.
+        </Absent>
+      )}
+
+      <Notes>
+        <Note label="How to read it">
+          Dashed: the paddlewheel as configured — GPS speed equals paddlewheel speed. Blue: this
+          Era’s fit, over the speeds it was fitted on and no wider.
+          {race?.fit.fitted === true &&
+            ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)}’s own line, against the Era’s.`}{' '}
+          {METHOD_WORDS[method]}
+        </Note>
+        <Note label="Coverage">
+          <BlankStw era={era} />
+        </Note>
+        <Note label="Caveat" tone="caveat">
+          {PADDLEWHEEL_CAVEAT}
+        </Note>
+      </Notes>
     </div>
   )
 }
@@ -338,14 +368,24 @@ function Summary({
         {gap === null ? '—' : signedKnots(gap)} · R² {line.r_squared.toFixed(2)}
       </Big>
       <div>
-        {name}: GPS speed averages{' '}
+        {name}: GPS speed reads{' '}
         {gap === null
-          ? 'no measurable gap'
+          ? 'no measurable gap from'
           : `${Math.abs(gap).toFixed(2)} kt ${gap >= 0 ? 'above' : 'below'}`}{' '}
-        the paddlewheel over {rowsPhrase(line.points)}. The line sits{' '}
-        {atFour === null ? 'off the chart' : signedKnots(atFour)} from 1:1 at 4 kt and{' '}
-        {atEight === null ? 'off the chart' : signedKnots(atEight)} at 8 kt.
+        the paddlewheel over {rowsPhrase(line.points)}.
       </div>
+      {/*
+        The line's gap at two speeds, which is the `STW` card's own headline (ADR 0035) and the only
+        reading of the drawn line that may be printed — never a slope. Two labelled figures rather
+        than a clause naming both, so the speeds they belong to cannot drift from them.
+      */}
+      <Figures>
+        <Figure
+          label="line vs 1:1 at 4 kt"
+          value={atFour === null ? 'off the chart' : signedKnots(atFour)}
+        />
+        <Figure label="at 8 kt" value={atEight === null ? 'off the chart' : signedKnots(atEight)} />
+      </Figures>
     </>
   )
 }
@@ -376,9 +416,7 @@ function BandDetail({
             race === null
             ? 'No Race in this Era sailed this speed.'
             : 'This Race never sailed this speed.'
-          : `GPS speed sits ${Math.abs(here.mean_gap_knots).toFixed(2)} kt ${
-              here.mean_gap_knots >= 0 ? 'above' : 'below'
-            } the paddlewheel here, over ${rowsPhrase(here.rows)}${
+          : `Over ${rowsPhrase(here.rows)}${
               race === null ? ` from ${racesPhrase(here.races)}, each weighted equally` : ''
             }.`}
       </div>

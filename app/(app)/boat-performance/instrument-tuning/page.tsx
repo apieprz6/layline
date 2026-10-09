@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react'
 import EmptyState from '@/components/common/EmptyState'
-import InstrumentTuningCharts from '@/components/boat/instrument-tuning/InstrumentTuningCharts'
+import InstrumentTuningCharts, {
+  SCREEN_MAX_WIDTH,
+} from '@/components/boat/instrument-tuning/InstrumentTuningCharts'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { spacing } from '@/lib/utils/design'
@@ -33,38 +35,45 @@ export default async function InstrumentTuningPage(): Promise<ReactElement> {
   const read = await readInstrumentTuning()
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--page-bg)', padding: spacing(4) }}>
-      <h1
-        style={{
-          margin: `0 0 ${spacing(4)}`,
-          fontFamily: 'var(--font-display)',
-          fontSize: 20,
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          color: 'var(--text-primary)',
-        }}
-      >
-        Instrument tuning
-      </h1>
+    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
+      {/*
+        A measure, centred. Without one, an ultrawide window stretched three charts to a third of
+        its width each and the page ran three screens long; `SCREEN_MAX_WIDTH` is the width at which
+        all three are fully drawn, so past it the window gets margins rather than magnification.
+      */}
+      <div style={{ padding: spacing(4), maxWidth: SCREEN_MAX_WIDTH, margin: '0 auto' }}>
+        <h1
+          style={{
+            margin: `0 0 ${spacing(4)}`,
+            fontFamily: 'var(--font-display)',
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: 'var(--text-primary)',
+          }}
+        >
+          Instrument tuning
+        </h1>
 
-      {read.ok ? (
-        <InstrumentTuningCharts season={read.season} log={read.log} races={read.races} />
-      ) : read.reason === 'no-races' ? (
-        <EmptyState
-          mark="⛵"
-          title="No races to measure yet"
-          detail="These checks read a season of recordings. They appear once a race has been uploaded."
-        />
-      ) : (
-        // Said rather than drawn around. A season computed over the Races that happened to load
-        // would present as a complete season, and its coverage verdict would be a claim about
-        // evidence that is not the evidence it had.
-        <EmptyState
-          mark="⚠"
-          title="The archive could not be read"
-          detail="Nothing is shown rather than a season measured over part of it. Try again shortly."
-        />
-      )}
+        {read.ok ? (
+          <InstrumentTuningCharts season={read.season} log={read.log} races={read.races} />
+        ) : read.reason === 'no-races' ? (
+          <EmptyState
+            mark="⛵"
+            title="No races to measure yet"
+            detail="These checks read a season of recordings. They appear once a race has been uploaded."
+          />
+        ) : (
+          // Said rather than drawn around. A season computed over the Races that happened to load
+          // would present as a complete season, and its coverage verdict would be a claim about
+          // evidence that is not the evidence it had.
+          <EmptyState
+            mark="⚠"
+            title="The archive could not be read"
+            detail="Nothing is shown rather than a season measured over part of it. Try again shortly."
+          />
+        )}
+      </div>
     </div>
   )
 }

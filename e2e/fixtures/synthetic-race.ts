@@ -61,16 +61,28 @@ interface Leg {
   twa: number
 }
 
+/**
+ * `awa` is unsigned, as a Recording writes it, so a **port** angle is `360 − the angle held**.
+ *
+ * Worth spelling out, because getting it wrong is silent: the first version of this fixture paired
+ * a starboard 40° against `320`, which is exactly −40°, so every pair came out perfectly symmetric
+ * and the Tack Dial drew `Δ0.0°` wedges while the comments here claimed otherwise. The browser
+ * suite passed throughout — "0.0° wider" still contains the word "wider".
+ *
+ * So the two tacks hold *different* angles, and they lean opposite ways upwind and downwind, which
+ * is both the archive's own finding and the one case the dial exists to make visible.
+ */
 const LEGS: Leg[] = [
-  // A starboard beat, then a port one: one upwind Tack Pair, port holding 10° wider.
+  // A starboard beat at 40°, then a port one at 46°: one upwind pair, port holding 6° wider.
   { ctw: 10, errorDeg: 12, awa: 40, twa: 40 },
-  { ctw: 290, errorDeg: -9, awa: 320, twa: -40 },
-  // Bear away, then gybe: one downwind pair, starboard holding 20° wider — the opposite lean.
-  { ctw: 200, errorDeg: -3, awa: 200, twa: -160 },
-  { ctw: 120, errorDeg: 2, awa: 160, twa: 160 },
-  // Two more beats, for two more heading bins.
+  { ctw: 290, errorDeg: -9, awa: 360 - 46, twa: -40 },
+  // Bear away to a port run at 160°, then gybe onto starboard at 170°: one downwind pair, with
+  // starboard 10° wider — the opposite lean from upwind.
+  { ctw: 200, errorDeg: -3, awa: 360 - 160, twa: -160 },
+  { ctw: 120, errorDeg: 2, awa: 170, twa: 160 },
+  // Two more beats, for two more heading bins and a second upwind pair.
   { ctw: 20, errorDeg: 11, awa: 42, twa: 42 },
-  { ctw: 300, errorDeg: -8, awa: 318, twa: -42 },
+  { ctw: 300, errorDeg: -8, awa: 360 - 48, twa: -42 },
 ]
 
 /** One row of the fixture Transcription, by the `recording_rows` column names. */

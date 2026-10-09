@@ -152,7 +152,7 @@ describe('a Log with nothing in it', () => {
     // and a boundary is never inferred from a step in the data.
     expect(screen.queryAllByTestId('calibration-mark')).toHaveLength(0)
     expect(screen.getByTestId('calibration-rail-STW')).toHaveTextContent(
-      'Nothing in the Calibration Log touches STW, so this is one Calibration Era over the whole archive. A boundary is never inferred from a step in the data.'
+      'Nothing in the Calibration Log touches STW — one Calibration Era over the whole archive, since a boundary is never inferred from a step in the data.'
     )
   })
 })
@@ -176,9 +176,26 @@ describe('the Races on the rail', () => {
 
   it('names a Race by its label where it has one, and by its date where it does not', () => {
     const { container } = renderRail('HDG')
-    const titles = [...container.querySelectorAll('title')].map((title) => title.textContent)
+    // The rules carry a `<title>` of their own now, so this reads the Races' circles rather than
+    // every title on the rail.
+    const titles = [...container.querySelectorAll('circle > title')].map(
+      (title) => title.textContent
+    )
 
     expect(titles[0]).toBe('20 May · Beer-can')
     expect(titles[1]).toBe('24 Jun')
+  })
+
+  it('explains each rule on the rule itself, rather than in a paragraph underneath', () => {
+    renderRail('AWA')
+    const [own, borrowed] = screen.getAllByTestId('calibration-mark')
+
+    expect(own.querySelector('title')?.textContent).toBe(
+      '10 May: other. Races to the left were sailed before it.'
+    )
+    // A borrowed rule says whose act it was and why it is on this chart at all.
+    expect(borrowed.querySelector('title')?.textContent).toBe(
+      '4 Jul: an act on HDG, which could have moved this figure. Races to the left were sailed before it.'
+    )
   })
 })

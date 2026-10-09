@@ -143,12 +143,12 @@ describe('the fit-method toggle', () => {
 
     // The two fits read the same rows and disagree about the line through them: orthogonal sits
     // +0.24 kt from 1:1 at 4 kt, SOG-on-STW +0.30 kt — and by 8 kt the second has crossed over.
-    expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.24 kt from 1:1 at 4 kt')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.24 ktline vs 1:1 at 4 kt')
 
     await userEvent.click(screen.getByRole('radio', { name: 'SOG on STW' }))
 
-    expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.30 kt from 1:1 at 4 kt')
-    expect(screen.getByTestId('chart-readout')).toHaveTextContent('−0.10 kt at 8 kt')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.30 ktline vs 1:1 at 4 kt')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('−0.10 ktat 8 kt')
     expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
       'noise in STW flattens this line'
     )
@@ -165,7 +165,7 @@ describe('what a tapped band says', () => {
 
     const readout = screen.getByTestId('chart-readout')
     expect(readout).toHaveTextContent('2–3 kt · +0.45 kt')
-    expect(readout).toHaveTextContent('over 120 rows from 2 Races, each weighted equally')
+    expect(readout).toHaveTextContent('Over 120 rows from 2 Races, each weighted equally')
     expect(readout).toHaveTextContent('The straight line says +0.29 kt here')
     expect(readout).toHaveTextContent(
       'the rows disagree with it by more than 0.1 kt, which is the U a straight line cannot follow'
@@ -294,9 +294,9 @@ describe('the line’s coefficients', () => {
   it('gives the line’s gap from 1:1 at 4 kt and at 8 kt, which is a reading of the drawn line', () => {
     renderChart()
 
-    expect(screen.getByTestId('chart-readout')).toHaveTextContent(
-      'The line sits +0.24 kt from 1:1 at 4 kt and +0.13 kt at 8 kt.'
-    )
+    const readout = screen.getByTestId('chart-readout')
+    expect(readout).toHaveTextContent('+0.24 ktline vs 1:1 at 4 kt')
+    expect(readout).toHaveTextContent('+0.13 ktat 8 kt')
   })
 
   it('keeps R² and the knot gap, which depend on no fit at all', () => {

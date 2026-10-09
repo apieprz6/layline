@@ -98,6 +98,19 @@ const HEIGHT = 46
 /** Where the Race ticks sit: high enough to leave the rule labels a line of their own beneath. */
 const BASELINE = 17
 
+/**
+ * Which side of its own rule a label hangs off.
+ *
+ * A rule in the middle of the season gets a centred label; one near either end gets a label that
+ * grows inward, because the alternative is a label that grows off the chart.
+ */
+function anchorFor(x: number): 'start' | 'middle' | 'end' {
+  const room = 60
+  if (x < room) return 'start'
+  if (x > TUNING_CHART_WIDTH - room) return 'end'
+  return 'middle'
+}
+
 /** Whether a Log entry is an act on this channel — an Event names them, a Version shows them. */
 function touches(entry: CalibrationLogEntry, channel: CalibrationChannel): boolean {
   return entry.entry === 'event'
@@ -216,6 +229,11 @@ export default function CalibrationRail({
           const borrowed = rule.borrowedFrom !== null
           return (
             <g key={rule.key} data-testid="calibration-mark" data-date={rule.date}>
+              <title>
+                {borrowed
+                  ? `${shortDate(rule.date)}: an act on ${rule.borrowedFrom}, which could have moved this figure. Races to the left were sailed before it.`
+                  : `${shortDate(rule.date)}: ${rule.what}. Races to the left were sailed before it.`}
+              </title>
               <line
                 x1={x}
                 x2={x}
@@ -227,10 +245,13 @@ export default function CalibrationRail({
                 opacity={borrowed ? 0.65 : 1}
               />
               <text
-                x={Math.min(Math.max(x, 20), TUNING_CHART_WIDTH - 20)}
+                // Anchored away from whichever edge it is near, rather than centred and clamped.
+                // Clamping an x while anchoring the middle still ran half the label off the side:
+                // a rule at the very start of the season had "1 Aug · swung" reading "ug · swung".
+                x={Math.min(Math.max(x, INSET), TUNING_CHART_WIDTH - INSET)}
                 y={BASELINE + 18}
                 fontSize={CHART_FONT.micro}
-                textAnchor="middle"
+                textAnchor={anchorFor(x)}
                 fontFamily="var(--font-mono)"
                 fill={borrowed ? 'var(--text-muted)' : 'var(--text-secondary)'}
               >
@@ -267,29 +288,24 @@ export default function CalibrationRail({
         ))}
       </svg>
 
-      <p
-        style={{
-          margin: `0 0 ${spacing(1)}`,
-          fontSize: 9.5,
-          lineHeight: 1.5,
-          color: 'var(--text-muted)',
-        }}
-      >
-        {rules.length === 0 ? (
-          <>
-            Nothing in the Calibration Log touches {channel}, so this is one Calibration Era over the
-            whole archive. A boundary is never inferred from a step in the data.
-          </>
-        ) : (
-          <>
-            Dashed: the Calibration Log&rsquo;s dates. Races left of a rule were sailed before that
-            act.
-            {rules.some((rule) => rule.borrowedFrom !== null) &&
-              ' Muted and channel-labelled: an act on another channel that could have moved this figure.'}
-          </>
-        )}{' '}
-        Hollow: a Race this check got no figure from.
-      </p>
+      {rules.length === 0 && (
+        <p
+          style={{
+            margin: `0 0 ${spacing(1)}`,
+            fontSize: 9.5,
+            lineHeight: 1.5,
+            color: 'var(--text-muted)',
+          }}
+        >
+          {/*
+            The one thing the rail cannot draw: that there is nothing to draw. ADR 0032's correct
+            failure, and a finding rather than a legend — so it stays printed where the rules would
+            have been, while everything that merely explains a mark is now on the mark itself.
+          */}
+          Nothing in the Calibration Log touches {channel} — one Calibration Era over the whole
+          archive, since a boundary is never inferred from a step in the data.
+        </p>
+      )}
     </div>
   )
 }
