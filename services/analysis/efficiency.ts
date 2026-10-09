@@ -135,29 +135,52 @@ export function computeRowEfficiency(row: ScorableRow, targets: PolarTargets): R
 }
 
 /**
- * A race's or a season's figure: total distance over total target-implied distance.
+ * A row whose interval has already been measured and whose figures have already been scored.
  *
- * Hand this **every** row in the window, Countable or not, with its verdict on it — the intervals
- * are measured over all of them and summed over the Countable ones, which is what keeps an excluded
- * row's time out of the figure instead of in a neighbour's weight.
+ * The shape `sumEfficiency` adds up, and what lets the same arithmetic serve two callers that
+ * cannot both measure their own intervals:
+ *
+ *   - `aggregateEfficiency` below, which has a race's whole window in hand and measures them;
+ *   - an **Analysis Filter**'s matched rows in the browser, which do **not** have the window in
+ *     hand. A filter removes rows from the middle of a recording, so the gap to the next *matched*
+ *     row is not a span anything happened over, and the rows of two races are not one sequence at
+ *     all. Those rows carry an interval measured on the server over their own race's window
+ *     (`MatchableRow`), and this adds those up without re-deriving anything.
+ *
+ * A `MatchableRow` satisfies it structurally, which is how the second caller gets one.
+ */
+export interface SummableRow {
+  /** Not **Frozen**, not **Low-Speed**, not inside a **Maneuver Window** (ADR 0025). */
+  countable: boolean
+  /** Seconds this row lasted, measured. Null where none could be — see `rowIntervalSeconds`. */
+  interval_seconds: number | null
+  /** Knots over the ground, as a number. The efficiency numerator (ADR 0027). */
+  sog: number | null
+  /** This row scored against the **Polar** its own Race was sailed under. */
+  efficiency: RowEfficiency
+}
+
+/**
+ * The ratio of sums itself: every Countable row's distance over its target-implied distance.
+ *
+ * The one place the sums are accumulated, for the reason every shared rule in this directory is
+ * shared — two copies would be two chances for a race figure and a season figure to disagree about
+ * what **Polar Efficiency** is.
  *
  * Every Countable row lands in exactly one of three tallies — `rows`, `rows_without_interval`,
  * `rows_without_target` — so a screen can state the coverage behind the figure (ADR 0025) rather
  * than leaving a row that dropped out unaccounted for anywhere.
  *
- * For a season, sum these aggregates' own sums rather than calling this across races: the rows of
- * two races are not one sequence, and differencing across the seam would weight the last row of one
- * race by the gap to the first row of the next.
+ * Additive across races by construction: each row carries its own interval and its own target,
+ * the latter from the Polar its Race was actually sailed under (ADR 0012), so adding two races'
+ * rows and adding two races' sums give the same number.
  */
-export function aggregateEfficiency(
-  rows: readonly ScorableRow[],
-  targets: PolarTargets
-): EfficiencyAggregate {
-  const intervals = rowIntervalSeconds(rows)
-
+export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate {
   const totals = {
     rows: 0,
     filler_anchored_rows: 0,
+    vmg_rows: 0,
+    vmg_filler_anchored_rows: 0,
     rows_without_interval: 0,
     rows_without_target: 0,
     elapsed_seconds: 0,
@@ -167,26 +190,25 @@ export function aggregateEfficiency(
     target_vmg_distance_nm: 0,
   }
 
-  rows.forEach((row, index) => {
-    if (!row.countable) return
+  for (const row of rows) {
+    if (!row.countable) continue
 
-    const seconds = intervals[index]
+    const seconds = row.interval_seconds
     if (seconds === null) {
       totals.rows_without_interval += 1
-      return
+      continue
     }
 
-    const scored = computeRowEfficiency(row, targets)
-    const sog = channelValue(row.sog)
+    const scored = row.efficiency
 
-    if (scored.target_speed === null || sog === null) {
+    if (scored.target_speed === null || row.sog === null) {
       totals.rows_without_target += 1
-      return
+      continue
     }
 
     totals.rows += 1
     totals.elapsed_seconds += seconds
-    totals.actual_distance_nm += distanceNm(sog, seconds)
+    totals.actual_distance_nm += distanceNm(row.sog, seconds)
     totals.target_distance_nm += distanceNm(scored.target_speed.knots, seconds)
     if (scored.target_speed.filler_anchored) totals.filler_anchored_rows += 1
 
@@ -194,10 +216,14 @@ export function aggregateEfficiency(
     // is rare — the TWS axis answers both — but counting it in one sum and not the other would
     // silently divide distances the boat covered by targets for a different set of rows.
     if (scored.vmg !== null && scored.target_vmg !== null) {
+      totals.vmg_rows += 1
       totals.actual_vmg_distance_nm += distanceNm(scored.vmg, seconds)
       totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.estimated_knots, seconds)
+      // Target VMG's own trust, not the Target Speed bracket's: the search reads a whole zone of
+      // the grid at one wind speed and can land on filler where the point lookup did not.
+      if (scored.target_vmg.filler_anchored) totals.vmg_filler_anchored_rows += 1
     }
-  })
+  }
 
   return {
     ...totals,
@@ -209,3 +235,33 @@ export function aggregateEfficiency(
         : null,
   }
 }
+
+/**
+ * A race's or a season's figure: total distance over total target-implied distance.
+ *
+ * Hand this **every** row in the window, Countable or not, with its verdict on it — the intervals
+ * are measured over all of them and summed over the Countable ones, which is what keeps an excluded
+ * row's time out of the figure instead of in a neighbour's weight.
+ *
+ * For a season, sum these aggregates' own sums rather than calling this across races: the rows of
+ * two races are not one sequence, and differencing across the seam would weight the last row of one
+ * race by the gap to the first row of the next.
+ */
+export function aggregateEfficiency(
+  rows: readonly ScorableRow[],
+  targets: PolarTargets
+): EfficiencyAggregate {
+  const intervals = rowIntervalSeconds(rows)
+
+  return sumEfficiency(
+    rows.map((row, index) => ({
+      countable: row.countable,
+      interval_seconds: intervals[index],
+      sog: channelValue(row.sog),
+      // Scored for every row given, Countable or not. One wasted lookup per excluded row buys a
+      // caller that cannot accidentally score a different set of rows than it summed.
+      efficiency: computeRowEfficiency(row, targets),
+    }))
+  )
+}
+
