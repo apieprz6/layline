@@ -31,6 +31,7 @@ import {
 import {
   cellTotals,
   cellViews,
+  chartAgreement,
   getSailSelectionData,
   gridCoverage,
   type CellVerdict,
@@ -220,6 +221,85 @@ describeArchiveScreen('Cell Agreement over the whole archive', () => {
     const notRecorded = verdicts()['not-recorded']
 
     expect(notRecorded).toBeGreaterThan(agrees + differs)
+  })
+})
+
+describeArchiveScreen('what the Overall tab’s card says about this chart', () => {
+  /**
+   * The card's own ten-race window, by Race and never by row.
+   *
+   * Ten is what `SAIL_SELECTION_TEASER_RACES` reads, and on this archive it is the whole of the
+   * evidence: agreement is only legible on a race that recorded its sails, those are the seven
+   * most recent, and so a ten-race window holds **every judgeable row the archive has**.
+   */
+  const window = once(() => {
+    // By **Race** and never by day: the 26 Jun race starts at 22:16 and finishes after 03:42 the
+    // next morning, so ten days is not ten races. These ids are the recordings' own
+    // `MM-DD-YY` stems, which sort chronologically within a season.
+    const newest = new Set(
+      [...new Set(archiveRows().map((row) => row.race_id))].sort().reverse().slice(0, 10)
+    )
+
+    return archiveRows().filter((row) => newest.has(row.race_id))
+  })
+
+  const card = once(() =>
+    chartAgreement(
+      getSailSelectionData(window(), EMPTY_FILTER, dimensions(), archiveChart(), archiveDomain())
+        .cells
+    )
+  )
+
+  it('reads the ten-race window as every judgeable row the archive holds', () => {
+    const whole = chartAgreement(screen().cells)
+
+    expect(card().judgeable_rows).toBe(1241)
+    expect(card().judgeable_rows).toBe(whole.judgeable_rows)
+    // And three of the ten races were never annotated, which is why the card states the share.
+    expect(card().placed_rows).toBe(1964)
+    expect(card().judgeable_rows / card().placed_rows).toBeCloseTo(0.632, 3)
+  })
+
+  it('reads 76.2% of that judgeable sailing as carrying what the chart calls for', () => {
+    expect(card().agreement).toBeCloseTo(0.762, 3)
+  })
+
+  /**
+   * The two figures that turn a compliance number into a calibration one — and the measurement
+   * behind the decision *not* to subtract them.
+   *
+   * 88.5% against 89.0%: half a point apart across 294 differing rows, a fifth of them
+   * Filler-Anchored. Per race the same pair swings hard and in both directions — 97.8% against
+   * 90.1% on the 22 Aug GLR race, 80.3% against 86.5% on 26 Aug — so the signal is real at cell
+   * and race level and absent in the aggregate. A card that divided these would publish noise.
+   */
+  it('reads both sides’ own percent of target, which sit within half a point', () => {
+    const following = card().following.polar_efficiency
+    const differing = card().differing.polar_efficiency
+
+    expect(following).toBeCloseTo(0.885, 3)
+    expect(differing).toBeCloseTo(0.89, 3)
+    expect(Math.abs((following ?? 0) - (differing ?? 0))).toBeLessThan(0.01)
+  })
+
+  it('accounts for every placed row across the two sides and the two unjudgeable states', () => {
+    const totals = { agrees: 0, differs: 0, 'off-chart': 0, 'not-recorded': 0 }
+
+    for (const cell of getSailSelectionData(
+      window(),
+      EMPTY_FILTER,
+      dimensions(),
+      archiveChart(),
+      archiveDomain()
+    ).cells) {
+      const verdicts = cellTotals(cell.slices).verdicts
+      for (const key of Object.keys(totals) as CellVerdict[]) totals[key] += verdicts[key]
+    }
+
+    expect(totals.agrees + totals.differs).toBe(card().judgeable_rows)
+    expect(totals.agrees + totals.differs + totals['off-chart'] + totals['not-recorded']).toBe(
+      card().placed_rows
+    )
   })
 })
 

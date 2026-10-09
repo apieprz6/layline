@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
-import { CHART, ROWS, RACES } from '@/components/analysis/__tests__/fixture'
+import { SAIL_SELECTION_TEASER_RACES } from '@/components/analysis/SailSelectionTeaser'
+import { CHART, ROWS, RACES, matchableRow } from '@/components/analysis/__tests__/fixture'
 
 const redirect = jest.fn((to: string) => {
   throw Object.assign(new Error(`NEXT_REDIRECT:${to}`), { digest: 'NEXT_REDIRECT' })
@@ -108,30 +109,59 @@ describe('the Overall tab', () => {
     expect(teaser).toHaveTextContent('across 2 races')
   })
 
-  it('asks the database for five races rather than reading the archive and slicing it', async () => {
+  it('asks the database for the wider of the two windows, once', async () => {
     readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
 
     await renderOverall()
 
-    // The limit is the whole saving: the other eight races' Transcriptions were being read,
-    // assessed and scored to make rows this card never shows.
-    expect(readRecentRaceRows).toHaveBeenCalledWith(TEASER_RACES)
+    // The limit is the whole saving: the remaining races' Transcriptions would be read, assessed
+    // and scored to make rows this tab never shows. One read for both cards, at the wider window,
+    // rather than two overlapping on the five the Polar card wants.
+    expect(readRecentRaceRows).toHaveBeenCalledTimes(1)
+    expect(readRecentRaceRows).toHaveBeenCalledWith(SAIL_SELECTION_TEASER_RACES)
+    expect(SAIL_SELECTION_TEASER_RACES).toBeGreaterThan(TEASER_RACES)
   })
 
-  it('adds the Sail selection chart row, stating coverage and tapping through', async () => {
+  it('keeps the Polar card to its own five races out of the ten read', async () => {
+    // Six races came back, so the two cards' windows genuinely differ: the Polar card is over the
+    // five most recently sailed and the card below it over all six.
+    const races = Array.from({ length: 6 }, (_, index) => ({
+      id: `race-${index}`,
+      title: `race ${index}`,
+      // Newest first, as the database orders them on `window_start` descending.
+      day: `2026-0${6 - index}-01`,
+      seconds: 60,
+    }))
+
+    readRecentRaceRows.mockResolvedValue({
+      rows: races.map((race) => matchableRow({ race_id: race.id })),
+      races,
+    })
+
+    await renderOverall()
+
+    expect(screen.getByTestId('polar-performance-teaser')).toHaveTextContent(
+      `across ${TEASER_RACES} races`
+    )
+    expect(screen.getByTestId('sail-selection-teaser')).toHaveTextContent('over the last 6 races')
+  })
+
+  it('adds the Sail selection chart row, stating agreement and tapping through', async () => {
     readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
 
     await renderOverall()
 
     const row = screen.getByTestId('sail-selection-teaser')
     expect(row).toHaveAttribute('href', '/boat-performance/sail-selection')
-    // Three of the fixture chart's six cells were reached, over the two races that came back.
-    expect(row).toHaveTextContent('3')
-    expect(row).toHaveTextContent('of 6 cells reached')
-    expect(row).toHaveTextContent('Over the last 2 races')
+    // Two of the fixture's Countable rows carried Main + Jib 1 where their own cell calls for it;
+    // the third recorded no sail at all, so it is placed and not judgeable.
+    expect(row).toHaveTextContent('100.0%')
+    expect(row).toHaveTextContent('carried what the chart calls for')
+    expect(row).toHaveTextContent('over the last 2 races')
+    expect(row).toHaveTextContent('whose sail was written down')
   })
 
-  it('says there is no chart yet rather than drawing a coverage figure over none', async () => {
+  it('says there is no chart yet rather than drawing an agreement figure over none', async () => {
     readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
     readCrossoverChartScreen.mockResolvedValue({ list: [], current: null })
 

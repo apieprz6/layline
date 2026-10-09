@@ -644,6 +644,89 @@ export function cellBreakdown(
 }
 
 /**
+ * How well the chart matches what the boat actually does, over a whole grid rather than per cell.
+ *
+ * The Overall tab's card. **Three figures and not one**, because agreement alone cannot answer the
+ * question a sailor is really asking. 31% agreement means one thing on a race where following the
+ * chart was measurably faster and the opposite on a race where it was slower, and this archive
+ * holds both: 08-22 reads 97.8% of target when the chart was followed against 90.1% when it was
+ * not, and 08-26 reads 80.3% against 86.5%.
+ *
+ * So the pair travels with the share, and **no verdict is computed from it**. Over this archive the
+ * two sides differ by half a point across 294 differing rows, a fifth of them Filler-Anchored —
+ * well inside the noise — and a card that divided them into "the chart is wrong by 0.5%" would be
+ * inventing a finding. ADR 0030's rule holds here too: the word is never "wrong", about the chart
+ * or about the crew.
+ */
+export interface ChartAgreement {
+  /**
+   * Countable rows that landed in a cell at all, judgeable or not.
+   *
+   * The denominator the *coverage* sentence needs, which is not the one the share uses: half this
+   * archive's placed sailing carries no **Sail Configuration**, and a card that quietly dropped
+   * those rows from both numerator and denominator would report a confident share over a third of
+   * the evidence without saying so.
+   */
+  placed_rows: number
+  /**
+   * Of those, the rows that can be compared with the chart at all: `Agrees` plus `Differs`.
+   *
+   * **Off-chart** is out of this, as is **Not recorded** — for different reasons that come to the
+   * same arithmetic. A row whose sail was never written down cannot be judged; a row carrying a
+   * sail the chart has no word for *has* been judged and the answer is that the vocabulary ran
+   * out, which is never disagreement (ADR 0023) and would be dishonest as agreement.
+   */
+  judgeable_rows: number
+  /** Agreeing rows over judgeable ones, or null where nothing could be judged. Never a zero. */
+  agreement: number | null
+  /** The sums over the rows that carried what their own cell calls for. */
+  following: EfficiencyAggregate
+  /** The sums over the rows that carried something else. */
+  differing: EfficiencyAggregate
+}
+
+/**
+ * The share, and both sides' own percent of target.
+ *
+ * Built from the slices, so it costs nothing the screen was not already computing and needs no
+ * **Polar** read of its own: each row's **Target Speed** came from the Polar its own Race was
+ * sailed under (ADR 0012) and travels with it.
+ */
+export function chartAgreement(cells: readonly SailSelectionCell[]): ChartAgreement {
+  const following: EfficiencyAggregate[] = []
+  const differing: EfficiencyAggregate[] = []
+  let placed_rows = 0
+  let agrees = 0
+  let differs = 0
+
+  for (const cell of cells) {
+    for (const slice of cell.slices) {
+      const rows = countableRows(slice.efficiency)
+      placed_rows += rows
+
+      if (slice.verdict === 'agrees') {
+        agrees += rows
+        following.push(slice.efficiency)
+      }
+      if (slice.verdict === 'differs') {
+        differs += rows
+        differing.push(slice.efficiency)
+      }
+    }
+  }
+
+  const judgeable_rows = agrees + differs
+
+  return {
+    placed_rows,
+    judgeable_rows,
+    agreement: judgeable_rows === 0 ? null : agrees / judgeable_rows,
+    following: mergeEfficiency(following),
+    differing: mergeEfficiency(differing),
+  }
+}
+
+/**
  * One cell with its figures already folded.
  *
  * The shape every reader of the grid wants: five grids are drawn from the same 338 cells — four
