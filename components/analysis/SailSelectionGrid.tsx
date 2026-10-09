@@ -8,25 +8,25 @@ import {
   GRID_STICKY_STYLE,
   GRID_TABLE_STYLE,
   SAIL_SELECTION_LAYERS,
-  cellPrint,
   cellSentence,
-  cellTint,
   isFillerAnchored,
   isGhost,
   type CellView,
   type SailSelectionLayer,
+  type SailSelectionLayerSpec,
 } from '@/components/analysis/sail-selection-chrome'
-import { spacing } from '@/lib/utils/design'
+import { radius, spacing } from '@/lib/utils/design'
+import { cellKey } from '@/services/analysis/sail-selection'
 
 interface SailSelectionGridProps {
   /** Row-major, every cell of the chart, with its figures already folded. */
   views: readonly CellView[]
   twa_axis: readonly number[]
   tws_axis: readonly number[]
-  layer: SailSelectionLayer
+  layer: SailSelectionLayerSpec
   /** Which definition number is drawn in which band — the chart's own, shared with Boat Setup. */
   bands: ReadonlyMap<number, string>
-  /** `row:column` of the cell whose breakdown is open, or null. */
+  /** The `cellKey` of the cell whose breakdown is open, or null. */
   selected: string | null
   onSelect: (key: string | null) => void
 }
@@ -56,10 +56,8 @@ export default function SailSelectionGrid({
   selected,
   onSelect,
 }: SailSelectionGridProps): ReactElement {
-  const byKey = new Map(views.map((view) => [`${view.cell.row}:${view.cell.column}`, view]))
-
   return (
-    <div data-testid="sail-selection-grid" data-layer={layer} style={BLEED_STYLE}>
+    <div data-testid="sail-selection-grid" data-layer={layer.id} style={BLEED_STYLE}>
       <table style={GRID_TABLE_STYLE}>
         <thead>
           <tr>
@@ -80,13 +78,14 @@ export default function SailSelectionGrid({
                 {twa}
               </th>
               {tws_axis.map((tws, column) => {
-                const key = `${row}:${column}`
-                const view = byKey.get(key)
-                if (view === undefined) return <td key={tws} style={CELL_WRAP_STYLE} />
-
+                // Row-major and complete, which `getSailSelectionData` guarantees and
+                // `sail-selection.test.ts` pins — so the cell is at its own index and there is no
+                // lookup to miss. A map keyed on the same arithmetic would only be able to fail.
+                const view = views[row * tws_axis.length + column]
+                const key = cellKey(row, column)
                 const ghost = isGhost(view, layer)
                 const open = selected === key
-                const print = cellPrint(view, layer)
+                const print = layer.print(view)
 
                 return (
                   <td key={tws} style={CELL_WRAP_STYLE}>
@@ -118,7 +117,7 @@ export default function SailSelectionGrid({
                     >
                       <span
                         aria-hidden="true"
-                        style={{ ...FILL_STYLE, background: cellTint(view, layer, bands) }}
+                        style={{ ...FILL_STYLE, background: layer.tint(view, bands) }}
                       />
                       <span
                         aria-hidden="true"
@@ -160,6 +159,7 @@ export function SailSelectionThumbnails({
 }: {
   views: readonly CellView[]
   tws_axis: readonly number[]
+  /** The open layer's id, which is all a thumbnail needs: each draws its own. */
   layer: SailSelectionLayer
   bands: ReadonlyMap<number, string>
   onSelect: (layer: SailSelectionLayer) => void
@@ -189,8 +189,8 @@ export function SailSelectionThumbnails({
             >
               {views.map((view) => (
                 <span
-                  key={`${view.cell.row}:${view.cell.column}`}
-                  style={{ ...THUMB_CELL_STYLE, background: cellTint(view, entry.id, bands) }}
+                  key={cellKey(view.cell.row, view.cell.column)}
+                  style={{ ...THUMB_CELL_STYLE, background: entry.tint(view, bands) }}
                 />
               ))}
             </span>
@@ -253,7 +253,7 @@ const THUMB_STYLE: CSSProperties = {
   display: 'block',
   width: '100%',
   padding: 4,
-  borderRadius: 'var(--radius-sm)',
+  borderRadius: radius('sm'),
   borderWidth: 1,
   borderStyle: 'solid',
   background: 'var(--surface-raised)',
@@ -264,7 +264,7 @@ const THUMB_LABEL_STYLE: CSSProperties = {
   display: 'block',
   marginBottom: 3,
   fontFamily: 'var(--font-body)',
-  fontSize: '10px',
+  fontSize: 'var(--text-xs)',
   textAlign: 'center',
   color: 'var(--text-primary)',
 }

@@ -128,15 +128,20 @@ export interface SailSelectionCell {
    */
   unfiltered_rows: number
   /**
-   * Whether a **Target Speed** can exist anywhere in this cell, ever.
+   * Whether a **Target Speed** can exist anywhere in this cell, ever — or **null** for *unknown*.
    *
    * False only where the cell's whole region lies outside the **Polar**'s own axes, which on this
    * boat is the chart's 25 and 30 knot columns against a certificate that stops at 24 — a property
    * of the two artifacts' shapes and not of how much racing has been logged (ADR 0028, ADR 0030).
-   * True where no Polar was in hand to ask, since a cell cannot be called structurally hopeless on
-   * the strength of a read that failed.
+   *
+   * **Null where no Polar was in hand to ask**, and null rather than `true` on purpose. A failed or
+   * absent Polar read means the question cannot be answered, and answering it `true` would let a
+   * screen count the region at nought — a plausible number standing in for a missing one, which is
+   * the one thing `AGENTS.md` forbids outright. A renderer draws a null cell the way it draws a
+   * reachable one, because an unknown limit is no reason to dash a cell; what it must not do is
+   * *state* the limit, and the null is what stops it.
    */
-  target_reachable: boolean
+  target_reachable: boolean | null
 }
 
 /** What the Sail Selection Screen draws. Typed here and not centrally: nothing else names it. */
@@ -199,8 +204,14 @@ function sliceKey(sail: string, sea: string, time: string): string {
   return `${sail}\u0000${sea}\u0000${time}`
 }
 
-/** A cell key, by grid index rather than by axis value, so nothing is re-floored to find it. */
-function cellKey(row: number, column: number): string {
+/**
+ * A cell key, by grid index rather than by axis value, so nothing is re-floored to find it.
+ *
+ * Exported because it is also the screen's **selection identity** — which cell's breakdown is open
+ * — so the grid, the sheet and the aggregation all have to spell it the same way. Four private
+ * copies of one template string is three chances for a tap to open a neighbour's breakdown.
+ */
+export function cellKey(row: number, column: number): string {
   return `${row}:${column}`
 }
 
@@ -244,7 +255,7 @@ function spanReaches(
 }
 
 /**
- * Whether a cell of this chart can ever carry a percent of **Target Speed**.
+ * Whether a cell of this chart can ever carry a percent of **Target Speed**, or null for unknown.
  *
  * Exported because the legend has to be able to say how large the region is, and the `–` it prints
  * there is a different fact from the `–` a cell with rows and no computable target prints — the two
@@ -255,8 +266,8 @@ export function targetReachable(
   domain: PolarDomain | null,
   row: number,
   column: number
-): boolean {
-  if (domain === null) return true
+): boolean | null {
+  if (domain === null) return null
 
   return (
     spanReaches(chart.twa_axis, row, domain.twa_from, domain.twa_to) &&
@@ -265,29 +276,120 @@ export function targetReachable(
 }
 
 /**
- * Why this cell can never hold a percent of target, in words, or null where it can.
+ * The four ways a cell's region can fall outside the Polar's, each said twice.
+ *
+ * Twice because the two readers want different sentences about one fact. A **tapped cell** is
+ * asking about itself and gets its own numbers — "25 kt is past the Polar's last column (24 kt)".
+ * The **legend** is describing a region and has to say it once however many cells are in it, so
+ * naming any one cell's numbers there would be arbitrary. One table rather than two, so the two
+ * phrasings cannot come to disagree about the rule.
+ *
+ * Four and not one. This boat's region is its two top wind-speed columns, but a chart whose angle
+ * axis ran past the Polar's, or opened below it, would get a sentence that was simply false — and
+ * `spanReaches` can fail on either side of either axis.
+ */
+const UNREACHABLE_SIDES: readonly {
+  holds(cell: UnreachableCell, domain: PolarDomain): boolean
+  cell(cell: UnreachableCell, domain: PolarDomain): string
+  region(domain: PolarDomain): string
+}[] = [
+  {
+    holds: (cell, domain) => cell.tws > domain.tws_to,
+    cell: (cell, domain) =>
+      `${cell.tws} kt is past the Polar's last column (${domain.tws_to} kt), and a Target Speed is never extrapolated.`,
+    region: (domain) =>
+      `Past the Polar's last column (${domain.tws_to} kt) a Target Speed is never extrapolated.`,
+  },
+  {
+    holds: (cell, domain) => cell.tws < domain.tws_from,
+    cell: (cell, domain) =>
+      `${cell.tws} kt is below the Polar's first column (${domain.tws_from} kt), so there is no bracket to interpolate inside.`,
+    region: (domain) =>
+      `Below the Polar's first column (${domain.tws_from} kt) there is no bracket to interpolate inside.`,
+  },
+  {
+    holds: (cell, domain) => cell.twa > domain.twa_to,
+    cell: (cell, domain) =>
+      `${cell.twa}° is past the Polar's last tabulated angle (${domain.twa_to}°).`,
+    region: (domain) => `Past the Polar's last tabulated angle (${domain.twa_to}°) there is nothing to read.`,
+  },
+  {
+    holds: (cell, domain) => cell.twa < domain.twa_from,
+    cell: (cell, domain) =>
+      `${cell.twa}° is below the Polar's first tabulated angle (${domain.twa_from}°).`,
+    region: (domain) =>
+      `Below the Polar's first tabulated angle (${domain.twa_from}°) there is nothing to read.`,
+  },
+]
+
+/** What saying why a cell is unreachable needs of it. */
+type UnreachableCell = Pick<SailSelectionCell, 'twa' | 'tws' | 'target_reachable'>
+
+/**
+ * Said where no side matches, which `spanReaches` makes unreachable in both senses.
+ *
+ * Kept anyway rather than returned as null: a dash with no reason is the one thing ADR 0012 rules
+ * out, and a sentence that is merely vague is still a reason.
+ */
+const OUTSIDE_THE_AXES =
+  "This cell lies outside the Polar's own axes, where a Target Speed is never extrapolated."
+
+/** Which side of the Polar's domain this cell falls outside, or null where it falls inside. */
+function sideOf(
+  cell: UnreachableCell,
+  domain: PolarDomain | null
+): (typeof UNREACHABLE_SIDES)[number] | null {
+  if (cell.target_reachable !== false || domain === null) return null
+  return UNREACHABLE_SIDES.find((side) => side.holds(cell, domain)) ?? null
+}
+
+/**
+ * Why this cell can never hold a percent of target, in words, or null where it can or nobody knows.
  *
  * Said rather than left as a dash on its own, because ADR 0012's stance on absence is that it is a
  * legitimate answer *with a reason*, and because the structural `–` and the "rows but no target"
  * `–` would otherwise be indistinguishable.
  */
 export function unreachableReason(
-  cell: Pick<SailSelectionCell, 'twa' | 'tws' | 'target_reachable'>,
+  cell: UnreachableCell,
   domain: PolarDomain | null
 ): string | null {
-  if (cell.target_reachable || domain === null) return null
+  if (cell.target_reachable !== false || domain === null) return null
 
-  if (cell.tws > domain.tws_to) {
-    return `${cell.tws} kt is past the Polar's last column (${domain.tws_to} kt), and a Target Speed is never extrapolated.`
-  }
-  if (cell.tws < domain.tws_from) {
-    return `${cell.tws} kt is below the Polar's first column (${domain.tws_from} kt), so there is no bracket to interpolate inside.`
-  }
-  if (cell.twa > domain.twa_to) {
-    return `${cell.twa}° is past the Polar's last tabulated angle (${domain.twa_to}°).`
+  return sideOf(cell, domain)?.cell(cell, domain) ?? OUTSIDE_THE_AXES
+}
+
+/**
+ * One sentence per region of the grid that can never hold a figure, in axis order, or none.
+ *
+ * What the legend prints. Read off the cells rather than asserted, and deduplicated by *side* so
+ * that this chart's 25 and 30 knot columns are one sentence between them rather than two
+ * near-identical ones.
+ */
+export function unreachableRegions(
+  cells: readonly UnreachableCell[],
+  domain: PolarDomain | null
+): string[] {
+  if (domain === null) return []
+
+  const said = new Set<string>()
+  let generic = false
+
+  for (const cell of cells) {
+    if (cell.target_reachable !== false) continue
+
+    const side = sideOf(cell, domain)
+    if (side === null) generic = true
+    else said.add(side.region(domain))
   }
 
-  return `${cell.twa}° is below the Polar's first tabulated angle (${domain.twa_from}°).`
+  // In the table's own order, not in the order the cells happened to be walked: the first two are
+  // about wind speed and the last two about angle, which is how a sailor reads the grid.
+  const ordered = UNREACHABLE_SIDES.map((side) => side.region(domain)).filter((each) =>
+    said.has(each)
+  )
+
+  return generic ? [...ordered, OUTSIDE_THE_AXES] : ordered
 }
 
 /**
@@ -542,6 +644,25 @@ export function cellBreakdown(
 }
 
 /**
+ * One cell with its figures already folded.
+ *
+ * The shape every reader of the grid wants: five grids are drawn from the same 338 cells — four
+ * thumbnails and the full-size one — and folding each cell's slices once per grid is four folds
+ * nobody asked for. Typed here rather than beside the renderer because `gridCoverage` reads it too.
+ */
+export interface SailSelectionCellView {
+  cell: SailSelectionCell
+  totals: CellTotals
+}
+
+/** Every cell, folded once, in the order the grid draws them. */
+export function cellViews(
+  cells: readonly SailSelectionCell[]
+): SailSelectionCellView[] {
+  return cells.map((cell) => ({ cell, totals: cellTotals(cell.slices) }))
+}
+
+/**
  * How many cells the grid holds, how many were reached, and how many can never hold a figure.
  *
  * The counts each layer's own summary line states. Written once because they are read three times
@@ -556,17 +677,24 @@ export interface GridCoverage {
   with_figure: number
   /** Cells with rows and no computable target: inside the Polar, and still unanswerable. */
   rows_without_figure: number
-  /** Cells whose region lies outside the Polar's axes, reached or not (ADR 0028). */
-  unreachable: number
+  /**
+   * Cells whose region lies outside the Polar's axes, reached or not (ADR 0028) — or **null**
+   * where no Polar was in hand to ask.
+   *
+   * Null and not nought. With no Polar read the question has no answer, and a zero here would read
+   * as "every cell can hold a figure" — a plausible number in place of a missing one. A caller
+   * that cannot print the figure has to say so instead, which is what the null forces.
+   */
+  unreachable: number | null
   /** Cells holding both agreeing and differing rows. */
   mixed: number
   /** Cells a narrowing emptied, which keep a dotted ghost. */
   ghosted: number
 }
 
-export function gridCoverage(cells: readonly SailSelectionCell[]): GridCoverage {
-  const coverage: GridCoverage = {
-    cells: cells.length,
+export function gridCoverage(views: readonly SailSelectionCellView[]): GridCoverage {
+  const coverage = {
+    cells: views.length,
     reached: 0,
     with_figure: 0,
     rows_without_figure: 0,
@@ -575,10 +703,11 @@ export function gridCoverage(cells: readonly SailSelectionCell[]): GridCoverage 
     ghosted: 0,
   }
 
-  for (const cell of cells) {
-    const totals = cellTotals(cell.slices)
+  let known = true
 
-    if (!cell.target_reachable) coverage.unreachable += 1
+  for (const { cell, totals } of views) {
+    if (cell.target_reachable === null) known = false
+    if (cell.target_reachable === false) coverage.unreachable += 1
     if (totals.agreement === 'mixed') coverage.mixed += 1
 
     if (totals.rows === 0) {
@@ -591,5 +720,5 @@ export function gridCoverage(cells: readonly SailSelectionCell[]): GridCoverage 
     else coverage.with_figure += 1
   }
 
-  return coverage
+  return { ...coverage, unreachable: known ? coverage.unreachable : null }
 }

@@ -284,6 +284,35 @@ describe('what the screen says about itself', () => {
     )
   })
 
+  it('claims no figure at all for the region when the Polar could not be read', async () => {
+    render(
+      <SailSelectionContent
+        rows={ROWS}
+        races={RACES}
+        dimensions={DIMENSIONS}
+        initialFilter={EMPTY_FILTER}
+        chart={CHART}
+        domain={null}
+      />
+    )
+    const user = userEvent.setup({ delay: null })
+    await showLayer(user, 'target')
+
+    // Null is not nought. With no Polar in hand the question has no answer, and "0 where none can
+    // ever exist" would be a plausible number standing in for a missing one.
+    const summary = screen.getByTestId('sail-selection-summary')
+    expect(summary).toHaveTextContent('no Polar read, so where none can exist is unknown')
+    expect(summary).not.toHaveTextContent('0 where none can ever exist')
+    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(
+      'How much of the grid can never hold one is unknown here'
+    )
+
+    // The 18 kt cell still dashes, because *its own* rows have no Target Speed — which is a fact
+    // about those rows and not a claim about the region. The two `–` cases stay distinguishable.
+    expect(printOf('40/16')).toBe('–')
+    expect(printOf('90/16')).toBe('')
+  })
+
   it('says how many cells a narrowing emptied', async () => {
     const { user } = renderScreen()
     await showLayer(user, 'coverage')
@@ -301,6 +330,20 @@ describe('what the screen says about itself', () => {
     expect(
       screen.getByText(/1 matched rows are excluded as Frozen, Low-Speed or inside a Maneuver Window/)
     ).toBeInTheDocument()
+  })
+
+  it('says why the region can never hold a figure, once per region', async () => {
+    const { user } = renderScreen()
+    await showLayer(user, 'target')
+
+    const legend = screen.getByTestId('sail-selection-legend')
+    expect(legend).toHaveTextContent('2 of the 6 cells can never hold one')
+    expect(legend).toHaveTextContent(
+      "Past the Polar's last column (14 kt) a Target Speed is never extrapolated."
+    )
+    // One sentence for the region, not one per cell in it — both unreachable cells are the same
+    // column, and the legend says so once.
+    expect(legend.textContent?.match(/never extrapolated/g)).toHaveLength(1)
   })
 
   it('keeps colour out of the legend’s only carrier, on every layer that has one', async () => {

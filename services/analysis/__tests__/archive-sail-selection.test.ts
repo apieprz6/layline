@@ -30,6 +30,7 @@ import {
 } from '@/services/analysis/filter'
 import {
   cellTotals,
+  cellViews,
   getSailSelectionData,
   gridCoverage,
   type CellVerdict,
@@ -48,6 +49,19 @@ function screenFor(filter: AnalysisFilter): SailSelection {
 }
 
 const screen = once((): SailSelection => screenFor(EMPTY_FILTER))
+
+/**
+ * ADR 0030's state 3 — a cell with racing in it and still no computable **Target Speed** — is
+ * **empty on this archive today**, where the ADR measured 11.
+ *
+ * The same amendment that took the region from 74 to 52 did this: ADR 0036 removed the row-level
+ * suppression floor, so every reached cell inside the Polar's domain now yields a figure, flagged
+ * **Filler-Anchored** where its bracket touches the certificate's ramp. The state is not dead code
+ * — a cell reached *past* the Polar's axes, or one whose rows carry no `SOG`, still lands in it,
+ * and `sail-selection.test.ts` covers both — it is simply unoccupied, which is a fact about this
+ * season rather than about the rule. Named so there is one place to correct when the archive grows.
+ */
+const ROWS_WITHOUT_FIGURE = 0
 
 /** Every verdict in the archive, in Countable rows — the proportion, not a per-cell flag. */
 const verdicts = once((): Record<CellVerdict, number> => {
@@ -104,15 +118,23 @@ describeArchiveScreen('what thirteen races reached', () => {
   })
 
   it('reaches 150 of the 338 cells', () => {
-    expect(gridCoverage(screen().cells).reached).toBe(150)
+    expect(gridCoverage(cellViews(screen().cells)).reached).toBe(150)
   })
 
   it('holds 38 cells where the crew both agreed and differed with the chart', () => {
-    expect(gridCoverage(screen().cells).mixed).toBe(38)
+    expect(gridCoverage(cellViews(screen().cells)).mixed).toBe(38)
+  })
+
+  /** ADR 0030's state 3, pinned as the shipped engine reads it — see `ROWS_WITHOUT_FIGURE`. */
+  it('counts the cells that hold sailing and still have no figure', () => {
+    const coverage = gridCoverage(cellViews(screen().cells))
+
+    expect(coverage.reached).toBe(coverage.with_figure + coverage.rows_without_figure)
+    expect(coverage.rows_without_figure).toBe(ROWS_WITHOUT_FIGURE)
   })
 
   it('leaves no cell ghosted, since nothing is narrowed', () => {
-    expect(gridCoverage(screen().cells).ghosted).toBe(0)
+    expect(gridCoverage(cellViews(screen().cells)).ghosted).toBe(0)
   })
 })
 
@@ -205,8 +227,8 @@ describeArchiveScreen('a narrowing, re-aggregated from the slices', () => {
   it('empties cells and leaves them ghosted rather than blank', () => {
     const moderate = screenFor({ buckets: { sea: ['moderate'] }, range: null })
 
-    const narrowed = gridCoverage(moderate.cells)
-    const whole = gridCoverage(screen().cells)
+    const narrowed = gridCoverage(cellViews(moderate.cells))
+    const whole = gridCoverage(cellViews(screen().cells))
 
     expect(narrowed.reached).toBeLessThan(whole.reached)
     expect(narrowed.ghosted).toBe(whole.reached - narrowed.reached)

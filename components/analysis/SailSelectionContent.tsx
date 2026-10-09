@@ -9,12 +9,11 @@ import SailSelectionGrid, { SailSelectionThumbnails } from '@/components/analysi
 import {
   AGREEMENT_GLYPHS,
   NO_FIGURE,
-  SAIL_SELECTION_LAYERS,
   SWATCH_STYLE,
   agreementTint,
   coverageTint,
+  sailSelectionLayer,
   targetTint,
-  type CellView,
   type SailSelectionLayer,
 } from '@/components/analysis/sail-selection-chrome'
 import { radius, spacing } from '@/lib/utils/design'
@@ -28,9 +27,12 @@ import {
 } from '@/services/analysis/filter'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
 import {
-  cellTotals,
+  cellKey,
+  cellViews,
   getSailSelectionData,
   gridCoverage,
+  unreachableRegions,
+  type GridCoverage,
 } from '@/services/analysis/sail-selection'
 import { sailBands } from '@/services/boat/crossoverSailBands'
 import type {
@@ -98,19 +100,27 @@ export default function SailSelectionContent({
 
   const bands = useMemo(() => sailBands(chart), [chart])
 
-  // 338 cells folded once per narrowing and read by five grids — four thumbnails and the full-size
-  // one — so the fold is memoised on the filter rather than repeated per grid.
-  const { data, views, coverage } = useMemo(() => {
+  // 338 cells folded **once** per narrowing and read by five grids — four thumbnails and the
+  // full-size one — plus the summary line. Everything downstream reads the fold rather than
+  // redoing it, which is what `cellViews` and a `gridCoverage` over views are for.
+  const { data, views, coverage, reasons } = useMemo(() => {
     const selection = getSailSelectionData(rows, filter, dimensions, chart, domain)
+    const folded = cellViews(selection.cells)
+
     return {
       data: selection,
-      views: selection.cells.map((cell): CellView => ({ cell, totals: cellTotals(cell.slices) })),
-      coverage: gridCoverage(selection.cells),
+      views: folded,
+      coverage: gridCoverage(folded),
+      // The legend's own sentences, read off the cells rather than asserted: a chart whose angle
+      // axis ran past the Polar's would get a different reason, and a legend naming only one of
+      // the four would be false there. Deduplicated by region, so this chart's 25 and 30 kt
+      // columns are one sentence between them.
+      reasons: unreachableRegions(selection.cells, domain),
     }
   }, [rows, filter, dimensions, chart, domain])
 
-  const active = SAIL_SELECTION_LAYERS.find((entry) => entry.id === layer) ?? SAIL_SELECTION_LAYERS[0]
-  const open = views.find((view) => `${view.cell.row}:${view.cell.column}` === selected) ?? null
+  const active = sailSelectionLayer(layer)
+  const open = views.find((view) => cellKey(view.cell.row, view.cell.column) === selected) ?? null
   const narrowed = data.ledger.matched_rows < rows.length
 
   function change(next: AnalysisFilter): void {
@@ -161,7 +171,7 @@ export default function SailSelectionContent({
         views={views}
         twa_axis={data.twa_axis}
         tws_axis={data.tws_axis}
-        layer={layer}
+        layer={active}
         bands={bands}
         selected={selected}
         onSelect={setSelected}
@@ -183,7 +193,7 @@ export default function SailSelectionContent({
           `${countOf(data.rows_off_grid)} sailed below the chart's own first row or column, where it makes no recommendation to have agreed or disagreed with.`}
       </p>
 
-      <Legend layer={layer} cells={coverage.cells} unreachable={coverage.unreachable} />
+      <Legend layer={layer} coverage={coverage} reasons={reasons} />
 
       {narrowed && (
         <button
@@ -210,7 +220,7 @@ export default function SailSelectionContent({
 }
 
 /** The one line under the grid: what this layer is actually over. */
-function summary(layer: SailSelectionLayer, coverage: ReturnType<typeof gridCoverage>): string {
+function summary(layer: SailSelectionLayer, coverage: GridCoverage): string {
   const ghosts = coverage.ghosted > 0 ? ` ${coverage.ghosted} were emptied by this filter.` : ''
 
   if (layer === 'chart') {
@@ -222,10 +232,16 @@ function summary(layer: SailSelectionLayer, coverage: ReturnType<typeof gridCove
   if (layer === 'target') {
     // Phrased so no clause has to agree with its own number, since every one of the three can be
     // one cell on a young archive and 150 on this one.
+    // The third clause is dropped rather than zeroed where no Polar was read: the question has no
+    // answer there, and `0 where none can ever exist` would be an answer.
+    const structural =
+      coverage.unreachable === null
+        ? ' · no Polar read, so where none can exist is unknown'
+        : ` · ${coverage.unreachable} where none can ever exist`
+
     return (
       `${coverage.with_figure} of ${coverage.cells} cells carry a percent of target · ` +
-      `${coverage.rows_without_figure} with sailing and no computable one · ` +
-      `${coverage.unreachable} where none can ever exist.${ghosts}`
+      `${coverage.rows_without_figure} with sailing and no computable one${structural}.${ghosts}`
     )
   }
 
@@ -235,12 +251,13 @@ function summary(layer: SailSelectionLayer, coverage: ReturnType<typeof gridCove
 /** What the colours and the glyphs mean, in words, beside a swatch that is never the only carrier. */
 function Legend({
   layer,
-  cells,
-  unreachable,
+  coverage,
+  reasons,
 }: {
   layer: SailSelectionLayer
-  cells: number
-  unreachable: number
+  coverage: GridCoverage
+  /** Why each unreachable cell is unreachable, deduplicated — never one asserted reason. */
+  reasons: readonly string[]
 }): ReactElement | null {
   if (layer === 'chart') return null
 
@@ -269,10 +286,15 @@ function Legend({
             manufactured rather than measured. Shown with the doubt attached, never withheld.
           </li>
           <li>
-            <Swatch fill="var(--surface-divider)" /> {NO_FIGURE} is no Target Speed. {unreachable}{' '}
-            of the {cells} cells can never hold one — their wind speeds are past the Polar&apos;s
-            last column, and it is never extrapolated. Elsewhere a {NO_FIGURE} means this cell&apos;s
-            own rows could not be scored; a tapped cell says which.
+            <Swatch fill="var(--surface-divider)" /> {NO_FIGURE} is no Target Speed.{' '}
+            {/* Null is not nought. With no Polar read, how much of the grid can never hold a
+                figure has no answer — and printing `0` there would be a plausible number standing
+                in for a missing one, which is the one thing AGENTS.md forbids outright. */}
+            {coverage.unreachable === null
+              ? 'How much of the grid can never hold one is unknown here, because the boat’s Polar could not be read.'
+              : `${coverage.unreachable} of the ${coverage.cells} cells can never hold one.`}{' '}
+            {reasons.join(' ')} Elsewhere a {NO_FIGURE} means this cell&apos;s own rows could not be
+            scored; a tapped cell says which.
           </li>
         </>
       )}

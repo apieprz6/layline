@@ -146,6 +146,49 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
     expect([...new Set(past.map((cell) => cell.dataset.print))]).toEqual(['–'])
   })
 
+  /**
+   * The night-vision half of the acceptance criterion, in the only form that can be checked here.
+   *
+   * jsdom loads no stylesheet and resolves no custom property, so the *colours* under
+   * `theme-nightvision` cannot be rendered. What can be rendered, and is the claim that matters,
+   * is that **the print does not consult the theme at all**: every cell prints the same character
+   * under the class as without it. That is what makes the grid readable when the eight sail bands
+   * and the four state tokens have all collapsed to reds (`app/globals.css`, ADR 0024).
+   */
+  it('prints the same in night vision as in daylight, on every layer', async () => {
+    const user = renderScreen()
+    const printsPerLayer: string[][] = []
+
+    for (const layer of SAIL_SELECTION_LAYERS) {
+      await user.click(
+        screen
+          .getAllByTestId('sail-selection-layer')
+          .find((button) => button.dataset.layer === layer.id) as HTMLElement
+      )
+      printsPerLayer.push(
+        screen.getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
+      )
+    }
+
+    document.documentElement.classList.add('theme-nightvision')
+
+    try {
+      for (const [index, layer] of SAIL_SELECTION_LAYERS.entries()) {
+        await user.click(
+          screen
+            .getAllByTestId('sail-selection-layer')
+            .find((button) => button.dataset.layer === layer.id) as HTMLElement
+        )
+
+        expect(
+          screen.getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
+        ).toEqual(printsPerLayer[index])
+      }
+    } finally {
+      document.documentElement.classList.remove('theme-nightvision')
+    }
+  })
+
   it('opens a real cell’s breakdown, with each line’s own percent of target', async () => {
     const user = renderScreen()
 

@@ -12,7 +12,7 @@ import { signInFirst } from '@/lib/account/signInFirst'
 import { sumEfficiency } from '@/services/analysis/efficiency'
 import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { readRecentRaceRows } from '@/services/analysis/readArchive'
-import { getSailSelectionData, gridCoverage } from '@/services/analysis/sail-selection'
+import { cellViews, getSailSelectionData, gridCoverage } from '@/services/analysis/sail-selection'
 import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readRaces } from '@/services/races/readRaces'
 
@@ -123,15 +123,17 @@ async function OverallTab(): Promise<ReactElement> {
           payload === null
             ? null
             : gridCoverage(
-                getSailSelectionData(
-                  recent.rows,
-                  EMPTY_FILTER,
-                  // No dimension registry is needed to count cells, and passing the screen's own
-                  // would mean building a vocabulary this card never shows.
-                  [],
-                  payload,
-                  null
-                ).cells
+                cellViews(
+                  getSailSelectionData(
+                    recent.rows,
+                    EMPTY_FILTER,
+                    // No dimension registry is needed to count cells, and passing the screen's own
+                    // would mean building a vocabulary this card never shows.
+                    [],
+                    payload,
+                    null
+                  ).cells
+                )
               )
         }
       />

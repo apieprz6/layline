@@ -28,36 +28,16 @@
 
 import { radius } from '@/lib/utils/design'
 import { UNKNOWN_SAIL_BAND } from '@/services/boat/crossoverSailBands'
-import type { CellTotals, SailSelectionCell } from '@/services/analysis/sail-selection'
+import type { CellAgreement, SailSelectionCellView } from '@/services/analysis/sail-selection'
 import type { CSSProperties } from 'react'
 
-/** The four grids, in the order the thumbnails draw them. */
-export const SAIL_SELECTION_LAYERS = [
-  {
-    id: 'chart',
-    name: 'Chart',
-    blurb: 'The sail the chart calls for. Never narrowed, never ghosted.',
-  },
-  { id: 'coverage', name: 'Coverage', blurb: 'Races that reached the cell.' },
-  {
-    id: 'target',
-    name: '% target',
-    blurb: 'Percent of Target Speed over the cell’s Countable rows.',
-  },
-  {
-    id: 'agreement',
-    name: 'Agreement',
-    blurb: 'Whether the sail carried was the one the cell prints.',
-  },
-] as const
-
-export type SailSelectionLayer = (typeof SAIL_SELECTION_LAYERS)[number]['id']
-
-/** One cell with its figures already folded, so neither grid re-folds 338 cells to draw them. */
-export interface CellView {
-  cell: SailSelectionCell
-  totals: CellTotals
-}
+/**
+ * One cell with its figures already folded.
+ *
+ * The service's own shape, re-exported under the name the renderers use: five grids are drawn from
+ * the same 338 cells and the fold happens once (`cellViews`).
+ */
+export type CellView = SailSelectionCellView
 
 /**
  * A cell with no figure, on a layer that has one to give.
@@ -68,7 +48,7 @@ export interface CellView {
 export const NO_FIGURE = '–'
 
 /** The glyph each **Cell Agreement** verdict is read by. Printed in every theme. */
-export const AGREEMENT_GLYPHS: Record<string, string> = {
+export const AGREEMENT_GLYPHS: Record<CellAgreement, string> = {
   agrees: '=',
   differs: '≠',
   mixed: '±',
@@ -78,7 +58,7 @@ export const AGREEMENT_GLYPHS: Record<string, string> = {
 }
 
 /** What each verdict is called in words, where there is room for words. */
-export const AGREEMENT_WORDS: Record<string, string> = {
+export const AGREEMENT_WORDS: Record<CellAgreement, string> = {
   agrees: 'carried what the chart calls for',
   differs: 'carried something else',
   mixed: 'both, across this cell’s rows',
@@ -92,12 +72,21 @@ function tint(token: string, percent: number): string {
   return `color-mix(in srgb, var(${token}) ${percent}%, transparent)`
 }
 
-/** Below target, near it, on it, over it — the four bands the legend names. */
+/**
+ * Below target, near it, on it, over it — the four bands the legend names.
+ *
+ * **The four state tokens**, as ADR 0030 says, and `--state-info` for the top band rather than
+ * `--text-accent`: the accent is the Coverage ramp's own hue, and one token meaning two things
+ * across two layers is exactly the confusion the small multiples exist to avoid.
+ *
+ * Above target gets its own band rather than folding into "on target": 105%+ is either genuinely
+ * fast or a calibration story, and both are worth being able to find.
+ */
 export function targetToken(percent: number): string {
   if (percent < 85) return '--state-danger'
   if (percent < 95) return '--state-warning'
   if (percent < 105) return '--state-success'
-  return '--text-accent'
+  return '--state-info'
 }
 
 export function targetTint(percent: number | null, alpha = 34): string {
@@ -117,7 +106,7 @@ export function coverageTint(races: number): string {
  * the crew. Off-chart is emphatically not disagreement (ADR 0023), and the glyph is what tells the
  * two apart.
  */
-const AGREEMENT_TOKENS: Record<string, string | null> = {
+const AGREEMENT_TOKENS: Record<CellAgreement, string | null> = {
   agrees: '--state-success',
   mixed: '--state-warning',
   differs: '--state-danger',
@@ -126,30 +115,150 @@ const AGREEMENT_TOKENS: Record<string, string | null> = {
   'no-rows': null,
 }
 
-export function agreementTint(agreement: string, alpha = 34): string {
-  const token = AGREEMENT_TOKENS[agreement] ?? null
+export function agreementTint(agreement: CellAgreement, alpha = 34): string {
+  const token = AGREEMENT_TOKENS[agreement]
   if (token === null) return 'transparent'
 
   return tint(token, token === '--text-muted' ? 14 : alpha)
 }
 
+/**
+ * A ratio as the whole percent a cell or a breakdown line is *banded* by, or null where none.
+ *
+ * Deliberately not `figures.ts`'s `efficiencyPercent`, and the two are not interchangeable: that
+ * one writes a figure down to one decimal for a sailor to read, and this one rounds to the integer
+ * a 27px cell has room for and `targetToken` picks a band from. One rounding rule for both uses,
+ * so a cell printing `95` can never be tinted from the band below it.
+ */
+export function roundedPercent(ratio: number | null): number | null {
+  return ratio === null ? null : Math.round(ratio * 100)
+}
+
 /** This cell's percent of target, rounded as the grid prints it, or null where it has none. */
 export function cellPercent(view: CellView): number | null {
-  const ratio = view.totals.efficiency.polar_efficiency
-  return ratio === null ? null : Math.round(ratio * 100)
+  return roundedPercent(view.totals.efficiency.polar_efficiency)
+}
+
+/**
+ * What one layer draws in a cell, and what it says about it.
+ *
+ * The layers are a **registry and not a cascade**, which is the difference between adding a fifth
+ * grid and editing seven `switch`es. Every per-layer decision lives on the layer: what a cell
+ * prints, how it is tinted, what its accessible sentence says, whether it narrows at all, and
+ * whether it flags the Polar's filler.
+ */
+export interface SailSelectionLayerSpec {
+  id: 'chart' | 'coverage' | 'target' | 'agreement'
+  name: string
+  blurb: string
+  /**
+   * Whether an **Analysis Filter** touches this layer.
+   *
+   * False on Chart alone, and it is what makes that layer unghostable: the chart's recommendation
+   * does not become less true because no Race reached the cell (ADR 0030).
+   */
+  narrows: boolean
+  /** Whether this layer's figure can rest on the Polar's own filler, and so be flagged. */
+  flags_filler: boolean
+  /** What the cell prints. The empty string is blank, and blank means blank. */
+  print(view: CellView): string
+  /** The cell's fill. `transparent` where nothing was reached: empty reads as empty. */
+  tint(view: CellView, bands: ReadonlyMap<number, string>): string
+  /** What this layer adds to a reached cell's spoken sentence, after its coverage. */
+  detail(view: CellView): string
+}
+
+/** The four grids, in the order the thumbnails draw them. */
+export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
+  {
+    id: 'chart',
+    name: 'Chart',
+    blurb: 'The sail the chart calls for. Never narrowed, never ghosted.',
+    narrows: false,
+    flags_filler: false,
+    print: (view) => (view.cell.sail_number === null ? '' : String(view.cell.sail_number)),
+    tint: (view, bands) => {
+      const band = view.cell.sail_number === null ? undefined : bands.get(view.cell.sail_number)
+      return band ?? UNKNOWN_SAIL_BAND
+    },
+    // Never reached: the Chart layer's sentence is its recommendation, which every layer already
+    // says, so there is nothing to add.
+    detail: () => '',
+  },
+  {
+    id: 'coverage',
+    name: 'Coverage',
+    blurb: 'Races that reached the cell.',
+    narrows: true,
+    flags_filler: false,
+    print: (view) => (view.totals.rows === 0 ? '' : String(view.totals.races)),
+    tint: (view) => (view.totals.rows === 0 ? 'transparent' : coverageTint(view.totals.races)),
+    detail: () => '',
+  },
+  {
+    id: 'target',
+    name: '% target',
+    blurb: 'Percent of Target Speed over the cell’s Countable rows.',
+    narrows: true,
+    flags_filler: true,
+    print: (view) => {
+      // A figure first, always: a computed figure is never suppressed on the strength of a claim
+      // about the Polar's domain (ADR 0036). Then the structural dash — which prints whether or
+      // not any Race reached the cell, because whether a Target Speed can exist there is a
+      // property of the two artifacts' shapes and not of how much racing has been logged.
+      const percent = cellPercent(view)
+      if (percent !== null) return String(percent)
+      if (view.cell.target_reachable === false) return NO_FIGURE
+
+      return view.totals.rows === 0 ? '' : NO_FIGURE
+    },
+    tint: (view) => {
+      const percent = cellPercent(view)
+      if (percent !== null) return targetTint(percent)
+
+      // A neutral and not the pale end of the band ramp: there is no figure here to be in a band,
+      // and the dash printed over it is the fact.
+      return view.cell.target_reachable === false || view.totals.rows > 0
+        ? 'var(--surface-divider)'
+        : 'transparent'
+    },
+    detail: (view) => {
+      const percent = cellPercent(view)
+      return percent === null ? 'no percent of target' : `${percent}% of target`
+    },
+  },
+  {
+    id: 'agreement',
+    name: 'Agreement',
+    blurb: 'Whether the sail carried was the one the cell prints.',
+    narrows: true,
+    flags_filler: false,
+    print: (view) => (view.totals.rows === 0 ? '' : AGREEMENT_GLYPHS[view.totals.agreement]),
+    tint: (view) =>
+      view.totals.rows === 0 ? 'transparent' : agreementTint(view.totals.agreement),
+    detail: (view) => AGREEMENT_WORDS[view.totals.agreement],
+  },
+]
+
+export type SailSelectionLayer = SailSelectionLayerSpec['id']
+
+/** One layer by id, falling back to the Chart the screen opens on. */
+export function sailSelectionLayer(id: SailSelectionLayer): SailSelectionLayerSpec {
+  return SAIL_SELECTION_LAYERS.find((layer) => layer.id === id) ?? SAIL_SELECTION_LAYERS[0]
 }
 
 /**
  * Whether this cell keeps a **dotted ghost**: it held rows, and the current narrowing emptied it.
  *
- * The Chart layer never ghosts, because it never filtered. Blank plus a ghost rather than the
- * unfiltered value dimmed: showing a number the filter excludes is a lie with a legend, and on a
- * grid of 338 cells nobody consults the legend. Silently blanking loses the one thing a sailor
- * wants from a narrowing — what it cost — and moderate seas alone take this screen from 150 reached
- * cells to a fraction of that (ADR 0030).
+ * The Chart layer never ghosts, because it never filtered — which is `narrows`, read off the layer
+ * rather than re-tested here. Blank plus a ghost rather than the unfiltered value dimmed: showing
+ * a number the filter excludes is a lie with a legend, and on a grid of 338 cells nobody consults
+ * the legend. Silently blanking loses the one thing a sailor wants from a narrowing — what it cost
+ * — and moderate seas alone take this screen from 150 reached cells to a fraction of that
+ * (ADR 0030).
  */
-export function isGhost(view: CellView, layer: SailSelectionLayer): boolean {
-  return layer !== 'chart' && view.totals.rows === 0 && view.cell.unfiltered_rows > 0
+export function isGhost(view: CellView, layer: SailSelectionLayerSpec): boolean {
+  return layer.narrows && view.totals.rows === 0 && view.cell.unfiltered_rows > 0
 }
 
 /**
@@ -159,60 +268,8 @@ export function isGhost(view: CellView, layer: SailSelectionLayer): boolean {
  * cell it is compared against, so the doubt belongs *on* the figure (ADR 0036). There is no room
  * for a badge in 27 pixels, and a shape survives the night-vision theme where a colour does not.
  */
-export function isFillerAnchored(view: CellView, layer: SailSelectionLayer): boolean {
-  return layer === 'target' && view.totals.efficiency.filler_anchored_rows > 0
-}
-
-/** What the cell prints on this layer. The empty string is blank, and blank means blank. */
-export function cellPrint(view: CellView, layer: SailSelectionLayer): string {
-  if (layer === 'chart') {
-    return view.cell.sail_number === null ? '' : String(view.cell.sail_number)
-  }
-
-  if (layer === 'target') {
-    // A figure first, always: a computed figure is never suppressed on the strength of a claim
-    // about the Polar's domain (ADR 0036). Then the structural dash — which prints whether or not
-    // any Race reached the cell, because whether a Target Speed can exist there is a property of
-    // the two artifacts' shapes and not of how much racing has been logged (ADR 0030).
-    const percent = cellPercent(view)
-    if (percent !== null) return String(percent)
-    if (!view.cell.target_reachable) return NO_FIGURE
-
-    return view.totals.rows === 0 ? '' : NO_FIGURE
-  }
-
-  if (view.totals.rows === 0) return ''
-  if (layer === 'coverage') return String(view.totals.races)
-
-  return AGREEMENT_GLYPHS[view.totals.agreement] ?? ''
-}
-
-/** The cell's fill on this layer. `transparent` where nothing was reached: empty reads as empty. */
-export function cellTint(
-  view: CellView,
-  layer: SailSelectionLayer,
-  bands: ReadonlyMap<number, string>
-): string {
-  if (layer === 'chart') {
-    const band = view.cell.sail_number === null ? undefined : bands.get(view.cell.sail_number)
-    return band ?? UNKNOWN_SAIL_BAND
-  }
-
-  if (layer === 'target') {
-    const percent = cellPercent(view)
-    if (percent !== null) return targetTint(percent)
-
-    // A neutral and not the pale end of the band ramp: there is no figure here to be in a band,
-    // and the dash printed over it is the fact.
-    return !view.cell.target_reachable || view.totals.rows > 0
-      ? 'var(--surface-divider)'
-      : 'transparent'
-  }
-
-  if (view.totals.rows === 0) return 'transparent'
-  if (layer === 'coverage') return coverageTint(view.totals.races)
-
-  return agreementTint(view.totals.agreement)
+export function isFillerAnchored(view: CellView, layer: SailSelectionLayerSpec): boolean {
+  return layer.flags_filler && view.totals.efficiency.filler_anchored_rows > 0
 }
 
 /**
@@ -220,32 +277,29 @@ export function cellTint(
  *
  * A grid of 338 glyphs is unreadable if every one has to be looked up, and this is also the cell
  * button's accessible name: a screen reader is given the sentence rather than the glyph.
+ *
+ * The shared half is here and the per-layer clause is the layer's own `detail`, because what every
+ * layer says about a cell — where it is, what the chart calls for, and whether a narrowing emptied
+ * it — is the same sentence on all four.
  */
-export function cellSentence(view: CellView, layer: SailSelectionLayer): string {
+export function cellSentence(view: CellView, layer: SailSelectionLayerSpec): string {
   const { cell, totals } = view
   const where = `${cell.twa}° at ${cell.tws} kt`
   const says = `chart says ${cell.recommendation?.definition.label ?? `sail ${cell.sail_number ?? '—'}`}`
+  const opening = `${where} — ${says}`
 
-  if (layer === 'chart') return `${where} — ${says}`
+  if (!layer.narrows) return opening
 
   if (totals.rows === 0) {
     const emptied =
-      cell.unfiltered_rows > 0
-        ? `, ${cell.unfiltered_rows} with the filter cleared`
-        : ''
-    return `${where} — ${says}, no sailing here under this filter${emptied}`
+      cell.unfiltered_rows > 0 ? `, ${cell.unfiltered_rows} with the filter cleared` : ''
+    return `${opening}, no sailing here under this filter${emptied}`
   }
 
   const coverage = `${totals.rows} rows from ${totals.races} ${totals.races === 1 ? 'race' : 'races'}`
-  if (layer === 'coverage') return `${where} — ${says}, ${coverage}`
+  const detail = layer.detail(view)
 
-  if (layer === 'target') {
-    const percent = cellPercent(view)
-    const figure = percent === null ? 'no percent of target' : `${percent}% of target`
-    return `${where} — ${says}, ${figure} over ${coverage}`
-  }
-
-  return `${where} — ${says}, ${AGREEMENT_WORDS[totals.agreement] ?? ''} over ${coverage}`
+  return detail === '' ? `${opening}, ${coverage}` : `${opening}, ${detail} over ${coverage}`
 }
 
 /** 40px of angle column, and thirteen wind speeds dividing what is left of a 390px screen. */

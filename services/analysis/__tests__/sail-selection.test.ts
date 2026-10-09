@@ -28,6 +28,7 @@ import type { PolarDomain } from '@/services/analysis/polar-targets'
 import {
   cellBreakdown,
   cellTotals,
+  cellViews,
   getSailSelectionData,
   gridCoverage,
   unreachableReason,
@@ -346,11 +347,21 @@ describe('a cell that can never hold a percent of Target Speed', () => {
     expect(cellAt(reaching.cells, 90, 25).target_reachable).toBe(false)
   })
 
-  it('claims nothing structural where no Polar was in hand to ask', () => {
+  it('answers unknown rather than yes where no Polar was in hand to ask', () => {
     const noPolar = getSailSelectionData([], EMPTY_FILTER, DIMENSIONS, CHART, null)
 
-    expect(noPolar.cells.every((cell) => cell.target_reachable)).toBe(true)
+    // Null and not `true`: the question has no answer with no Polar read, and `true` everywhere
+    // would let the screen count the region at nought — a plausible number in place of a missing
+    // one, which is the one thing AGENTS.md forbids outright.
+    expect(noPolar.cells.every((cell) => cell.target_reachable === null)).toBe(true)
     expect(unreachableReason(cellAt(noPolar.cells, 90, 25), null)).toBeNull()
+  })
+
+  it('has no count of the region to give where the Polar could not be read', () => {
+    const noPolar = getSailSelectionData([], EMPTY_FILTER, DIMENSIONS, CHART, null)
+
+    expect(gridCoverage(cellViews(noPolar.cells)).unreachable).toBeNull()
+    expect(gridCoverage(cellViews(data([]).cells)).unreachable).toBe(2)
   })
 
   it('is a different state from a cell that holds rows and still has no figure', () => {
@@ -425,7 +436,7 @@ describe('what the grid says about itself', () => {
       row({ twa: 45, tws: 7, target: null }),
     ]
 
-    const coverage = gridCoverage(data(rows).cells)
+    const coverage = gridCoverage(cellViews(data(rows).cells))
 
     expect(coverage).toEqual({
       cells: 6,
@@ -441,7 +452,7 @@ describe('what the grid says about itself', () => {
 
   it('counts a cell a narrowing emptied as ghosted rather than as reached', () => {
     const coverage = gridCoverage(
-      data([row({ sea: 'calm' })], { buckets: { sea: ['slight'] }, range: null }).cells
+      cellViews(data([row({ sea: 'calm' })], { buckets: { sea: ['slight'] }, range: null }).cells)
     )
 
     expect(coverage.reached).toBe(0)

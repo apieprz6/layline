@@ -6,6 +6,7 @@ import {
   AGREEMENT_GLYPHS,
   AGREEMENT_WORDS,
   cellPercent,
+  roundedPercent,
   targetTint,
   type CellView,
 } from '@/components/analysis/sail-selection-chrome'
@@ -182,8 +183,11 @@ function Group({
  * state colours to four reds. `no target` in words rather than a dash, which reads as withheld.
  */
 function Line({ line }: { line: BreakdownLine }): ReactElement {
-  const percent = line.efficiency.polar_efficiency
-  const figure = efficiencyPercent(percent)
+  const ratio = line.efficiency.polar_efficiency
+  // Written to one decimal for reading, banded on the integer — through the same two helpers the
+  // grid uses, so a line printing 95.0% can never be tinted from the band below it.
+  const figure = efficiencyPercent(ratio)
+  const percent = roundedPercent(ratio)
 
   return (
     <li data-testid="breakdown-line" data-line={line.id} style={ROW_STYLE}>
@@ -200,7 +204,7 @@ function Line({ line }: { line: BreakdownLine }): ReactElement {
         <span
           style={{
             ...PERCENT_STYLE,
-            background: percent === null ? undefined : targetTint(Math.round(percent * 100), 42),
+            background: percent === null ? undefined : targetTint(percent, 42),
           }}
         >
           {figure ?? 'no target'}
