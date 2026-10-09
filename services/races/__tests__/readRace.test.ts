@@ -38,8 +38,9 @@ let annotationError: { message: string } | null = null
 /**
  * The vocabulary the Race's own Crossover Chart Version defines, and which Version was asked for.
  *
- * The Version asked for is recorded because that is the claim: the words come from the Version the
- * Race points at, never from whichever chart is current now (ADR 0012).
+ * The Versions asked for are recorded because that is the claim: the words come from the Version
+ * the Race points at, never from whichever chart is current now (ADR 0012). One request for every
+ * Version named, so what lands here is a list.
  */
 let definitions: Record<string, unknown>[] = []
 let definitionsError: { message: string } | null = null
@@ -91,8 +92,8 @@ const from = jest.fn((table: string) => {
   if (table === 'crossover_sail_definitions') {
     return {
       select: () => ({
-        eq: (_column: string, value: unknown) => {
-          versionsAsked.push(value)
+        in: (_column: string, values: unknown) => {
+          versionsAsked.push(values)
           return {
             returns: async () =>
               definitionsError !== null
@@ -231,8 +232,8 @@ describe('readRace', () => {
     seaStateEntries = []
     annotationError = null
     definitions = [
-      { number: 1, label: 'Main + Jib 1' },
-      { number: 4, label: 'Main + A2' },
+      { version_id: 'chart-v1', number: 1, label: 'Main + Jib 1' },
+      { version_id: 'chart-v1', number: 4, label: 'Main + A2' },
     ]
     definitionsError = null
     versionsAsked.length = 0
@@ -458,7 +459,7 @@ describe('readRace', () => {
         { at: '2026-08-22 11:01:30', sea_state: 'moderate' },
       ])
       // The Race's own frozen pointer, not the artifact's current one.
-      expect(versionsAsked).toEqual(['chart-v1'])
+      expect(versionsAsked).toEqual([['chart-v1']])
     })
 
     it('states a note-only entry as what was written, with no label nobody chose', async () => {
@@ -471,8 +472,11 @@ describe('readRace', () => {
       expect(race?.annotations.sails).toEqual([
         { at: '2026-08-22 11:00:00', definition_number: null, label: null, note: 'delivery main' },
       ])
-      // Nothing named a Definition, so no vocabulary was needed and none was asked for.
-      expect(versionsAsked).toEqual([])
+      // The vocabulary is read whatever the entries say — it goes out beside the Transcription,
+      // so skipping it would save no time — and nothing from it is put on an entry that named no
+      // Definition. `label: null` above is that claim; this is only that the right Version was
+      // asked about.
+      expect(versionsAsked).toEqual([['chart-v1']])
     })
 
     it('asks for no vocabulary at all when the Race records no chart Version', async () => {
@@ -486,6 +490,8 @@ describe('readRace', () => {
       const race = await readRace('race-1')
 
       expect(race?.annotations.sails).toEqual([])
+      // Still nothing asked for: with no Version named there is no vocabulary to read, and
+      // `readSailDefinitions` short-circuits rather than sending `version_id=in.()`.
       expect(versionsAsked).toEqual([])
     })
 

@@ -25,8 +25,9 @@
  * The screen defaults to the **whole archive**. A recent window is something the sailor asks for
  * through the `when` chip, never something the screen quietly applied — thirteen races is the
  * entire evidence base, and a default that hid most of it would make the **Coverage Ledger**'s own
- * totals a lie. `recentRaceRows` exists for the Overall tab's teaser alone, which says in as many
- * words that it is five races.
+ * totals a lie. The Overall tab's teaser is the one place a recent window appears, it says so in
+ * as many words, and it gets there by reading five races rather than by slicing thirteen
+ * (`readRecentRaceRows`).
  */
 
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
@@ -117,23 +118,3 @@ export function vmgFillerAnchoredShare(aggregate: EfficiencyAggregate): number |
     : aggregate.vmg_filler_anchored_rows / aggregate.vmg_rows
 }
 
-/**
- * The rows of the most recent `count` **Races**, for the Overall tab's teaser.
- *
- * `racesNewestFirst` is passed in rather than inferred from the rows, because the order that
- * matters is the Races' own `window_start` — the date each race was *sailed* (`readRaces`) — and a
- * row set says nothing about a race whose rows are all outside its window. Inferring it from the
- * rows' days would also quietly reorder two races logged on one day.
- *
- * A named race the row set has nothing for contributes no rows and still spends one of the
- * `count`: it is one of the most recent races, and silently reaching further back would make the
- * teaser's own "last five races" untrue.
- */
-export function recentRaceRows(
-  rows: readonly MatchableRow[],
-  racesNewestFirst: readonly string[],
-  count: number
-): MatchableRow[] {
-  const recent = new Set(racesNewestFirst.slice(0, count))
-  return rows.filter((row) => recent.has(row.race_id))
-}

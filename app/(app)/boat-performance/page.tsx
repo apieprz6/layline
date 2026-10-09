@@ -9,8 +9,7 @@ import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { sumEfficiency } from '@/services/analysis/efficiency'
-import { recentRaceRows } from '@/services/analysis/polar-performance'
-import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { readRecentRaceRows } from '@/services/analysis/readArchive'
 import { readRaces } from '@/services/races/readRaces'
 
 export const dynamic = 'force-dynamic'
@@ -74,16 +73,18 @@ async function RaceArchiveScreen({
  * `/boat-performance/polar` gives: "no races" over a failed read would be Layline claiming the
  * sailor has sailed nothing.
  *
- * The race order comes from `archive.races`, which is `window_start` descending — the date each
- * race was *sailed* and never the date it was typed in, so an archive backfilled in one afternoon
- * still teases the five most recent races.
+ * The five most recent races are chosen by the **database**, ordered on `window_start` descending
+ * — the date each race was *sailed* and never the date it was typed in, so an archive backfilled in
+ * one afternoon still teases the five races last sailed. Reading only those five rather than the
+ * whole archive is most of what this card costs: the other eight races' Transcriptions were being
+ * read, assessed and scored to produce rows nobody on this tab would ever see.
  */
 async function OverallTab(): Promise<ReactElement> {
-  const archive = await readAnalysisArchive()
+  const recent = await readRecentRaceRows(TEASER_RACES)
 
-  if (archive === null) return <ArchiveUnreadable />
+  if (recent === null) return <ArchiveUnreadable />
 
-  if (archive.races.length === 0) {
+  if (recent.races.length === 0) {
     return (
       <EmptyState
         mark="📈"
@@ -93,13 +94,11 @@ async function OverallTab(): Promise<ReactElement> {
     )
   }
 
-  const raceIds = archive.races.map((race) => race.id)
-  const recent = recentRaceRows(archive.rows, raceIds, TEASER_RACES)
-
   return (
     <PolarPerformanceTeaser
-      races={Math.min(TEASER_RACES, raceIds.length)}
-      efficiency={sumEfficiency(recent)}
+      // What the figure is actually over, which on a young archive is fewer than five.
+      races={recent.races.length}
+      efficiency={sumEfficiency(recent.rows)}
     />
   )
 }

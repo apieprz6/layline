@@ -17,7 +17,6 @@ import {
 import {
   fillerAnchoredShare,
   getPolarPerformanceData,
-  recentRaceRows,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import type { MatchableRow } from '@/types'
@@ -218,39 +217,5 @@ describe('the per-band breakdown', () => {
   it('has no band breakdown on a screen that does not offer the wind dimension', () => {
     const withoutWind = analysisDimensions(['pos', 'sea'], { sails: [], months: [] })
     expect(getPolarPerformanceData(rows, EMPTY_FILTER, withoutWind).bands).toEqual([])
-  })
-})
-
-describe('the recent-N teaser the Overall tab shows', () => {
-  const rows = [
-    scored({ race_id: 'f', day: '2026-07-29', sog: 6, target: 6 }),
-    scored({ race_id: 'e', day: '2026-07-22', sog: 6, target: 6 }),
-    scored({ race_id: 'd', day: '2026-07-01', sog: 6, target: 6 }),
-    scored({ race_id: 'c', day: '2026-06-26', sog: 6, target: 6 }),
-    scored({ race_id: 'b', day: '2026-06-20', sog: 6, target: 6 }),
-    scored({ race_id: 'a', day: '2026-06-03', sog: 3, target: 6 }),
-  ]
-  const newestFirst = ['f', 'e', 'd', 'c', 'b', 'a']
-
-  it('takes the rows of the most recent N races and no others', () => {
-    const recent = recentRaceRows(rows, newestFirst, 5)
-    expect(new Set(recent.map((row) => row.race_id))).toEqual(new Set(['f', 'e', 'd', 'c', 'b']))
-  })
-
-  it('takes the whole archive when it is shorter than N, rather than refusing', () => {
-    expect(recentRaceRows(rows, newestFirst, 20)).toHaveLength(6)
-  })
-
-  it('reads the race order it is given rather than inferring one from the rows', () => {
-    // The reader orders races by their own `window_start` (`readRaces`), which is the race's date
-    // and not the upload's — so an archive backfilled in one afternoon still teases the last five
-    // races sailed.
-    expect(new Set(recentRaceRows(rows, ['a', 'b'], 1).map((row) => row.race_id))).toEqual(
-      new Set(['a'])
-    )
-  })
-
-  it('leaves a race the row set has nothing for out, rather than counting it toward N', () => {
-    expect(recentRaceRows(rows, ['zz', 'a'], 1)).toEqual([])
   })
 })
