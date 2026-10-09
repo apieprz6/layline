@@ -10,13 +10,13 @@
  * in-window rows, hand-entered a few times a season; a cache keyed on `updated_at` that nothing
  * yet needs is a maintenance cost with no matching benefit.
  *
- * ## The order the figures are derived in, which is load-bearing
+ * ## What is here, and what is next door
  *
- * Row Quality and Maneuvers are computed over the **whole Transcription** and only then clipped to
- * the Race Window (ADR 0009): a dropout beginning before the gun still froze the race's first
- * rows, and clipping first cannot see the flip that says so. The row **intervals**, by contrast,
- * are measured over the in-window rows alone, which is what `aggregateEfficiency` is handed and
- * what makes an excluded row's time fall out of the sums rather than land on a neighbour.
+ * The **reads** are here, with the all-or-nothing refusal that depends on them. Every *rule* about
+ * a row — Row Quality and Maneuvers over the whole Transcription before the window clip (ADR
+ * 0009), the intervals measured over the in-window rows alone, **Countable**, the scoring — is
+ * `services/analysis/matchable-rows.ts`, which needs no database and so can be run against the
+ * owner's own thirteen recordings by the suites that pin the archive's counts.
  *
  * ## Why each row carries its interval and its score
  *
@@ -35,30 +35,17 @@
  */
 
 import { createClient } from '@/lib/supabase/server'
-import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
-import { computeRowEfficiency, rowIntervalSeconds } from '@/services/analysis/efficiency'
 import type { AnalysisVocabulary } from '@/services/analysis/filter'
-import { detectManeuvers, sameRowOrder } from '@/services/analysis/maneuvers'
+import { buildMatchableRows } from '@/services/analysis/matchable-rows'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
 import { polarTargets } from '@/services/analysis/polar-targets'
-import { channelValue } from '@/services/analysis/readable-rows'
 import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readPolarVersion } from '@/services/boat/readPolarVersions'
-import { annotationInForce } from '@/services/races/annotations'
 import type { SailDefinitionLabels } from '@/services/races/readRace'
 import { readRaceAnnotations, readSailDefinitions } from '@/services/races/readRace'
-import type { RecordedRow } from '@/services/races/recording-rows'
 import { readRecordingRows } from '@/services/races/recording-rows'
-import { assessRowQuality } from '@/services/recordings/row-quality'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
-import type {
-  AnalysisArchiveRace,
-  CrossoverChartScreen,
-  MatchableRow,
-  RaceAnnotations,
-  RowEfficiency,
-  RowSail,
-} from '@/types'
+import type { AnalysisArchiveRace, CrossoverChartScreen, MatchableRow } from '@/types'
 
 /** Everything an analysis screen is shipped. */
 export interface AnalysisArchive {
@@ -94,42 +81,12 @@ interface RaceRow {
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
-/** An unscored row: what a Race with no **Polar** pointer, or a channel-less row, answers with. */
-const NO_EFFICIENCY = (row_index: number): RowEfficiency => ({
-  row_index,
-  target_speed: null,
-  polar_efficiency: null,
-  vmg_zone: null,
-  vmg: null,
-  target_vmg: null,
-  vmg_efficiency: null,
-})
-
-/**
- * What the record says about the sail in force on a row: a Definition, a note alone, or nothing.
- *
- * The three states ADR 0029 names, read off one resolved annotation. A Configuration with a label
- * names a **Sail Definition**; one without names none, which ADR 0023 makes a legitimate answer
- * rather than a defect; no Configuration at all is **Not recorded**.
- */
-function sailInForce(annotations: RaceAnnotations, rowTime: string): RowSail {
-  const entry = annotationInForce(annotations.sails, rowTime)
-  if (entry === null) return { recorded: 'not-recorded' }
-
-  return entry.label === null ? { recorded: 'note-only' } : { recorded: 'definition', label: entry.label }
-}
-
-/** Seconds past midnight in the recording's own frame, which is the `time` dimension's axis. */
-function secondsIntoDay(rowTime: string): number {
-  return (
-    Number(rowTime.slice(11, 13)) * 3600 +
-    Number(rowTime.slice(14, 16)) * 60 +
-    Number(rowTime.slice(17, 19))
-  )
-}
-
 /**
  * One Race's in-window rows, or null where the Race could not be read whole.
+ *
+ * The two reads, and then `buildMatchableRows` for every rule about a row. The split is what lets
+ * the suites that pin these figures against the owner's own thirteen recordings run the same
+ * pipeline with no database behind them (`services/analysis/matchable-rows.ts`).
  *
  * `targets` is the Polar the Race itself points at, already resolved, or null where it points at
  * none. Null is not a failure: the oldest races predate every Boat Setup artifact the boat has,
@@ -151,40 +108,7 @@ async function raceRows(
 
   if (transcription === null || annotations === null) return null
 
-  // Assessed over the whole Transcription, then clipped — in that order, always (ADR 0009).
-  const quality = assessRowQuality(transcription)
-  const maneuvers = detectManeuvers(transcription, quality)
-  const verdicts = analysisRows(quality, maneuvers)
-
-  // `analysisRows` already refuses to join two misaligned row lists, and both its arguments were
-  // derived from `transcription` in order — so this is the belt rather than the braces. It is one
-  // line, and what it protects against is one row's channels wearing its neighbour's verdict.
-  if (!sameRowOrder(transcription, verdicts)) {
-    throw new Error(`the Transcription and its Countable verdicts are not the same rows: ${race.id}`)
-  }
-
-  const joined: (RecordedRow & { countable: boolean })[] = transcription.map((row, index) => ({
-    ...row,
-    countable: verdicts[index].countable,
-  }))
-
-  const inWindow = analysisRowsWithin(joined, race)
-  const intervals = rowIntervalSeconds(inWindow)
-
-  return inWindow.map((row, index) => ({
-    race_id: race.id,
-    row_index: row.row_index,
-    day: row.row_time.slice(0, 10),
-    day_seconds: secondsIntoDay(row.row_time),
-    tws: channelValue(row.tws),
-    twa: channelValue(row.twa),
-    sea_state: annotationInForce(annotations.sea_state, row.row_time)?.sea_state ?? null,
-    sail: sailInForce(annotations, row.row_time),
-    countable: row.countable,
-    interval_seconds: intervals[index],
-    sog: channelValue(row.sog),
-    efficiency: targets === null ? NO_EFFICIENCY(row.row_index) : computeRowEfficiency(row, targets),
-  }))
+  return buildMatchableRows(transcription, { id: race.id, window: race }, annotations, targets)
 }
 
 /**

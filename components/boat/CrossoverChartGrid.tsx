@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { crossoverDefinitionUsage } from '@/services/boat/crossoverDefinitionUsage'
+import { UNKNOWN_SAIL_BAND, sailBand } from '@/services/boat/crossoverSailBands'
 import { spacing } from '@/lib/utils/design'
 import type { CrossoverChartPayload } from '@/types'
 
@@ -32,10 +33,10 @@ interface CrossoverChartGridProps {
 export default function CrossoverChartGrid({ payload }: CrossoverChartGridProps): ReactElement {
   const usage = crossoverDefinitionUsage(payload)
 
-  // Band by position in this Version's own definitions list, not by sail number: the numbers are
-  // qtVlm's and need not start at 1 or be contiguous, so indexing a palette by them would leave
-  // gaps in the palette and give two charts of the same boat different colours.
-  const bandOf = new Map(usage.map((entry, index) => [entry.definition.number, band(index)]))
+  // Banded by position in this Version's own definitions list and not by sail number — see
+  // `crossoverSailBands`, which the Sail Selection Screen's Chart layer reads too, so the two grids
+  // cannot give the same sail two colours.
+  const bandOf = new Map(usage.map((entry, index) => [entry.definition.number, sailBand(index)]))
   const labelOf = new Map(usage.map((entry) => [entry.definition.number, entry.definition.label]))
 
   return (
@@ -70,7 +71,7 @@ export default function CrossoverChartGrid({ payload }: CrossoverChartGridProps)
                     title={`${formatAxis(twa)}° at ${formatAxis(
                       payload.tws_axis[column] ?? 0
                     )} kn — ${labelOf.get(sail) ?? `sail ${sail}`}`}
-                    style={{ ...CELL_STYLE, background: bandOf.get(sail) ?? UNKNOWN_BAND }}
+                    style={{ ...CELL_STYLE, background: bandOf.get(sail) ?? UNKNOWN_SAIL_BAND }}
                   >
                     {sail}
                   </td>
@@ -94,7 +95,7 @@ export default function CrossoverChartGrid({ payload }: CrossoverChartGridProps)
             data-sail={entry.definition.number}
             style={LEGEND_ROW_STYLE}
           >
-            <span aria-hidden="true" style={{ ...SWATCH_STYLE, background: band(index) }}>
+            <span aria-hidden="true" style={{ ...SWATCH_STYLE, background: sailBand(index) }}>
               {entry.definition.number}
             </span>
             <span style={LEGEND_LABEL_STYLE}>{entry.definition.label}</span>
@@ -114,20 +115,6 @@ export default function CrossoverChartGrid({ payload }: CrossoverChartGridProps)
     </div>
   )
 }
-
-/** How many sail bands the stylesheet defines. Beyond it the tints repeat. */
-const BANDS = 8
-
-function band(index: number): string {
-  return `var(--sail-band-${(index % BANDS) + 1})`
-}
-
-/**
- * A cell whose sail no definition defines — which the payload schema refuses, so nothing that
- * reached the database can show it. Drawn rather than hidden all the same: a payload written before
- * a rule tightened must still render, and an unnamed sail is better shown as unnamed than dropped.
- */
-const UNKNOWN_BAND = 'var(--surface-divider)'
 
 /**
  * An axis value as the file gave it: `6`, `12.5`. Never padded to a decimal place the file did not

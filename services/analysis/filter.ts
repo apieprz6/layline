@@ -123,6 +123,27 @@ export const POLAR_PERFORMANCE_DIMENSIONS: readonly AnalysisDimension[] = [
 ]
 
 /**
+ * The **Sail Selection Screen**'s five, which is the same list with **"sail used" dropped**.
+ *
+ * Not an omission to be fixed. The sail is the chart's own answer on that screen, so a chip that
+ * narrowed by it would be filtering the grid by the quantity the grid is about — and ADR 0029
+ * drops a dimension whose values are the chart's answer. The sail actually carried is still
+ * legible there, twice over: the **Cell Agreement** layer counts it per cell, and a tapped cell's
+ * breakdown lists it per **Sail Configuration** with each line's own percent of target (ADR 0030).
+ *
+ * Wind speed and point of sail stay, though they are the grid's own two axes. A cell is a *floor*
+ * on both — the largest column at or below the row — so narrowing to Medium air is not the same
+ * question as reading a column, and narrowing to upwind spans several of the chart's angle rows.
+ */
+export const SAIL_SELECTION_DIMENSIONS: readonly AnalysisDimension[] = [
+  'wind',
+  'pos',
+  'sea',
+  'time',
+  'when',
+]
+
+/**
  * What the two derived dimensions take from the archive.
  *
  * A port, in the sense `AGENTS.md` means: whoever reads the archive supplies it, and this module

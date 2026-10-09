@@ -1,6 +1,7 @@
 import { Suspense, type ReactElement } from 'react'
 import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
 import PolarPerformanceTeaser, { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
+import SailSelectionTeaser from '@/components/analysis/SailSelectionTeaser'
 import BoatPerformanceContent from '@/components/boat/BoatPerformanceContent'
 import BoatPerformanceSkeleton from '@/components/boat/BoatPerformanceSkeleton'
 import EmptyState from '@/components/common/EmptyState'
@@ -9,7 +10,10 @@ import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { sumEfficiency } from '@/services/analysis/efficiency'
+import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { readRecentRaceRows } from '@/services/analysis/readArchive'
+import { getSailSelectionData, gridCoverage } from '@/services/analysis/sail-selection'
+import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readRaces } from '@/services/races/readRaces'
 
 export const dynamic = 'force-dynamic'
@@ -67,7 +71,8 @@ async function RaceArchiveScreen({
 }
 
 /**
- * The Overall tab: the Polar performance teaser, over the last five races.
+ * The Overall tab: the Polar performance teaser, and the Sail selection chart's coverage, over the
+ * last five races.
  *
  * A failed read and an empty archive are different screens, for the reason
  * `/boat-performance/polar` gives: "no races" over a failed read would be Layline claiming the
@@ -76,11 +81,19 @@ async function RaceArchiveScreen({
  * The five most recent races are chosen by the **database**, ordered on `window_start` descending
  * — the date each race was *sailed* and never the date it was typed in, so an archive backfilled in
  * one afternoon still teases the five races last sailed. Reading only those five rather than the
- * whole archive is most of what this card costs: the other eight races' Transcriptions were being
- * read, assessed and scored to produce rows nobody on this tab would ever see.
+ * whole archive is most of what this tab costs: the other eight races' Transcriptions were being
+ * read, assessed and scored to produce rows nobody here would ever see.
+ *
+ * The **Crossover Chart** read goes out alongside the rows rather than after them: which sails the
+ * boat owns is a question no row has a say in. No **Polar** is read for the sail-selection row,
+ * because coverage is a question about cells reached and not about targets — so nothing here needs
+ * to know which region of the chart can never carry a figure, and the screen itself says that.
  */
 async function OverallTab(): Promise<ReactElement> {
-  const recent = await readRecentRaceRows(TEASER_RACES)
+  const [recent, chart] = await Promise.all([
+    readRecentRaceRows(TEASER_RACES),
+    readCrossoverChartScreen(),
+  ])
 
   if (recent === null) return <ArchiveUnreadable />
 
@@ -94,11 +107,34 @@ async function OverallTab(): Promise<ReactElement> {
     )
   }
 
+  const payload = chart?.current?.payload ?? null
+
   return (
-    <PolarPerformanceTeaser
-      // What the figure is actually over, which on a young archive is fewer than five.
-      races={recent.races.length}
-      efficiency={sumEfficiency(recent.rows)}
-    />
+    <>
+      <PolarPerformanceTeaser
+        // What the figure is actually over, which on a young archive is fewer than five.
+        races={recent.races.length}
+        efficiency={sumEfficiency(recent.rows)}
+      />
+
+      <SailSelectionTeaser
+        races={recent.races.length}
+        coverage={
+          payload === null
+            ? null
+            : gridCoverage(
+                getSailSelectionData(
+                  recent.rows,
+                  EMPTY_FILTER,
+                  // No dimension registry is needed to count cells, and passing the screen's own
+                  // would mean building a vocabulary this card never shows.
+                  [],
+                  payload,
+                  null
+                ).cells
+              )
+        }
+      />
+    </>
   )
 }

@@ -2,15 +2,35 @@ import { analysisRows } from '@/services/analysis/countable'
 import {
   aggregateEfficiency,
   computeRowEfficiency,
+  countableRows,
+  mergeEfficiency,
   rowIntervalSeconds,
+  sumEfficiency,
 } from '@/services/analysis/efficiency'
-import type { ScorableRow } from '@/services/analysis/efficiency'
+import type { ScorableRow, SummableRow } from '@/services/analysis/efficiency'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { readableRows } from '@/services/analysis/readable-rows'
 import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
 import { assessRowQuality } from '@/services/recordings/row-quality'
-import type { PolarPayload, Transcription } from '@/types'
+import type { EfficiencyAggregate, PolarPayload, Transcription } from '@/types'
+
+/** Nothing summed: the identity `mergeEfficiency` adds to, so a test can state one field at a time. */
+const EMPTY_AGGREGATE: EfficiencyAggregate = {
+  rows: 0,
+  filler_anchored_rows: 0,
+  vmg_rows: 0,
+  vmg_filler_anchored_rows: 0,
+  rows_without_interval: 0,
+  rows_without_target: 0,
+  elapsed_seconds: 0,
+  actual_distance_nm: 0,
+  target_distance_nm: 0,
+  actual_vmg_distance_nm: 0,
+  target_vmg_distance_nm: 0,
+  polar_efficiency: null,
+  vmg_efficiency: null,
+}
 
 /**
  * Polar Efficiency and VMG Efficiency, per row and over a window.
@@ -336,6 +356,81 @@ describe('aggregateEfficiency', () => {
     expect(season).not.toBeCloseTo(
       ((fast.polar_efficiency ?? 0) + (slow.polar_efficiency ?? 0)) / 2 + 0.01
     )
+  })
+})
+
+describe('mergeEfficiency', () => {
+  /**
+   * Rows that already carry their own measured interval — which is what a slice of the **Sail
+   * Selection Screen**'s grid holds, and the reason this is pinned on `sumEfficiency` rather than
+   * on `aggregateEfficiency`: splitting a *window* loses the interval across the seam, while
+   * splitting rows that carry their own intervals loses nothing. That is the whole property.
+   */
+  const summable = (over: Partial<SummableRow> & { target?: number | null }): SummableRow => ({
+    countable: true,
+    interval_seconds: 60,
+    sog: 5.4,
+    efficiency: {
+      row_index: 0,
+      target_speed: over.target === null ? null : { knots: over.target ?? 6, filler_anchored: false },
+      polar_efficiency: null,
+      vmg_zone: 'upwind',
+      vmg: 5.4,
+      target_vmg: { estimated_knots: 6, filler_anchored: false },
+      vmg_efficiency: null,
+    },
+    ...over,
+  })
+
+  /** Each half holds one summed row and one of the two kinds that leave a figure but no distance. */
+  const first = [summable({}), summable({ interval_seconds: null })]
+  const second = [summable({ sog: 7.2 }), summable({ target: null })]
+
+  /**
+   * The guard the **Sail Selection Screen** rests on: adding two slices' sums gives what summing
+   * their rows in one pass gives, field for field. Walked over the keys on purpose — a field added
+   * to `EfficiencyAggregate` and forgotten in `mergeEfficiency` fails here rather than silently
+   * reading as nought on a screen that re-aggregates (ADR 0030).
+   */
+  it('adds two aggregates into what one pass over their rows would have given', () => {
+    const merged = mergeEfficiency([sumEfficiency(first), sumEfficiency(second)])
+    const once = sumEfficiency([...first, ...second])
+
+    for (const key of Object.keys(once) as (keyof EfficiencyAggregate)[]) {
+      const left = merged[key]
+      const right = once[key]
+
+      if (left === null || right === null) expect(left).toBe(right)
+      else expect(left).toBeCloseTo(right, 10)
+    }
+  })
+
+  it('recomputes the ratio from the summed distances rather than averaging two ratios', () => {
+    // 30 seconds at 120% of target, then 90 seconds at 90%. The mean of the ratios is 1.05; the
+    // honest answer is the distances divided (ADR 0036).
+    const fast = mergeEfficiency([
+      { ...EMPTY_AGGREGATE, actual_distance_nm: 1.2, target_distance_nm: 1, polar_efficiency: 1.2 },
+      { ...EMPTY_AGGREGATE, actual_distance_nm: 2.7, target_distance_nm: 3, polar_efficiency: 0.9 },
+    ])
+
+    expect(fast.polar_efficiency).toBeCloseTo(3.9 / 4)
+    expect(fast.polar_efficiency).not.toBeCloseTo(1.05)
+  })
+
+  it('answers null rather than nought where nothing was summed', () => {
+    expect(mergeEfficiency([]).polar_efficiency).toBeNull()
+    expect(mergeEfficiency([]).vmg_efficiency).toBeNull()
+    expect(mergeEfficiency([]).rows).toBe(0)
+  })
+
+  it('reads every Countable row an aggregate accounted for', () => {
+    const figure = sumEfficiency([...first, ...second, summable({ countable: false })])
+
+    // The three tallies partition the Countable rows, and the excluded one is in none of them.
+    expect(countableRows(figure)).toBe(4)
+    expect(figure.rows).toBe(2)
+    expect(figure.rows_without_target).toBe(1)
+    expect(figure.rows_without_interval).toBe(1)
   })
 })
 

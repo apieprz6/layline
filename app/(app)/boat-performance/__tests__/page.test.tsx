@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
-import { ROWS, RACES } from '@/components/analysis/__tests__/fixture'
+import { CHART, ROWS, RACES } from '@/components/analysis/__tests__/fixture'
 
 const redirect = jest.fn((to: string) => {
   throw Object.assign(new Error(`NEXT_REDIRECT:${to}`), { digest: 'NEXT_REDIRECT' })
@@ -24,16 +24,27 @@ jest.mock('@/services/analysis/readArchive', () => ({
   readRecentRaceRows: jest.fn(async () => null),
 }))
 
+// And the boat's current Crossover Chart, which the Sail selection row's coverage is counted over
+// (LAY-158). Mocked for the same reason, and because the grid *is* the chart: with none uploaded
+// the row has a different thing to say, and that is one of the cases below.
+jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
+  readCrossoverChartScreen: jest.fn(async () => null),
+}))
+
 import BoatPerformancePage from '../page'
 
 describe('/boat-performance', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
   const { readRecentRaceRows } = jest.requireMock('@/services/analysis/readArchive')
+  const { readCrossoverChartScreen } = jest.requireMock(
+    '@/services/boat/readCrossoverChartVersions'
+  )
 
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(null)
     readRecentRaceRows.mockResolvedValue({ rows: [], races: [] })
+    readCrossoverChartScreen.mockResolvedValue(null)
   })
 
   // The read sits behind a `<Suspense>` (LAY-132), so awaiting the page hands back a
@@ -71,10 +82,14 @@ describe('/boat-performance', () => {
 describe('the Overall tab', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
   const { readRecentRaceRows } = jest.requireMock('@/services/analysis/readArchive')
+  const { readCrossoverChartScreen } = jest.requireMock(
+    '@/services/boat/readCrossoverChartVersions'
+  )
 
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(CREW)
+    readCrossoverChartScreen.mockResolvedValue({ list: [], current: { payload: CHART } })
   })
 
   async function renderOverall(): Promise<void> {
@@ -101,6 +116,32 @@ describe('the Overall tab', () => {
     // The limit is the whole saving: the other eight races' Transcriptions were being read,
     // assessed and scored to make rows this card never shows.
     expect(readRecentRaceRows).toHaveBeenCalledWith(TEASER_RACES)
+  })
+
+  it('adds the Sail selection chart row, stating coverage and tapping through', async () => {
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+
+    await renderOverall()
+
+    const row = screen.getByTestId('sail-selection-teaser')
+    expect(row).toHaveAttribute('href', '/boat-performance/sail-selection')
+    // Three of the fixture chart's six cells were reached, over the two races that came back.
+    expect(row).toHaveTextContent('3')
+    expect(row).toHaveTextContent('of 6 cells reached')
+    expect(row).toHaveTextContent('Over the last 2 races')
+  })
+
+  it('says there is no chart yet rather than drawing a coverage figure over none', async () => {
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readCrossoverChartScreen.mockResolvedValue({ list: [], current: null })
+
+    await renderOverall()
+
+    // Not an error, and not an empty grid: the grid *is* the chart, so with none uploaded there is
+    // nothing for the archive to be laid over, however much racing has been logged.
+    expect(screen.getByTestId('sail-selection-teaser')).toHaveTextContent(
+      'No Crossover Chart has been uploaded yet.'
+    )
   })
 
   it('says there is nothing to summarise rather than drawing a figure over no rows', async () => {
