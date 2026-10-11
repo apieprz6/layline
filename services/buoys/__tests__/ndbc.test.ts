@@ -1,10 +1,12 @@
-import { fetchCHII2History, fetchPurdueBuoyHistory, clearHistoryCache } from '../ndbc'
+import { fetchCHII2History, fetchPurdueBuoyHistory, purgeBuoyHistory } from '../ndbc'
+import { clearDataCache, flushRefreshes } from './data-cache'
+
+jest.mock('next/cache', () => jest.requireActual('./data-cache'))
 
 describe('NDBC Buoy History - Extended 72-hour Support', () => {
   beforeEach(() => {
-    // Clear any module-level caches
     jest.clearAllMocks()
-    clearHistoryCache()
+    clearDataCache()
   })
 
   describe('fetchCHII2History', () => {
@@ -71,27 +73,152 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
   })
 
   describe('Cache behavior', () => {
-    it('respects 10-minute cache TTL for history', async () => {
-      const mockNDBCResponse = generateMockNDBCResponse(72)
+    function mockNDBC() {
       const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => mockNDBCResponse,
+        text: async () => generateMockNDBCResponse(72),
       } as Response)
-
       global.fetch = fetchMock
+      return fetchMock
+    }
 
-      // First call - should fetch from NDBC
+    /**
+     * How many times NDBC was asked for one station.
+     *
+     * Not the same as how many times `fetch` was called: the Purdue read tries
+     * Supabase first, and where the service keys are set that attempt goes
+     * through this same mock before falling back to NDBC. Counting every call
+     * would make the same assertion mean one thing locally and another in CI,
+     * which is how the first version of these tests passed here and failed there.
+     */
+    function ndbcCalls(fetchMock: jest.Mock, stationId: string): number {
+      return fetchMock.mock.calls.filter((call) => String(call[0]).includes(stationId))
+        .length
+    }
+
+    it('serves a second read from the cache without touching NDBC', async () => {
+      const fetchMock = mockNDBC()
+
       const result1 = await fetchCHII2History()
       expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(result1.history).toHaveLength(432)
 
-      // Second call immediately after - should use cache
       const result2 = await fetchCHII2History()
-      expect(fetchMock).toHaveBeenCalledTimes(1) // Still only 1 call
+      expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(result2.history).toHaveLength(432)
 
-      // Verify both results have the same data
+      // Same entry, not a coincidentally identical refetch
       expect(result1.fetchedAt).toBe(result2.fetchedAt)
+    })
+
+    it('leaves NDBC alone inside the 5-minute window and refreshes behind the read past it', async () => {
+      jest.useFakeTimers()
+      try {
+        const fetchMock = mockNDBC()
+
+        const first = await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+
+        jest.advanceTimersByTime(4 * 60 * 1000)
+        await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+
+        // Past the window the caller is still handed the stored reading — the
+        // refresh runs behind it, so the fresh data reaches the *next* reader.
+        jest.advanceTimersByTime(2 * 60 * 1000)
+        const stale = await fetchCHII2History()
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(stale.fetchedAt).toBe(first.fetchedAt)
+
+        await flushRefreshes()
+        const refreshed = await fetchCHII2History()
+        expect(refreshed.fetchedAt).not.toBe(first.fetchedAt)
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('labels a reading with the status it has now, not the one it was cached with', async () => {
+      jest.useFakeTimers()
+      try {
+        mockNDBC()
+
+        const fresh = await fetchCHII2History()
+        expect(fresh.status).toBe('online')
+
+        // Same entry, three hours on: the samples in it are now well past every
+        // staleness threshold, and the status has to say so.
+        jest.advanceTimersByTime(3 * 60 * 60 * 1000)
+        const later = await fetchCHII2History()
+        expect(later.fetchedAt).toBe(fresh.fetchedAt)
+        expect(later.status).toBe('offline')
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('keeps each station in its own cache entry', async () => {
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      await fetchPurdueBuoyHistory()
+
+      const requestedUrls = fetchMock.mock.calls.map((call) => String(call[0]))
+      expect(requestedUrls.some((url) => url.includes('CHII2'))).toBe(true)
+      expect(requestedUrls.some((url) => url.includes('45198'))).toBe(true)
+    })
+
+    it('fetches on the read after a purge, well inside the window', async () => {
+      // What the refresh control on a station screen is worth. Reading again on its
+      // own returns the stored reading with the stored `fetchedAt`, which is why a
+      // tap that only read left the fetch age climbing and the screen unchanged.
+      const fetchMock = mockNDBC()
+
+      const before = await fetchCHII2History()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
+
+      await new Promise((resolve) => setTimeout(resolve, 2))
+      purgeBuoyHistory('CHII2')
+
+      const after = await fetchCHII2History()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
+      expect(after.fetchedAt).not.toBe(before.fetchedAt)
+    })
+
+    it('purges the station asked for and leaves the other one stored', async () => {
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      await fetchPurdueBuoyHistory()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
+      expect(ndbcCalls(fetchMock, '45198')).toBe(1)
+
+      purgeBuoyHistory('45198')
+
+      // CHII2's reading is untouched — a tap on one station's screen must not
+      // spend the other station's stored reading.
+      await fetchCHII2History()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(1)
+
+      await fetchPurdueBuoyHistory()
+      expect(ndbcCalls(fetchMock, '45198')).toBe(2)
+    })
+
+    it('stores what a purged read fetches, so it is not a private answer', async () => {
+      // The difference between this and the deleted `bypassCache`: the fresh reading
+      // goes into the cache, so the next reader benefits instead of fetching again.
+      const fetchMock = mockNDBC()
+
+      await fetchCHII2History()
+      purgeBuoyHistory('CHII2')
+
+      const asked = await fetchCHII2History()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
+
+      const next = await fetchCHII2History()
+      expect(ndbcCalls(fetchMock, 'CHII2')).toBe(2)
+      expect(next.fetchedAt).toBe(asked.fetchedAt)
     })
   })
 
@@ -104,6 +231,21 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       expect(result.status).toBe('error')
       expect(result.history).toBeNull()
       expect(result.error).toBe('Network error')
+    })
+
+    it('never caches a failed fetch — the next read retries live', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('Network error'))
+      const failed = await fetchCHII2History()
+      expect(failed.history).toBeNull()
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => generateMockNDBCResponse(72),
+      } as Response)
+
+      const retried = await fetchCHII2History()
+      expect(retried.status).not.toBe('error')
+      expect(retried.history).toHaveLength(432)
     })
   })
 })

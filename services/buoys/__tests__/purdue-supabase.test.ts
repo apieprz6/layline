@@ -1,7 +1,9 @@
-import { fetchPurdueBuoyHistory, clearHistoryCache } from '../ndbc'
+import { fetchPurdueBuoyHistory } from '../ndbc'
 import { getServiceClient } from '@/lib/supabase/service'
+import { clearDataCache } from './data-cache'
 
 jest.mock('@/lib/supabase/service')
+jest.mock('next/cache', () => jest.requireActual('./data-cache'))
 
 const mockGetServiceClient = getServiceClient as jest.MockedFunction<typeof getServiceClient>
 
@@ -37,7 +39,7 @@ function generateSupabaseRows(count: number, startMinutesAgo: number = 0) {
 describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    clearHistoryCache()
+    clearDataCache()
   })
 
   describe('when Supabase has data', () => {
@@ -46,7 +48,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       const mockClient = createMockSupabaseClient({ data: rows })
       mockGetServiceClient.mockReturnValue(mockClient)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.history).not.toBeNull()
       expect(result.history).toHaveLength(10)
@@ -69,7 +71,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       const fetchSpy = jest.fn()
       global.fetch = fetchSpy
 
-      await fetchPurdueBuoyHistory({ bypassCache: true })
+      await fetchPurdueBuoyHistory()
 
       expect(fetchSpy).not.toHaveBeenCalled()
     })
@@ -81,7 +83,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       const mockClient = createMockSupabaseClient({ data: rows })
       mockGetServiceClient.mockReturnValue(mockClient)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.history![0].dir).toBe(0)
     })
@@ -91,7 +93,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       const mockClient = createMockSupabaseClient({ data: rows })
       mockGetServiceClient.mockReturnValue(mockClient)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(['online', 'recent']).toContain(result.status)
     })
@@ -108,7 +110,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
         text: async () => mockNDBCResponse,
       } as Response)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.history).not.toBeNull()
       expect(result.history!.length).toBeGreaterThan(0)
@@ -132,7 +134,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
         text: async () => mockNDBCResponse,
       } as Response)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.history).not.toBeNull()
       expect(result.history!.length).toBeGreaterThan(0)
@@ -149,7 +151,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
         text: async () => mockNDBCResponse,
       } as Response)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.history).not.toBeNull()
       expect(result.history!.length).toBeGreaterThan(0)
@@ -165,7 +167,7 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
 
       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'))
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result = await fetchPurdueBuoyHistory()
 
       expect(result.status).toBe('error')
       expect(result.history).toBeNull()
@@ -179,10 +181,42 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       const mockClient = createMockSupabaseClient({ data: rows })
       mockGetServiceClient.mockReturnValue(mockClient)
 
-      const result1 = await fetchPurdueBuoyHistory({ bypassCache: true })
+      const result1 = await fetchPurdueBuoyHistory()
       const result2 = await fetchPurdueBuoyHistory()
 
       expect(mockGetServiceClient).toHaveBeenCalledTimes(1)
+      expect(result1.fetchedAt).toBe(result2.fetchedAt)
+    })
+
+    it('never caches a failed read — the next call re-queries Supabase', async () => {
+      mockGetServiceClient.mockReturnValue(
+        createMockSupabaseClient({ error: { message: 'connection refused', code: 'PGRST301' } })
+      )
+      global.fetch = jest.fn().mockRejectedValue(new Error('Network error'))
+
+      const failed = await fetchPurdueBuoyHistory()
+      expect(failed.history).toBeNull()
+
+      const rows = generateSupabaseRows(5)
+      mockGetServiceClient.mockReturnValue(createMockSupabaseClient({ data: rows }))
+
+      const retried = await fetchPurdueBuoyHistory()
+      expect(retried.history).toHaveLength(5)
+    })
+
+    it('caches the NDBC fallback so the fallback path is not re-walked', async () => {
+      mockGetServiceClient.mockReturnValue(createMockSupabaseClient({ data: [] }))
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => generateMockNDBCResponse(72),
+      } as Response)
+      global.fetch = fetchMock
+
+      const result1 = await fetchPurdueBuoyHistory()
+      const result2 = await fetchPurdueBuoyHistory()
+
+      expect(mockGetServiceClient).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(result1.fetchedAt).toBe(result2.fetchedAt)
     })
   })

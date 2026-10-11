@@ -13,6 +13,9 @@ interface StationHeaderProps {
   lastFetchTime: Date
   nowOffset: number
   onReturnToLive: () => void
+  /** Omitted where there is nothing to ask again — the skeleton header. */
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }
 
 /**
@@ -26,6 +29,8 @@ export default function StationHeader({
   lastFetchTime,
   nowOffset,
   onReturnToLive,
+  onRefresh,
+  isRefreshing = false,
 }: StationHeaderProps) {
   const router = useRouter()
   const [nowTick, setNowTick] = useState(() => Date.now())
@@ -180,6 +185,37 @@ export default function StationHeader({
           <span style={{ opacity: 0.7 }}>Fetched </span>
           <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{fetchAge}</span>
         </span>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            // Sits beside the age it acts on: the reading is what is stale, and this
+            // is the way to say so out loud rather than waiting for the poll.
+            //
+            // The padding is a tap target — 11px of glyph is not one on a 390px
+            // screen — and the negative margin takes it back out of the layout, so
+            // the metadata row is still as tall as its text and the skeleton header
+            // in `loading.tsx` still measures the same. `e2e/loading-skeletons.spec.ts`
+            // holds that to a pixel.
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: spacing(2),
+              // `-${spacing(2)}` would be `-var(--space-2)`, which is not CSS and
+              // gets dropped — the whole padded box would then grow the row.
+              margin: `calc(${spacing(2)} * -1)`,
+              fontSize: '11px',
+              lineHeight: 1,
+              color: isRefreshing ? 'var(--text-muted)' : 'var(--text-secondary)',
+              cursor: isRefreshing ? 'default' : 'pointer',
+              flexShrink: 0,
+              animation: isRefreshing ? 'spin 900ms linear infinite' : 'none',
+            }}
+            aria-label={isRefreshing ? 'Refreshing' : 'Refresh this reading'}
+          >
+            ↻
+          </button>
+        )}
         <span style={{ flex: 1 }} />
         {!isLive && (
           <span style={{ color: '#0044CC', fontWeight: 600, whiteSpace: 'nowrap' }}>

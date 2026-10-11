@@ -13,6 +13,11 @@ jest.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
+// The real `cookies()` needs a request scope. Held as a mock rather than stubbed
+// away because the degraded path calling it at all is the behaviour asserted below.
+const cookies = jest.fn(async () => new Map())
+jest.mock('next/headers', () => ({ cookies: () => cookies() }))
+
 const CLAIMS = {
   sub: '11111111-1111-1111-1111-111111111111',
   email: 'crew@example.com',
@@ -128,6 +133,21 @@ describe('resolveAccount', () => {
 
       await expect(resolveAccount()).resolves.toBeNull()
       expect(consoleError).toHaveBeenCalled()
+    })
+
+    it('still reads the cookies, so the render stays per request', async () => {
+      const { createClient } = jest.requireMock('@/lib/supabase/server')
+      createClient.mockRejectedValueOnce(new Error('Missing Supabase environment variables.'))
+
+      await resolveAccount()
+
+      // `createClient` throws ahead of its own `cookies()` call, so this is the one
+      // path that would otherwise never touch them — and Next reads a layout that
+      // never touches them as one it can prerender, which would quietly make every
+      // screen in the `(app)` group static in a keyless build and dynamic in
+      // production. A build that behaves unlike the one it is testing is worse than
+      // the missing keys.
+      expect(cookies).toHaveBeenCalled()
     })
   })
 
