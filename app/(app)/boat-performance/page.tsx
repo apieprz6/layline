@@ -65,8 +65,11 @@ async function RaceArchiveScreen({
       // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
       // tab is the whole archive scored, so a shared `await` would make the list wait on the
       // figures behind a tab the sailor may never open.
+      // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
+      // tab is the whole archive scored, so a shared `await` would make the list wait on the
+      // figures behind a tab the sailor may never open.
       overall={
-        <Suspense fallback={<Skeleton height="92px" radius="var(--radius-md)" />}>
+        <Suspense fallback={rowFallback()}>
           <OverallTab />
         </Suspense>
       }
@@ -170,11 +173,22 @@ async function OverallTab(): Promise<ReactElement> {
         The third row, behind a boundary of its own — and not in the `Promise.all` above, for a
         reason that is about cost rather than tidiness. See `InstrumentTuningRow`.
       */}
-      <Suspense fallback={<Skeleton height="92px" radius="var(--radius-md)" />}>
+      <Suspense fallback={rowFallback()}>
         <InstrumentTuningRow />
       </Suspense>
     </>
   )
+}
+
+/**
+ * What a boundary holds the place of: one teaser row's own height.
+ *
+ * Both boundaries on this screen are waiting for a row of this shape — the tab's first one for
+ * whichever row paints first, and the Instrument tuning row's for itself — so the placeholder is one
+ * function rather than the same two numbers written twice.
+ */
+function rowFallback(): ReactElement {
+  return <Skeleton height="92px" radius="var(--radius-md)" />
 }
 
 /**

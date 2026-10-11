@@ -1,5 +1,9 @@
 import Link from 'next/link'
 import type { ReactElement } from 'react'
+import {
+  CHANNEL_TITLE,
+  type CheckedChannel,
+} from '@/components/boat/instrument-tuning/chart-text'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import {
@@ -42,17 +46,16 @@ interface InstrumentTuningTeaserProps {
  *
  * A verdict printed alone is a grade (`types/index.ts`, `CoverageStatement`), and the charts
  * themselves never print one without the reason that earned it. So the caption names the channel
- * the word came from, in the words that channel's own card uses, and states what it rests on — a
- * sailor who taps `anecdotal` then lands on the screen already knowing which of the three charts
- * sent them there.
+ * the word came from and states what it rests on — a sailor who taps `anecdotal` lands on the screen
+ * already knowing which of the three charts sent them there. The name is `CHANNEL_TITLE`'s and not
+ * this row's, so it is the title of the card they will find rather than a second word for it.
  *
  * A Server Component: a link, a word and a sentence, with nothing to interact with.
  */
 export default function InstrumentTuningTeaser({
   read,
 }: InstrumentTuningTeaserProps): ReactElement {
-  const coverage = read.ok ? worst(channels(read.season)) : null
-  const without = read.ok ? null : WITHOUT_A_SEASON[read.reason]
+  const said = read.ok ? fromSeason(read.season) : WITHOUT_A_SEASON[read.reason]
 
   return (
     <Link
@@ -71,11 +74,11 @@ export default function InstrumentTuningTeaser({
     >
       <span style={{ ...EYEBROW_STYLE, marginBottom: 0 }}>Instrument tuning</span>
 
-      {coverage === null ? (
+      {said.kind === 'instead' ? (
         <span
           style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}
         >
-          {without?.figure}
+          {said.instead}
         </span>
       ) : (
         <span
@@ -88,9 +91,7 @@ export default function InstrumentTuningTeaser({
           }}
         >
           <span data-testid="tuning-coverage" style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>
-            {/* Lower case here and upper case on the charts, deliberately: `ANECDOTAL` beside a
-                chart is a term being quoted, and a row on a tab is reading English. */}
-            {coverage.verdict.toLowerCase()}
+            {said.word}
           </span>
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
             coverage, at the thinnest of the three checks
@@ -99,13 +100,24 @@ export default function InstrumentTuningTeaser({
       )}
 
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        {coverage === null
-          ? without?.caption
-          : `${coverage.channel}: ${coverage.reason}. Over every Race in the archive. Tap for the three charts.`}
+        {said.caption}
       </span>
     </Link>
   )
 }
+
+/**
+ * Everything the row prints, as one shape per state.
+ *
+ * A union and not a word that might be missing: the row has three states — a season, an archive
+ * that could not be read, and one with nothing in it — and in two of them there is no coverage word
+ * to print at all, rather than a blank one.
+ */
+type RowWords =
+  /** A season was read: the worst word, and the channel and reason that earned it. */
+  | { kind: 'coverage'; word: string; caption: string }
+  /** None was, so a sentence stands where the word would have been. */
+  | { kind: 'instead'; instead: string; caption: string }
 
 /**
  * What the row says where there is no season behind it.
@@ -116,21 +128,39 @@ export default function InstrumentTuningTeaser({
  */
 const WITHOUT_A_SEASON: Record<
   Extract<InstrumentTuningRead, { ok: false }>['reason'],
-  { figure: string; caption: string }
+  Extract<RowWords, { kind: 'instead' }>
 > = {
   'no-races': {
-    figure: 'No race has been uploaded yet.',
+    kind: 'instead',
+    instead: 'No race has been uploaded yet.',
     caption: 'These checks read a season of recordings. Tap for the three charts.',
   },
   unreadable: {
-    figure: 'The archive could not be read.',
+    kind: 'instead',
+    instead: 'The archive could not be read.',
     caption: 'Nothing is shown rather than a coverage word over part of it. Try again shortly.',
   },
 }
 
-/** One channel's coverage, carrying the name its own card on the screen gives it. */
+/**
+ * The worst channel's word, and the sentence that says what earned it.
+ *
+ * Lower case here and upper case on the charts, deliberately: `ANECDOTAL` beside a chart is a term
+ * being quoted, and a row on a tab is reading English.
+ */
+function fromSeason(season: InstrumentTuningSeason): RowWords {
+  const { channel, verdict, reason } = worst(channels(season))
+
+  return {
+    kind: 'coverage',
+    word: verdict.toLowerCase(),
+    caption: `${CHANNEL_TITLE[channel]}: ${reason}. Over every Race in the archive. Tap for the three charts.`,
+  }
+}
+
+/** One channel's coverage, carrying the channel so the caption can name it. */
 interface ChannelCoverage extends CoverageStatement {
-  channel: string
+  channel: CheckedChannel
 }
 
 /** Worst first, which is the order a `max` over the three verdicts reads in (ADR 0035). */
@@ -162,17 +192,19 @@ function channels(season: InstrumentTuningSeason): ChannelCoverage[] {
 
   return [
     {
-      channel: 'Compass',
+      channel: 'HDG',
       ...(heading === null
         ? nothingMeasured('no Race has produced a compass reading yet')
         : headingCoverage(heading)),
     },
     {
-      channel: 'Wind angle, tack to tack',
+      channel: 'AWA',
+      // No absence to compose for: an Asymmetry over no **Tack Pair** at either point of sail is a
+      // state `asymmetryCoverage` already states in its own words.
       ...asymmetryCoverage(season.asymmetry.season),
     },
     {
-      channel: 'Boat speed',
+      channel: 'STW',
       ...(speed === null
         ? nothingMeasured('no Race has produced a speed comparison yet')
         : speedCoverage(speed)),

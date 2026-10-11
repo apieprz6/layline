@@ -10,6 +10,29 @@
  */
 
 import { countOf } from '@/services/analysis/figures'
+import type { CalibrationChannel } from '@/types'
+
+/**
+ * The three channels this screen checks, in the causal order it reads them in: `HDG → AWA → STW`.
+ *
+ * Not every **Calibration Channel**: `AWS` has no check of its own, there being nothing in a
+ * Recording to measure a wind speed against.
+ */
+export type CheckedChannel = Extract<CalibrationChannel, 'HDG' | 'AWA' | 'STW'>
+
+/**
+ * What each of them is called on the face of the screen.
+ *
+ * Here because two places now say it: the three cards on this screen, and the Overall tab's
+ * **Instrument tuning** row, which names the channel its coverage word came from so that a tap
+ * lands on the card that earned it. A row reading "Boat speed" over a card titled something else
+ * would send a sailor looking for the figure they had just been shown.
+ */
+export const CHANNEL_TITLE: Readonly<Record<CheckedChannel, string>> = {
+  HDG: 'Compass',
+  AWA: 'Wind angle, tack to tack',
+  STW: 'Boat speed',
+}
 
 /**
  * A signed figure with its sign always drawn, using a true minus rather than a hyphen.

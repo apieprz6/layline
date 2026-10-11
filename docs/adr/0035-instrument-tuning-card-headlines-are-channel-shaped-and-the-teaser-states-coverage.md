@@ -89,6 +89,28 @@ is not an alarm, each states how much evidence exists. Same row shape as its nei
 second line, no promoted mini-chart, no colour change. The "two rows starting Instrument …" collision
 is untouched and stays exactly as parked on the map.
 
+## Amendment — LAY-160, as the row shipped
+
+The decision above is unchanged: the row states the worst coverage word, lowercased, in one neutral
+tone, with no count of channels. Three of its premises were written from the mockup rather than from
+the app, and the row was built to what shipped.
+
+- **The word lands in the caption line its neighbours have, not in a pill.** "No status word at all"
+  is rejected above on the grounds that the tab's existing rows "each carry a status pill" — they do
+  not. Both are eyebrow, figure, muted caption, and no pill primitive exists anywhere in the app.
+- **The caption names the channel the word came from, and that channel's own reason.** "No second
+  line" meant no line *beyond the row shape*; the row shape has three, and the third is where the
+  reason goes. A coverage verdict is never printed alone — `types/index.ts`'s `CoverageStatement`
+  settled that for the charts, naming this teaser as one of its readers: "a word with no reason
+  beside it is a grade, and these are not grading the boat." So the row reads `anecdotal` over
+  `Compass: 4 of 36 headings rest on two or more Races`. The count inside a reason is not the count
+  this ADR retired — `2 of 3` counted *channels*, as a severity score over the whole screen; this
+  one is the evidence the single word rests on, and both neighbouring rows state theirs the same way.
+- **Nothing on the tab was renamed, and nothing collided.** ADR 0032's "two rows starting
+  Instrument …" cannot arise: the shipped app put Instrument Calibration on **Boat management** as a
+  Boat Setup row, so the Overall tab had exactly two rows before this one. The renaming question
+  stays parked on LAY-138 with nothing to decide against.
+
 ## Consequences
 
 - **`services/analysis/` must expose the swing (per-Era max/min heading bin) and the upwind/downwind
