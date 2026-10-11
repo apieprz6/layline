@@ -258,6 +258,24 @@ function leaning(asymmetry_deg: number): Pick<AsymmetryFigure, 'wider_tack' | 'w
   }
 }
 
+/**
+ * The angle each tack held, as magnitudes, averaged over whatever was handed in.
+ *
+ * Magnitudes rather than the signed convention the arithmetic uses, because this is what the **Tack
+ * Dial** draws: the dial is a picture of how wide each tack sailed, starboard right and port left,
+ * and a negative port angle would put port's ray on starboard's side of the boat.
+ *
+ * Carried rather than left to the chart to reconstruct. `asymmetry_deg` alone fixes the *gap*
+ * between the two rays and says nothing about where either sits, so a dial drawn from it would have
+ * to invent a centre angle the boat never held — a correct number over a fabricated picture.
+ */
+function heldAngles(
+  starboard: readonly number[],
+  port: readonly number[]
+): AsymmetryFigure['held_deg'] {
+  return { starboard: meanOfSome(starboard), port: meanOfSome(port) }
+}
+
 /** One point of sail's figure over the Tack Pairs that measured it. */
 function figure(point_of_sail: PairedPointOfSail, pairs: readonly TackPair[]): AsymmetryFigure {
   const asymmetry_deg = meanOfSome(pairs.map((pair) => pair.asymmetry_deg))
@@ -266,6 +284,10 @@ function figure(point_of_sail: PairedPointOfSail, pairs: readonly TackPair[]): A
     point_of_sail,
     asymmetry_deg,
     ...leaning(asymmetry_deg),
+    held_deg: heldAngles(
+      pairs.map((pair) => Math.abs(pair.starboard.held_angle_deg)),
+      pairs.map((pair) => Math.abs(pair.port.held_angle_deg))
+    ),
     pair_count: pairs.length,
     caveat: ASYMMETRY_CAVEAT,
   }
@@ -337,6 +359,7 @@ function eraFigure(
             race_id: race.race_id,
             window_start: race.window_start,
             asymmetry_deg: its.asymmetry_deg,
+            held_deg: its.held_deg,
             pair_count: its.pair_count,
           },
         ]
@@ -350,6 +373,13 @@ function eraFigure(
     point_of_sail,
     asymmetry_deg,
     ...leaning(asymmetry_deg),
+    // Each Race's own held angles averaged, not its pairs pooled — the same weighting the figure
+    // above it uses, so the two rays the dial draws and the number it labels them with stay one
+    // statement. Pooling here would move a ray off the figure beside it.
+    held_deg: heldAngles(
+      race_figures.map((race) => race.held_deg.starboard),
+      race_figures.map((race) => race.held_deg.port)
+    ),
     pair_count: race_figures.reduce((total, race) => total + race.pair_count, 0),
     race_count: race_figures.length,
     race_figures,

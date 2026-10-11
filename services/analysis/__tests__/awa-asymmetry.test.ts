@@ -228,6 +228,26 @@ describe('one Race’s Apparent Wind Asymmetry', () => {
     expect(asymmetry.upwind?.wider_by_deg).toBeCloseTo(10, 10)
   })
 
+  it('carries the angle each tack actually held, which is what the Tack Dial draws', () => {
+    const asymmetry = measured(leaningPort())
+
+    // The dial is a picture of how wide each tack sailed, so it needs the two angles and not only
+    // the gap between them. Reconstructing them from the Asymmetry would mean inventing a centre
+    // angle the boat never held — the figure would be right and the drawing a fabrication.
+    expect(asymmetry.upwind?.held_deg).toEqual({ starboard: 36, port: 46 })
+  })
+
+  it('keeps the held angles and the Asymmetry one arithmetic', () => {
+    const upwind = measured(leaningPort()).upwind
+
+    // Half the difference, positive where starboard reads wider — the same identity the pair-level
+    // figure has, so a dial drawn from the angles can never disagree with the number beside it.
+    expect((upwind!.held_deg.starboard - upwind!.held_deg.port) / 2).toBeCloseTo(
+      upwind!.asymmetry_deg,
+      10
+    )
+  })
+
   it('carries the caveat that says why it is not a Measured Offset', () => {
     const asymmetry = measured(leaningPort())
 
@@ -305,6 +325,21 @@ describe('an Era’s Asymmetry', () => {
       'distance-race',
       'beer-can',
     ])
+  })
+
+  it('weights the held angles the dial draws the same way it weights the figure', () => {
+    // Starboard held 36° in the four-pair Race and 15° in the one-pair Race: every Race equal
+    // gives 25.5°, where pooling five pairs would give 31.8° and put the ray somewhere the boat
+    // spent one beat. The two rays must move with the number between them.
+    const many = asym(sides(-46, 4, 0), 'distance-race', '2026-06-01 09:00:00')
+    const one = asym([...holding(15, 3, 0), ...holding(-45, 3, 3)], 'beer-can', '2026-06-10 19:00:00')
+    const era = eraAwaAsymmetry(ERA, [many, one])
+
+    expect(era.upwind?.held_deg).toEqual({ starboard: 25.5, port: 45.5 })
+    expect((era.upwind!.held_deg.starboard - era.upwind!.held_deg.port) / 2).toBeCloseTo(
+      era.upwind!.asymmetry_deg,
+      10
+    )
   })
 
   it('keeps upwind and downwind apart, and offers no figure across the two', () => {
