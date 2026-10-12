@@ -288,6 +288,12 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await row.click()
     await expect(page).toHaveURL(/\/boat-performance\/instrument-tuning$/)
     await expect(page.getByTestId('compass-chart')).toBeVisible()
+
+    // And back out again, which is the whole round trip: the drawer names sections rather than the
+    // screens inside them, so this link is the only way up from here.
+    await page.getByRole('link', { name: '← Boat performance' }).click()
+    await expect(page).toHaveURL(/\/boat-performance$/)
+    await expect(page.getByRole('tab', { name: 'Overall' })).toBeVisible()
   })
 })
 

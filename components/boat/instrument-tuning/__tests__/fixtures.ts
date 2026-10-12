@@ -381,12 +381,26 @@ export function asymmetrySeason(
 ): InstrumentTuningSeason['asymmetry'] {
   const figure = asymmetryEra([
     raceAsymmetry('race-awa', DAY, [
-      ...Array.from({ length: upwind }, () => pair('upwind', 40, 46)),
-      ...Array.from({ length: downwind }, () => pair('downwind', 150, 140)),
+      ...Array.from({ length: upwind }, (_, index) => pair('upwind', 40, 46, minuteOf(index))),
+      ...Array.from({ length: downwind }, (_, index) =>
+        pair('downwind', 150, 140, minuteOf(index))
+      ),
     ]),
   ])
 
   return { season: figure, eras: [figure], compass_eras: [figure] }
+}
+
+/**
+ * A distinct minute per pair, because a **Tack Pair** is identified by when it happened.
+ *
+ * The **Tack Dial** keys its dots on `race_id`, the pair's time and its point of sail, so pairs
+ * built at one timestamp are one dot as far as React is concerned — three of them went missing from
+ * a dial before this counted.
+ */
+function minuteOf(index: number): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `2026-06-03 ${pad(18 + Math.floor(index / 60))}:${pad(index % 60)}:00`
 }
 
 /**
