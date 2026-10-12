@@ -7,6 +7,7 @@
  * is drawn hollow" can be stated with one Race in it, which no real season would hand over.
  */
 
+import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
 import type { EraDivergence, RaceDivergence } from '@/services/analysis/paddlewheel'
 import type {
   CalibrationEra,
@@ -361,4 +362,95 @@ export function speedEra(
     races_with_a_line: races.filter((race) => race.fit.fitted).length,
     ...over,
   }
+}
+
+/* --------------------------------------------------------------------------- A whole season */
+
+/** The day these shapes are dated. Nothing below reads it; a Race simply has to have one. */
+const DAY = '2026-06-03 18:00:00'
+
+/**
+ * A season **Apparent Wind Asymmetry** with `upwind` **Tack Pairs** at one point of sail and
+ * `downwind` at the other, in the three cuts `instrumentTuningSeason` returns.
+ *
+ * The pair counts are what a coverage verdict reads off this channel, so they are the argument.
+ */
+export function asymmetrySeason(
+  upwind: number,
+  downwind: number
+): InstrumentTuningSeason['asymmetry'] {
+  const figure = asymmetryEra([
+    raceAsymmetry('race-awa', DAY, [
+      ...Array.from({ length: upwind }, (_, index) => pair('upwind', 40, 46, minuteOf(index))),
+      ...Array.from({ length: downwind }, (_, index) =>
+        pair('downwind', 150, 140, minuteOf(index))
+      ),
+    ]),
+  ])
+
+  return { season: figure, eras: [figure], compass_eras: [figure] }
+}
+
+/**
+ * A distinct minute per pair, because a **Tack Pair** is identified by when it happened.
+ *
+ * The **Tack Dial** keys its dots on `race_id`, the pair's time and its point of sail, so pairs
+ * built at one timestamp are one dot as far as React is concerned — three of them went missing from
+ * a dial before this counted.
+ */
+function minuteOf(index: number): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `2026-06-03 ${pad(18 + Math.floor(index / 60))}:${pad(index % 60)}:00`
+}
+
+/**
+ * An `STW` season over `races` Races, `withLine` of which carry a line of their own.
+ *
+ * Both fit methods, as the screen reads them, and the same Races in each: the rows are identical in
+ * the two and only the fitted line differs.
+ */
+export function speedSeason(races: number, withLine: number): InstrumentTuningSeason['speed'] {
+  const anEra = (): EraDivergence =>
+    speedEra(
+      Array.from({ length: races }, (_, index) =>
+        raceDivergence(`race-${index}`, DAY, speedPoints(20, 0.3))
+      ),
+      { races_with_a_line: withLine }
+    )
+
+  return { orthogonal: [anEra()], 'sog-on-stw': [anEra()] }
+}
+
+/**
+ * A whole season, as `instrumentTuningSeason` returns one, with **every channel `SOLID`**.
+ *
+ * For the suites that read a season rather than one chart — the Overall tab's Instrument tuning row
+ * and the tab that renders it. A caller overrides the one channel it is about and leaves the other
+ * two alone, so "the worst of the three" is stated about a known arrangement rather than about
+ * whatever three hand-built Eras happened to produce.
+ */
+export function tuningSeason(over: Partial<InstrumentTuningSeason> = {}): InstrumentTuningSeason {
+  return {
+    heading: [headingSeason()],
+    asymmetry: asymmetrySeason(12, 10),
+    speed: speedSeason(10, 9),
+    ...over,
+  }
+}
+
+/**
+ * A compass Era with a readable curve and `SOLID` coverage.
+ *
+ * Two Races holding the same two bins, so the Era has a swing to lead with — `+12.7°` at `NNE` down
+ * to `−8.9°` at `WSW`, which is the shape the owner's own season turned out to have. The covered
+ * count is *stated* rather than drawn from 24 hand-built bins: the swing comes off the bins and the
+ * coverage verdict off the count, and a fixture is allowed to set the two independently.
+ */
+function headingSeason(): EraHeadingOffset {
+  const bins = raceBins({ 1: { mean: 12.7, rows: 40 }, 20: { mean: -8.9, rows: 40 } })
+
+  return headingEra(
+    [raceHeading('race-hdg-1', DAY, bins), raceHeading('race-hdg-2', DAY, bins)],
+    { headings_on_two_or_more_races: 24 }
+  )
 }

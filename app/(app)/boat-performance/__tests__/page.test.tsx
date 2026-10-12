@@ -5,6 +5,7 @@ import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
 import { SAIL_SELECTION_TEASER_RACES } from '@/components/analysis/SailSelectionTeaser'
 import { CHART, ROWS, RACES, matchableRow } from '@/components/analysis/__tests__/fixture'
+import { headingEra, tuningSeason } from '@/components/boat/instrument-tuning/__tests__/fixtures'
 
 const redirect = jest.fn((to: string) => {
   throw Object.assign(new Error(`NEXT_REDIRECT:${to}`), { digest: 'NEXT_REDIRECT' })
@@ -30,6 +31,13 @@ jest.mock('@/services/analysis/readArchive', () => ({
 // the row has a different thing to say, and that is one of the cases below.
 jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
   readCrossoverChartScreen: jest.fn(async () => null),
+}))
+
+// And the whole-archive instrument read the third row's coverage word comes off (LAY-160). Mocked
+// for the same reason as the other two, and because this is the expensive read on the tab: it is
+// every Race's whole Transcription, which is `readInstrumentTuning`'s own suite to drive.
+jest.mock('@/services/analysis/readInstrumentTuning', () => ({
+  readInstrumentTuning: jest.fn(async () => ({ ok: false, reason: 'no-races' })),
 }))
 
 import BoatPerformancePage from '../page'
@@ -86,11 +94,18 @@ describe('the Overall tab', () => {
   const { readCrossoverChartScreen } = jest.requireMock(
     '@/services/boat/readCrossoverChartVersions'
   )
+  const { readInstrumentTuning } = jest.requireMock('@/services/analysis/readInstrumentTuning')
 
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(CREW)
     readCrossoverChartScreen.mockResolvedValue({ list: [], current: { payload: CHART } })
+    readInstrumentTuning.mockResolvedValue({
+      ok: true,
+      season: tuningSeason(),
+      log: [],
+      races: [],
+    })
   })
 
   async function renderOverall(): Promise<void> {
@@ -192,5 +207,60 @@ describe('the Overall tab', () => {
     // it is the same sentence the detail screen shows, from the same component, so the two cannot
     // drift into disagreeing about what happened.
     expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
+  })
+
+  it('adds the Instrument tuning row beneath the other two, tapping through to the charts', async () => {
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readInstrumentTuning.mockResolvedValue({
+      ok: true,
+      // One `ANECDOTAL` channel among two solid ones, which is the word under the three figures.
+      season: tuningSeason({ heading: [headingEra([], { headings_on_two_or_more_races: 4 })] }),
+      log: [],
+      races: [],
+    })
+
+    await renderOverall()
+
+    const row = screen.getByTestId('instrument-tuning-teaser')
+    expect(row).toHaveAttribute('href', '/boat-performance/instrument-tuning')
+    // The three channels, each with what its figure rests on, and the worst of their words beneath.
+    expect(screen.getAllByTestId('tuning-channel')).toHaveLength(3)
+    expect(screen.getByTestId('tuning-coverage')).toHaveTextContent('anecdotal')
+    expect(row).toHaveTextContent('4 of 36 headings rest on two or more Races')
+    expect(row).toHaveTextContent('9 of 10 Races carry a line of their own')
+
+    // Third of three, which is the order the tab's rows are a list of doors in: the Polar hero, the
+    // Sail selection chart, then this.
+    const above = screen.getByTestId('sail-selection-teaser')
+    expect(above.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('asks the archive for the instrument season once, and only for this row', async () => {
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+
+    await renderOverall()
+
+    // The expensive read on the tab — every Race's whole Transcription, uncached by ADR 0009. One
+    // call for one word, and nothing above it waits on the answer: the row has a boundary of its
+    // own, so the rows that are already measured paint while this one is still reading.
+    expect(readInstrumentTuning).toHaveBeenCalledTimes(1)
+    expect(readInstrumentTuning).toHaveBeenCalledWith()
+  })
+
+  it('keeps a failed instrument read to its own row', async () => {
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readInstrumentTuning.mockResolvedValue({ ok: false, reason: 'unreadable' })
+
+    await renderOverall()
+
+    // The two rows above are measured over a read that worked, so they still say what they found.
+    expect(screen.getByTestId('polar-performance-teaser')).toBeInTheDocument()
+    expect(screen.getByTestId('sail-selection-teaser')).toBeInTheDocument()
+
+    const row = screen.getByTestId('instrument-tuning-teaser')
+    expect(row).toHaveTextContent('The archive could not be read.')
+    // And no coverage word over the part of the season that loaded: that read is all-or-nothing,
+    // because a season over the Races that happened to load would present as a complete one.
+    expect(screen.queryByTestId('tuning-coverage')).not.toBeInTheDocument()
   })
 })

@@ -33,7 +33,7 @@ import CompassChart from './CompassChart'
 import SpeedCheckChart from './SpeedCheckChart'
 import TackDial from './TackDial'
 import { CHART_MAX_WIDTH } from './chart-furniture'
-import { raceLabelsFrom } from './chart-text'
+import { CHANNEL_TITLE, raceLabelsFrom } from './chart-text'
 
 /**
  * The measure the three charts are laid out in.
@@ -78,7 +78,7 @@ export default function InstrumentTuningCharts({
         maxWidth: SCREEN_MAX_WIDTH,
       }}
     >
-      <Chart title="Compass" term="Measured Offset for HDG, via COG">
+      <Chart title={CHANNEL_TITLE.HDG} term="Measured Offset for HDG, via COG">
         {heading === null ? (
           <Nothing what="No Race has produced a compass reading yet." />
         ) : (
@@ -87,7 +87,7 @@ export default function InstrumentTuningCharts({
       </Chart>
 
       <Chart
-        title="Wind angle, tack to tack"
+        title={CHANNEL_TITLE.AWA}
         term="Apparent Wind Asymmetry — not a Measured Offset"
         warn
       >
@@ -100,7 +100,7 @@ export default function InstrumentTuningCharts({
         />
       </Chart>
 
-      <Chart title="Boat speed" term="Measured Offset for STW, via SOG">
+      <Chart title={CHANNEL_TITLE.STW} term="Measured Offset for STW, via SOG">
         {speed.orthogonal === null || speed['sog-on-stw'] === null ? (
           <Nothing what="No Race has produced a speed comparison yet." />
         ) : (

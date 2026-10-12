@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import ScreenHeading from '@/components/analysis/ScreenHeading'
 import EmptyState from '@/components/common/EmptyState'
 import InstrumentTuningCharts, {
   SCREEN_MAX_WIDTH,
@@ -42,18 +43,15 @@ export default async function InstrumentTuningPage(): Promise<ReactElement> {
         all three are fully drawn, so past it the window gets margins rather than magnification.
       */}
       <div style={{ padding: spacing(4), maxWidth: SCREEN_MAX_WIDTH, margin: '0 auto' }}>
-        <h1
-          style={{
-            margin: `0 0 ${spacing(4)}`,
-            fontFamily: 'var(--font-display)',
-            fontSize: 18,
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
-            color: 'var(--text-primary)',
-          }}
-        >
-          Instrument tuning
-        </h1>
+        {/*
+          The way back, which this screen went without until LAY-160 put a door to it on the Overall
+          tab. The same heading as `/boat-performance/polar` and `/boat-performance/sail-selection`,
+          from one component: all three are detail screens reached by tapping a row, and the app's
+          drawer names sections rather than the screens inside them.
+        */}
+        <div style={{ marginBottom: spacing(4) }}>
+          <ScreenHeading title="Instrument tuning" />
+        </div>
 
         {read.ok ? (
           <InstrumentTuningCharts season={read.season} log={read.log} races={read.races} />

@@ -19,6 +19,10 @@ import { FIXTURE_HDG_ACT_DATE, FIXTURE_STW_ACT_DATE } from '../fixtures/syntheti
  * - **Both toggles, and the state they share.** That the selection survives Strip → Rose is the
  *   whole reason ADR 0034 chose a toggle over two stacked charts.
  * - **That a chart fits 390px.** A chart wider than the screen is not a chart.
+ *
+ * And, since LAY-160, the door: that the Overall tab's **Instrument tuning** row reaches this route
+ * when a thumb lands on it. What the row *says* is Jest's — `InstrumentTuningTeaser.test.tsx` — and
+ * what is left for a browser is the tap and the 390px screen it happens on.
  */
 
 const ROUTE = '/boat-performance/instrument-tuning'
@@ -246,6 +250,50 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
       // A chart wider than the viewport is a chart with a column off the side of it.
       expect(box!.width).toBeLessThanOrEqual(viewport!.width)
     }
+  })
+
+  test('taps through from the Overall tab’s instrument tuning row', async ({ page }) => {
+    await gotoHydrated(page, '/boat-performance')
+
+    await page.getByRole('tab', { name: 'Overall' }).click()
+
+    // Waited for rather than expected in the first paint: the row has a `Suspense` boundary of its
+    // own, because its read is the whole archive where the two rows above it are a ten-Race window.
+    const row = page.getByTestId('instrument-tuning-teaser')
+    await expect(row).toBeVisible()
+
+    // Third of three cards, so on a 390px screen it starts below the fold — and `toBeInViewport`
+    // never scrolls, so asserting it cold would only be asking about the fold.
+    await row.scrollIntoViewIfNeeded()
+    await expect(row).toBeInViewport()
+
+    // Three channels across a 390px screen, which is the question this shape actually raises: a
+    // tile designed as a third of a phone has to hold a mono figure without spilling out of its
+    // column. Jest can see the words; only a browser can see the width.
+    await expect(row.getByTestId('tuning-channel')).toHaveCount(3)
+    const rowBox = await row.boundingBox()
+    expect(rowBox).not.toBeNull()
+    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(390)
+
+    for (const channel of ['HDG', 'AWA', 'STW']) {
+      const figures = row.locator(`[data-testid="tuning-figures"][data-channel="${channel}"]`)
+      const overflow = await figures.evaluate((node) => node.scrollWidth - node.clientWidth)
+      expect(overflow, `${channel} spills out of its column`).toBeLessThanOrEqual(1)
+    }
+
+    // One coverage word under the three, and no count of channels beside it (ADR 0035).
+    await expect(row.getByTestId('tuning-coverage')).toHaveText(/^(solid|thin|anecdotal)$/)
+    await expect(row).not.toContainText('off band')
+
+    await row.click()
+    await expect(page).toHaveURL(/\/boat-performance\/instrument-tuning$/)
+    await expect(page.getByTestId('compass-chart')).toBeVisible()
+
+    // And back out again, which is the whole round trip: the drawer names sections rather than the
+    // screens inside them, so this link is the only way up from here.
+    await page.getByRole('link', { name: '← Boat performance' }).click()
+    await expect(page).toHaveURL(/\/boat-performance$/)
+    await expect(page.getByRole('tab', { name: 'Overall' })).toBeVisible()
   })
 })
 

@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { Suspense, type ReactElement } from 'react'
 import PolarPerformanceContent from '@/components/analysis/PolarPerformanceContent'
 import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
 import PolarPerformanceSkeleton from '@/components/analysis/PolarPerformanceSkeleton'
+import ScreenHeading from '@/components/analysis/ScreenHeading'
 import EmptyState from '@/components/common/EmptyState'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
@@ -109,28 +109,7 @@ function Screen({ children }: { children: ReactElement }): ReactElement {
       style={{ background: 'var(--page-bg)', padding: spacing(4) }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
-        <div>
-          <Link
-            href="/boat-performance"
-            style={{
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-accent)',
-              textDecoration: 'none',
-            }}
-          >
-            ← Boat performance
-          </Link>
-          <h1
-            style={{
-              margin: `${spacing(1)} 0 0`,
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--text-xl)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            Polar performance
-          </h1>
-        </div>
+        <ScreenHeading title="Polar performance" />
 
         {children}
       </div>

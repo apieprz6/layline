@@ -1,5 +1,6 @@
 import { Suspense, type ReactElement } from 'react'
 import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
+import InstrumentTuningTeaser from '@/components/analysis/InstrumentTuningTeaser'
 import PolarPerformanceTeaser, { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
 import SailSelectionTeaser, {
   SAIL_SELECTION_TEASER_RACES,
@@ -14,6 +15,7 @@ import { signInFirst } from '@/lib/account/signInFirst'
 import { sumEfficiency } from '@/services/analysis/efficiency'
 import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { readRecentRaceRows } from '@/services/analysis/readArchive'
+import { readInstrumentTuning } from '@/services/analysis/readInstrumentTuning'
 import { chartAgreement, getSailSelectionData } from '@/services/analysis/sail-selection'
 import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readRaces } from '@/services/races/readRaces'
@@ -63,8 +65,11 @@ async function RaceArchiveScreen({
       // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
       // tab is the whole archive scored, so a shared `await` would make the list wait on the
       // figures behind a tab the sailor may never open.
+      // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
+      // tab is the whole archive scored, so a shared `await` would make the list wait on the
+      // figures behind a tab the sailor may never open.
       overall={
-        <Suspense fallback={<Skeleton height="92px" radius="var(--radius-md)" />}>
+        <Suspense fallback={rowFallback()}>
           <OverallTab />
         </Suspense>
       }
@@ -73,8 +78,12 @@ async function RaceArchiveScreen({
 }
 
 /**
- * The Overall tab: the Polar performance teaser, and how well the Sail selection chart matches
- * what the boat actually does.
+ * The Overall tab: the Polar performance teaser, how well the Sail selection chart matches what the
+ * boat actually does, and how much of a season the instrument checks rest on.
+ *
+ * Three rows, which are a list of doors: each states one figure and taps through to the screen that
+ * can be reasoned on. The third reads the whole archive and so has a boundary of its own, which the
+ * first two share one `Promise.all` behind — see `InstrumentTuningRow`.
  *
  * A failed read and an empty archive are different screens, for the reason
  * `/boat-performance/polar` gives: "no races" over a failed read would be Layline claiming the
@@ -159,6 +168,46 @@ async function OverallTab(): Promise<ReactElement> {
               )
         }
       />
+
+      {/*
+        The third row, behind a boundary of its own — and not in the `Promise.all` above, for a
+        reason that is about cost rather than tidiness. See `InstrumentTuningRow`.
+      */}
+      <Suspense fallback={rowFallback()}>
+        <InstrumentTuningRow />
+      </Suspense>
     </>
   )
+}
+
+/**
+ * What a boundary holds the place of: one teaser row's own height.
+ *
+ * Both boundaries on this screen are waiting for a row of this shape — the tab's first one for
+ * whichever row paints first, and the Instrument tuning row's for itself — so the placeholder is one
+ * function rather than the same two numbers written twice.
+ */
+function rowFallback(): ReactElement {
+  return <Skeleton height="92px" radius="var(--radius-md)" />
+}
+
+/**
+ * The **Instrument tuning** row: the worst of the three channels' coverage words, as a door.
+ *
+ * Its own read and its own boundary. The two rows above it share a ten-Race window and a Crossover
+ * Chart read; this one is the **whole archive** — every Race's whole Transcription, around 35,000
+ * rows on the owner's season, assessed before it can be clipped and uncached by ADR 0009 (see
+ * `readInstrumentTuning` on what that costs and why). LAY-155 measured a smaller read of the same
+ * shape at 9.12 s against a hosted database, essentially all of it latency.
+ *
+ * So it is deliberately **not** awaited beside the other two. Put in that `Promise.all`, a tab a
+ * sailor reads at a glance would hold its two measured rows back for seconds to print one word
+ * whose only job is to say whether the screen behind it is worth opening. Behind this boundary, the
+ * rows above paint and this one arrives when the archive has been read.
+ *
+ * The read is all-or-nothing, and the row says which of its three states it is in; nothing is
+ * unwrapped here, because a page choosing the words would be a second place they could drift.
+ */
+async function InstrumentTuningRow(): Promise<ReactElement> {
+  return <InstrumentTuningTeaser read={await readInstrumentTuning()} />
 }
