@@ -213,7 +213,7 @@ describe('the Overall tab', () => {
     readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
     readInstrumentTuning.mockResolvedValue({
       ok: true,
-      // One `ANECDOTAL` channel among two solid ones, which is the word the row must land on.
+      // One `ANECDOTAL` channel among two solid ones, which is the word under the three figures.
       season: tuningSeason({ heading: [headingEra([], { headings_on_two_or_more_races: 4 })] }),
       log: [],
       races: [],
@@ -223,8 +223,11 @@ describe('the Overall tab', () => {
 
     const row = screen.getByTestId('instrument-tuning-teaser')
     expect(row).toHaveAttribute('href', '/boat-performance/instrument-tuning')
+    // The three channels, each with what its figure rests on, and the worst of their words beneath.
+    expect(screen.getAllByTestId('tuning-channel')).toHaveLength(3)
     expect(screen.getByTestId('tuning-coverage')).toHaveTextContent('anecdotal')
-    expect(row).toHaveTextContent('Compass: 4 of 36 headings rest on two or more Races')
+    expect(row).toHaveTextContent('4 of 36 headings rest on two or more Races')
+    expect(row).toHaveTextContent('9 of 10 Races carry a line of their own')
 
     // Third of three, which is the order the tab's rows are a list of doors in: the Polar hero, the
     // Sail selection chart, then this.

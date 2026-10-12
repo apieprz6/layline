@@ -2,18 +2,23 @@ import Link from 'next/link'
 import type { ReactElement } from 'react'
 import {
   CHANNEL_TITLE,
+  NO_FIT_WORDS,
+  signedKnots,
   type CheckedChannel,
 } from '@/components/boat/instrument-tuning/chart-text'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import {
+  ASYMMETRY_SOLID_PAIRS,
+  SOLID_SHARE,
   asymmetryCoverage,
   headingCoverage,
   speedCoverage,
 } from '@/services/analysis/coverage-verdict'
 import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
+import { lineGapAt, type EraDivergence } from '@/services/analysis/paddlewheel'
 import type { InstrumentTuningRead } from '@/services/analysis/readInstrumentTuning'
-import type { CoverageStatement, CoverageVerdict } from '@/types'
+import type { CoverageStatement, CoverageVerdict, EraAwaAsymmetry, EraHeadingOffset } from '@/types'
 
 interface InstrumentTuningTeaserProps {
   /**
@@ -28,35 +33,51 @@ interface InstrumentTuningTeaserProps {
 }
 
 /**
- * The Overall tab's **Instrument tuning** row, tapping through to the three charts.
+ * The Overall tab's **Instrument tuning** row: three channels, each with its figure, what that
+ * figure rests on, and a bar for how far that is from `solid`.
  *
- * One word: the **worst of the three channels' coverage verdicts**, lowercased (ADR 0035). It says
- * how much of a season the figures behind it rest on and nothing whatever about the instruments —
- * `solid` is not a pass mark and `anecdotal` is not an alarm. So the word is **never carried by
- * colour**: the figure slot keeps the accent its two neighbours' percentages use and keeps it
- * whichever of the three words lands there, because a tone that moved with the verdict would be the
- * severity reading ADR 0034 took away. There is no count beside it for the same reason — `2 of 3`
- * reads as a severity score regardless of the word next to it, and low coverage is not a severity.
+ * **The shape is LAY-149's variant D**, the recommended mix the owner chose — its per-Race
+ * "Instrument calibration check" tile, three columns of `Stat` over a coverage bar, brought to the
+ * Overall tab. It replaces ADR 0035's single worst-of-three word by the owner's decision on LAY-160
+ * (see that ADR's amendment): a sailor deciding whether to open the screen is better served by the
+ * three figures and their evidence than by one word standing for all three.
  *
- * A row and not a hero, like the Sail selection row above it: eyebrow, figure, muted caption, in
- * the same card. The Overall tab's rows are a list of doors, and what this one is for is deciding
- * whether to open the screen at all.
+ * ## What each column prints, and why it is not the prototype's number
  *
- * ## Why the word arrives with a channel and a reason
+ * The prototype printed one scalar per channel — the `HDG` era mean, a single `AWA` mean of both
+ * points of sail, and the `STW` fit's bias. ADR 0035 retired all three, on findings from the same
+ * archive the prototype ran on:
  *
- * A verdict printed alone is a grade (`types/index.ts`, `CoverageStatement`), and the charts
- * themselves never print one without the reason that earned it. So the caption names the channel
- * the word came from and states what it rests on — a sailor who taps `anecdotal` lands on the screen
- * already knowing which of the three charts sent them there. The name is `CHANNEL_TITLE`'s and not
- * this row's, so it is the title of the card they will find rather than a second word for it.
+ * - **Compass: the swing**, not the mean. The curve reads about `+12.7°` heading NNE and `−8.9°`
+ *   heading WSW, so the `+3.3°` mean is a number matching no heading the compass actually shows.
+ *   Which headings those are is the chart's own readout, one tap away; the spread is what this
+ *   leads with.
+ * - **Wind angle: both points of sail**, each saying which tack reads wider. Their mean sits near
+ *   zero and states the opposite of the finding, because the two lean opposite ways. A side that
+ *   paired no tacks says so on its own line rather than leaving the other to stand alone.
+ * - **Boat speed: the line's gap from 1:1 at 4 kt and at 8 kt** — the one reading of the fitted
+ *   line that may be printed. Never a slope or an intercept (ADR 0027), and never one scalar for a
+ *   gap that is U-shaped by speed.
  *
- * A Server Component: a link, a word and a sentence, with nothing to interact with.
+ * ## The bars, and what makes them comparable
+ *
+ * Each bar is how close that channel is to **`solid`** coverage, so a full bar means the same thing
+ * in all three: the share of the headings, or of the Races with their own line, divided by
+ * `SOLID_SHARE`; the weaker point of sail's pair count divided by `ASYMMETRY_SOLID_PAIRS`. Drawn
+ * that way deliberately — three bars that looked alike while scaling differently would be worse
+ * than no bars, and the raw shares do scale differently, a two-thirds share being `SOLID` where
+ * seven pairs are not. No new cut-point is introduced: these are ADR 0034's own, read off
+ * `coverage-verdict.ts`.
+ *
+ * Neutral throughout, one tone whatever the figures say (ADR 0034): coverage states how much
+ * evidence there is and never that an instrument is wrong, and no figure here is a value to type
+ * into a display (LAY-138 decision 7).
+ *
+ * A Server Component: a link, some figures and three bars, with nothing to interact with.
  */
 export default function InstrumentTuningTeaser({
   read,
 }: InstrumentTuningTeaserProps): ReactElement {
-  const said = read.ok ? fromSeason(read.season) : WITHOUT_A_SEASON[read.reason]
-
   return (
     <Link
       href="/boat-performance/instrument-tuning"
@@ -64,7 +85,7 @@ export default function InstrumentTuningTeaser({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: spacing(1),
+        gap: spacing(2),
         background: 'var(--surface-raised)',
         border: '1px solid var(--surface-border)',
         borderRadius: radius('md'),
@@ -74,93 +95,242 @@ export default function InstrumentTuningTeaser({
     >
       <span style={{ ...EYEBROW_STYLE, marginBottom: 0 }}>Instrument tuning</span>
 
-      {said.kind === 'instead' ? (
-        <span
-          style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}
-        >
-          {said.instead}
-        </span>
+      {!read.ok ? (
+        <WithoutASeason read={read} />
       ) : (
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: spacing(2),
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-accent)',
-          }}
-        >
-          <span data-testid="tuning-coverage" style={{ fontSize: 'var(--text-2xl)', fontWeight: 700 }}>
-            {said.word}
-          </span>
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-            coverage, at the thinnest of the three checks
-          </span>
-        </span>
+        <Season panels={channels(read.season)} />
       )}
-
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        {said.caption}
-      </span>
     </Link>
   )
 }
 
+/** The three channels side by side, and the one sentence under them. */
+function Season({ panels }: { panels: readonly ChannelPanel[] }): ReactElement {
+  return (
+    <>
+      {/*
+        Laid out a row at a time rather than a column at a time — three names, then three sets of
+        figures, then three reasons, then three bars. A grid of three columns fills in that order by
+        itself, so the four bands line up across the three channels without a subgrid: otherwise the
+        Wind angle column's two points of sail would push its bar below the other two, and the three
+        would stop reading as one picture.
+      */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          columnGap: spacing(2),
+          rowGap: 2,
+          alignItems: 'start',
+        }}
+      >
+        {panels.map((panel) => (
+          <ChannelName key={panel.channel} panel={panel} />
+        ))}
+        {panels.map((panel) => (
+          <ChannelFigures key={panel.channel} panel={panel} />
+        ))}
+        {panels.map((panel) => (
+          <ChannelReason key={panel.channel} panel={panel} />
+        ))}
+        {panels.map((panel) => (
+          <ChannelBar key={panel.channel} panel={panel} />
+        ))}
+      </div>
+
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        {/* The coverage word ADR 0035 chose, kept as a clause rather than as the row's whole
+            figure: it is the one sentence saying which of the three to trust least, and what the
+            bars above are a summary of. */}
+        Coverage is{' '}
+        <span data-testid="tuning-coverage">{worst(panels).coverage.verdict.toLowerCase()}</span> at
+        its thinnest, each bar being how close that channel is to solid. Over every Race in the
+        archive. Tap for the three charts.
+      </span>
+    </>
+  )
+}
+
+/** The channel's own name — the title of the card a tap lands on, never a second word for it. */
+function ChannelName({ panel }: { panel: ChannelPanel }): ReactElement {
+  return (
+    <span
+      data-testid="tuning-channel"
+      data-channel={panel.channel}
+      style={{
+        fontSize: 8.5,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: 'var(--text-muted)',
+        lineHeight: 1.3,
+        minWidth: 0,
+      }}
+    >
+      {CHANNEL_TITLE[panel.channel]}
+    </span>
+  )
+}
+
+/** Its figure, or the words that stand where the figure would have been. */
+function ChannelFigures({ panel }: { panel: ChannelPanel }): ReactElement {
+  if (panel.instead !== null) {
+    return (
+      // Words, never a dash and never a nought: the prototype's `—` is the one thing from its tile
+      // that cannot ship (ADR 0012). An absence is a finding and reads as one.
+      <span
+        data-testid="tuning-figures"
+        data-channel={panel.channel}
+        style={{ fontSize: 10.5, color: 'var(--text-muted)', fontStyle: 'italic', minWidth: 0 }}
+      >
+        {panel.instead}
+      </span>
+    )
+  }
+
+  return (
+    <span
+      data-testid="tuning-figures"
+      data-channel={panel.channel}
+      style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}
+    >
+      {panel.figures.map((figure) => (
+        <span
+          key={figure.at ?? figure.reading}
+          style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}
+        >
+          {/* Which speed or which point of sail, small and ahead of the figure it belongs to, so
+              two readings in one column can never be read in the wrong order. */}
+          {figure.at !== undefined && (
+            <span style={{ fontSize: 8.5, color: 'var(--text-muted)', flexShrink: 0 }}>
+              {figure.at}
+            </span>
+          )}
+          {/*
+            Never wrapped, and 12px rather than the 13 the prototype's tile used: `stbd 10.0°` with
+            its point of sail ahead of it is the widest reading any channel produces, and at 13px it
+            broke across two lines in a third of a 390px screen — splitting a figure from its unit,
+            which is the one thing a figure may not do. `e2e/authenticated/instrument-tuning-charts`
+            measures the column, so a wider reading fails there rather than wrapping quietly.
+          */}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {figure.reading}
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** What the figure rests on, in the coverage verdict's own words. */
+function ChannelReason({ panel }: { panel: ChannelPanel }): ReactElement {
+  return (
+    <span
+      data-testid="tuning-reason"
+      data-channel={panel.channel}
+      style={{ fontSize: 8.5, color: 'var(--text-muted)', lineHeight: 1.4, minWidth: 0 }}
+    >
+      {panel.coverage.reason}
+    </span>
+  )
+}
+
 /**
- * Everything the row prints, as one shape per state.
+ * The bar, or nothing at all where the channel produced no figure.
  *
- * A union and not a word that might be missing: the row has three states — a season, an archive
- * that could not be read, and one with nothing in it — and in two of them there is no coverage word
- * to print at all, rather than a blank one.
+ * A bar is a drawing of how much a figure rests on, so an empty track under no figure would be
+ * drawing the evidence for a measurement nobody made. The cell still stands, keeping the three
+ * columns in step.
  */
-type RowWords =
-  /** A season was read: the worst word, and the channel and reason that earned it. */
-  | { kind: 'coverage'; word: string; caption: string }
-  /** None was, so a sentence stands where the word would have been. */
-  | { kind: 'instead'; instead: string; caption: string }
+function ChannelBar({ panel }: { panel: ChannelPanel }): ReactElement {
+  if (panel.towardsSolid === null) return <span />
+
+  return (
+    <span
+      data-testid="coverage-bar"
+      data-channel={panel.channel}
+      data-share={panel.towardsSolid.toFixed(2)}
+      style={{
+        display: 'block',
+        height: 4,
+        background: 'var(--surface-divider)',
+        borderRadius: 2,
+        marginTop: 3,
+      }}
+    >
+      <span
+        style={{
+          display: 'block',
+          width: `${Math.round(panel.towardsSolid * 100)}%`,
+          height: 4,
+          background: 'var(--text-primary)',
+          borderRadius: 2,
+        }}
+      />
+    </span>
+  )
+}
 
 /**
  * What the row says where there is no season behind it.
  *
  * Both in the words the screen itself uses, so the row and the screen a tap opens cannot drift into
  * disagreeing about what happened. An empty archive is not a failure and says so; a failed read
- * says that **nothing** is shown rather than printing a word over the part that loaded.
+ * says that **nothing** is shown rather than drawing three bars over the part that loaded.
  */
-const WITHOUT_A_SEASON: Record<
-  Extract<InstrumentTuningRead, { ok: false }>['reason'],
-  Extract<RowWords, { kind: 'instead' }>
-> = {
-  'no-races': {
-    kind: 'instead',
-    instead: 'No race has been uploaded yet.',
-    caption: 'These checks read a season of recordings. Tap for the three charts.',
-  },
-  unreadable: {
-    kind: 'instead',
-    instead: 'The archive could not be read.',
-    caption: 'Nothing is shown rather than a coverage word over part of it. Try again shortly.',
-  },
+function WithoutASeason({
+  read,
+}: {
+  read: Extract<InstrumentTuningRead, { ok: false }>
+}): ReactElement {
+  const said =
+    read.reason === 'no-races'
+      ? {
+          instead: 'No race has been uploaded yet.',
+          caption: 'These checks read a season of recordings. Tap for the three charts.',
+        }
+      : {
+          instead: 'The archive could not be read.',
+          caption:
+            'Nothing is shown rather than figures measured over part of it. Try again shortly.',
+        }
+
+  return (
+    <>
+      <span
+        style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}
+      >
+        {said.instead}
+      </span>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        {said.caption}
+      </span>
+    </>
+  )
 }
 
-/**
- * The worst channel's word, and the sentence that says what earned it.
- *
- * Lower case here and upper case on the charts, deliberately: `ANECDOTAL` beside a chart is a term
- * being quoted, and a row on a tab is reading English.
- */
-function fromSeason(season: InstrumentTuningSeason): RowWords {
-  const { channel, verdict, reason } = worst(channels(season))
-
-  return {
-    kind: 'coverage',
-    word: verdict.toLowerCase(),
-    caption: `${CHANNEL_TITLE[channel]}: ${reason}. Over every Race in the archive. Tap for the three charts.`,
-  }
+/** One figure, with the speed or point of sail it belongs to where there are two of them. */
+interface ChannelFigure {
+  /** `4 kt`, `up`, `down` — absent where the column has one figure and nothing to tell apart. */
+  at?: string
+  reading: string
 }
 
-/** One channel's coverage, carrying the channel so the caption can name it. */
-interface ChannelCoverage extends CoverageStatement {
+/** One channel's column, computed. */
+interface ChannelPanel {
   channel: CheckedChannel
+  figures: ChannelFigure[]
+  /** Words in place of the figures, where the channel produced none. Null where it did. */
+  instead: string | null
+  coverage: CoverageStatement
+  /** 0–1 of the way to `solid`, or null where there is no figure to draw evidence for. */
+  towardsSolid: number | null
 }
 
 /** Worst first, which is the order a `max` over the three verdicts reads in (ADR 0035). */
@@ -178,49 +348,165 @@ function nothingMeasured(reason: string): CoverageStatement {
   return { verdict: 'ANECDOTAL', reason }
 }
 
-/**
- * The three channels' own verdicts, in the causal order the screen reads them in.
- *
- * Each over **what a tap would show**: the current Era on the compass and on boat speed — the last
- * of each, as `InstrumentTuningCharts` draws — and the pooled season on the **Tack Dial**, which is
- * the level that dial opens at. A row stating a verdict over an Era the screen does not draw would
- * send a sailor looking for a figure that is not there.
- */
-function channels(season: InstrumentTuningSeason): ChannelCoverage[] {
-  const heading = season.heading[season.heading.length - 1] ?? null
-  const speed = season.speed.orthogonal[season.speed.orthogonal.length - 1] ?? null
-
-  return [
-    {
-      channel: 'HDG',
-      ...(heading === null
-        ? nothingMeasured('no Race has produced a compass reading yet')
-        : headingCoverage(heading)),
-    },
-    {
-      channel: 'AWA',
-      // No absence to compose for: an Asymmetry over no **Tack Pair** at either point of sail is a
-      // state `asymmetryCoverage` already states in its own words.
-      ...asymmetryCoverage(season.asymmetry.season),
-    },
-    {
-      channel: 'STW',
-      ...(speed === null
-        ? nothingMeasured('no Race has produced a speed comparison yet')
-        : speedCoverage(speed)),
-    },
-  ]
+/** A share of a population, as a fraction of the share that reads `SOLID`. */
+function towardsSolidShare(found: number, population: number): number | null {
+  if (population <= 0) return null
+  return Math.min(1, found / population / SOLID_SHARE)
 }
 
 /**
- * The worst of them.
+ * The three channels, in the causal order the screen reads them in: `HDG → AWA → STW`.
  *
- * A tie goes to the earliest channel, which is the `HDG → AWA → STW` order the screen reads in and
- * the order deviation propagates in. Nothing is lost by it: the word is the same either way, and
- * the reason beside it should name the first chart the sailor will meet.
+ * Each over **what a tap would show**: the current Era on the compass and on boat speed — the last
+ * of each, as `InstrumentTuningCharts` draws — and the pooled season on the **Tack Dial**, which is
+ * the level that dial opens at. A row stating a figure over an Era the screen does not draw would
+ * send a sailor looking for something that is not there.
  */
-function worst(coverage: readonly ChannelCoverage[]): ChannelCoverage {
-  return coverage.reduce((found, channel) =>
-    WORST_FIRST.indexOf(channel.verdict) < WORST_FIRST.indexOf(found.verdict) ? channel : found
+function channels(season: InstrumentTuningSeason): ChannelPanel[] {
+  return [
+    compass(season.heading[season.heading.length - 1] ?? null),
+    windAngle(season.asymmetry.season),
+    boatSpeed(season.speed.orthogonal[season.speed.orthogonal.length - 1] ?? null),
+  ]
+}
+
+function compass(era: EraHeadingOffset | null): ChannelPanel {
+  if (era === null) {
+    return {
+      channel: 'HDG',
+      figures: [],
+      instead: 'No Race has produced a compass reading yet.',
+      coverage: nothingMeasured('no Race has produced a compass reading yet'),
+      towardsSolid: null,
+    }
+  }
+
+  const coverage = headingCoverage(era)
+  const towardsSolid = towardsSolidShare(
+    era.headings_on_two_or_more_races,
+    era.heading_bin_count
+  )
+
+  // An Era with Races in it but no bin clearing the three-row gate: its coverage is real and nought
+  // of the compass carries a figure, which is a different sentence from no Race at all.
+  if (era.swing === null) {
+    return {
+      channel: 'HDG',
+      figures: [],
+      instead: 'No heading carries a figure yet.',
+      coverage,
+      towardsSolid: null,
+    }
+  }
+
+  return {
+    channel: 'HDG',
+    figures: [{ reading: `${era.swing.swing_deg.toFixed(1)}° swing` }],
+    instead: null,
+    coverage,
+    towardsSolid,
+  }
+}
+
+function windAngle(season: EraAwaAsymmetry): ChannelPanel {
+  const { upwind, downwind } = season
+  const coverage = asymmetryCoverage(season)
+
+  if (upwind === null && downwind === null) {
+    return {
+      channel: 'AWA',
+      figures: [],
+      instead: 'No Tack Pair has been found yet.',
+      coverage,
+      towardsSolid: null,
+    }
+  }
+
+  return {
+    channel: 'AWA',
+    figures: [
+      { at: 'up', reading: widerReading(upwind) },
+      { at: 'down', reading: widerReading(downwind) },
+    ],
+    instead: null,
+    coverage,
+    // The weaker point of sail against the count that reads `SOLID`, which is the quantity the
+    // verdict itself is read off: the comparison between the two sides is the whole check, so a
+    // side that paired nothing cannot be averaged away by a well-covered other one.
+    towardsSolid: Math.min(
+      1,
+      Math.min(upwind?.pair_count ?? 0, downwind?.pair_count ?? 0) / ASYMMETRY_SOLID_PAIRS
+    ),
+  }
+}
+
+/**
+ * Which tack read wider at one point of sail, and by how much.
+ *
+ * `wider_by_deg` and the tack rather than the signed Asymmetry, which is half of it and needs the
+ * sign convention explained — a row has nowhere to explain one. "Even" where the two tacks held the
+ * same angle, which is a real reading and not a missing one.
+ */
+function widerReading(figure: EraAwaAsymmetry['upwind']): string {
+  if (figure === null) return 'no pairs'
+  if (figure.wider_tack === null) return 'even'
+
+  return `${figure.wider_tack === 'port' ? 'port' : 'stbd'} ${figure.wider_by_deg.toFixed(1)}°`
+}
+
+function boatSpeed(era: EraDivergence | null): ChannelPanel {
+  if (era === null) {
+    return {
+      channel: 'STW',
+      figures: [],
+      instead: 'No Race has produced a speed comparison yet.',
+      coverage: nothingMeasured('no Race has produced a speed comparison yet'),
+      towardsSolid: null,
+    }
+  }
+
+  const coverage = speedCoverage(era)
+  const towardsSolid = towardsSolidShare(era.races_with_a_line, era.races.length)
+
+  if (!era.fit.fitted) {
+    return {
+      channel: 'STW',
+      figures: [],
+      instead: `No season line yet — ${NO_FIT_WORDS[era.fit.reason]}.`,
+      coverage,
+      towardsSolid,
+    }
+  }
+
+  const { line } = era.fit
+
+  // The line's gap at the two speeds the `STW` card headlines (ADR 0035), read with the chart's own
+  // arithmetic. A speed the line was never fitted over is off the chart rather than extrapolated.
+  return {
+    channel: 'STW',
+    figures: [4, 8].map((knots) => {
+      const gap = lineGapAt(line, knots)
+      return {
+        at: `${knots} kt`,
+        reading: gap === null ? 'off the chart' : signedKnots(gap),
+      }
+    }),
+    instead: null,
+    coverage,
+    towardsSolid,
+  }
+}
+
+/**
+ * The channel whose coverage is worst.
+ *
+ * A tie goes to the earliest, which is the `HDG → AWA → STW` order the screen reads in and the
+ * order deviation propagates in. Nothing is lost by it: the word is the same either way.
+ */
+function worst(panels: readonly ChannelPanel[]): ChannelPanel {
+  return panels.reduce((found, panel) =>
+    WORST_FIRST.indexOf(panel.coverage.verdict) < WORST_FIRST.indexOf(found.coverage.verdict)
+      ? panel
+      : found
   )
 }

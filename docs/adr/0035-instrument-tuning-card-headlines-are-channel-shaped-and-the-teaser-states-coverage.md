@@ -89,27 +89,46 @@ is not an alarm, each states how much evidence exists. Same row shape as its nei
 second line, no promoted mini-chart, no colour change. The "two rows starting Instrument …" collision
 is untouched and stays exactly as parked on the map.
 
-## Amendment — LAY-160, as the row shipped
+## Amendment — LAY-160: the row is variant D's tile, and the word is a clause under it
 
-The decision above is unchanged: the row states the worst coverage word, lowercased, in one neutral
-tone, with no count of channels. Three of its premises were written from the mockup rather than from
-the app, and the row was built to what shipped.
+The section above gives the Overall-tab teaser as one word and nothing else. On LAY-160 the owner
+chose **LAY-149 variant D's tile** for this row instead — the "Instrument calibration check" tile
+from that prototype's per-Race page, brought to the Overall tab: three columns, one per channel, each
+with its figure, what that figure rests on, and a bar for how close that is to `solid`. The coverage
+word survives as the clause beneath the three columns, naming the thinnest of them; it is no longer
+the whole of the row.
 
-- **The word lands in the caption line its neighbours have, not in a pill.** "No status word at all"
-  is rejected above on the grounds that the tab's existing rows "each carry a status pill" — they do
-  not. Both are eyebrow, figure, muted caption, and no pill primitive exists anywhere in the app.
-- **The caption names the channel the word came from, and that channel's own reason.** "No second
-  line" meant no line *beyond the row shape*; the row shape has three, and the third is where the
-  reason goes. A coverage verdict is never printed alone — `types/index.ts`'s `CoverageStatement`
-  settled that for the charts, naming this teaser as one of its readers: "a word with no reason
-  beside it is a grade, and these are not grading the boat." So the row reads `anecdotal` over
-  `Compass: 4 of 36 headings rest on two or more Races`. The count inside a reason is not the count
-  this ADR retired — `2 of 3` counted *channels*, as a severity score over the whole screen; this
-  one is the evidence the single word rests on, and both neighbouring rows state theirs the same way.
-- **Nothing on the tab was renamed, and nothing collided.** ADR 0032's "two rows starting
-  Instrument …" cannot arise: the shipped app put Instrument Calibration on **Boat management** as a
-  Boat Setup row, so the Overall tab had exactly two rows before this one. The renaming question
-  stays parked on LAY-138 with nothing to decide against.
+The reasoning that chose a word over a count is untouched by this, and three things it decided still
+hold:
+
+- **No count of channels.** `2 of 3 off band` stays retired, for exactly the reason given above. The
+  counts the row now prints are each channel's own evidence in `CoverageStatement`'s own words —
+  "24 of 36 headings rest on two or more Races" — which is what the charts already print beside the
+  same word, and not a severity score over the screen.
+- **Neutral throughout.** One tone whatever the figures say. Every bar is the same colour at every
+  length, so nothing on the row reads as an alarm or as a pass mark.
+- **Diagnostic only.** No figure on the row is a value to type into an instrument (LAY-138
+  decision 7).
+
+**The three figures are this ADR's, not the prototype's.** Variant D's tile printed the `HDG` era
+mean, one `AWA` mean of both points of sail, and the `STW` fit's bias — all three retired above, on
+findings from the same archive that prototype ran on. So the row carries the swing, both points of
+sail with the tack that reads wider on each, and the line's gap from 1:1 at 4 kt and at 8 kt. Nor
+does it keep the prototype's `—` for a channel that produced nothing: an absence is stated in words
+and draws no bar (ADR 0012).
+
+Three premises of the section above were written from the mockup rather than from the app, and are
+recorded here so a reader is not left with them:
+
+- **There is no status pill on the Overall tab.** "No status word at all" is rejected above on the
+  grounds that the tab's existing rows "each carry a status pill" — they do not. Both are eyebrow,
+  figure and muted caption inside a card, and no pill primitive exists anywhere in the app. The
+  prototype's rows had pills; the shipped rows never did.
+- **"No second line"** was a rule about that row shape, and the tile supersedes it.
+- **Nothing collided, and nothing was renamed.** ADR 0032's "two rows starting Instrument …" cannot
+  arise: the shipped app put Instrument Calibration on **Boat management** as a Boat Setup row, so
+  the Overall tab had exactly two rows before this one. The renaming question stays parked on
+  LAY-138 with nothing to decide against.
 
 ## Consequences
 

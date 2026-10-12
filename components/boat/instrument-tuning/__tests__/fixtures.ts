@@ -417,9 +417,26 @@ export function speedSeason(races: number, withLine: number): InstrumentTuningSe
  */
 export function tuningSeason(over: Partial<InstrumentTuningSeason> = {}): InstrumentTuningSeason {
   return {
-    heading: [headingEra([], { headings_on_two_or_more_races: 24 })],
+    heading: [headingSeason()],
     asymmetry: asymmetrySeason(12, 10),
     speed: speedSeason(10, 9),
     ...over,
   }
+}
+
+/**
+ * A compass Era with a readable curve and `SOLID` coverage.
+ *
+ * Two Races holding the same two bins, so the Era has a swing to lead with — `+12.7°` at `NNE` down
+ * to `−8.9°` at `WSW`, which is the shape the owner's own season turned out to have. The covered
+ * count is *stated* rather than drawn from 24 hand-built bins: the swing comes off the bins and the
+ * coverage verdict off the count, and a fixture is allowed to set the two independently.
+ */
+function headingSeason(): EraHeadingOffset {
+  const bins = raceBins({ 1: { mean: 12.7, rows: 40 }, 20: { mean: -8.9, rows: 40 } })
+
+  return headingEra(
+    [raceHeading('race-hdg-1', DAY, bins), raceHeading('race-hdg-2', DAY, bins)],
+    { headings_on_two_or_more_races: 24 }
+  )
 }

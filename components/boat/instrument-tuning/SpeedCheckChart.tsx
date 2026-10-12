@@ -29,12 +29,9 @@ import { spacing } from '@/lib/utils/design'
 import { speedCoverage } from '@/services/analysis/coverage-verdict'
 import type { OfferedFitMethod } from '@/services/analysis/instrument-tuning'
 import {
-  MIN_FIT_POINTS,
-  MIN_SOG_SPREAD_KNOTS,
   lineGapAt,
   type EraDivergence,
   type FittedLine,
-  type NoFitReason,
   type RaceDivergence,
   type SpeedBandGap,
   type SpeedPoint,
@@ -67,6 +64,7 @@ import {
   type ChipOption,
 } from './chart-furniture'
 import {
+  NO_FIT_WORDS as REASON_WORDS,
   raceLabel,
   races as racesPhrase,
   rows as rowsPhrase,
@@ -80,13 +78,6 @@ const SEASON = 'season'
 
 /** The speed axis never shrinks below this, so a light-air season is not drawn as a fast one. */
 const MIN_AXIS_KNOTS = 10
-
-const REASON_WORDS: Record<NoFitReason, string> = {
-  'no-points': 'no Countable row carried both speeds',
-  'too-few-points': `fewer than ${MIN_FIT_POINTS} rows carrying both speeds`,
-  'narrow-spread': `under ${MIN_SOG_SPREAD_KNOTS} kt of SOG between its slowest row and its fastest`,
-  flat: 'the two channels never varied together, so no line through them is defined',
-}
 
 /**
  * The `STW` caveat — the one of the three the services do not carry.

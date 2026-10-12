@@ -267,7 +267,21 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await row.scrollIntoViewIfNeeded()
     await expect(row).toBeInViewport()
 
-    // One coverage word and no count beside it, which is the whole of ADR 0035 on this row.
+    // Three channels across a 390px screen, which is the question this shape actually raises: a
+    // tile designed as a third of a phone has to hold a mono figure without spilling out of its
+    // column. Jest can see the words; only a browser can see the width.
+    await expect(row.getByTestId('tuning-channel')).toHaveCount(3)
+    const rowBox = await row.boundingBox()
+    expect(rowBox).not.toBeNull()
+    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(390)
+
+    for (const channel of ['HDG', 'AWA', 'STW']) {
+      const figures = row.locator(`[data-testid="tuning-figures"][data-channel="${channel}"]`)
+      const overflow = await figures.evaluate((node) => node.scrollWidth - node.clientWidth)
+      expect(overflow, `${channel} spills out of its column`).toBeLessThanOrEqual(1)
+    }
+
+    // One coverage word under the three, and no count of channels beside it (ADR 0035).
     await expect(row.getByTestId('tuning-coverage')).toHaveText(/^(solid|thin|anecdotal)$/)
     await expect(row).not.toContainText('off band')
 
