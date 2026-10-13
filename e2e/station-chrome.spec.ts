@@ -97,13 +97,13 @@ test.describe('the station page chrome', () => {
     })
   }
 
-  test('explains the 85ft elevation on CHII2, and nothing of the kind on 45198', async ({ page }) => {
+  test('explains the 85 ft elevation once, in a header chip on CHII2, and nothing of the kind on 45198', async ({ page }) => {
     await openStation(page, 390, 844, 'CHII2')
-    const note = page.getByText(/Wind measured at 85ft/)
-    await note.scrollIntoViewIfNeeded()
-    await expect(note).toBeInViewport()
+    const chip = header(page).getByRole('button', { name: /Measured at 85 ft/ })
+    await expect(chip).toBeInViewport()
+    await expect(page.getByText(/higher than at the surface/)).toHaveCount(0)
 
     await openStation(page, 390, 844, '45198')
-    await expect(page.getByText(/85ft/)).toHaveCount(0)
+    await expect(page.getByText(/85 ?ft/)).toHaveCount(0)
   })
 })

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import type { BuoyMetadata, WindDataPoint, WindDataPointWithOffset } from "@/types";
 import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
+import { carries } from "@/lib/utils/stationReadings";
 import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
 import WindRose from "@/components/dashboard/WindRose";
@@ -113,6 +114,7 @@ export default function StationPageClient({
         <StationHeader
           stationName={stationName}
           buoyId={buoyId}
+          metadata={metadata}
           latestDataTime={latestDataTime}
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
@@ -129,6 +131,7 @@ export default function StationPageClient({
             onHoverChange={setHoverPoint}
             displayPoint={displayPoint}
             mode={mode}
+            capability={metadata.capability}
           />
         ) : null
       }
@@ -162,6 +165,7 @@ export default function StationPageClient({
                 }}
               >
                 Wind speed
+                {metadata.capability.gust && carries(data, "gust") && <span style={{ color: "var(--wind-heavy)" }}> · gust</span>}
               </span>
               <span
                 style={{
@@ -180,6 +184,7 @@ export default function StationPageClient({
               nowOffsetMinutes={nowOffset}
               hoverPoint={hoverPoint}
               onHoverChange={setHoverPoint}
+              capability={metadata.capability}
             />
           </div>
         ) : null
@@ -190,7 +195,6 @@ export default function StationPageClient({
             dataWithOffset={dataWithOffset}
             timeWindowMinutes={timeWindowMinutes}
             nowOffsetMinutes={nowOffset}
-            metadata={metadata}
           />
         ) : null
       }

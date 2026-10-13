@@ -28,7 +28,7 @@ export interface BuoyMetadata {
     longitude: number
   }
   windMeasurementHeight: number // feet above water
-  adjustmentNote?: string // Context for interpretation (e.g., "Wind measured at 85ft typically reads 20-30% higher than surface")
+  adjustmentNote?: string // Context for interpretation (e.g., "Wind at this height typically reads 20–30% higher than at the surface.")
   capability: StationCapability
 }
 
@@ -215,6 +215,19 @@ export interface WindDataPoint {
 // Wind data point with calculated relative time offset (for component use)
 export interface WindDataPointWithOffset extends WindDataPoint {
   minsAgo: number // calculated minutes ago from reference time
+}
+
+/**
+ * What a station said about one secondary quantity (gust, waves) at the displayed moment.
+ *
+ * `point` is the displayed point when it carries the reading. When it doesn't, `point` is null
+ * and `lastAt` is when the most recent earlier reading was, or null if there was none in the
+ * data at all. The older value itself is never handed back: shown as if current it would be a
+ * plausible number standing in for a missing one (ADR 0008).
+ */
+export interface SecondaryReading {
+  point: WindDataPointWithOffset | null
+  lastAt: Date | null
 }
 
 // DEPRECATED: Use WindDataPoint with absolute timestamps instead

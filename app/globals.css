@@ -881,13 +881,14 @@
     line-height: 1;
   }
 
+  /* Not `overflow: hidden`: the elevation note's tooltip hangs below the header from in here. The
+     name ellipsizes on its own, and it is the one item that shrinks. */
   .station-header__title {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: baseline;
     gap: 6px;
-    overflow: hidden;
   }
 
   .station-header__name {
@@ -916,6 +917,54 @@
   .station-header__latest {
     display: none;
     font-size: 10px;
+  }
+
+  .elevation-note {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  .elevation-note__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    line-height: 1.4;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .elevation-note__chip--open {
+    background: var(--blue-muted);
+  }
+
+  .elevation-note__icon {
+    font-size: 10.5px;
+  }
+
+  .elevation-note__tooltip {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    width: 220px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--text-primary);
+    color: var(--surface-raised);
+    font-family: var(--font-body);
+    font-size: 11px;
+    line-height: 1.4;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   }
 
   @media (min-width: 768px) {

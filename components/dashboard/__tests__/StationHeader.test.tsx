@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import StationHeader from '../StationHeader'
+import type { BuoyMetadata } from '@/types'
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ push: jest.fn(), back: jest.fn() })),
@@ -8,11 +9,30 @@ jest.mock('next/navigation', () => ({
 
 const latestDataTime = new Date(2026, 9, 13, 18, 42)
 
-function renderHeader(nowOffset = 0, onReturnToLive = jest.fn()) {
+const chii2Metadata: BuoyMetadata = {
+  station: 'CHII2',
+  source: 'ndbc',
+  location: { latitude: 41.87, longitude: -87.59 },
+  windMeasurementHeight: 85,
+  adjustmentNote: 'Wind at this height typically reads 20–30% higher than at the surface.',
+  capability: { gust: true, waves: false },
+}
+
+const purdueMetadata: BuoyMetadata = {
+  station: '45198',
+  source: 'ndbc',
+  location: { latitude: 41.89, longitude: -87.6 },
+  windMeasurementHeight: 3,
+  adjustmentNote: 'Surface-level measurements',
+  capability: { gust: true, waves: true },
+}
+
+function renderHeader(nowOffset = 0, onReturnToLive = jest.fn(), metadata = chii2Metadata) {
   render(
     <StationHeader
       stationName="Harrison Dever Crib"
       buoyId="CHII2"
+      metadata={metadata}
       latestDataTime={latestDataTime}
       nowOffset={nowOffset}
       onReturnToLive={onReturnToLive}
@@ -46,5 +66,19 @@ describe('StationHeader', () => {
 
     await userEvent.setup().click(pill)
     expect(onReturnToLive).toHaveBeenCalledTimes(1)
+  })
+
+  it('carries the elevation note beside the id for an elevated anemometer', () => {
+    renderHeader()
+
+    const title = screen.getByRole('heading', { level: 1 }).parentElement!
+    expect(title).toContainElement(screen.getByRole('button', { name: /Measured at 85 ft/ }))
+  })
+
+  it('carries no elevation note for a surface station', () => {
+    renderHeader(0, jest.fn(), purdueMetadata)
+
+    expect(screen.queryByRole('button', { name: /Measured at/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/ft/)).not.toBeInTheDocument()
   })
 })
