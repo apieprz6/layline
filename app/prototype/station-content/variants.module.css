@@ -1,0 +1,99 @@
+/*
+ * PROTOTYPE — throwaway. See ./README.md.
+ *
+ * Each variant appends to `../station-chrome/grid.module.css` (LAY-61's
+ * grid, copied there). A keeps it exactly. B appends LAY-168 A's third
+ * column. C adds one auto-height row under column 2.
+ */
+
+/* ---------- A: folded in — LAY-61's grid, untouched ---------- */
+
+.foldedContent {
+  min-height: 0;
+}
+
+/* ---------- B: own modules — LAY-168 A's third column ---------- */
+
+.modulesContent {
+  min-height: 0;
+}
+
+/* Phone: a two-up strip after stats, so the data is there on the commute. */
+.modules {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modules.single {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .modulesContent {
+    grid-template-rows: 1fr 1fr auto;
+  }
+
+  .modules {
+    grid-row: 3;
+    grid-column: 1 / -1;
+  }
+
+  /* Tablet: the rose stops above the strip rather than spanning it. */
+  .roseAboveStrip {
+    grid-row: 1 / 3 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .roseAboveStrip {
+    grid-row: 1 / -1 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .modulesContent {
+    grid-template-columns: 3fr 2fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .modules {
+    grid-row: 1 / -1;
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .modules > * {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .modulesContent {
+    grid-template-columns: 1fr 1fr 0.8fr;
+  }
+
+  .modules {
+    flex-direction: row;
+  }
+}
+
+/* ---------- C: hybrid — gust folds in, waves get one strip under column 2 ---------- */
+
+.hybridContent {
+  min-height: 0;
+}
+
+@media (min-width: 768px) {
+  .hybridContent.withWaves {
+    grid-template-rows: 1fr 1fr auto;
+  }
+
+  .waveStrip {
+    grid-row: 3;
+    grid-column: 2;
+  }
+}
