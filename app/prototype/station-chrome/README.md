@@ -29,6 +29,12 @@ Left open for the build, because A does not answer them:
 - **The 1024px third column is narrow** (about 190px at 1280). Whether that is
   enough is LAY-169's call once Gust and Wave have content.
 
+**Owner's caveat (2026-10-13): Gust and Wave may be folded into the existing charts**
+rather than getting modules of their own. If they are, A's third column has nothing to
+hold. The 1024+ grid then stays LAY-61's two columns, and the space A freed goes to the
+wind rose, speed chart and stats panel. The 190px question goes away too. The header
+and dock parts of A don't depend on this. Which way it goes is LAY-169's to decide.
+
 B and C stay in this folder as the record of what A was chosen against.
 
 ## Run it
