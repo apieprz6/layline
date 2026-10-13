@@ -261,7 +261,6 @@ export default function RaceTrackAndPolarPlot({
         <SharedReadout
           facts={facts}
           moment={moment}
-          hasPlot={plot !== null}
           overlay={overlay}
           scoring={scoring}
           onClear={() => setSelected(null)}

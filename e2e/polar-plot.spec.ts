@@ -136,7 +136,9 @@ test.describe('one race: the plot and the track share one selection', () => {
     await expect(page.getByTestId('track-selection')).toBeAttached()
     await expect(page.getByTestId('track-readout')).toHaveCount(1)
     await expect(readout(page).getByTestId('track-readout')).toContainText('Percent of Target Speed')
-    await expect(readout(page)).toContainText('lasted')
+    // The shipped readout alone: the plot's side line was cut as not needed.
+    await expect(readout(page).getByTestId('track-readout')).toBeVisible()
+    await expect(readout(page)).not.toContainText('lasted')
     await expect(readout(page)).toBeInViewport()
   })
 
@@ -148,7 +150,7 @@ test.describe('one race: the plot and the track share one selection', () => {
 
     await expect(page.getByTestId('polar-plot-selected')).toHaveCount(1)
     await expect(page.getByTestId('track-selection')).toHaveCount(0)
-    await expect(readout(page)).toContainText('not on the map')
+    await expect(readout(page)).toContainText('Not on the map')
   })
 
   test('a stretch of track rings its dot, or says it has no figure — never a neighbour', async ({
@@ -158,16 +160,14 @@ test.describe('one race: the plot and the track share one selection', () => {
 
     await tapLeg(page, camera.locator('polyline[stroke^="var(--track-"]').nth(6))
     await expect(page.getByTestId('track-selection')).toBeAttached()
-    const rung = await page.getByTestId('polar-plot-selected').count()
-    expect(rung).toBeLessThanOrEqual(1)
-    if (rung === 0) await expect(readout(page)).toContainText('no figure for this moment')
+    expect(await page.getByTestId('polar-plot-selected').count()).toBeLessThanOrEqual(1)
 
     // A stretch the plot draws nothing for: the map keeps the selection, the plot rings nothing,
-    // and the words say why. Clearing, or ringing the nearest dot, would both be lies.
+    // and the readout says why. Clearing, or ringing the nearest dot, would both be lies.
     await tapLeg(page, camera.locator('polyline[data-not-scored]').first())
     await expect(page.getByTestId('track-selection')).toBeAttached()
     await expect(page.getByTestId('polar-plot-selected')).toHaveCount(0)
-    await expect(readout(page)).toContainText('no figure for this moment')
+    await expect(readout(page).getByTestId('track-readout-why')).toContainText('No figure')
   })
 
   test('the readout leads with whichever overlay the track is coloured by', async ({ page }) => {

@@ -132,9 +132,8 @@ describe('one selection, one readout', () => {
     expect(screen.getAllByTestId('track-readout')).toHaveLength(1)
     const card = screen.getByTestId('shared-readout')
     expect(within(card).getByTestId('track-readout')).toBeInTheDocument()
-    expect(within(card).getByTestId('shared-readout-plot')).toHaveTextContent(
-      `lasted ${BOTH.seconds}s`
-    )
+    // Nothing beside it: the plot's own side line was cut as not needed.
+    expect(card.children).toHaveLength(1)
   })
 
   it('leads the readout with whatever overlay the track is coloured by', async () => {
@@ -157,7 +156,7 @@ describe('one selection, one readout', () => {
     expect(screen.queryByTestId('track-selection')).not.toBeInTheDocument()
     expect(screen.queryByTestId('track-readout')).not.toBeInTheDocument()
     expect(screen.getByTestId('shared-readout-plot-only')).toHaveTextContent('of target speed')
-    expect(screen.getByTestId('shared-readout-plot')).toHaveTextContent('not on the map')
+    expect(screen.getByTestId('shared-readout-plot-only')).toHaveTextContent('Not on the map')
   })
 
   it('clears on a second tap of the same dot, and on the readout’s own close', async () => {
@@ -177,22 +176,21 @@ describe('one selection, one readout', () => {
     // What the map hands up for a parked or mid-manoeuvre stretch is a row the plot holds no dot
     // for. jsdom cannot tap the map, so the shared card is rendered on the selection it would get.
     const { default: SharedReadout } = await import('../SharedReadout')
-    const drawn = new Set(PLOT.moments.map((moment) => moment.row_index))
-    const undrawn = HEATMAP.segments.find((segment) => !drawn.has(segment.row.row_index))!.row
+    const undrawn = HEATMAP.segments.find((segment) => segment.row.excluded !== null)!.row
 
     render(
       <SharedReadout
         facts={undrawn}
         moment={null}
-        hasPlot
         overlay="target_speed"
         scoring="polar"
         onClear={jest.fn()}
       />
     )
 
-    expect(screen.getByTestId('track-readout')).toBeInTheDocument()
-    expect(screen.getByTestId('shared-readout-plot')).toHaveTextContent('no figure for this moment')
+    // The shipped readout says which kind of missing it is; the plot simply rings nothing.
+    expect(screen.getByTestId('track-readout-why')).toHaveTextContent('No figure')
+    expect(screen.queryByTestId('polar-plot-selected')).not.toBeInTheDocument()
   })
 })
 
@@ -203,7 +201,7 @@ describe('the words', () => {
 
     const plotCard = screen.getByTestId('polar-plot-card')
     expect(plotCard.textContent).not.toMatch(/\brows?\b/i)
-    expect(screen.getByTestId('shared-readout-plot').textContent).not.toMatch(/\brows?\b/i)
+    expect(screen.getByTestId('shared-readout').textContent).not.toMatch(/\brows?\b/i)
     expect(within(plotCard).getByTestId('polar-plot-explainer')).not.toHaveAttribute('open')
   })
 })

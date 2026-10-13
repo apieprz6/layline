@@ -1,29 +1,25 @@
 'use client'
 
 /**
- * The one readout on the per-Race page: the shipped `TrackReadout`, and the one line only the
- * **Polar Plot** can add (ADR 0040).
+ * The one readout on the per-Race page: the shipped `TrackReadout`, for whichever picture was
+ * tapped (ADR 0040).
  *
  * Two readouts describing one row in two places was the problem; a hand-rolled replacement lost
- * what `TrackReadout` already does per overlay. So this renders that component, unchanged, and
- * adds only what the map cannot know: how long the moment lasted, which is the Polar Plot's own
- * weighting and not a channel on the row.
+ * what `TrackReadout` already does per overlay. So this renders that component, unchanged.
  *
- * ## Two asymmetries, stated rather than smoothed over
+ * The one case it cannot serve is the first fix of a run of fixes: the map's strokes are keyed by
+ * the row each one arrives at, so that moment has no stroke and no `TrackRowFacts`. The Polar Plot
+ * answers for it in its own figures and says the map cannot — never by feeding `TrackReadout` a
+ * row it was not given. A stretch the plot draws nothing for is visible as the plot ringing
+ * nothing; the selection is never cleared, and never moved to a neighbour.
  *
- * - **The map draws transitions; the Polar Plot draws moments.** A stroke is keyed by the row it
- *   arrives at, so the first moment of a run of fixes has no stroke and no `TrackRowFacts`. The
- *   Polar Plot answers for it in its own words, and says the map cannot — never by feeding
- *   `TrackReadout` a row it was not given.
- * - **The map draws every recorded moment; the Polar Plot only the scored ones.** Tapping one of
- *   the others says there is no figure for it. The selection is never cleared, and never moved to
- *   a neighbour that does have one.
+ * The plot's own line beside the readout (how long the moment lasted) was cut on the owner's
+ * review: it was not needed.
  */
 
 import type { ReactElement } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import { spacing } from '@/lib/utils/design'
-import { describeDuration } from '@/services/recordings/coverage'
 import type { PolarPlotMoment, RaceTrack, TrackOverlay, TrackRowFacts } from '@/types'
 
 import TrackReadout from './TrackReadout'
@@ -45,7 +41,6 @@ const EYEBROW = { ...NOTE_STYLE, textTransform: 'uppercase' as const, letterSpac
 export default function SharedReadout({
   facts,
   moment,
-  hasPlot,
   overlay,
   scoring,
   onClear,
@@ -54,49 +49,23 @@ export default function SharedReadout({
   facts: TrackRowFacts | null
   /** The Polar Plot's dot for it, or null where it carries no figure. */
   moment: PolarPlotMoment | null
-  /** Whether a Polar Plot is drawn beside the map at all. Without one it has nothing to add. */
-  hasPlot: boolean
   overlay: TrackOverlay
   scoring: RaceTrack['scoring']
   onClear: () => void
 }): ReactElement | null {
-  if (facts === null && moment === null) return null
+  if (facts !== null) {
+    return (
+      <div data-testid="shared-readout" className="flex">
+        <TrackReadout row={facts} overlay={overlay} scoring={scoring} onDismiss={onClear} />
+      </div>
+    )
+  }
+
+  if (moment === null) return null
 
   return (
-    // Stacked on a phone, so the sticky card stays short enough not to cover what was tapped;
-    // side by side from `sm`.
-    <div
-      data-testid="shared-readout"
-      className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2.5"
-    >
-      {facts !== null ? (
-        <TrackReadout row={facts} overlay={overlay} scoring={scoring} onDismiss={onClear} />
-      ) : (
-        moment !== null && <PlotOnly moment={moment} onClear={onClear} />
-      )}
-
-      {hasPlot && (
-        <div
-          data-testid="shared-readout-plot"
-          className="flex flex-row flex-wrap items-baseline gap-x-2 sm:w-36 sm:shrink-0 sm:flex-col sm:gap-1"
-          style={CARD}
-        >
-          <span style={EYEBROW}>Polar Plot</span>
-          {moment === null ? (
-            <span style={{ ...NOTE_STYLE, fontStyle: 'italic' }}>no figure for this moment</span>
-          ) : (
-            <>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-primary)' }}>
-                lasted {describeDuration(moment.seconds)}
-              </span>
-              {moment.filler_anchored && (
-                <span style={{ ...NOTE_STYLE, color: 'var(--state-warning)' }}>not measured</span>
-              )}
-              {facts === null && <span style={NOTE_STYLE}>not on the map</span>}
-            </>
-          )}
-        </div>
-      )}
+    <div data-testid="shared-readout" className="flex">
+      <PlotOnly moment={moment} onClear={onClear} />
     </div>
   )
 }
@@ -136,6 +105,9 @@ function PlotOnly({ moment, onClear }: { moment: PolarPlotMoment; onClear: () =>
       <span style={{ ...NOTE_STYLE, fontFamily: 'var(--font-mono)' }}>
         {Math.round(Math.abs(moment.twa))}° {moment.twa < 0 ? 'port' : 'starboard'} · {moment.sog.toFixed(2)} kt (GPS)
         against {moment.target_knots.toFixed(2)} kt (Polar) in {moment.tws.toFixed(1)} kt of wind (computed)
+      </span>
+      <span style={NOTE_STYLE}>
+        Not on the map: the track draws the stretches between fixes, and this is the first of a run.
       </span>
     </div>
   )
