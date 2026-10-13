@@ -6,23 +6,6 @@ export function formatTimeHHMM(date: Date): string {
 }
 
 /**
- * Format how long ago data was fetched
- * Examples: "just now", "12 sec ago", "5 min ago", "2.3 h ago"
- */
-export function formatFetchAge(lastFetchTime: Date, now: Date): string {
-  const secondsAgo = Math.max(0, (now.getTime() - lastFetchTime.getTime()) / 1000)
-
-  if (secondsAgo < 5) return 'just now'
-  if (secondsAgo < 60) return `${Math.round(secondsAgo)} sec ago`
-
-  const minutesAgo = secondsAgo / 60
-  if (minutesAgo < 60) return `${Math.round(minutesAgo)} min ago`
-
-  const hoursAgo = minutesAgo / 60
-  return `${hoursAgo.toFixed(1)} h ago`
-}
-
-/**
  * Format time offset from live position
  * Examples: "now", "30m ago", "2.5h ago", "1.0d ago"
  */

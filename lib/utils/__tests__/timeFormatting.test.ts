@@ -1,4 +1,4 @@
-import { formatTimeHHMM, formatFetchAge, formatOffset } from '../timeFormatting'
+import { formatTimeHHMM, formatOffset } from '../timeFormatting'
 
 describe('formatTimeHHMM', () => {
   it('formats afternoon time correctly', () => {
@@ -16,32 +16,6 @@ describe('formatTimeHHMM', () => {
   it('formats early morning correctly', () => {
     const date = new Date('2026-05-13T09:05:00')
     expect(formatTimeHHMM(date)).toBe('09:05')
-  })
-})
-
-describe('formatFetchAge', () => {
-  it('formats "just now" for very recent fetch', () => {
-    const now = new Date('2026-05-13T14:30:00')
-    const lastFetch = new Date('2026-05-13T14:29:58') // 2 seconds ago
-    expect(formatFetchAge(lastFetch, now)).toBe('just now')
-  })
-
-  it('formats seconds correctly', () => {
-    const now = new Date('2026-05-13T14:30:00')
-    const lastFetch = new Date('2026-05-13T14:29:48') // 12 seconds ago
-    expect(formatFetchAge(lastFetch, now)).toBe('12 sec ago')
-  })
-
-  it('formats minutes correctly', () => {
-    const now = new Date('2026-05-13T14:30:00')
-    const lastFetch = new Date('2026-05-13T14:25:00') // 5 minutes ago
-    expect(formatFetchAge(lastFetch, now)).toBe('5 min ago')
-  })
-
-  it('formats hours correctly', () => {
-    const now = new Date('2026-05-13T14:30:00')
-    const lastFetch = new Date('2026-05-13T12:12:00') // 2.3 hours ago
-    expect(formatFetchAge(lastFetch, now)).toBe('2.3 h ago')
   })
 })
 

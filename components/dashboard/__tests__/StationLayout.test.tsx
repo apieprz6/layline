@@ -6,7 +6,7 @@ describe('StationLayout', () => {
     header: <div data-testid="header">Header</div>,
     windRose: <div data-testid="wind-rose">Wind Rose</div>,
     speedChart: <div data-testid="speed-chart">Speed Chart</div>,
-    tabbedPanel: <div data-testid="tabbed-panel">Tabbed Panel</div>,
+    statsPanel: <div data-testid="stats-panel">Stats Panel</div>,
     dock: <div data-testid="dock">Dock</div>,
   }
 
@@ -16,7 +16,7 @@ describe('StationLayout', () => {
     expect(screen.getByTestId('header')).toBeInTheDocument()
     expect(screen.getByTestId('wind-rose')).toBeInTheDocument()
     expect(screen.getByTestId('speed-chart')).toBeInTheDocument()
-    expect(screen.getByTestId('tabbed-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('stats-panel')).toBeInTheDocument()
     expect(screen.getByTestId('dock')).toBeInTheDocument()
   })
 
@@ -40,11 +40,11 @@ describe('StationLayout', () => {
     expect(speedChart.parentElement).toHaveClass('station-layout__speed')
   })
 
-  it('places tabbed panel in the correct grid area', () => {
+  it('places stats panel in the correct grid area', () => {
     render(<StationLayout {...defaultProps} />)
 
-    const tabbedPanel = screen.getByTestId('tabbed-panel')
-    expect(tabbedPanel.parentElement).toHaveClass('station-layout__tabbed')
+    const statsPanel = screen.getByTestId('stats-panel')
+    expect(statsPanel.parentElement).toHaveClass('station-layout__stats')
   })
 
   it('renders null slots without crashing', () => {
@@ -53,7 +53,7 @@ describe('StationLayout', () => {
         header={<div data-testid="header">Header</div>}
         windRose={null}
         speedChart={null}
-        tabbedPanel={null}
+        statsPanel={null}
         dock={<div data-testid="dock">Dock</div>}
       />
     )

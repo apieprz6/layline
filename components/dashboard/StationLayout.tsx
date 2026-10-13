@@ -4,7 +4,7 @@ interface StationLayoutProps {
   header: ReactNode
   windRose: ReactNode
   speedChart: ReactNode
-  tabbedPanel: ReactNode
+  statsPanel: ReactNode
   dock: ReactNode
 }
 
@@ -12,7 +12,7 @@ export default function StationLayout({
   header,
   windRose,
   speedChart,
-  tabbedPanel,
+  statsPanel,
   dock,
 }: StationLayoutProps) {
   return (
@@ -27,8 +27,8 @@ export default function StationLayout({
           <div className="station-layout__speed">
             {speedChart}
           </div>
-          <div className="station-layout__tabbed">
-            {tabbedPanel}
+          <div className="station-layout__stats">
+            {statsPanel}
           </div>
         </div>
       </div>
