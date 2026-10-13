@@ -504,6 +504,11 @@
      STATION LAYOUT — Responsive grid for station detail page
      ============================================================ */
   .station-layout {
+    /* The header is held at this height; the dock's is measured (its content sets it),
+       so a change to either has to be re-measured here — see e2e/station-chrome.spec.ts. */
+    --station-header-h: 43px;
+    --station-dock-h: calc(121px + env(safe-area-inset-bottom, 0px));
+    --station-gutter: 14px;
     min-height: 100vh;
     background: var(--surface-base);
     display: flex;
@@ -517,8 +522,8 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 14px 16px 0 16px;
-    padding-bottom: calc(180px + 16px);
+    padding: var(--station-gutter) 16px 0 16px;
+    padding-bottom: calc(var(--station-dock-h) + var(--station-gutter));
   }
 
   .station-layout__content {
@@ -528,11 +533,17 @@
   }
 
   @media (min-width: 768px) {
+    .station-layout {
+      /* The date-range caption joins the dock from here */
+      --station-dock-h: calc(137px + env(safe-area-inset-bottom, 0px));
+      --station-gutter: 16px;
+    }
+
     .station-layout__scroll {
       display: flex;
       justify-content: center;
-      padding: 16px 20px 0 20px;
-      padding-bottom: calc(180px + 20px);
+      padding-left: 20px;
+      padding-right: 20px;
     }
 
     .station-layout__content {
@@ -543,7 +554,9 @@
       align-items: stretch;
       width: 100%;
       max-width: 1200px;
-      height: calc(100vh - 100px - 180px);
+      height: calc(
+        100vh - var(--station-header-h) - var(--station-dock-h) - 2 * var(--station-gutter)
+      );
     }
 
     .station-layout__wind-rose {
@@ -587,14 +600,14 @@
       flex-direction: column;
     }
 
-    .station-layout__tabbed {
+    .station-layout__stats {
       grid-row: 2;
       grid-column: 2;
       min-height: 0;
       display: flex;
     }
 
-    .station-layout__tabbed > * {
+    .station-layout__stats > * {
       flex: 1;
       min-height: 0;
       display: flex;
@@ -603,9 +616,8 @@
   }
 
   @media (min-width: 1024px) {
-    .station-layout__scroll {
-      padding: 20px 20px 0 20px;
-      padding-bottom: calc(180px + 20px);
+    .station-layout {
+      --station-gutter: 20px;
     }
 
     .station-layout__content {
@@ -620,9 +632,13 @@
   }
 
   @media (min-width: 1440px) {
+    .station-layout {
+      --station-gutter: 24px;
+    }
+
     .station-layout__scroll {
-      padding: 24px 24px 0 24px;
-      padding-bottom: calc(180px + 24px);
+      padding-left: 24px;
+      padding-right: 24px;
     }
 
     .station-layout__content {
@@ -790,9 +806,162 @@
     backdrop-filter: var(--surface-dock-blur);
     -webkit-backdrop-filter: var(--surface-dock-blur);
     border-top: 1px solid var(--surface-divider);
-    padding: 12px 16px;
-    padding-bottom: calc(env(safe-area-inset-bottom, 34px) + 12px);
+    padding: 8px 14px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
     box-shadow: var(--shadow-dock);
+  }
+
+  .bottom-dock__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .bottom-dock__scale {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bottom-dock__live {
+    flex-shrink: 0;
+    font-family: var(--font-body);
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 7px 9px;
+    background: var(--accent-primary);
+    color: var(--text-inverse);
+    border: 1px solid var(--accent-primary);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .bottom-dock__live:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .bottom-dock__caption {
+    display: none;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  @media (min-width: 768px) {
+    .bottom-dock__caption {
+      display: block;
+    }
+  }
+
+  /* One row, held at the height `.station-layout` reserves for it */
+  .station-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: var(--station-header-h);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .station-header__back {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .station-header__title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .station-header__name {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: var(--weight-bold);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .station-header__id,
+  .station-header__latest {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .station-header__id {
+    font-size: 9.5px;
+  }
+
+  .station-header__latest {
+    display: none;
+    font-size: 10px;
+  }
+
+  @media (min-width: 768px) {
+    .station-header__latest {
+      display: inline;
+    }
+  }
+
+  .station-header__pill {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1.25px solid var(--surface-border);
+    font-family: var(--font-body);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Scrubbed back from live: the pill is the way home, so it wears the accent */
+  button.station-header__pill {
+    cursor: pointer;
+    color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 66%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+  }
+
+  button.station-header__pill--live {
+    color: var(--state-success);
+    border-color: color-mix(in srgb, var(--state-success) 45%, transparent);
+    background: color-mix(in srgb, var(--state-success) 6%, transparent);
+  }
+
+  .station-header__pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .station-header__pill--live .station-header__pill-dot {
+    animation: pulseDot 2s ease-out infinite;
   }
 
   @media (min-width: 1024px) {

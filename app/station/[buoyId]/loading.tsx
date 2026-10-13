@@ -1,7 +1,10 @@
 import type { CSSProperties, ReactElement } from 'react'
 import Skeleton, { SkeletonScreen, SkeletonText } from '@/components/common/Skeleton'
 import { TIME_SCALES } from '@/lib/utils/windowing'
-import { spacing } from '@/lib/utils/design'
+import {
+  STATS_PANEL_LABEL_STYLE,
+  STATS_PANEL_STYLE,
+} from '@/components/dashboard/StationStatsPanel'
 
 /**
  * A station's detail screen while its 72 hours of history are still being read.
@@ -12,7 +15,7 @@ import { spacing } from '@/lib/utils/design'
  * column and the 768px two-column grid both hold their shape.
  *
  * The chrome that is a *setting* rather than a reading is drawn for real: the panel's
- * three tab names, "Wind speed", the four stat labels, and the 1h window label, which
+ * "Stats" label, "Wind speed", the four stat labels, and the 1h window label, which
  * is the scale the screen always opens on. The station's own name is a bar — the route
  * carries a buoy id, and turning that into "Harrison-Dever Crib" here would put a
  * second spelling of the station's name in a second place.
@@ -27,17 +30,6 @@ const CARD_STYLE: CSSProperties = {
   border: '1px solid var(--surface-border)',
   borderRadius: '12px',
   boxShadow: 'var(--shadow-sm)',
-}
-
-const PANEL_TAB_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-body)',
-  fontSize: '11.5px',
-  fontWeight: 600,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  textAlign: 'center',
-  borderRadius: '7px',
-  padding: '9px 0',
 }
 
 const STAT_LABEL_STYLE: CSSProperties = {
@@ -62,69 +54,21 @@ const CARD_EYEBROW_STYLE: CSSProperties = {
 export default function StationLoading(): ReactElement {
   return (
     <SkeletonScreen label="Loading station history" className="station-layout">
-      {/* Header — StationHeader's shape, under its testid so the two are measured the
-          same way in `e2e/loading-skeletons.spec.ts` */}
-      <div
-        data-testid="station-header"
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-          background: 'var(--surface-raised)',
-          borderBottom: '1px solid var(--surface-border)',
-          padding: spacing(4),
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing(3) }}>
-          <span
-            aria-hidden="true"
-            style={{
-              padding: spacing(2),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-primary)',
-              fontSize: '18px',
-              lineHeight: 1,
-            }}
-          >
-            ←
-          </span>
+      {/* Header — StationHeader's own classes, so it is held at the same height, and its
+          testid, so `e2e/loading-skeletons.spec.ts` measures the two the same way */}
+      <div data-testid="station-header" className="station-header">
+        <span aria-hidden="true" className="station-header__back">
+          ←
+        </span>
 
-          <div style={{ flex: 1 }}>
-            {/* An `h1` in the real header, so --leading-tight and not the body's 1.5 */}
-            <SkeletonText fontSize="16px" lineHeight="var(--leading-tight)" width="58%" />
-            <SkeletonText fontSize="10px" width="20%" style={{ marginTop: '2px' }} />
-          </div>
-
-          {/* The live pill, at its own geometry so the header is the right height */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 10px 5px 8px',
-              borderRadius: '999px',
-              border: '1.25px solid var(--surface-border)',
-              flexShrink: 0,
-            }}
-          >
-            <Skeleton width="7px" height="7px" radius="var(--radius-full)" />
-            <SkeletonText fontSize="11px" width="24px" />
-          </div>
+        <div className="station-header__title">
+          {/* An `h1` in the real header, so --leading-tight and not the body's 1.5 */}
+          <SkeletonText fontSize="14px" lineHeight="var(--leading-tight)" width="58%" />
         </div>
 
-        {/* Metadata row: Latest, Fetched */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginTop: '10px',
-          }}
-        >
-          <SkeletonText fontSize="10.5px" width="88px" />
-          <SkeletonText fontSize="10.5px" width="96px" />
+        <div className="station-header__pill">
+          <Skeleton width="6px" height="6px" radius="var(--radius-full)" />
+          <SkeletonText fontSize="10.5px" width="24px" />
         </div>
       </div>
 
@@ -189,42 +133,9 @@ export default function StationLoading(): ReactElement {
           </div>
 
           {/* Stats panel */}
-          <div className="station-layout__tabbed">
-            <div
-              style={{
-                background: 'var(--card-bg)',
-                border: '1px solid var(--border)',
-                borderRadius: '12px',
-                padding: '14px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.05)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  background: 'var(--card-el)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '10px',
-                  padding: '3px',
-                  gap: '2px',
-                  marginBottom: '14px',
-                }}
-              >
-                {['Stats', 'Jump to', 'Legend'].map((label, index) => (
-                  <span
-                    key={label}
-                    style={{
-                      ...PANEL_TAB_STYLE,
-                      color: index === 0 ? 'var(--text)' : 'var(--muted)',
-                      background: index === 0 ? 'var(--card-bg)' : 'transparent',
-                      boxShadow: index === 0 ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-                    }}
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
+          <div className="station-layout__stats">
+            <div style={STATS_PANEL_STYLE}>
+              <div style={STATS_PANEL_LABEL_STYLE}>Stats</div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 {['Mean dir', 'Mean spd', 'Range', 'Veer/back'].map((label) => (
@@ -242,26 +153,17 @@ export default function StationLoading(): ReactElement {
       {/* The dock is fixed, so it moves nothing — it is here because a station screen
           without one looks broken rather than pending */}
       <div className="bottom-dock">
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}
-        >
-          <span style={{ ...CARD_EYEBROW_STYLE, flexShrink: 0 }}>Scale</span>
+        <div className="bottom-dock__row">
           <Skeleton height="38px" radius="var(--radius-md)" style={{ flex: 1 }} />
+          <Skeleton width="50px" height="32px" radius="var(--radius-md)" />
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '2px',
-          }}
-        >
-          <span style={CARD_EYEBROW_STYLE}>Time scrubber</span>
-          <Skeleton width="52px" height="27px" radius="var(--radius-md)" />
-        </div>
+        {/* TimeScrubber's 44px track and its 14px row of tick labels */}
+        <Skeleton height="58px" radius="var(--radius-md)" />
 
-        <Skeleton height="44px" radius="var(--radius-md)" />
+        <div className="bottom-dock__caption">
+          <SkeletonText fontSize="9.5px" width="180px" style={{ margin: '0 auto' }} />
+        </div>
       </div>
     </SkeletonScreen>
   )

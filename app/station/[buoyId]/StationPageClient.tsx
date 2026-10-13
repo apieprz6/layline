@@ -9,14 +9,13 @@ import StationHeader from "@/components/dashboard/StationHeader";
 import WindRose from "@/components/dashboard/WindRose";
 import SpeedLineChart from "@/components/dashboard/SpeedLineChart";
 import BottomControlsDock from "@/components/dashboard/BottomControlsDock";
-import TabbedInfoPanel from "@/components/dashboard/TabbedInfoPanel";
+import StationStatsPanel from "@/components/dashboard/StationStatsPanel";
 
 interface StationPageClientProps {
   buoyId: string;
   stationName: string;
-  data: WindDataPoint[];
   metadata: BuoyMetadata;
-  fetchedAt: string;
+  data: WindDataPoint[];
   serverTime: number;
 }
 
@@ -26,9 +25,8 @@ const TOTAL_MINUTES = TOTAL_HOURS * 60;
 export default function StationPageClient({
   buoyId,
   stationName,
-  data,
   metadata,
-  fetchedAt,
+  data,
   serverTime,
 }: StationPageClientProps) {
   const [scaleId, setScaleId] = useState<TimeScale>("1h");
@@ -107,12 +105,6 @@ export default function StationPageClient({
     return new Date(serverTime - latestPoint.minsAgo * 60 * 1000);
   }, [dataWithOffset, serverTime]);
 
-  // Use the actual fetch time from the API response
-  const lastFetchTime = useMemo(
-    () => new Date(fetchedAt),
-    [fetchedAt],
-  );
-
   const hasData = data && data.length > 0;
 
   return (
@@ -122,7 +114,6 @@ export default function StationPageClient({
           stationName={stationName}
           buoyId={buoyId}
           latestDataTime={latestDataTime}
-          lastFetchTime={lastFetchTime}
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
         />
@@ -193,16 +184,13 @@ export default function StationPageClient({
           </div>
         ) : null
       }
-      tabbedPanel={
+      statsPanel={
         hasData ? (
-          <TabbedInfoPanel
-            data={data}
-            referenceTime={now}
+          <StationStatsPanel
+            dataWithOffset={dataWithOffset}
             timeWindowMinutes={timeWindowMinutes}
             nowOffsetMinutes={nowOffset}
-            onOffsetChange={setNowOffset}
             metadata={metadata}
-            maxOffsetMinutes={maxOffset}
           />
         ) : null
       }

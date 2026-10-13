@@ -32,75 +32,19 @@ export default function BottomControlsDock({
 }: BottomControlsDockProps) {
   return (
     <div className="bottom-dock">
-      {/* Scale selector */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          marginBottom: "10px",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "9.5px",
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "var(--text-muted)",
-            flexShrink: 0,
-          }}
-        >
-          Scale
-        </span>
-        <div style={{ flex: 1 }}>
+      <div className="bottom-dock__row">
+        <div className="bottom-dock__scale">
           <ScaleControl activeScale={scaleId} onScaleChange={onScaleChange} />
         </div>
-      </div>
-
-      {/* Scrubber row with label and button */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "2px",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "9.5px",
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "var(--text-muted)",
-          }}
-        >
-          Time scrubber
-        </span>
         <button
           onClick={onReturnToLive}
           disabled={isLive}
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "11px",
-            fontWeight: 500,
-            padding: "5px 9px",
-            background: "var(--accent-primary)",
-            color: "white",
-            border: "1px solid var(--accent-primary)",
-            borderRadius: "8px",
-            cursor: isLive ? "not-allowed" : "pointer",
-            opacity: isLive ? 0.45 : 1,
-          }}
+          className="bottom-dock__live"
         >
           Live →
         </button>
       </div>
 
-      {/* Time scrubber */}
       <TimeScrubber
         value={nowOffset}
         max={maxOffset}
@@ -108,18 +52,8 @@ export default function BottomControlsDock({
         onChange={onOffsetChange}
       />
 
-      {/* Date/time range display */}
-      <div
-        style={{
-          marginTop: "2px",
-          fontSize: "10px",
-          color: "var(--text-muted)",
-          fontFamily: "var(--font-mono)",
-          textAlign: "center",
-        }}
-      >
-        {formatDateTimeRange(windowStart)} →{" "}
-        {formatDateTimeRange(referenceTime)}
+      <div className="bottom-dock__caption">
+        {formatDateTimeRange(windowStart)} → {formatDateTimeRange(referenceTime)}
       </div>
     </div>
   );

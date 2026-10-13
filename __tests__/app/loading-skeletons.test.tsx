@@ -167,14 +167,14 @@ describe('/station/[buoyId] while it loads', () => {
     render(<StationLoading />)
 
     expect(screen.getByText('Wind speed')).toBeInTheDocument()
-    for (const label of ['Stats', 'Jump to', 'Legend']) {
-      expect(screen.getByText(label)).toBeInTheDocument()
-    }
+    expect(screen.getByText('Stats')).toBeInTheDocument()
     for (const label of ['Mean dir', 'Mean spd', 'Range', 'Veer/back']) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
-    expect(screen.getByText('Scale')).toBeInTheDocument()
-    expect(screen.getByText('Time scrubber')).toBeInTheDocument()
+    // LAY-172 deleted these from the real page, so the skeleton must not promise them.
+    for (const gone of ['Jump to', 'Legend', 'Scale', 'Time scrubber', /Fetched/]) {
+      expect(screen.queryByText(gone)).not.toBeInTheDocument()
+    }
 
     // The route carries a buoy id, not a station name. Spelling one out here would put
     // a second copy of the name in a second place.

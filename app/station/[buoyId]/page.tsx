@@ -40,7 +40,6 @@ export default async function StationPage({ params }: StationPageProps) {
       stationName={stationInfo.name}
       data={historyData.history ?? []}
       metadata={historyData.metadata}
-      fetchedAt={historyData.fetchedAt}
       // eslint-disable-next-line react-hooks/purity -- Server Component with force-dynamic, re-renders on every request
       serverTime={Date.now()}
     />
