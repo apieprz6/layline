@@ -20,18 +20,15 @@
 import type { KeyboardEvent, ReactElement } from 'react'
 import { FILLER_DASH } from '@/components/race/track-ink'
 import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
-import {
-  PATCH_SOG_KNOTS,
-  PATCH_TWA_DEG,
-  TRACE_TWA_DEG,
-  type CertificateFamily,
-  type PolarPlotPatch,
-} from '@/services/analysis/polar-plot'
+import { PATCH_SOG_KNOTS, PATCH_TWA_DEG, TRACE_TWA_DEG } from '@/services/analysis/polar-plot'
 import { overlayBand, overlayColour } from '@/services/analysis/track-overlays'
-import type { PolarPlotMoment, PolarPlotTraceBin } from '@/types'
-
-/** What the radius means: two readings of one state (ADR 0034's pattern, ADR 0040). */
-export type PolarPlotReading = 'knots' | 'pct'
+import type {
+  CertificateFamily,
+  PolarPlotMoment,
+  PolarPlotPatch,
+  PolarPlotReading,
+  PolarPlotTraceBin,
+} from '@/types'
 
 /** The frame: a half-disc with its centre on the left edge. */
 const R = 168
@@ -45,18 +42,6 @@ const PCT = { low: 0.6, high: 1.4 }
 /** The stitch a Filler-Anchored dot or patch wears, as the track's stitched legs do (ADR 0036). */
 const STITCH = '1.2 1'
 
-/**
- * Knots at the rim: past the fastest thing on the picture, the certificate included, on an even
- * knot so the rings land on round numbers.
- *
- * Never clamped *down* to a fixed figure. A dot beyond a fixed rim would have to be pinned to it,
- * and a speed drawn slower than it was is the one thing this picture must not do.
- */
-export function rimKnots(speeds: readonly number[]): number {
-  const fastest = Math.max(4, ...speeds.filter(Number.isFinite))
-  return Math.ceil(fastest / 2) * 2
-}
-
 /** Where a speed at an angle lands: 0° straight up, clockwise down the right-hand side to 180°. */
 function at(twa: number, fraction: number): [number, number] {
   const radius = Math.min(Math.max(fraction, 0), 1) * R
@@ -67,6 +52,16 @@ function at(twa: number, fraction: number): [number, number] {
 
 function pctFraction(pct: number): number {
   return (pct - PCT.low) / (PCT.high - PCT.low)
+}
+
+/**
+ * Where a percent falls off the picture's window, if it does.
+ *
+ * A moment beyond the window is pinned to that edge and *marked*, never silently drawn as a
+ * figure it was not; the legend's disclosure says what the mark means.
+ */
+function offScale(pct: number): 'below' | 'above' | null {
+  return pct < PCT.low ? 'below' : pct > PCT.high ? 'above' : null
 }
 
 interface PolarPlotProps {
@@ -404,6 +399,10 @@ function Dots({
       {moments.map((moment) => {
         const [x, y] = place(moment)
         const r = Math.max(onSelect === undefined ? 0.7 : 1.6, Math.min(3.2, Math.sqrt(moment.seconds) / 3.5))
+        const pinned = reading === 'pct' ? offScale(moment.polar_efficiency) : null
+        // Above the window: a tick pointing out past the rim. Below it: a ring at the centre.
+        const radians = (Math.abs(moment.twa) * Math.PI) / 180
+        const tick: [number, number] = [x + 5 * Math.sin(radians), y - 5 * Math.cos(radians)]
 
         return (
           <g
@@ -427,6 +426,28 @@ function Dots({
               data-filler-anchored={moment.filler_anchored ? '' : undefined}
               opacity={0.72}
             />
+            {pinned === 'above' && (
+              <line
+                data-testid="polar-plot-off-scale"
+                x1={x}
+                y1={y}
+                x2={tick[0]}
+                y2={tick[1]}
+                stroke="var(--text-muted)"
+                strokeWidth={0.8}
+              />
+            )}
+            {pinned === 'below' && (
+              <circle
+                data-testid="polar-plot-off-scale"
+                cx={x}
+                cy={y}
+                r={r + 1.2}
+                fill="none"
+                stroke="var(--text-muted)"
+                strokeWidth={0.6}
+              />
+            )}
           </g>
         )
       })}
@@ -463,10 +484,11 @@ function Trace({
   reading: PolarPlotReading
   rim: number
 }): ReactElement {
+  // A slice off the percent window breaks the trace rather than being pinned to its edge.
   const radius = (bin: PolarPlotTraceBin): number | null =>
     reading === 'knots'
       ? bin.knots / rim
-      : bin.polar_efficiency === null
+      : bin.polar_efficiency === null || offScale(bin.polar_efficiency) !== null
         ? null
         : pctFraction(bin.polar_efficiency)
 

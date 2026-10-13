@@ -319,14 +319,40 @@ describe('the Polar Plot under the figures (ADR 0040)', () => {
     expect(windowLabel()).toBe('17–23 kt')
   })
 
-  it('ticks the certificate’s own columns under the slider, lit where the window holds them', () => {
+  it('ticks the certificate’s columns under the slider, lit where they are the curves drawn', () => {
     renderScreen(EMPTY_FILTER, SPREAD)
 
     const ticks = screen.getAllByTestId('polar-plot-column-tick')
     expect(ticks.map((tick) => tick.textContent)).toEqual(['4', '8', '12', '16', '20'])
+    // 9, 10 and 11 knots were all scored between the 8 and 12 kt columns.
     expect(ticks.filter((tick) => tick.dataset.inside !== undefined).map((tick) => tick.textContent)).toEqual([
       '8',
+      '12',
     ])
+  })
+
+  it('counts sailing with no wind reading as not drawn, since no window can hold it', () => {
+    renderScreen(EMPTY_FILTER, [...SPREAD, matchableRow({ tws: null, interval_seconds: 600 })])
+
+    expect(screen.getByTestId('polar-plot-explainer')).toHaveTextContent(
+      '10m of this sailing is not drawn: 10m with no speed or wind reading'
+    )
+  })
+
+  it('leaves the arrow keys nothing to walk in the percent reading, where there are no patches', async () => {
+    const { user } = renderScreen(EMPTY_FILTER, SPREAD)
+
+    await user.click(screen.getByTestId('polar-plot-reading-pct'))
+    expect(plot()).not.toHaveAttribute('tabindex')
+  })
+
+  it('marks a moment off the percent window rather than drawing it as a figure it was not', async () => {
+    const fast = matchableRow({ tws: 10, twa: 35, sog: 9 })
+    const { user } = renderScreen(EMPTY_FILTER, [...SPREAD, fast])
+
+    await user.click(screen.getByTestId('polar-plot-reading-pct'))
+    // 9 knots against 6 is 150%, past the picture's 140% rim.
+    expect(within(plot()).getAllByTestId('polar-plot-off-scale')).toHaveLength(1)
   })
 
   it('narrows the picture and never the match: the ledger and the figures do not move', () => {

@@ -2180,6 +2180,7 @@ export type PolarPlotUndrawnReason =
   | 'no_polar'
   | 'no_reading'
   | 'off_the_certificate'
+  | 'zero_target'
 
 /** How much of a match is drawn nowhere on the **Polar Plot**, and why — in time (ADR 0037). */
 export interface PolarPlotUndrawn {
@@ -2193,7 +2194,45 @@ export interface RacePolarPlot {
   moments: PolarPlotMoment[]
   /** The Polar the Race holds (ADR 0012): what the certificate family is read from. */
   polar: PolarPayload
+  /** That Polar's Version id. */
+  polar_version_id: string
   undrawn: PolarPlotUndrawn
+}
+
+/** What the **Polar Plot**'s radius means: two readings of one state (ADR 0040). */
+export type PolarPlotReading = 'knots' | 'pct'
+
+/** One patch of the Polar Plot's (angle × speed) plane, and the sailing that landed in it. */
+export interface PolarPlotPatch {
+  /** `twa|sog`, the selection's identity. */
+  key: string
+  /** Lower edge of the `|TWA|` bin, degrees. */
+  twa: number
+  /** Lower edge of the `SOG` bin, knots. */
+  sog: number
+  /** `sumEfficiency` over exactly the rows in the patch. */
+  efficiency: EfficiencyAggregate
+  /** How many Races the patch's rows came from. */
+  races: number
+}
+
+/** A stretch of one certificate column drawn in one ink. */
+export interface CertificateRun {
+  /** Every point on this stretch was read through a cell the certificate manufactured. */
+  filler_anchored: boolean
+  points: { twa: number; knots: number }[]
+}
+
+/** One certificate column, read along the Polar's own angles. */
+export interface CertificateCurve {
+  tws: number
+  runs: CertificateRun[]
+}
+
+/** One Polar Version's columns behind the Polar Plot, for the sailing scored against it. */
+export interface CertificateFamily {
+  version_id: string
+  curves: CertificateCurve[]
 }
 
 // ---------------------------------------------------------------------------

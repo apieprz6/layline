@@ -3,9 +3,9 @@ import type { ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
-import PolarPlot, { rimKnots } from '@/components/analysis/PolarPlot'
+import PolarPlot from '@/components/analysis/PolarPlot'
 import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
-import { PATCH_SOG_KNOTS, familiesFor, plotPatches } from '@/services/analysis/polar-plot'
+import { familiesFor, plotMoments, plotPatches, rimKnots } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
 import type { EfficiencyAggregate, MatchableRow, PolarPayload } from '@/types'
 
@@ -100,10 +100,7 @@ export default function PolarPerformanceTeaser({
         <PolarPlot
           teaser
           reading="knots"
-          rim={rimKnots([
-            ...patches.map((patch) => patch.sog + PATCH_SOG_KNOTS),
-            ...Object.values(polars).flatMap((grid) => grid.boat_speed.flat()),
-          ])}
+          rim={rimKnots(plotMoments(rows), Object.values(polars))}
           families={familiesFor(rows, polars)}
           patches={patches}
           label={`The boat's speed at each wind angle against its certificate, over the last ${races} race${races === 1 ? '' : 's'}.`}

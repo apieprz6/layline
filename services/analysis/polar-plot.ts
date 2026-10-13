@@ -30,8 +30,12 @@ import type { PolarTargets } from '@/services/analysis/polar-targets'
 import { bracketingValues, polarTargets } from '@/services/analysis/polar-targets'
 import { channelValue } from '@/services/analysis/readable-rows'
 import type {
+  CertificateCurve,
+  CertificateFamily,
+  CertificateRun,
   EfficiencyAggregate,
   PolarPayload,
+  PolarPlotPatch,
   PolarPlotMoment,
   PolarPlotTraceBin,
   PolarPlotUndrawn,
@@ -67,8 +71,9 @@ type ScoredRow = PlottableRow & {
 /**
  * Whether a row is drawn: `sumEfficiency`'s own test, plus the percent a dot is coloured by.
  *
- * The percent is null beside a target only where the target is zero knots — a certificate's ramp
- * meeting 0° — which no boat sails and which no colour could mean anything at.
+ * The one place the two part: a target of zero knots, a certificate's ramp meeting 0°, which no
+ * boat sails. `sumEfficiency` still sums such a row (its distance, against no target distance);
+ * no colour could mean anything at it, so it is drawn nowhere and `timeNotDrawn` says why.
  */
 function isScored(row: PlottableRow): row is ScoredRow {
   return (
@@ -105,24 +110,15 @@ export function plotMoments(rows: readonly PlottableRow[]): PolarPlotMoment[] {
 export const PATCH_TWA_DEG = 5
 export const PATCH_SOG_KNOTS = 0.5
 
-/** One patch of the (angle × speed) plane, and the sailing that landed in it. */
-export interface PolarPlotPatch {
-  /** `twa|sog`, the selection's identity. */
-  key: string
-  /** Lower edge of the `|TWA|` bin, degrees. */
-  twa: number
-  /** Lower edge of the `SOG` bin, knots. */
-  sog: number
-  /** `sumEfficiency` over exactly the rows in the patch. */
-  efficiency: EfficiencyAggregate
-  /** How many Races the patch's rows came from. */
-  races: number
+/** The lower edge of a `|TWA|` bin. 180° belongs to the last bin rather than opening one past it. */
+function angleBin(twa: number, width: number): number {
+  return Math.min(180 - width, Math.floor(Math.abs(twa) / width) * width)
 }
 
-/** The patch a row lands in. 180° belongs to the last bin rather than opening one past the rim. */
+/** The patch a row lands in. */
 function patchOf(row: ScoredRow): { twa: number; sog: number } {
   return {
-    twa: Math.min(180 - PATCH_TWA_DEG, Math.floor(Math.abs(row.twa) / PATCH_TWA_DEG) * PATCH_TWA_DEG),
+    twa: angleBin(row.twa, PATCH_TWA_DEG),
     sog: Math.floor(row.sog / PATCH_SOG_KNOTS) * PATCH_SOG_KNOTS,
   }
 }
@@ -176,6 +172,29 @@ export function aggregateTargetKnots(efficiency: EfficiencyAggregate): number | 
     : null
 }
 
+/**
+ * Knots at the rim: past the fastest thing a screen will draw — every moment, the top of every
+ * patch it lands in, every certificate cell — on an even knot so the rings land on round numbers.
+ *
+ * Over everything the screen holds rather than what is drawn this instant, so the rim does not
+ * move as the focus window does. Never clamped *down* to a fixed figure: a dot beyond a fixed rim
+ * would have to be pinned to it, and a speed drawn slower than it was is the one thing this
+ * picture must not do.
+ */
+export function rimKnots(
+  moments: readonly { sog: number }[],
+  polars: readonly PolarPayload[],
+  also: readonly number[] = []
+): number {
+  const fastest = Math.max(
+    4,
+    ...moments.map((moment) => moment.sog + PATCH_SOG_KNOTS),
+    ...polars.flatMap((polar) => polar.boat_speed.flat()),
+    ...also
+  )
+  return Math.ceil(fastest / 2) * 2
+}
+
 // ---------------------------------------------------------------------------------------------
 // The focus window
 // ---------------------------------------------------------------------------------------------
@@ -191,7 +210,7 @@ export const FOCUS_WIDTHS = [2, 4, 6] as const
 export type FocusWidth = (typeof FOCUS_WIDTHS)[number]
 
 /** Where the window opens: 10 knots, ± 2. */
-export const DEFAULT_FOCUS = { centre: 10, width: 4 as FocusWidth }
+export const DEFAULT_FOCUS = { centre: 10, width: 4 } satisfies { centre: number; width: FocusWidth }
 
 export interface FocusWindow {
   /** Inclusive. */
@@ -237,19 +256,6 @@ export function clampCentre(centre: number, range: { from: number; to: number })
 // ---------------------------------------------------------------------------------------------
 // The certificate family
 // ---------------------------------------------------------------------------------------------
-
-/** A stretch of one certificate column drawn in one ink. */
-export interface CertificateRun {
-  /** Every point on this stretch was read through a cell the certificate manufactured. */
-  filler_anchored: boolean
-  points: { twa: number; knots: number }[]
-}
-
-/** One certificate column, read along the Polar's own angles. */
-export interface CertificateCurve {
-  tws: number
-  runs: CertificateRun[]
-}
 
 /**
  * The columns a set of moments was scored against: for each wind, the one column an exact hit
@@ -320,12 +326,6 @@ export function certificateFamily(
   })
 }
 
-/** One Polar Version's family, for the rows that were scored against it. */
-export interface CertificateFamily {
-  version_id: string
-  curves: CertificateCurve[]
-}
-
 /**
  * The family behind a season's rows, one per **Polar Version** in play.
  *
@@ -370,7 +370,7 @@ export function seasonTrace(rows: readonly PlottableRow[]): PolarPlotTraceBin[] 
 
   for (const row of rows) {
     if (!isScored(row)) continue
-    const twa = Math.min(180 - TRACE_TWA_DEG, Math.floor(Math.abs(row.twa) / TRACE_TWA_DEG) * TRACE_TWA_DEG)
+    const twa = angleBin(row.twa, TRACE_TWA_DEG)
     const found = into.get(twa)
     if (found === undefined) into.set(twa, [row])
     else found.push(row)
@@ -407,6 +407,7 @@ function undrawnReason(row: PlottableRow): PolarPlotUndrawnReason | null {
   if (!row.countable) return 'not_countable'
   if (row.polar_version_id === null) return 'no_polar'
   if (row.sog === null || row.tws === null || row.twa === null) return 'no_reading'
+  if (row.efficiency.target_speed !== null) return 'zero_target'
   return 'off_the_certificate'
 }
 
@@ -453,7 +454,12 @@ export function racePolarPlot(
   targets: PolarTargets
 ): RacePolarPlot {
   const plottable = racePlottableRows(rows, race, targets)
-  return { moments: plotMoments(plottable), polar, undrawn: timeNotDrawn(plottable) }
+  return {
+    moments: plotMoments(plottable),
+    polar,
+    polar_version_id: race.polar_version_id,
+    undrawn: timeNotDrawn(plottable),
+  }
 }
 
 /** The same rows, measured and scored, before they are reduced to dots. */

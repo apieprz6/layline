@@ -24,7 +24,7 @@
 
 import { useMemo, useState, type ReactElement } from 'react'
 import { NOTE_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
-import PolarPlot, { rimKnots, type PolarPlotReading } from '@/components/analysis/PolarPlot'
+import PolarPlot from '@/components/analysis/PolarPlot'
 import PolarPlotLegend from '@/components/analysis/PolarPlotLegend'
 import PolarPlotReadingToggle from '@/components/analysis/PolarPlotReadingToggle'
 import { radius, spacing } from '@/lib/utils/design'
@@ -44,12 +44,12 @@ import {
   inFocus,
   plotMoments,
   plotPatches,
+  rimKnots,
   timeNotDrawn,
   type FocusWidth,
-  type PolarPlotPatch,
 } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
-import type { MatchableRow, PolarPayload } from '@/types'
+import type { MatchableRow, PolarPayload, PolarPlotPatch, PolarPlotReading } from '@/types'
 
 export default function SeasonPolarPlot({
   rows,
@@ -79,13 +79,18 @@ export default function SeasonPolarPlot({
 
   // Over everything the rail matched and every certificate, not over the window: a rim that moved
   // as the thumb did would redraw every ring and make two positions impossible to compare.
-  const rim = useMemo(
-    () =>
-      rimKnots([
-        ...plotMoments(rows).map((moment) => moment.sog + PATCH_SOG_KNOTS),
-        ...certificates.flatMap((polar) => polar.boat_speed.flat()),
-      ]),
-    [rows, certificates]
+  const rim = useMemo(() => rimKnots(plotMoments(rows), certificates), [rows, certificates])
+  // What is drawn nowhere is over everything the rail matched that this window could hold —
+  // including sailing with no wind reading, which no window position ever draws.
+  const undrawn = useMemo(
+    () => timeNotDrawn([...shown, ...rows.filter((row) => row.tws === null)]),
+    [shown, rows]
+  )
+  // Lit under the slider: the columns the drawn sailing was actually scored against, so the ticks
+  // name exactly the curves on the picture (a 9–11 kt window is read off the 8, 10 and 12).
+  const inPlay = useMemo(
+    () => new Set(families.flatMap((family) => family.curves.map((curve) => curve.tws))),
+    [families]
   )
 
   if (range === null) {
@@ -117,6 +122,7 @@ export default function SeasonPolarPlot({
         <WindFocus
           range={range}
           columns={columns}
+          inPlay={inPlay}
           centre={centre}
           onCentre={setCentre}
           width={width}
@@ -136,10 +142,12 @@ export default function SeasonPolarPlot({
               moments={moments}
               selectedPatch={selected}
               onPatch={setSelected}
-              onStep={step}
+              // A patch is the mark only in the speed reading; in `%` the plot is dots and has
+              // nothing for the arrows to walk.
+              onStep={reading === 'knots' ? step : undefined}
               label={`The boat's speed at each wind angle against its certificate, over ${describeDuration(drawn)} of sailing in ${focus.low}–${focus.high} knots of wind. Tap a patch to read it.`}
             />
-            <PolarPlotLegend form="patches" undrawn={timeNotDrawn(shown)} />
+            <PolarPlotLegend form="patches" undrawn={undrawn} />
           </div>
 
           {drawn === 0 ? (
@@ -173,12 +181,13 @@ function Card({ children }: { children: ReactElement }): ReactElement {
 /**
  * The window: a centre in whole knots and a width the sailor picks.
  *
- * The certificate's columns are ticked under the slider at their real positions and lit where
- * they fall inside the window, because those are what the patches are about to be compared with.
+ * The certificate's columns are ticked under the slider at their real positions and lit where the
+ * window's sailing was scored against them, because those are the curves the patches sit over.
  */
 function WindFocus({
   range,
   columns,
+  inPlay,
   centre,
   onCentre,
   width,
@@ -187,6 +196,8 @@ function WindFocus({
 }: {
   range: { from: number; to: number }
   columns: readonly number[]
+  /** The columns the window's sailing was scored against. */
+  inPlay: ReadonlySet<number>
   centre: number
   onCentre: (next: number) => void
   width: FocusWidth
@@ -229,7 +240,7 @@ function WindFocus({
         {columns
           .filter((tws) => tws >= range.from && tws <= range.to)
           .map((tws) => {
-            const inside = tws >= low && tws < high
+            const inside = inPlay.has(tws)
             return (
               <span
                 key={tws}

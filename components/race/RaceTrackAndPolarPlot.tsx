@@ -34,14 +34,15 @@ import {
   type Ref,
 } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
-import PolarPlot, { rimKnots, type PolarPlotReading } from '@/components/analysis/PolarPlot'
+import PolarPlot from '@/components/analysis/PolarPlot'
 import PolarPlotLegend from '@/components/analysis/PolarPlotLegend'
 import PolarPlotReadingToggle from '@/components/analysis/PolarPlotReadingToggle'
 import { radius, spacing } from '@/lib/utils/design'
-import { certificateFamily } from '@/services/analysis/polar-plot'
+import { certificateFamily, rimKnots } from '@/services/analysis/polar-plot'
 import { TRACK_OVERLAYS, TRACK_SCALES, isRatioOverlay } from '@/services/analysis/track-overlays'
 import { describeDuration } from '@/services/recordings/coverage'
 import type {
+  PolarPlotReading,
   PolarPlotTraceBin,
   RaceTrack,
   TrackOverlay,
@@ -101,16 +102,21 @@ export default function RaceTrackAndPolarPlot({
     () =>
       plot === null
         ? []
-        : [{ version_id: 'race', curves: certificateFamily(plot.polar, plot.moments.map((each) => each.tws)) }],
+        : [
+            {
+              version_id: plot.polar_version_id,
+              curves: certificateFamily(plot.polar, plot.moments.map((each) => each.tws)),
+            },
+          ],
     [plot]
   )
   const rim = useMemo(
     () =>
-      rimKnots([
-        ...(plot?.moments.map((each) => each.sog) ?? []),
-        ...(plot?.polar.boat_speed.flat() ?? []),
-        ...(season?.map((bin) => bin.knots) ?? []),
-      ]),
+      rimKnots(
+        plot?.moments ?? [],
+        plot === null ? [] : [plot.polar],
+        season?.map((bin) => bin.knots)
+      ),
     [plot, season]
   )
 

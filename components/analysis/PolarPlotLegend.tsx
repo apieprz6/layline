@@ -25,6 +25,7 @@ const WHY: Record<PolarPlotUndrawnReason, string> = {
   no_polar: 'in a race that records no Polar',
   no_reading: 'with no speed or wind reading',
   off_the_certificate: 'at an angle or wind speed the certificate does not reach',
+  zero_target: 'against a target of zero knots',
 }
 
 export default function PolarPlotLegend({
@@ -53,7 +54,9 @@ export default function PolarPlotLegend({
         rather than measured. Sailing compared against those cells keeps its colour and gets an
         amber stitched outline, as it does on the track: treat a high percentage there with
         suspicion, because the target it was divided by is weak, not because the boat was fast.
-        {form === 'dots' && ' The dotted blue line is the whole season, for comparison.'} Only one
+        {form === 'dots' && ' The dotted line is the whole archive, every race and every wind, for comparison.'}{' '}
+        In the % of target reading, a moment beyond 140% or below 60% is pinned to the edge of the
+        picture and wears a short tick, rather than being drawn somewhere it was not. Only one
         side is drawn: the certificate does not tell port from starboard, so neither does this.
         {undrawn.seconds > 0 && (
           <>

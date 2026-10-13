@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactElement } from 'react'
-import type { PolarPlotReading } from '@/components/analysis/PolarPlot'
+import type { PolarPlotReading } from '@/types'
 
 /**
  * `Speed` | `% of target`: two readings of one state, so the selection and the window survive the

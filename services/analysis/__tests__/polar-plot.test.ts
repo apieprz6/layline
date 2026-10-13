@@ -72,7 +72,7 @@ function row(over: Partial<PlottableRow> & { target?: number | null; filler?: bo
     efficiency: {
       row_index: next,
       target_speed: target === null ? null : { knots: target, filler_anchored: over.filler ?? false },
-      polar_efficiency: target === null || sog === null ? null : sog / target,
+      polar_efficiency: target === null || target <= 0 || sog === null ? null : sog / target,
       vmg_zone: 'upwind',
       vmg: sog,
       target_vmg: null,
@@ -277,17 +277,20 @@ describe('time not drawn', () => {
       row({ tws: null, target: null, interval_seconds: 20 }),
       row({ sog: null, interval_seconds: 5 }),
       row({ twa: 20, target: null, interval_seconds: 40 }),
+      // A ramp meeting 0°: a target, and no colour any percent of it could mean.
+      row({ twa: 0, target: 0, interval_seconds: 7 }),
       // No measured span, so no amount of sailing to state.
       row({ countable: false, interval_seconds: null }),
     ])
 
     expect(undrawn).toEqual({
-      seconds: 120 + 300 + 25 + 40,
+      seconds: 120 + 300 + 25 + 40 + 7,
       parts: [
         { reason: 'no_polar', seconds: 300 },
         { reason: 'not_countable', seconds: 120 },
         { reason: 'off_the_certificate', seconds: 40 },
         { reason: 'no_reading', seconds: 25 },
+        { reason: 'zero_target', seconds: 7 },
       ],
     })
   })
