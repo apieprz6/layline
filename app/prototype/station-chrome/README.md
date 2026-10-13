@@ -4,6 +4,33 @@
 scrubber are the real components on real 72h buoy history; only the chrome around them
 is drawn three ways. Delete the folder once a variant wins; the branch keeps it.
 
+## Verdict — Variant A won (2026-10-13)
+
+The owner picked **A — Shrink in place** whole. What the build inherits:
+
+- **Header: one row.** Back, station name with the id beside it, `· Latest HH:MM`
+  from 768px up, and the live pill. The metadata row is gone, and with it the
+  **"Fetched X ago"** age. Measured 43px, down from 94.
+- **Dock: stays fixed at the bottom, two rows.** Scale control with the Live button
+  beside it, then the scrubber. The "Scale" and "Time scrubber" labels go, and the
+  date-range caption shows only from 768px up. Measured 121px on phone and 137px from
+  768px, down from 181. LAY-61's 80% / 60% centring at 1024 / 1440 is unchanged.
+- **Jump to and Legend are deleted**, and the stats panel loses its tab bar.
+- **The modules get a third grid column from 1024px**, appended to LAY-61's ratio:
+  `3fr 2fr 1fr`, then `1fr 1fr 0.8fr` at 1440 with Gust and Wave side by side.
+  Hidden below 1024.
+- **Ultrawide gets no bucket of its own.** 1440+ already has room, so C's 1920px
+  breakpoint is not built.
+
+Left open for the build, because A does not answer them:
+
+- **The CHII2 85ft note has no home.** It lived in the Legend, and AGENTS.md
+  requires the UI to explain the elevation, so the build must place it somewhere.
+- **The 1024px third column is narrow** (about 190px at 1280). Whether that is
+  enough is LAY-169's call once Gust and Wave have content.
+
+B and C stay in this folder as the record of what A was chosen against.
+
 ## Run it
 
 ```bash
