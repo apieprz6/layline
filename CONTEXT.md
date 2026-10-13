@@ -20,6 +20,14 @@ Primary buoy located at Harrison Dever water crib, 85 feet above water surface. 
 **Purdue Buoy (45198)**:
 Secondary buoy with surface-level measurements. Seasonal (May-October). Best on-water wind speed when operational.
 
+**Station Capability**:
+Whether a station's sensors can report a quantity at all, independent of whether this moment has a reading. CHII2 measures gust but structurally never measures waves — it is a water-intake crib, not a wave buoy — while Purdue Buoy measures both. Lets the UI tell "doesn't measure this" (no card at all) from "measures this, no current reading" (card shown, footnote only). Held per station, not per reading.
+_Avoid_: Sensor support, feature flag (this is a fact about the station, not a toggle)
+
+**Wave Reading**:
+A buoy's own measured wave height, period, and direction — nullable per reading like any other instrument figure, never fabricated when absent. Distinct from **Sea State**, which is a sailor's hand-typed Testimony about the boat's own conditions: the two are different domains (buoy measurement vs. boat-side human annotation) and must never be joined as if they were the same vocabulary.
+_Avoid_: Sea State, wave state (reserved for the Race Archive's sailor-reported annotation)
+
 ### Weather Models
 
 **Weather Model**:
@@ -408,7 +416,7 @@ _Avoid_: Interpolated track, estimated path, gap fill (nothing is filled in; the
 ### Data Structures
 
 **Wind History**:
-Time-series of wind measurements from a buoy. NDBC provides 10-minute interval readings (up to 72 hours). Each point: `{ timestamp, spd, dir }` where timestamp is ISO 8601 format. UI components filter to needed time ranges (last hour, last 6h, last 72h, etc.) and calculate relative time offsets at render time to prevent timestamp drift.
+Time-series of wind measurements from a buoy. NDBC provides 10-minute interval readings (up to 72 hours). Each point: `{ timestamp, spd, dir }`, plus `gust`/`waveHeight`/`wavePeriod`/`waveDir` where the station's own **Station Capability** supports them — present and nullable per reading, never fabricated when a given moment has no reading. timestamp is ISO 8601 format. UI components filter to needed time ranges (last hour, last 6h, last 72h, etc.) and calculate relative time offsets at render time to prevent timestamp drift.
 
 ## Relationships
 

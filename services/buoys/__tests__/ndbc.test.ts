@@ -41,6 +41,26 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       expect(hoursDiff).toBeGreaterThanOrEqual(71)
       expect(hoursDiff).toBeLessThanOrEqual(72)
     })
+
+    it('parses GST into gust (knots), and carries Station Capability metadata', async () => {
+      const mockNDBCResponse = generateMockNDBCResponse(1)
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => mockNDBCResponse,
+      } as Response)
+
+      const result = await fetchCHII2History()
+
+      expect(result.history).not.toBeNull()
+      const point = result.history![0]
+      // Mock generator sets gust = windSpeed(m/s) + 2, so gust > spd always
+      expect(point.gust).not.toBeNull()
+      expect(point.gust).toBeGreaterThan(point.spd)
+
+      expect(result.metadata.windMeasurementHeight).toBe(85)
+      expect(result.metadata.capability).toEqual({ gust: true, waves: false })
+    })
   })
 
   describe('fetchPurdueBuoyHistory', () => {
@@ -67,6 +87,8 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       // Verify timestamps are ISO 8601 format
       expect(() => new Date(oldestPoint.timestamp)).not.toThrow()
       expect(() => new Date(newestPoint.timestamp)).not.toThrow()
+
+      expect(result.metadata.capability).toEqual({ gust: true, waves: true })
     })
   })
 
@@ -104,6 +126,8 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       expect(result.status).toBe('error')
       expect(result.history).toBeNull()
       expect(result.error).toBe('Network error')
+      // Station Capability is a fact about the station, known even when the fetch fails.
+      expect(result.metadata.capability).toEqual({ gust: true, waves: false })
     })
   })
 })

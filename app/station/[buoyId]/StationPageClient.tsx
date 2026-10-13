@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { WindDataPoint, WindDataPointWithOffset } from "@/types";
+import type { BuoyMetadata, WindDataPoint, WindDataPointWithOffset } from "@/types";
 import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
 import StationLayout from "@/components/dashboard/StationLayout";
@@ -15,6 +15,7 @@ interface StationPageClientProps {
   buoyId: string;
   stationName: string;
   data: WindDataPoint[];
+  metadata: BuoyMetadata;
   fetchedAt: string;
   serverTime: number;
 }
@@ -26,6 +27,7 @@ export default function StationPageClient({
   buoyId,
   stationName,
   data,
+  metadata,
   fetchedAt,
   serverTime,
 }: StationPageClientProps) {
@@ -199,7 +201,7 @@ export default function StationPageClient({
             timeWindowMinutes={timeWindowMinutes}
             nowOffsetMinutes={nowOffset}
             onOffsetChange={setNowOffset}
-            buoyId={buoyId}
+            metadata={metadata}
             maxOffsetMinutes={maxOffset}
           />
         ) : null

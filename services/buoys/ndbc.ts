@@ -1,6 +1,7 @@
 import type {
   BuoyData,
   BuoyDataResult,
+  BuoyMetadata,
   DataSourceStatus,
   BuoyHistoryData,
   WindDataPoint,
@@ -27,6 +28,9 @@ const BUOY_CONFIGS = {
     },
     adjustmentNote:
       'Wind measured at 85ft typically reads 20-30% higher than surface',
+    // CHII2 is a water-intake crib, not a wave buoy — its NDBC feed reliably reports GST but
+    // WVHT is structurally always MM. See docs/adr/0008.
+    capability: { gust: true, waves: false },
   },
   '45198': {
     stationId: '45198',
@@ -37,7 +41,19 @@ const BUOY_CONFIGS = {
       longitude: -87.6,
     },
     adjustmentNote: 'Surface-level measurements',
+    capability: { gust: true, waves: true },
   },
+}
+
+function buildMetadata(config: (typeof BUOY_CONFIGS)[keyof typeof BUOY_CONFIGS]): BuoyMetadata {
+  return {
+    station: config.stationId,
+    source: 'ndbc',
+    location: config.location,
+    windMeasurementHeight: config.windMeasurementHeight,
+    adjustmentNote: config.adjustmentNote,
+    capability: config.capability,
+  }
 }
 
 /**
@@ -78,6 +94,10 @@ function metersPerSecondToKnots(ms: number): number {
   return ms * 1.94384
 }
 
+function metersToFeet(m: number): number {
+  return m * 3.28084
+}
+
 // Removed parseNDBCResponse and apiResponseToBuoyData - now using history parser as single source of truth
 
 /**
@@ -95,27 +115,23 @@ function extractLatestFromHistory(historyData: BuoyHistoryData): BuoyDataResult 
   }
 
   const latestPoint = historyData.history[0]
-  const config = BUOY_CONFIGS[historyData.buoyId as keyof typeof BUOY_CONFIGS]
 
+  // Dashboard summary cards are the only consumer of this "latest" shape, and gust/wave on
+  // the dashboard is explicitly out of scope for this effort (see the station-page map) — so
+  // windGust/waveHeight/wavePeriod stay unset here even though latestPoint now carries them.
   const buoyData: BuoyData = {
     buoyId: historyData.buoyId,
     name: historyData.name,
     timestamp: latestPoint.timestamp,
     windSpeed: latestPoint.spd,
     windDirection: latestPoint.dir,
-    windGust: undefined, // History data only has speed/direction
+    windGust: undefined,
     waveHeight: undefined,
     wavePeriod: undefined,
     airTemp: undefined,
     waterTemp: undefined,
     pressure: undefined,
-    metadata: {
-      station: config?.stationId || historyData.buoyId,
-      source: 'ndbc',
-      location: config?.location || { latitude: 0, longitude: 0 },
-      windMeasurementHeight: config?.windMeasurementHeight || 0,
-      adjustmentNote: config?.adjustmentNote || '',
-    },
+    metadata: historyData.metadata,
   }
 
   return {
@@ -190,7 +206,7 @@ export function clearCache(): void {
  */
 function parseNDBCHistoricalRows(
   text: string
-): Array<{ timestamp: Date; windSpeed: number; windDirection: number }> {
+): Array<{ timestamp: Date; windSpeed: number; windDirection: number; gust: number | null }> {
   const lines = text.trim().split('\n')
 
   if (lines.length < 3) {
@@ -198,7 +214,12 @@ function parseNDBCHistoricalRows(
   }
 
   const headers = lines[0].split(/\s+/)
-  const dataPoints: Array<{ timestamp: Date; windSpeed: number; windDirection: number }> = []
+  const dataPoints: Array<{
+    timestamp: Date
+    windSpeed: number
+    windDirection: number
+    gust: number | null
+  }> = []
 
   // Skip header lines (0 and 1), parse data rows starting at line 2
   for (let i = 2; i < lines.length; i++) {
@@ -250,7 +271,18 @@ function parseNDBCHistoricalRows(
       continue
     }
 
-    dataPoints.push({ timestamp, windSpeed, windDirection })
+    // GST is nullable per reading, independent of WDIR/WSPD above — a missing gust never
+    // excludes a row that otherwise has valid wind.
+    const gustRaw = data['GST']
+    let gust: number | null = null
+    if (gustRaw && gustRaw !== 'MM' && gustRaw !== '99.0') {
+      const parsedGust = metersPerSecondToKnots(parseFloat(gustRaw))
+      if (!isNaN(parsedGust)) {
+        gust = parsedGust
+      }
+    }
+
+    dataPoints.push({ timestamp, windSpeed, windDirection, gust })
   }
 
   return dataPoints
@@ -316,6 +348,7 @@ async function fetchBuoyHistory(
       timestamp: p.timestamp.toISOString(),
       spd: Math.round(p.windSpeed * 10) / 10,
       dir: Math.round(p.windDirection),
+      gust: p.gust !== null ? Math.round(p.gust * 10) / 10 : null,
     }))
 
     // Calculate status based on most recent data point timestamp
@@ -328,6 +361,7 @@ async function fetchBuoyHistory(
       history,
       status,
       fetchedAt: new Date(now).toISOString(),
+      metadata: buildMetadata(config),
     }
 
     // Cache the result
@@ -343,6 +377,7 @@ async function fetchBuoyHistory(
       status: 'error',
       fetchedAt: new Date(now).toISOString(),
       error: error instanceof Error ? error.message : 'Unknown error',
+      metadata: buildMetadata(BUOY_CONFIGS[stationId]),
     }
 
     return historyData
@@ -384,9 +419,13 @@ async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | n
 
     const { data, error } = await supabase
       .from('purdue_buoy_readings')
-      .select('timestamp, wind_speed, wind_direction')
+      .select('timestamp, wind_speed, wind_direction, wind_gust, wave_height, wave_period, wave_direction')
       .gt('timestamp', cutoff)
       .not('wind_speed', 'is', null)
+      // A WindDataPoint needs both: a reading with speed but no direction (or vice versa) is
+      // excluded here rather than defaulting the missing half to 0 — the ADR 0008 bug this
+      // fixes (ndbc.ts previously rendered a missing direction as due north).
+      .not('wind_direction', 'is', null)
       .order('timestamp', { ascending: false })
       .returns<PurdueBuoyRow[]>()
 
@@ -396,7 +435,13 @@ async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | n
     const history: WindDataPoint[] = data.map((row) => ({
       timestamp: new Date(row.timestamp).toISOString(),
       spd: Math.round(metersPerSecondToKnots(row.wind_speed) * 10) / 10,
-      dir: row.wind_direction ?? 0,
+      dir: row.wind_direction,
+      // Gust and wave fields are independently nullable — a missing one is stored as null,
+      // never fabricated, and never gates the row out (ADR 0008).
+      gust: row.wind_gust == null ? null : Math.round(metersPerSecondToKnots(row.wind_gust) * 10) / 10,
+      waveHeight: row.wave_height == null ? null : Math.round(metersToFeet(row.wave_height) * 10) / 10,
+      wavePeriod: row.wave_period == null ? null : row.wave_period,
+      waveDir: row.wave_direction == null ? null : row.wave_direction,
     }))
 
     const latestTimestamp = history[0].timestamp
@@ -408,6 +453,7 @@ async function fetchPurdueFromSupabase(now: number): Promise<BuoyHistoryData | n
       history,
       status,
       fetchedAt: new Date(now).toISOString(),
+      metadata: buildMetadata(BUOY_CONFIGS['45198']),
     }
   } catch {
     return null
