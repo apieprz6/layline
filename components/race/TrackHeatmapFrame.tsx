@@ -4,8 +4,9 @@
  * The **Race Track Heatmap**'s frame: a stable box the sailor zooms, pans and taps inside.
  *
  * It owns the camera and the hit test, and nothing else — which overlay is painted and which row
- * is selected are its caller's state, because the legend and the readout need the same two answers
- * and two copies of them would drift.
+ * is selected are its caller's state, because the legend, the readout and the **Polar Plot** need
+ * the same two answers and two copies of them would drift. The readout is its caller's too: the
+ * selection is described once, below both pictures that share it (ADR 0040).
  *
  * It takes drawn geometry with each row's facts attached, and bands them through
  * `track-overlays.ts` — the same module the server tallies its counts with, so a band this draws
@@ -48,7 +49,6 @@ import { niceDistance, scaleBarLabel } from '@/services/recordings/track-project
 import { spacing } from '@/lib/utils/design'
 import type { RaceTrack, RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@/types'
 
-import TrackReadout from './TrackReadout'
 import {
   DROPOUT,
   FILLER_DASH,
@@ -341,20 +341,6 @@ export default function TrackHeatmapFrame({
   const unscored = painted.filter(({ paint }) => paint.band === null)
   const scored = painted.filter(({ paint }) => paint.band !== null)
   const chosen = segments.find(({ row }) => row.row_index === selected?.row_index)
-  const chosenPoint = points.find(({ row }) => row.row_index === selected?.row_index)
-
-  /**
-   * Which half of the frame the selected stretch is in, so the readout can sit in the other one.
-   *
-   * Through the camera, not in the track's own coordinates: what matters is where the stretch is on
-   * screen *now*, after a pan has moved it, since that is what the card would cover.
-   */
-  const anchor = chosen
-    ? { x: (chosen.x1 + chosen.x2) / 2, y: (chosen.y1 + chosen.y2) / 2 }
-    : chosenPoint
-      ? { x: chosenPoint.x, y: chosenPoint.y }
-      : null
-  const selectionInTopHalf = anchor !== null && anchor.y * zoom + view.ty < height / 2
 
   return (
     <div>
@@ -419,6 +405,7 @@ export default function TrackHeatmapFrame({
             {chosen && (
               <polyline
                 data-testid="track-selection"
+                data-selected-mark=""
                 points={chosen.points}
                 fill="none"
                 stroke={SELECTION.stroke}
@@ -624,20 +611,6 @@ export default function TrackHeatmapFrame({
           ⤢
         </Knob>
       </div>
-
-      {/* The answer to a tap, over the map rather than under it: at 390px a card below the frame
-          lands past the fold, and a readout the sailor has to scroll to find is not a readout. It
-          sits in the half the selection is not in, so the stretch stays visible while it is
-          described. */}
-      {selected !== null && (
-        <TrackReadout
-          row={selected}
-          overlay={overlay}
-          scoring={scoring}
-          onDismiss={() => onSelect(null)}
-          selectionInTopHalf={selectionInTopHalf}
-        />
-      )}
 
       </div>
 

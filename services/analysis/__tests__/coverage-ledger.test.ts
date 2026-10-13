@@ -15,15 +15,11 @@ import {
   gapSentence,
   ledgerHeadline,
 } from '@/services/analysis/coverage-ledger'
-import {
-  EMPTY_FILTER,
-  NOT_RECORDED,
-  POLAR_PERFORMANCE_DIMENSIONS,
-  analysisDimensions,
-} from '@/services/analysis/filter'
+import { EMPTY_FILTER, NOT_RECORDED, analysisDimensions } from '@/services/analysis/filter'
 import type { AnalysisFilter, CoverageLedger, MatchableRow } from '@/types'
 
-const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, {
+/** All six: the ledger is the same over any screen's registry, and `wind` narrows these suites. */
+const DIMENSIONS = analysisDimensions(['wind', 'pos', 'sail', 'sea', 'time', 'when'], {
   sails: ['Main + Jib 1'],
   months: ['2026-06'],
 })
@@ -44,6 +40,7 @@ function row(over: Partial<MatchableRow> = {}): MatchableRow {
     twa: 42,
     sea_state: 'calm',
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: 'polar-version-1',
     sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' },
     countable: true,
     interval_seconds: 60,

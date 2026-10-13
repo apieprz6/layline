@@ -149,6 +149,23 @@ function bracketOn(axis: readonly number[], at: number): Bracket | null {
   return { low, high, fraction: (at - axis[low]) / (axis[high] - axis[low]) }
 }
 
+/**
+ * The axis values a lookup at `at` reads: one on an exact hit, the two either side otherwise, none
+ * outside the axis.
+ *
+ * Exported for the **Polar Plot**, which draws behind each moment the certificate columns that
+ * moment was actually scored against (ADR 0040). The same bracket as `targetSpeed`'s, rather than
+ * a second guess at it, so a column drawn as reference is a column the figure really read.
+ */
+export function bracketingValues(axis: readonly number[], at: number): number[] {
+  const bracket = bracketOn(axis, at)
+  if (bracket === null) return []
+
+  return bracket.low === bracket.high
+    ? [axis[bracket.low]]
+    : [axis[bracket.low], axis[bracket.high]]
+}
+
 /** Every distinct cell a bracket pair reads: four, or two on an axis hit, or one on both. */
 function corners(twa: Bracket, tws: Bracket): [number, number][] {
   const rows = twa.low === twa.high ? [twa.low] : [twa.low, twa.high]

@@ -21,7 +21,8 @@
  * ## Why it is not a second renderer
  *
  * It mounts `RaceDetailView` — the component the race page mounts — over a `RaceDetail` whose track
- * comes from `raceTrackHeatmap`, the same function `readRaceTrack` calls, scored through the same
+ * comes from `raceTrackHeatmap` and whose **Polar Plot** from `racePolarPlot`, the same functions
+ * `readRaceTrack` calls, scored through the same
  * `polarTargets` and compared against the chart through the same `compareSailToChart`. The only
  * thing that is a fixture is the data. Nothing about the layout, the drawing, the banding or the
  * camera is reimplemented here, so there is nothing for it to drift from.
@@ -31,6 +32,7 @@ import { notFound } from 'next/navigation'
 import type { ReactElement } from 'react'
 import type { DeleteRaceResult } from '@/types'
 import RaceDetailView from '@/components/race/RaceDetailView'
+import { racePlottableRows, racePolarPlot, seasonTrace } from '@/services/analysis/polar-plot'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { compareSailToChart } from '@/services/analysis/sail-agreement'
@@ -65,13 +67,19 @@ export default function RaceTrackHarnessPage(): ReactElement {
     ),
   }))
 
-  const heatmap = raceTrackHeatmap(rows, polarTargets(HARNESS_POLAR), {
-    annotations: HARNESS_TESTIMONY,
-  })
+  const targets = polarTargets(HARNESS_POLAR)
+  const heatmap = raceTrackHeatmap(rows, targets, { annotations: HARNESS_TESTIMONY })
+  // The Polar Plot from the same rows and the same Polar, through the function `readRaceTrack`
+  // calls, so the two pictures here are linked exactly as they are on the race page.
+  const race = { id: 'harness-race', polar_version_id: 'harness-polar' }
+  const plot = racePolarPlot(rows, race, HARNESS_POLAR, targets)
 
   return (
     <RaceDetailView
-      race={harnessRace({ heatmap, scoring: 'polar' })}
+      race={harnessRace({ heatmap, scoring: 'polar', plot })}
+      // A harness has no archive, so the season behind this race is the race itself: enough to
+      // put the trace on screen, which is all a browser can judge of it.
+      season={seasonTrace(racePlottableRows(rows, race, targets))}
       // `canDelete` off, and not for want of a Role: `RaceDeletePanel` is a Client Component, so
       // the action it takes has to be a real Server Action rather than a closure a harness can
       // make up — and a no-op action is a production endpoint this route has no business adding.

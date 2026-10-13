@@ -4,8 +4,9 @@
  * Composes the two layers under it and adds nothing of its own — the **Analysis Filter** decides
  * which rows (`filter.ts`), **Countable** decides which of those may be read (ADR 0025), and the
  * ratio of sums decides what the figure is (`efficiency.ts`). What is here is the screen's shape:
- * one figure over the whole matched set, the same figure per wind band, and the **Coverage
- * Ledger** beside both.
+ * one figure over the whole matched set, and the **Coverage Ledger** beside it. The per-wind-band
+ * list that used to sit under them is the **Polar Plot** now (ADR 0040, `polar-plot.ts`), drawn
+ * over the same matched rows.
  *
  * Isomorphic, like the two layers it composes: ADR 0029 runs this in the browser on every chip
  * tap.
@@ -31,10 +32,9 @@
  */
 
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
-import { bucketOf, matchedRows } from '@/services/analysis/filter'
+import { matchedRows } from '@/services/analysis/filter'
 import { sumEfficiency } from '@/services/analysis/efficiency'
 import type {
-  AnalysisBucket,
   AnalysisDimensionSpec,
   AnalysisFilter,
   CoverageLedger,
@@ -42,31 +42,12 @@ import type {
   MatchableRow,
 } from '@/types'
 
-/** One wind band's own figure. */
-export interface PolarPerformanceBand {
-  /** The band, with its own words, so a renderer need not carry the registry to label a row. */
-  bucket: AnalysisBucket
-  efficiency: EfficiencyAggregate
-}
-
 /** What the Polar performance screen draws. Typed here and not centrally: nothing else names it. */
 export interface PolarPerformance {
   /** Always present, narrowed or not (ADR 0029). */
   ledger: CoverageLedger
   /** **Polar Efficiency** and **VMG Efficiency** over every matched, Countable row. */
   overall: EfficiencyAggregate
-  /**
-   * The same figure per wind band, every band in the vocabulary present.
-   *
-   * Wind speed and not point of sail, because wind speed is one of the **Polar**'s own two axes:
-   * a band is a column of the grid the boat is being compared against, so a band that reads low is
-   * a question about the boat in that wind and not an artefact of how the rows were sliced. Empty
-   * where a narrowing or the archive left the band with nothing — a band that vanished would not
-   * say why (ADR 0014).
-   *
-   * Empty list on a screen whose registry has no wind dimension.
-   */
-  bands: PolarPerformanceBand[]
 }
 
 /**
@@ -80,16 +61,9 @@ export function getPolarPerformanceData(
   filter: AnalysisFilter,
   dimensions: readonly AnalysisDimensionSpec[]
 ): PolarPerformance {
-  const matched = matchedRows(rows, filter, dimensions)
-  const wind = dimensions.find((dimension) => dimension.id === 'wind')
-
   return {
     ledger: coverageLedger(rows, filter, dimensions),
-    overall: sumEfficiency(matched),
-    bands: (wind?.buckets ?? []).map((bucket) => ({
-      bucket,
-      efficiency: sumEfficiency(matched.filter((row) => bucketOf(row, 'wind') === bucket.id)),
-    })),
+    overall: sumEfficiency(matchedRows(rows, filter, dimensions)),
   }
 }
 

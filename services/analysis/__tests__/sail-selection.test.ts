@@ -104,6 +104,7 @@ function row(over: {
     twa: over.twa === undefined ? 95 : over.twa,
     sea_state: over.sea === undefined ? 'calm' : over.sea,
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: 'polar-version-1',
     sail: over.sail ?? carrying(KITE),
     countable: over.countable ?? true,
     interval_seconds: over.seconds === undefined ? 60 : over.seconds,

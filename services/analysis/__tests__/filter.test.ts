@@ -35,7 +35,12 @@ const VOCABULARY = {
   months: ['2026-06', '2026-07'],
 }
 
-const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, VOCABULARY)
+/**
+ * All six. No one screen offers every dimension any more (ADR 0040 took `wind` off Polar
+ * performance), and the matching rules are the same for each, so the suite holds the whole set.
+ */
+const ALL_SIX: AnalysisDimension[] = ['wind', 'pos', 'sail', 'sea', 'time', 'when']
+const DIMENSIONS = analysisDimensions(ALL_SIX, VOCABULARY)
 
 /** The Crossover Chart Version these rows were sailed under: the vocabulary their sail numbers are in. */
 const CHART_VERSION = 'chart-version-1'
@@ -54,6 +59,7 @@ function row(over: Partial<MatchableRow> = {}): MatchableRow {
     twa: 42,
     sea_state: 'calm',
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: 'polar-version-1',
     sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' } satisfies RowSail,
     countable: true,
     interval_seconds: 30,
@@ -77,8 +83,10 @@ const narrowed = (over: Partial<AnalysisFilter['buckets']>): AnalysisFilter => (
 })
 
 describe('the dimension registry', () => {
-  it('offers all six dimensions on the Polar performance screen, in rail order', () => {
-    expect(DIMENSIONS.map((each) => each.id)).toEqual(['wind', 'pos', 'sail', 'sea', 'time', 'when'])
+  it('offers five on the Polar performance screen, wind handed to the Polar Plot (ADR 0040)', () => {
+    expect(
+      analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, VOCABULARY).map((each) => each.id)
+    ).toEqual(['pos', 'sail', 'sea', 'time', 'when'])
   })
 
   it('gives every dimension a Not recorded bucket, and marks it as about the record', () => {

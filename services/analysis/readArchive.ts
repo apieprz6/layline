@@ -45,7 +45,12 @@ import type { SailDefinitionLabels } from '@/services/races/readRace'
 import { readRaceAnnotations, readSailDefinitions } from '@/services/races/readRace'
 import { readRecordingRows } from '@/services/races/recording-rows'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
-import type { AnalysisArchiveRace, CrossoverChartScreen, MatchableRow } from '@/types'
+import type {
+  AnalysisArchiveRace,
+  CrossoverChartScreen,
+  MatchableRow,
+  PolarPayload,
+} from '@/types'
 
 /** Everything an analysis screen is shipped. */
 export interface AnalysisArchive {
@@ -61,6 +66,8 @@ export interface AnalysisArchive {
   vocabulary: AnalysisVocabulary
   /** Newest first, as `readRaces` orders them: the Race's own date, never the upload's. */
   races: AnalysisArchiveRace[]
+  /** Every Polar the rows were scored against, by Version id. See `RaceSet`. */
+  polars: Record<string, PolarPayload>
 }
 
 /** What one Race's rows are built from. Mirrors `readRace`'s own select, minus what it alone needs. */
@@ -117,6 +124,7 @@ async function raceRows(
       id: race.id,
       window: race,
       crossover_chart_version_id: race.crossover_chart_version_id,
+      polar_version_id: race.polar_version_id,
     },
     annotations,
     targets
@@ -137,20 +145,26 @@ async function raceRows(
  */
 async function resolvePolars(
   versionIds: readonly string[]
-): Promise<Map<string, PolarTargets> | null> {
+): Promise<Map<string, ResolvedPolar> | null> {
   const wanted = [...new Set(versionIds)]
   const versions = await Promise.all(wanted.map((id) => readPolarVersion(id)))
-  const resolved = new Map<string, PolarTargets>()
+  const resolved = new Map<string, ResolvedPolar>()
 
   for (const [index, version] of versions.entries()) {
     if (version === null) {
       console.error(`Analysis: the Polar Version a Race names did not come back: ${wanted[index]}`)
       return null
     }
-    resolved.set(wanted[index], polarTargets(version.payload))
+    resolved.set(wanted[index], { payload: version.payload, targets: polarTargets(version.payload) })
   }
 
   return resolved
+}
+
+/** A Polar Version as the archive uses it twice: the grid to ship, and the grid classified. */
+interface ResolvedPolar {
+  payload: PolarPayload
+  targets: PolarTargets
 }
 
 /**
@@ -192,6 +206,12 @@ function sailVocabulary(
 export interface RaceSet {
   rows: MatchableRow[]
   races: AnalysisArchiveRace[]
+  /**
+   * Every Polar the rows were scored against, by Version id — what the **Polar Plot** draws behind
+   * them (ADR 0040). Shipped as the grid itself, because `polar-targets.ts` is isomorphic and the
+   * plot reads it in the browser as the focus window moves.
+   */
+  polars: Record<string, PolarPayload>
 }
 
 /**
@@ -257,7 +277,7 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
       raceRows(
         supabase,
         race,
-        race.polar_version_id === null ? null : polars.get(race.polar_version_id) ?? null,
+        race.polar_version_id === null ? null : polars.get(race.polar_version_id)?.targets ?? null,
         race.crossover_chart_version_id === null
           ? null
           : definitions.get(race.crossover_chart_version_id) ?? new Map()
@@ -275,6 +295,7 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
     // `Promise.all` keeps the order of its inputs, so this is still newest Race first with each
     // Race's rows in file order — which is what the teaser's recent-N and the row payload assume.
     rows: resolved.flat(),
+    polars: Object.fromEntries([...polars].map(([id, polar]) => [id, polar.payload])),
     races: races.map((race, index) => ({
       id: race.id,
       title: race.title,

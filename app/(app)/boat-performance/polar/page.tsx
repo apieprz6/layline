@@ -96,6 +96,7 @@ async function PolarPerformanceScreen({ params }: { params: SearchParams }): Pro
         races={archive.races}
         dimensions={dimensions}
         initialFilter={filterFromSearchParams(params, dimensions)}
+        polars={archive.polars}
       />
     </Screen>
   )

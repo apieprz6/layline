@@ -1,20 +1,21 @@
 'use client'
 
-import { useState, type ReactElement } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import AnalysisFilterRail from '@/components/analysis/AnalysisFilterRail'
 import { NOTE_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
 import CoverageLedgerPanel from '@/components/analysis/CoverageLedgerPanel'
+import SeasonPolarPlot from '@/components/analysis/SeasonPolarPlot'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import { filterToSearchParams } from '@/services/analysis/filter-url'
 import {
   EMPTY_FILTER,
+  matchedRows,
   recordedRowsLabel,
   recordedRowsState,
   setRecordedRows,
 } from '@/services/analysis/filter'
-import type { PolarPerformanceBand } from '@/services/analysis/polar-performance'
 import {
   fillerAnchoredShare,
   getPolarPerformanceData,
@@ -27,6 +28,7 @@ import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
   MatchableRow,
+  PolarPayload,
 } from '@/types'
 
 interface PolarPerformanceContentProps {
@@ -36,6 +38,8 @@ interface PolarPerformanceContentProps {
   dimensions: AnalysisDimensionSpec[]
   /** Read from `searchParams` on the server, already sanitised, so a shared link renders at once. */
   initialFilter: AnalysisFilter
+  /** Every Polar the rows were scored against, by Version id: what the Polar Plot draws behind them. */
+  polars: Record<string, PolarPayload>
 }
 
 /**
@@ -66,10 +70,12 @@ export default function PolarPerformanceContent({
   races,
   dimensions,
   initialFilter,
+  polars,
 }: PolarPerformanceContentProps): ReactElement {
   const [filter, setFilter] = useState<AnalysisFilter>(initialFilter)
 
   const data = getPolarPerformanceData(rows, filter, dimensions)
+  const matched = useMemo(() => matchedRows(rows, filter, dimensions), [rows, filter, dimensions])
   const narrowed = data.ledger.matched_rows < rows.length
 
   function change(next: AnalysisFilter): void {
@@ -81,7 +87,9 @@ export default function PolarPerformanceContent({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+    // One measure for the rail, the ledger, the figures and the picture, rather than three
+    // full-bleed bands with a card lost under them on an ultrawide (ADR 0040).
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3), maxWidth: 1180 }}>
       <AnalysisFilterRail
         dimensions={dimensions}
         filter={filter}
@@ -126,7 +134,9 @@ export default function PolarPerformanceContent({
         {TARGET_VMG_CAVEAT}
       </p>
 
-      {data.bands.length > 0 && <BandTable bands={data.bands} />}
+      {/* The picture under the figures (ADR 0040), over the same matched rows. Its focus window
+          narrows what is drawn and never what is matched, so nothing above it moves. */}
+      <SeasonPolarPlot rows={matched} polars={polars} />
 
       {narrowed && (
         <button
@@ -216,91 +226,6 @@ function Figure({
           manufactured rather than measured
         </div>
       )}
-    </div>
-  )
-}
-
-/**
- * The same figure, one wind band at a time — ADR 0026's "binned efficiency grid", binned on the
- * one axis the Polar itself has.
- *
- * Wind speed and not point of sail, because wind speed is one of the **Polar**'s own two axes: a
- * band is a column of the grid the boat is measured against, so a band that reads low is a
- * question about the boat in that wind rather than an artefact of how the rows were sliced. Every
- * band in the vocabulary has a row, empty or not — a band that vanished would not say whether the
- * boat has never sailed in it or the narrowing emptied it (ADR 0014).
- *
- * Each band carries its own **Filler-Anchored** mark, for ADR 0036's reason rather than for
- * consistency's sake: filler is per *cell*, so one band of the grid can rest on the certificate's
- * ramp while the figure over every band does not, and a flag only on the total would hide exactly
- * the band whose comparison point is weakest.
- */
-function BandTable({ bands }: { bands: readonly PolarPerformanceBand[] }): ReactElement {
-  return (
-    <div
-      data-testid="band-table"
-      style={{
-        background: 'var(--surface-raised)',
-        border: '1px solid var(--surface-border)',
-        borderRadius: radius('md'),
-        overflow: 'hidden',
-      }}
-    >
-      {bands.map((band) => {
-        const percent = efficiencyPercent(band.efficiency.polar_efficiency)
-
-        return (
-          <div
-            key={band.bucket.id}
-            data-testid="band-row"
-            data-bucket={band.bucket.id}
-            style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
-              gap: spacing(2),
-              padding: `${spacing(2)} ${spacing(3)}`,
-              borderTop: '1px solid var(--surface-divider)',
-            }}
-          >
-            <span
-              style={{
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-secondary)',
-                fontStyle: band.bucket.about_the_record ? 'italic' : 'normal',
-              }}
-            >
-              {band.bucket.label}
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-sm)',
-                color: percent === null ? 'var(--text-muted)' : 'var(--text-primary)',
-              }}
-            >
-              {/* Italic words rather than a dash: a band with nothing scorable in it has no
-                  figure, and a dash reads as a value withheld (ADR 0012). */}
-              {percent === null ? (
-                <em style={{ color: 'var(--text-muted)' }}>no scorable time</em>
-              ) : (
-                <>
-                  {percent} · {describeDuration(band.efficiency.elapsed_seconds)}
-                  {band.efficiency.filler_anchored_rows > 0 && (
-                    <em
-                      data-testid="band-filler-anchored"
-                      style={{ color: 'var(--state-warning)', fontFamily: 'var(--font-body)' }}
-                    >
-                      {' '}
-                      · {sharePercent(fillerAnchoredShare(band.efficiency) ?? 0)} filler
-                    </em>
-                  )}
-                </>
-              )}
-            </span>
-          </div>
-        )
-      })}
     </div>
   )
 }

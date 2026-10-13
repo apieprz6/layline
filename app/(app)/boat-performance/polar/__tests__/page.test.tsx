@@ -28,7 +28,7 @@ describe('/boat-performance/polar', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(CREW)
-    readAnalysisArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY })
+    readAnalysisArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
   })
 
   /** The read sits behind a `<Suspense>`, so the tree has to be settled before it is rendered. */
@@ -71,27 +71,35 @@ describe('/boat-performance/polar', () => {
     expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent(
       '2 of 2 races · 4m recorded'
     )
-    expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Any')
+    expect(screen.getByTestId('filter-chip-sea')).toHaveTextContent('Any')
   })
 
   it('renders a shared link’s own narrowing on first paint, before any hydration', async () => {
-    await renderPage({ wind: 'heavy' })
+    await renderPage({ sea: 'not-recorded' })
 
-    expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Heavy (16–22 kt)')
+    expect(screen.getByTestId('filter-chip-sea')).toHaveTextContent('Not recorded')
     expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('2m recorded')
   })
 
   it('reads a repeated param as a multi-select', async () => {
-    await renderPage({ wind: ['light', 'heavy'] })
+    await renderPage({ sail: ['Main + Jib 1', 'note-only'] })
 
     expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('3m recorded')
   })
 
   it('drops a bucket id this build does not know rather than narrowing to nothing', async () => {
-    await renderPage({ wind: 'hurricane' })
+    await renderPage({ sea: 'hurricane' })
 
-    expect(screen.getByTestId('filter-chip-wind')).toHaveTextContent('Any')
+    expect(screen.getByTestId('filter-chip-sea')).toHaveTextContent('Any')
     expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4m recorded')
+  })
+
+  it('ignores an old link’s wind narrowing, which the Polar Plot’s window owns now (ADR 0040)', async () => {
+    await renderPage({ wind: 'heavy' })
+
+    expect(screen.queryByTestId('filter-chip-wind')).not.toBeInTheDocument()
+    expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent('4m recorded')
+    expect(screen.getByTestId('polar-plot-card')).toBeInTheDocument()
   })
 
   it('reads a sail bucket named in the Crossover Chart’s own words', async () => {
@@ -111,7 +119,7 @@ describe('/boat-performance/polar', () => {
   })
 
   it('says an empty archive is empty rather than drawing a filter over nothing', async () => {
-    readAnalysisArchive.mockResolvedValue({ rows: [], races: [], vocabulary: VOCABULARY })
+    readAnalysisArchive.mockResolvedValue({ rows: [], races: [], vocabulary: VOCABULARY, polars: {} })
 
     await renderPage()
 

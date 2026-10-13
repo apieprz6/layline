@@ -2121,6 +2121,79 @@ export interface RaceTrack {
    * comparison is missing, and saying so is not the same as saying none was recorded.
    */
   scoring: 'polar' | 'no-polar-version' | 'polar-unreadable'
+  /**
+   * What the **Polar Plot** beside the map draws, or null where `scoring` is not `polar`: with no
+   * Polar there is nothing to draw the sailing against (ADR 0040).
+   *
+   * A payload of its own rather than more fields on `TrackRowFacts`, because the two pictures draw
+   * different sets of rows. The map draws every recorded row, as the strokes between them; the
+   * Polar Plot draws only the scored ones, each at its own measured interval, which no stroke
+   * carries.
+   */
+  plot: RacePolarPlot | null
+}
+
+/**
+ * One scored moment, as the **Polar Plot** draws it: a dot at its own angle and speed.
+ *
+ * Exactly the rows `sumEfficiency` sums, so a dot is never drawn for a moment the figures leave
+ * out, and nothing the figures count is missing from the picture. Every value is the row's own,
+ * scored on the server against the Polar its Race was sailed under (ADR 0012).
+ */
+export interface PolarPlotMoment {
+  race_id: string
+  /** The join to everything else drawn from the same row, the track's `TrackRowFacts` included. */
+  row_index: number
+  /** Signed as recorded (ADR 0008). The Polar Plot draws `|twa|`. */
+  twa: number
+  tws: number
+  /** Knots over the ground: the dot's radius. */
+  sog: number
+  /** What this moment was scored against, at its own angle and its own wind. */
+  target_knots: number
+  /** `SOG` over that target: the dot's colour. */
+  polar_efficiency: number
+  /** The target touched a cell the certificate manufactured (ADR 0036). Stitched, still coloured. */
+  filler_anchored: boolean
+  /** How long the moment lasted, measured: the dot's area. */
+  seconds: number
+}
+
+/**
+ * One 10° slice of the season, summed: the dotted trace behind one Race on the **Polar Plot**.
+ *
+ * A ratio of sums like every figure here (ADR 0036), so the trace's speed and its percent are two
+ * readings of one `EfficiencyAggregate`.
+ */
+export interface PolarPlotTraceBin {
+  /** Lower edge of the `|TWA|` slice, degrees. */
+  twa: number
+  /** Time-weighted speed over the ground, knots. */
+  knots: number
+  polar_efficiency: number | null
+  seconds: number
+}
+
+/** Why a stretch of sailing is on no **Polar Plot**, in the words a legend groups it by. */
+export type PolarPlotUndrawnReason =
+  | 'not_countable'
+  | 'no_polar'
+  | 'no_reading'
+  | 'off_the_certificate'
+
+/** How much of a match is drawn nowhere on the **Polar Plot**, and why — in time (ADR 0037). */
+export interface PolarPlotUndrawn {
+  seconds: number
+  /** Largest first. A reason with no time behind it is not listed. */
+  parts: { reason: PolarPlotUndrawnReason; seconds: number }[]
+}
+
+/** One Race's **Polar Plot**, as the server hands it to the page. */
+export interface RacePolarPlot {
+  moments: PolarPlotMoment[]
+  /** The Polar the Race holds (ADR 0012): what the certificate family is read from. */
+  polar: PolarPayload
+  undrawn: PolarPlotUndrawn
 }
 
 // ---------------------------------------------------------------------------
@@ -2310,6 +2383,14 @@ export interface MatchableRow {
    * artifact the boat has, and a Race with no Version can hold no Sail Configurations either.
    */
   crossover_chart_version_id: string | null
+  /**
+   * The **Polar Version** this row's Race was sailed under, or null where it records none.
+   *
+   * `efficiency` was already scored against it; this travels so the **Polar Plot** can draw the
+   * same certificate behind the row (ADR 0040), and can say a row has no figure because its Race
+   * names no Polar rather than because the Polar could not answer.
+   */
+  polar_version_id: string | null
 }
 
 /**

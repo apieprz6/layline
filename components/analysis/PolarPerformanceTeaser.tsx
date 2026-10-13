@@ -3,9 +3,11 @@ import type { ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import PolarPlot, { rimKnots } from '@/components/analysis/PolarPlot'
 import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
+import { PATCH_SOG_KNOTS, familiesFor, plotPatches } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
-import type { EfficiencyAggregate } from '@/types'
+import type { EfficiencyAggregate, MatchableRow, PolarPayload } from '@/types'
 
 /** How many races the teaser looks back over. Said in the card, never implied. */
 export const TEASER_RACES = 5
@@ -14,6 +16,10 @@ interface PolarPerformanceTeaserProps {
   /** How many Races the figure is actually over — fewer than `TEASER_RACES` on a young archive. */
   races: number
   efficiency: EfficiencyAggregate
+  /** Those Races' rows: what the small **Polar Plot** under the figure is drawn from. */
+  rows: readonly MatchableRow[]
+  /** Every Polar those rows were scored against, by Version id. */
+  polars: Readonly<Record<string, PolarPayload>>
 }
 
 /**
@@ -26,13 +32,21 @@ interface PolarPerformanceTeaserProps {
  * words. A card that silently showed a recent window under the same name as the screen's figure
  * would make two honest numbers look like a bug.
  *
- * A Server Component: a link and some digits, with nothing to interact with.
+ * Under the figure, the **Polar Plot** in its small patched form over the same five races (ADR
+ * 0040): about 150px, no labels, the figure above it. At that size a cloud of dots is a smudge, so
+ * it is patches; and it is all the wind the five races sailed in, because a glance has no window
+ * to set. The detail screen is where the window is.
+ *
+ * A Server Component: a link, some digits and a drawing, with nothing to interact with.
  */
 export default function PolarPerformanceTeaser({
   races,
   efficiency,
+  rows,
+  polars,
 }: PolarPerformanceTeaserProps): ReactElement {
   const polar = efficiencyPercent(efficiency.polar_efficiency)
+  const patches = plotPatches(rows)
   const vmg = efficiencyPercent(efficiency.vmg_efficiency)
   const filler = fillerAnchoredShare(efficiency)
 
@@ -80,6 +94,20 @@ export default function PolarPerformanceTeaser({
             VMG {vmg === null ? 'not scorable' : vmg}
           </span>
         </span>
+      )}
+
+      {patches.length > 0 && (
+        <PolarPlot
+          teaser
+          reading="knots"
+          rim={rimKnots([
+            ...patches.map((patch) => patch.sog + PATCH_SOG_KNOTS),
+            ...Object.values(polars).flatMap((grid) => grid.boat_speed.flat()),
+          ])}
+          families={familiesFor(rows, polars)}
+          patches={patches}
+          label={`The boat's speed at each wind angle against its certificate, over the last ${races} race${races === 1 ? '' : 's'}.`}
+        />
       )}
 
       {/* The teaser states its own coverage, like every other card that headlines a figure: a

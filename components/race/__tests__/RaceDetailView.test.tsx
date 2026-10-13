@@ -125,6 +125,7 @@ const TRACK: RaceTrack = {
     },
   },
   scoring: 'polar',
+  plot: null,
 }
 
 function raceOf(
@@ -181,6 +182,7 @@ function renderRace(race: RaceDetail, canDelete = false, canAmend = canDelete): 
       canDelete={canDelete}
       canAmend={canAmend}
       deleteRace={deleteRace}
+      season={null}
     />
   )
 }

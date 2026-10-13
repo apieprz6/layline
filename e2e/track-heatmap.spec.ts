@@ -18,6 +18,14 @@ import { gotoHydrated } from './hydrated'
  * uses, so there is no second renderer to drift.
  */
 
+/**
+ * The map's own frame. Scoped to its card, because the **Polar Plot** beside it is an
+ * `svg[role="img"]` too (ADR 0040).
+ */
+function trackSvg(page: Page): ReturnType<Page['locator']> {
+  return page.getByTestId('race-track-card').locator('svg[role="img"]')
+}
+
 /** `scale(…)` off the camera group, which is the one number the gesture is about. */
 async function zoomOf(page: Page): Promise<number> {
   const transform = await page.getByTestId('track-camera').getAttribute('transform')
@@ -39,7 +47,7 @@ async function panOf(page: Page): Promise<[number, number]> {
  * the fixture's course happens to run.
  */
 async function middleOfATrackLeg(page: Page): Promise<{ x: number; y: number }> {
-  const svg = page.locator('svg[role="img"]')
+  const svg = trackSvg(page)
   // Scrolled to first, because `page.mouse` clicks a *viewport* coordinate and does not scroll the
   // way a locator click does. On the race page the map sits below the Testimony, so a point near
   // the bottom of the track is off-screen until the map is: without this the click lands on
@@ -80,7 +88,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
 
     // A 440-unit-tall map would otherwise swallow every attempt to scroll past it, and at 1× there
     // is nothing to pan to — so the vertical gesture belongs to the page until the sailor zooms in.
-    const svg = page.locator('svg[role="img"]')
+    const svg = trackSvg(page)
     await expect(svg).toHaveCSS('touch-action', 'pan-y')
   })
 
@@ -106,7 +114,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     expect(await zoomOf(page)).toBeCloseTo(1.6, 2)
 
     // And the gesture is the map's now that there is something to pan to.
-    await expect(page.locator('svg[role="img"]')).toHaveCSS('touch-action', 'none')
+    await expect(trackSvg(page)).toHaveCSS('touch-action', 'none')
 
     await page.getByLabel('Zoom in').click()
     await page.getByLabel('Zoom in').click()
@@ -128,7 +136,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     await page.getByLabel('Zoom in').click()
     await page.getByLabel('Zoom in').click()
 
-    const box = await page.locator('svg[role="img"]').boundingBox()
+    const box = await trackSvg(page).boundingBox()
     expect(box).not.toBeNull()
     const centre = { x: (box?.x ?? 0) + (box?.width ?? 0) / 2, y: (box?.y ?? 0) + (box?.height ?? 0) / 2 }
 
@@ -159,8 +167,8 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // a `getBoundingClientRect` that jsdom reports as zero, so a Jest version of it would be
     // measuring nothing. Which is also why the camera assertion above is an attribute and not a
     // click (ADR 0033).
-    // Nothing is said until there is something to say: the readout is a card *over* the map, so
-    // there is no empty state taking up the page.
+    // Nothing is said until there is something to say: the readout opens on a tap, so there is no
+    // empty state taking up the page.
     await expect(page.getByTestId('track-readout')).toHaveCount(0)
     await expect(page.getByTestId('track-zoom-readout')).toContainText('tap a stretch to read it')
 
@@ -173,21 +181,16 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     const readout = page.getByTestId('track-readout')
     await expect(readout).toBeVisible()
     await expect(readout).toContainText('of target speed')
-    // Over the map, not under it: the whole point of the card is that the answer to a tap is where
-    // the sailor is already looking, at a viewport where a panel below the frame is past the fold.
-    const frame = await page.locator('svg[role="img"]').boundingBox()
-    const card = await readout.boundingBox()
-    expect(card?.y).toBeGreaterThanOrEqual((frame?.y ?? 0) - 1)
-    expect((card?.y ?? 0) + (card?.height ?? 0)).toBeLessThanOrEqual(
-      (frame?.y ?? 0) + (frame?.height ?? 0) + 1
-    )
+    // On screen, wherever the map has been scrolled to: the readout is sticky below both pictures
+    // that share the selection (ADR 0040), so the answer to a tap is never past the fold.
+    await expect(readout).toBeInViewport()
     // The stretch being read is marked on the map as well as read out, so the sailor can see which
     // one they got.
     await expect(page.getByTestId('track-selection')).toBeAttached()
 
     // A tap on open water is a question with no answer, and clearing is the honest one. The
     // frame's bottom-left corner is water on any track the fixture draws.
-    const svg = page.locator('svg[role="img"]')
+    const svg = trackSvg(page)
     await svg.scrollIntoViewIfNeeded()
     const box = await svg.boundingBox()
     await page.mouse.click((box?.x ?? 0) + 14, (box?.y ?? 0) + (box?.height ?? 0) - 90)
@@ -200,7 +203,7 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     // would end by selecting whatever stretch the finger happened to lift over.
     await page.getByLabel('Zoom in').click()
 
-    const svg = page.locator('svg[role="img"]')
+    const svg = trackSvg(page)
     await svg.scrollIntoViewIfNeeded()
     const box = await svg.boundingBox()
     const centre = {

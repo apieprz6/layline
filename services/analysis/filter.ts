@@ -112,9 +112,16 @@ const POINTS_OF_SAIL: readonly { id: string; label: string }[] = [
   { id: 'downwind', label: 'Downwind' },
 ]
 
-/** Every dimension the Polar performance screen offers, in the order its rail draws them. */
+/**
+ * The Polar performance screen's five, in the order its rail draws them: **wind speed dropped**.
+ *
+ * ADR 0029's own rule, applied by ADR 0040. The **Polar Plot**'s focus window owns the wind axis on
+ * this screen, so a `wind` chip beside it would be a second control over one axis — a chip and a
+ * slider that disagree, each narrowing what the other already had. The window narrows the picture
+ * and never the match, so the Coverage Ledger and the figures are still over everything the rail
+ * matched.
+ */
 export const POLAR_PERFORMANCE_DIMENSIONS: readonly AnalysisDimension[] = [
-  'wind',
   'pos',
   'sail',
   'sea',
@@ -123,7 +130,7 @@ export const POLAR_PERFORMANCE_DIMENSIONS: readonly AnalysisDimension[] = [
 ]
 
 /**
- * The **Sail Selection Screen**'s five, which is the same list with **"sail used" dropped**.
+ * The **Sail Selection Screen**'s five: all six dimensions with **"sail used" dropped**.
  *
  * Not an omission to be fixed. The sail is the chart's own answer on that screen, so a chip that
  * narrowed by it would be filtering the grid by the quantity the grid is about — and ADR 0029

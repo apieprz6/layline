@@ -22,6 +22,7 @@
 
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
+import { racePolarPlot } from '@/services/analysis/polar-plot'
 import { polarTargets } from '@/services/analysis/polar-targets'
 import { channelValue, readableRows } from '@/services/analysis/readable-rows'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
@@ -143,6 +144,8 @@ async function sailChart(
 }
 
 export async function readRaceTrack(
+  /** The Race's own id, which every moment on its Polar Plot carries. */
+  raceId: string,
   rows: readonly RecordedRow[],
   quality: TranscriptionQuality,
   window: RaceWindow,
@@ -160,7 +163,11 @@ export async function readRaceTrack(
   if (polarVersionId === null) {
     // Every row still drawn, none of them coloured. The track is where the boat went, which is
     // true whether or not anything exists to compare it against (ADR 0012).
-    return { heatmap: raceTrackHeatmap(drawable, null, placed), scoring: 'no-polar-version' }
+    return {
+      heatmap: raceTrackHeatmap(drawable, null, placed),
+      scoring: 'no-polar-version',
+      plot: null,
+    }
   }
 
   const polar = await readPolarVersion(polarVersionId)
@@ -171,11 +178,20 @@ export async function readRaceTrack(
     // sentence from "no Polar was recorded" — which is why `scoring` carries three states and not
     // a boolean.
     console.error(`Race: the Polar Version ${polarVersionId} this race names could not be read`)
-    return { heatmap: raceTrackHeatmap(drawable, null, placed), scoring: 'polar-unreadable' }
+    return {
+      heatmap: raceTrackHeatmap(drawable, null, placed),
+      scoring: 'polar-unreadable',
+      plot: null,
+    }
   }
 
+  const targets = polarTargets(polar.payload)
+
   return {
-    heatmap: raceTrackHeatmap(drawable, polarTargets(polar.payload), placed),
+    heatmap: raceTrackHeatmap(drawable, targets, placed),
     scoring: 'polar',
+    // From the same in-window rows the map draws, scored against the same Polar — so the two
+    // pictures beside each other are of one race, not of two reads of it (ADR 0040).
+    plot: racePolarPlot(drawable, { id: raceId, polar_version_id: polarVersionId }, polar.payload, targets),
   }
 }

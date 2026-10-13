@@ -4,6 +4,8 @@ import RaceDetailView from '@/components/race/RaceDetailView'
 import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
+import { seasonTrace } from '@/services/analysis/polar-plot'
+import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { readRace } from '@/services/races/readRace'
 
 import { deleteRace } from './actions'
@@ -36,7 +38,9 @@ export default async function RacePage({
   // This race, not the tab: a sailor sent a link to one race lands on it after signing in.
   if (!account) signInFirst(`/boat-performance/races/${raceId}`)
 
-  const race = await readRace(raceId)
+  // Together: the season behind this Race's Polar Plot waits on no part of the Race. An archive
+  // that cannot be read costs the trace and nothing else — the race is still true without it.
+  const [race, archive] = await Promise.all([readRace(raceId), readAnalysisArchive()])
 
   if (!race) notFound()
 
@@ -48,6 +52,7 @@ export default async function RacePage({
       canDelete={writable}
       canAmend={writable}
       deleteRace={deleteRace}
+      season={archive === null ? null : seasonTrace(archive.rows)}
     />
   )
 }

@@ -415,6 +415,7 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
     // The map, drawn from the rows already in hand and the Polar the Race itself names. Derived at
     // read and stored nowhere, like everything else below the Transcription boundary (ADR 0033).
     const track = await readRaceTrack(
+      race.id,
       rows,
       whole,
       race,

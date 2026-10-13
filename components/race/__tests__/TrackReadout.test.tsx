@@ -24,12 +24,11 @@ import TrackReadout from '../TrackReadout'
 
 const dismiss = jest.fn()
 
-/** Every render goes through here, so the two props the frame supplies are not spelled out nine times. */
+/** Every render goes through here, so the props the page supplies are not spelled out nine times. */
 function show(props: {
   row: TrackRowFacts
   overlay: Parameters<typeof TrackReadout>[0]['overlay']
   scoring?: Parameters<typeof TrackReadout>[0]['scoring']
-  selectionInTopHalf?: boolean
 }) {
   return render(
     <TrackReadout
@@ -37,7 +36,6 @@ function show(props: {
       overlay={props.overlay}
       scoring={props.scoring ?? 'polar'}
       onDismiss={dismiss}
-      selectionInTopHalf={props.selectionInTopHalf ?? true}
     />
   )
 }
@@ -132,18 +130,12 @@ describe('a stretch the boat sailed', () => {
   })
 })
 
-describe('the card over the map', () => {
-  it('sits in the half the selection is not in, so it never covers it', () => {
-    // The whole reason it floats rather than sitting under the frame: at 390px a card below the
-    // map lands past the fold, and one on top of the tapped stretch is no better.
-    const { unmount } = show({ row: facts(), overlay: 'sog', selectionInTopHalf: true })
-    expect(screen.getByTestId('track-readout').style.bottom).not.toBe('')
-    expect(screen.getByTestId('track-readout').style.top).toBe('')
-    unmount()
-
-    show({ row: facts(), overlay: 'sog', selectionInTopHalf: false })
-    expect(screen.getByTestId('track-readout').style.top).not.toBe('')
-    expect(screen.getByTestId('track-readout').style.bottom).toBe('')
+describe('the card', () => {
+  it('sits in the flow, because where it goes is the page’s business now (ADR 0040)', () => {
+    // It floated over the map and dodged the selection while the map was the only picture of it.
+    // With the Polar Plot sharing the selection it is rendered once below both, sticky.
+    show({ row: facts(), overlay: 'sog' })
+    expect(screen.getByTestId('track-readout').style.position).toBe('')
   })
 
   it('announces itself, so a tap tells a screen reader what is there too', () => {

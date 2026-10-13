@@ -55,6 +55,7 @@ function scored(over: {
     twa: 42,
     sea_state: 'calm',
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: 'polar-version-1',
     sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' },
     countable: over.countable ?? true,
     interval_seconds: over.seconds === undefined ? 60 : over.seconds,
@@ -107,8 +108,8 @@ describe('Polar Efficiency and VMG Efficiency over a matched set', () => {
 
   it('excludes the rows a narrowing excluded', () => {
     const data = getPolarPerformanceData(
-      [scored({ sog: 6, target: 6, tws: 11 }), scored({ sog: 3, target: 6, tws: 18 })],
-      { buckets: { wind: ['medium'] }, range: null },
+      [scored({ sog: 6, target: 6 }), scored({ sog: 3, target: 6, day: '2026-07-01' })],
+      { buckets: { when: ['2026-06'] }, range: null },
       DIMENSIONS
     )
 
@@ -182,44 +183,8 @@ describe('a Filler-Anchored figure is shown and flagged, never withheld', () => 
   })
 })
 
-describe('the per-band breakdown', () => {
-  const rows = [
-    scored({ sog: 6, target: 6, tws: 11 }),
-    scored({ sog: 3, target: 6, tws: 18 }),
-    scored({ sog: 3, target: 6, tws: null }),
-  ]
-
-  const data = getPolarPerformanceData(rows, EMPTY_FILTER, DIMENSIONS)
-
-  it('renders every band in the vocabulary, in band order, empty ones included', () => {
-    expect(data.bands.map((band) => band.bucket.id)).toEqual([
-      'light',
-      'medium',
-      'heavy',
-      'storm',
-      'not-recorded',
-    ])
-  })
-
-  it('reads the Polar’s own axis as the band, so each figure is over one wind range', () => {
-    const byId = new Map(data.bands.map((band) => [band.bucket.id, band]))
-    expect(byId.get('medium')?.efficiency.polar_efficiency).toBeCloseTo(1)
-    expect(byId.get('heavy')?.efficiency.polar_efficiency).toBeCloseTo(0.5)
-    expect(byId.get('light')?.efficiency.polar_efficiency).toBeNull()
-  })
-
-  it('keeps the rows that recorded no wind in their own band rather than in a real one', () => {
-    const notRecorded = data.bands.find((band) => band.bucket.id === 'not-recorded')
-    expect(notRecorded?.efficiency.rows).toBe(1)
-  })
-
-  it('narrows with the filter, rather than showing the whole archive beside a narrowed figure', () => {
-    const narrowed = getPolarPerformanceData(rows, { buckets: { wind: ['medium'] }, range: null }, DIMENSIONS)
-    expect(narrowed.bands.find((band) => band.bucket.id === 'heavy')?.efficiency.rows).toBe(0)
-  })
-
-  it('has no band breakdown on a screen that does not offer the wind dimension', () => {
-    const withoutWind = analysisDimensions(['pos', 'sea'], { sails: [], months: [] })
-    expect(getPolarPerformanceData(rows, EMPTY_FILTER, withoutWind).bands).toEqual([])
+describe('the screen’s registry', () => {
+  it('offers no wind chip, because the Polar Plot’s focus window owns that axis (ADR 0040)', () => {
+    expect(DIMENSIONS.map((dimension) => dimension.id)).toEqual(['pos', 'sail', 'sea', 'time', 'when'])
   })
 })
