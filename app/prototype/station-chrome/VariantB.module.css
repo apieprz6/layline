@@ -1,0 +1,170 @@
+/*
+ * PROTOTYPE — throwaway. See ./README.md.
+ *
+ * Variant B — "Let the charts breathe." The grid itself never grows a
+ * column: freed vertical and horizontal space goes into the existing
+ * wind-rose/speed/stats panels being bigger, not into new real estate. The
+ * header gives back its own height by collapsing on scroll instead of
+ * shrinking permanently, and the dock drops to one row everywhere. Past
+ * 1440px the content simply keeps LAY-61's own cap — no ultrawide bucket,
+ * because this variant's answer to "does ultrawide need its own treatment"
+ * is no.
+ */
+
+.wrapper {
+  --chrome-h: 147px;
+  --dock-h: 79px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--surface-border);
+  overflow: hidden;
+  transition: padding 150ms ease-out;
+  padding: 10px 14px;
+}
+
+.headerCollapsed {
+  padding: 6px 14px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metaRow {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: grid-template-rows 150ms ease-out, opacity 150ms ease-out, margin-top 150ms ease-out;
+}
+
+.metaRowCollapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.metaRowInner {
+  overflow: hidden;
+}
+
+/* Module strip: a reserved horizontal band under the grid, desktop+ only */
+
+.moduleStrip {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .moduleStrip {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 16px auto 0 auto;
+  }
+
+  .moduleStrip > * {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .moduleStrip {
+    max-width: 1400px;
+    margin-top: 24px;
+  }
+}
+
+/* Dock: one row, every breakpoint */
+
+.dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--surface-dock-bg);
+  backdrop-filter: var(--surface-dock-blur);
+  -webkit-backdrop-filter: var(--surface-dock-blur);
+  border-top: 1px solid var(--surface-divider);
+  padding: 10px 14px calc(env(safe-area-inset-bottom, 24px) + 10px) 14px;
+  box-shadow: var(--shadow-dock);
+}
+
+@media (min-width: 1024px) {
+  .dock {
+    width: 80%;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    border-radius: 12px 12px 0 0;
+  }
+}
+
+@media (min-width: 1440px) {
+  .dock {
+    width: 60%;
+  }
+}
+
+.dockRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.liveBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.liveBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.viewing {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #0044cc;
+  font-weight: 600;
+  white-space: nowrap;
+}

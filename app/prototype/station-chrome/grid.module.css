@@ -1,0 +1,125 @@
+/*
+ * PROTOTYPE — throwaway. See ./README.md.
+ *
+ * LAY-61's grid, carried over unchanged: the 768/1024/1440 breakpoints and
+ * the 3fr/2fr -> 1fr/1fr column ratio all come from `app/globals.css`
+ * `.station-layout__content`. This file exists only because that class
+ * lives in production CSS and a throwaway route shouldn't edit it — the
+ * numbers below are not a redecision, they're a copy.
+ *
+ * Each variant appends to `.content` (an extra grid-template-columns track,
+ * never a different ratio for the two columns LAY-61 already set) through
+ * its own module, which is where this ticket's actual job — the module
+ * column, the ultrawide question — gets decided three different ways.
+ *
+ * Each variant sets `--chrome-h` (header + dock, measured) and `--dock-h`
+ * (the fixed dock alone) on its wrapper, so a shorter header/dock
+ * measurably hands the grid more room — the point of LAY-168.
+ */
+
+.layout {
+  min-height: 100vh;
+  background: var(--surface-base);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 0 16px;
+  padding-bottom: calc(var(--dock-h, 180px) + 16px);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (min-width: 768px) {
+  .scroll {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 20px 0 20px;
+    padding-bottom: calc(var(--dock-h, 180px) + 20px);
+  }
+
+  .content {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 16px;
+    align-items: stretch;
+    width: 100%;
+    max-width: 1200px;
+    height: calc(100vh - var(--chrome-h, 180px) - 40px);
+  }
+
+  .windRose {
+    grid-row: 1 / -1;
+    grid-column: 1;
+    min-height: 0;
+  }
+
+  .windRose > :global(*) {
+    height: 100%;
+  }
+
+  .speed {
+    grid-row: 1;
+    grid-column: 2;
+    min-height: 0;
+    display: flex;
+  }
+
+  .speed > :global(*) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stats {
+    grid-row: 2;
+    grid-column: 2;
+    min-height: 0;
+    display: flex;
+  }
+
+  .stats > :global(*) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 1024px) {
+  .scroll {
+    padding: 20px 20px 0 20px;
+    padding-bottom: calc(var(--dock-h, 180px) + 20px);
+  }
+
+  .content {
+    grid-template-columns: 3fr 2fr;
+    gap: 20px;
+    max-width: 1200px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .scroll {
+    padding: 24px 24px 0 24px;
+    padding-bottom: calc(var(--dock-h, 180px) + 24px);
+  }
+
+  .content {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1400px;
+  }
+}

@@ -1,0 +1,186 @@
+/*
+ * PROTOTYPE — throwaway. See ./README.md.
+ *
+ * Variant A — "Shrink in place." The header and dock each lose a row of
+ * chrome but keep their positions (sticky top, fixed bottom) at every size.
+ * The space Jump to/Legend freed becomes a third grid column from desktop
+ * up — appended to LAY-61's 3fr/2fr (then 1fr/1fr) ratio, never replacing
+ * it. Ultrawide gets no new breakpoint: the answer here is that the
+ * widescreen bucket already has room, so past 1440px the module column just
+ * stops being cramped and the two slots sit side by side instead of
+ * stacked.
+ */
+
+.wrapper {
+  --chrome-h: 164px;
+  --dock-h: 121px;
+}
+
+@media (min-width: 768px) {
+  .wrapper {
+    --chrome-h: 180px;
+    --dock-h: 137px;
+  }
+}
+
+/* Header */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--surface-border);
+  padding: 8px 14px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.nameBlock {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buoyId {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.metaInline {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .metaInline {
+    display: inline;
+  }
+}
+
+/* Content: append a module column onto the existing grid */
+
+.content {
+  min-height: 0;
+}
+
+.modules {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .content {
+    grid-template-columns: 3fr 2fr 1fr;
+  }
+
+  .modules {
+    grid-row: 1 / -1;
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .modules > * {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .content {
+    grid-template-columns: 1fr 1fr 0.8fr;
+  }
+
+  .modules {
+    flex-direction: row;
+  }
+}
+
+/* Dock */
+
+.dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--surface-dock-bg);
+  backdrop-filter: var(--surface-dock-blur);
+  -webkit-backdrop-filter: var(--surface-dock-blur);
+  border-top: 1px solid var(--surface-divider);
+  padding: 8px 14px calc(env(safe-area-inset-bottom, 24px) + 8px) 14px;
+  box-shadow: var(--shadow-dock);
+}
+
+@media (min-width: 1024px) {
+  .dock {
+    width: 80%;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    border-radius: 12px 12px 0 0;
+  }
+}
+
+@media (min-width: 1440px) {
+  .dock {
+    width: 60%;
+  }
+}
+
+.dockRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.caption {
+  display: none;
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .caption {
+    display: block;
+  }
+}

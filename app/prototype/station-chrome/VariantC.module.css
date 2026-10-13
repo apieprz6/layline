@@ -1,0 +1,224 @@
+/*
+ * PROTOTYPE — throwaway. See ./README.md.
+ *
+ * Variant C — "The dock stops floating." Phone keeps a fixed bottom dock,
+ * thumb reach being real there; at 768px and up the dock leaves the
+ * floating/fixed pattern entirely and becomes a static strip docked under
+ * the header, in normal flow. LAY-61's grid itself — breakpoints and column
+ * ratio — is untouched; only what sits above and beside it changes. The
+ * freed module space is a strip at desktop, then an appended column at
+ * widescreen (same append-only move as Variant A), and this is the one
+ * variant that gives true ultrawide (>=1920px) its own explicit bucket: a
+ * second appended column, so Gust and Wave each get their own track.
+ */
+
+.wrapper {
+  --chrome-h: 164px;
+  --dock-h: 121px;
+}
+
+/* 768+: no fixed dock; the header carries the rail (~43 + ~75). */
+@media (min-width: 768px) {
+  .wrapper {
+    --chrome-h: 118px;
+    --dock-h: 0px;
+  }
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--surface-border);
+  padding: 8px 14px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.name {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nameText {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buoyId {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* The control rail: on phone it's the header's second row (no scale control,
+   that's still in the fixed dock below). From 768px up it IS the dock,
+   docked statically under the header instead of floating. */
+
+.rail {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .rail {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px -14px -8px -14px;
+    padding: 8px 20px;
+    border-top: 1px solid var(--surface-divider);
+  }
+
+  .railScale {
+    flex-shrink: 0;
+  }
+
+  .railScrubber {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.liveBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.liveBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Phone-only fixed dock */
+
+.dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--surface-dock-bg);
+  backdrop-filter: var(--surface-dock-blur);
+  -webkit-backdrop-filter: var(--surface-dock-blur);
+  border-top: 1px solid var(--surface-divider);
+  padding: 8px 14px calc(env(safe-area-inset-bottom, 24px) + 8px) 14px;
+  box-shadow: var(--shadow-dock);
+}
+
+@media (min-width: 768px) {
+  .dock {
+    display: none;
+  }
+}
+
+.dockRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Module strip at desktop (freed by the dock relocating), appended column
+   from widescreen (same move as Variant A). */
+
+.moduleStrip {
+  display: none;
+}
+
+.modules {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .moduleStrip {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 20px auto 0 auto;
+  }
+
+  .moduleStrip > * {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .moduleStrip {
+    display: none;
+  }
+
+  .content {
+    grid-template-columns: 1fr 1fr 0.8fr;
+    max-width: 1500px;
+  }
+
+  .modules {
+    grid-row: 1 / -1;
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .modules > * {
+    flex: 1;
+  }
+}
+
+/* True ultrawide gets its own bucket: a second appended column, so Gust and
+   Wave stop sharing one track and each get their own. */
+
+@media (min-width: 1920px) {
+  .content {
+    grid-template-columns: 1fr 1fr 0.7fr 0.7fr;
+    max-width: 2000px;
+  }
+
+  .modules {
+    display: contents;
+  }
+
+  .modules > * {
+    grid-row: 1 / -1;
+  }
+
+  .modules > :nth-child(1) {
+    grid-column: 3;
+  }
+
+  .modules > :nth-child(2) {
+    grid-column: 4;
+  }
+}
