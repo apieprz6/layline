@@ -11,6 +11,14 @@ export interface WindForecast {
 // Data source status states
 export type DataSourceStatus = 'online' | 'recent' | 'stale' | 'offline' | 'error'
 
+// What a station's sensors can report at all, independent of whether this moment has a reading.
+// Lets the UI tell "doesn't measure this" (capability false) from "measures this, no current
+// reading" (capability true, value null) — see docs/adr/0008.
+export interface StationCapability {
+  gust: boolean
+  waves: boolean
+}
+
 // Buoy metadata for context (never modify raw data)
 export interface BuoyMetadata {
   station: string
@@ -21,6 +29,7 @@ export interface BuoyMetadata {
   }
   windMeasurementHeight: number // feet above water
   adjustmentNote?: string // Context for interpretation (e.g., "Wind measured at 85ft typically reads 20-30% higher than surface")
+  capability: StationCapability
 }
 
 // Core buoy data structure (raw measurements preserved)
@@ -194,6 +203,13 @@ export interface WindDataPoint {
   timestamp: string // ISO 8601 format (e.g., "2026-05-19T17:50:00Z")
   spd: number // wind speed in knots
   dir: number // wind direction in degrees
+  // The four below are optional (absent where a station's own fetch path never populates them)
+  // and nullable per reading (present but null where this moment's reading is missing) — the two
+  // are different facts. Whether a station measures the quantity at all is StationCapability.
+  gust?: number | null // wind gust in knots
+  waveHeight?: number | null // significant wave height in feet
+  wavePeriod?: number | null // dominant wave period in seconds
+  waveDir?: number | null // dominant wave direction in degrees
 }
 
 // Wind data point with calculated relative time offset (for component use)
@@ -215,11 +231,18 @@ export interface MinuteDataPoint {
   dir: number // wind direction in degrees
 }
 
-// Row shape returned by Supabase `purdue_buoy_readings` table queries
+// Row shape returned by Supabase `purdue_buoy_readings` table queries.
+// `wind_speed`/`wind_direction` are non-null here because the query filters out rows missing
+// either — a WindDataPoint needs both. `wind_gust`/`wave_*` stay nullable: they're independent
+// of whether the row carries wind, and nulling never gates the row out (ADR 0008).
 export interface PurdueBuoyRow {
   timestamp: string
   wind_speed: number
-  wind_direction: number | null
+  wind_direction: number
+  wind_gust: number | null
+  wave_height: number | null
+  wave_period: number | null
+  wave_direction: number | null
 }
 
 export interface BuoyHistoryData {
@@ -229,6 +252,9 @@ export interface BuoyHistoryData {
   status: DataSourceStatus
   fetchedAt: string
   error?: string
+  // Always populated from the station's own config, even when `history` is null — a failed
+  // fetch still knows what the station is capable of reporting.
+  metadata: BuoyMetadata
   // DEPRECATED fields (maintained for backwards compatibility, will be removed in future version)
   hourlyHistory?: HourlyDataPoint[] | null
   minuteHistory?: MinuteDataPoint[] | null

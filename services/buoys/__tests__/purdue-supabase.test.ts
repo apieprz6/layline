@@ -6,7 +6,7 @@ jest.mock('@/lib/supabase/service')
 const mockGetServiceClient = getServiceClient as jest.MockedFunction<typeof getServiceClient>
 
 function createMockSupabaseClient(options: {
-  data?: Array<{ timestamp: string; wind_speed: number; wind_direction: number | null }>
+  data?: Array<Record<string, unknown>>
   error?: { message: string; code: string }
 }) {
   const returnsFn = jest.fn().mockResolvedValue({
@@ -14,8 +14,14 @@ function createMockSupabaseClient(options: {
     error: options.error ?? null,
   })
   const orderFn = jest.fn().mockReturnValue({ returns: returnsFn })
-  const notFn = jest.fn().mockReturnValue({ order: orderFn })
-  const gtFn = jest.fn().mockReturnValue({ not: notFn })
+  // Real supabase-js query builders return themselves from `.not()`, so a second `.not()` call
+  // chains off the same object — `notFn` has to appear on its own return value too.
+  const builder: { not: jest.Mock; order: jest.Mock } = {
+    not: jest.fn(),
+    order: orderFn,
+  }
+  builder.not.mockReturnValue(builder)
+  const gtFn = jest.fn().mockReturnValue(builder)
   const selectFn = jest.fn().mockReturnValue({ gt: gtFn })
   const fromFn = jest.fn().mockReturnValue({ select: selectFn })
 
@@ -30,6 +36,10 @@ function generateSupabaseRows(count: number, startMinutesAgo: number = 0) {
       timestamp,
       wind_speed: 5.0 + (i % 5) * 0.5, // 5.0-7.0 m/s range
       wind_direction: 180 + (i % 36) * 10, // 180-540 -> wraps
+      wind_gust: 7.0 + (i % 5) * 0.5, // m/s
+      wave_height: 0.3 + (i % 3) * 0.1, // meters
+      wave_period: 4 + (i % 4), // seconds
+      wave_direction: 190 + (i % 36) * 10,
     }
   })
 }
@@ -59,6 +69,49 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       expect(firstPoint.dir).toBe(rows[0].wind_direction)
       expect(firstPoint.timestamp).toBeTruthy()
       expect(() => new Date(firstPoint.timestamp)).not.toThrow()
+
+      expect(result.metadata.capability).toEqual({ gust: true, waves: true })
+    })
+
+    it('converts gust (m/s -> knots) and wave height (m -> ft), passing period/direction through', async () => {
+      const rows = generateSupabaseRows(3)
+      const mockClient = createMockSupabaseClient({ data: rows })
+      mockGetServiceClient.mockReturnValue(mockClient)
+
+      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+
+      const point = result.history![0]
+      expect(point.gust).toBeCloseTo(rows[0].wind_gust * 1.94384, 1)
+      expect(point.waveHeight).toBeCloseTo(rows[0].wave_height * 3.28084, 1)
+      expect(point.wavePeriod).toBe(rows[0].wave_period)
+      expect(point.waveDir).toBe(rows[0].wave_direction)
+    })
+
+    it('stores a missing gust/wave reading as null rather than fabricating a value', async () => {
+      const rows = [
+        {
+          timestamp: new Date().toISOString(),
+          wind_speed: 6.0,
+          wind_direction: 200,
+          wind_gust: null,
+          wave_height: null,
+          wave_period: null,
+          wave_direction: null,
+        },
+      ]
+      const mockClient = createMockSupabaseClient({ data: rows })
+      mockGetServiceClient.mockReturnValue(mockClient)
+
+      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+
+      const point = result.history![0]
+      expect(point.gust).toBeNull()
+      expect(point.waveHeight).toBeNull()
+      expect(point.wavePeriod).toBeNull()
+      expect(point.waveDir).toBeNull()
+      // The row still has valid wind, so it is not excluded just because waves are missing.
+      expect(point.spd).toBeCloseTo(6.0 * 1.94384, 1)
+      expect(point.dir).toBe(200)
     })
 
     it('does not call NDBC when Supabase succeeds', async () => {
@@ -74,16 +127,20 @@ describe('fetchPurdueBuoyHistory - Supabase-first with NDBC fallback', () => {
       expect(fetchSpy).not.toHaveBeenCalled()
     })
 
-    it('handles null wind_direction gracefully (defaults to 0)', async () => {
-      const rows = [
-        { timestamp: new Date().toISOString(), wind_speed: 6.0, wind_direction: null },
-      ]
+    it('filters out null wind_direction at the query level instead of fabricating 0 (ADR 0008)', async () => {
+      const rows = generateSupabaseRows(3)
       const mockClient = createMockSupabaseClient({ data: rows })
       mockGetServiceClient.mockReturnValue(mockClient)
 
-      const result = await fetchPurdueBuoyHistory({ bypassCache: true })
+      await fetchPurdueBuoyHistory({ bypassCache: true })
 
-      expect(result.history![0].dir).toBe(0)
+      const fromResult = (mockClient.from as jest.Mock).mock.results[0].value
+      const selectResult = fromResult.select.mock.results[0].value
+      const gtResult = selectResult.gt.mock.results[0].value
+      // Both wind_speed and wind_direction must be filtered the same way: a missing half of a
+      // reading excludes the row, rather than defaulting it to a fabricated value.
+      expect(gtResult.not).toHaveBeenCalledWith('wind_speed', 'is', null)
+      expect(gtResult.not).toHaveBeenCalledWith('wind_direction', 'is', null)
     })
 
     it('returns correct status based on data freshness', async () => {

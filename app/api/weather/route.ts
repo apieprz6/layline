@@ -45,6 +45,7 @@ export async function GET() {
           },
           windMeasurementHeight: 16,
           adjustmentNote: 'Mock buoy data for development',
+          capability: { gust: false, waves: true },
         },
       },
     ]

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TabbedInfoPanel from '../TabbedInfoPanel'
-import type { WindDataPoint } from '@/types'
+import type { BuoyMetadata, WindDataPoint } from '@/types'
 
 // Reference time for tests
 const referenceTime = new Date('2026-05-19T18:00:00Z')
@@ -29,13 +29,31 @@ const mockData: WindDataPoint[] = [
   { timestamp: '2026-05-19T17:40:00Z', spd: 13, dir: 230 }, // 20 mins ago
 ]
 
+const chii2Metadata: BuoyMetadata = {
+  station: 'CHII2',
+  source: 'ndbc',
+  location: { latitude: 41.87, longitude: -87.59 },
+  windMeasurementHeight: 85,
+  adjustmentNote: 'Wind measured at 85ft typically reads 20-30% higher than surface',
+  capability: { gust: true, waves: false },
+}
+
+const purdueMetadata: BuoyMetadata = {
+  station: '45198',
+  source: 'ndbc',
+  location: { latitude: 41.89, longitude: -87.6 },
+  windMeasurementHeight: 3,
+  adjustmentNote: 'Surface-level measurements',
+  capability: { gust: true, waves: true },
+}
+
 const defaultProps = {
   data: mockData,
   timeWindowMinutes: 60,
   nowOffsetMinutes: 0,
   referenceTime,
   onOffsetChange: jest.fn(),
-  buoyId: 'CHII2',
+  metadata: chii2Metadata,
   maxOffsetMinutes: 4320, // 72 hours
 }
 
@@ -159,26 +177,25 @@ describe('TabbedInfoPanel', () => {
     expect(screen.getByText('23+')).toBeInTheDocument()
   })
 
-  it('shows CHII2 elevation note only when buoyId is CHII2', async () => {
+  it('shows the station metadata elevation note only for an elevated anemometer', async () => {
     const user = userEvent.setup()
 
-    // Test with CHII2
     const { rerender } = render(
-      <TabbedInfoPanel {...defaultProps} buoyId="CHII2" />
+      <TabbedInfoPanel {...defaultProps} metadata={chii2Metadata} />
     )
 
     const legendTab = screen.getByRole('button', { name: /legend/i })
     await user.click(legendTab)
 
     expect(
-      screen.getByText(/wind measured at 85ft elevation/i)
+      screen.getByText(chii2Metadata.adjustmentNote!)
     ).toBeInTheDocument()
 
-    // Test with different buoy
-    rerender(<TabbedInfoPanel {...defaultProps} buoyId="45198" />)
+    rerender(<TabbedInfoPanel {...defaultProps} metadata={purdueMetadata} />)
 
+    expect(screen.queryByText(/wind measured at/i)).not.toBeInTheDocument()
     expect(
-      screen.queryByText(/wind measured at 85ft elevation/i)
+      screen.queryByText(purdueMetadata.adjustmentNote!)
     ).not.toBeInTheDocument()
   })
 

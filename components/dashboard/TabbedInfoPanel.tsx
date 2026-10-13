@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
+import type { BuoyMetadata, WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from '@/lib/utils/time'
 import WindowStats from './WindowStats'
 
@@ -10,10 +10,13 @@ interface TabbedInfoPanelProps {
   timeWindowMinutes: number
   nowOffsetMinutes: number
   onOffsetChange: (offset: number) => void
-  buoyId: string
+  metadata: BuoyMetadata
   maxOffsetMinutes: number
   referenceTime?: Date
 }
+
+// Below this an anemometer is effectively at surface and its reading needs no elevation caveat.
+const SURFACE_LEVEL_FT = 10
 
 // Common button style for Jump to tab
 const jumpButtonStyle: React.CSSProperties = {
@@ -49,7 +52,7 @@ export default function TabbedInfoPanel({
   timeWindowMinutes,
   nowOffsetMinutes,
   onOffsetChange,
-  buoyId,
+  metadata,
   maxOffsetMinutes,
   referenceTime,
 }: TabbedInfoPanelProps) {
@@ -245,8 +248,7 @@ export default function TabbedInfoPanel({
             ))}
           </div>
 
-          {/* CHII2 elevation note - conditional */}
-          {buoyId === 'CHII2' && (
+          {metadata.windMeasurementHeight > SURFACE_LEVEL_FT && metadata.adjustmentNote && (
             <div
               style={{
                 marginTop: '12px',
@@ -257,7 +259,7 @@ export default function TabbedInfoPanel({
                 lineHeight: 1.5,
               }}
             >
-              Wind measured at 85ft elevation. Surface wind typically 20-30% lower.
+              {metadata.adjustmentNote}
             </div>
           )}
 
