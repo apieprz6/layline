@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { BuoyMetadata } from '@/types'
 
 /**
@@ -22,7 +22,7 @@ interface ElevationNoteProps {
  *
  * Tap toggles, so it works without hover. Escape and a tap outside close it.
  */
-export default function ElevationNote({ metadata }: ElevationNoteProps) {
+export default function ElevationNote({ metadata }: ElevationNoteProps): ReactElement | null {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
 

@@ -217,6 +217,19 @@ export interface WindDataPointWithOffset extends WindDataPoint {
   minsAgo: number // calculated minutes ago from reference time
 }
 
+/**
+ * What a station said about one secondary quantity (gust, waves) at the displayed moment.
+ *
+ * `point` is the displayed point when it carries the reading. When it doesn't, `point` is null
+ * and `lastAt` is when the most recent earlier reading was, or null if there was none in the
+ * data at all. The older value itself is never handed back: shown as if current it would be a
+ * plausible number standing in for a missing one (ADR 0008).
+ */
+export interface SecondaryReading {
+  point: WindDataPointWithOffset | null
+  lastAt: Date | null
+}
+
 // DEPRECATED: Use WindDataPoint with absolute timestamps instead
 export interface HourlyDataPoint {
   time: string // HH:MM format (e.g., "14:00")

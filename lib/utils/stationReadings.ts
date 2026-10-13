@@ -1,26 +1,23 @@
-import type { WindDataPointWithOffset } from '@/types'
+import type { SecondaryReading, WindDataPoint, WindDataPointWithOffset } from '@/types'
 
 /** The secondary readings a station may or may not have at a given moment. */
 export type SecondaryField = 'gust' | 'waveHeight'
 
 /**
- * What a station said about one quantity at the displayed moment.
- *
- * `point` is the displayed point when it carries the reading. When it doesn't, `point` is null
- * and `lastAt` is when the most recent earlier reading was, or null if there was none in the
- * data at all. The older value itself is never handed back: shown as if current it would be a
- * plausible number standing in for a missing one (ADR 0008).
+ * Whether this history says anything about `field` at all. A field absent from every point is a
+ * fetch path that never reads it (Purdue's NDBC fallback reads no waves), which is not the same
+ * fact as a station with no reading: the station page shows nothing for it, rather than "—".
  */
-export interface Reading {
-  point: WindDataPointWithOffset | null
-  lastAt: Date | null
+export function carries(data: WindDataPoint[], field: SecondaryField): boolean {
+  return data.some((p) => p[field] !== undefined)
 }
 
+/** The reading at `at`, or when the last one before it was. See {@link SecondaryReading}. */
 export function readingAt(
   data: WindDataPointWithOffset[],
   at: WindDataPointWithOffset | undefined,
   field: SecondaryField
-): Reading {
+): SecondaryReading {
   if (!at) return { point: null, lastAt: null }
   if (at[field] != null) return { point: at, lastAt: null }
 

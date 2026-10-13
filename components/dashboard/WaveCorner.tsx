@@ -1,6 +1,7 @@
+import type { ReactElement } from 'react'
 import { getCompassDirection } from '@/lib/utils/wind'
 import { formatTimeHHMM } from '@/lib/utils/timeFormatting'
-import type { Reading } from '@/lib/utils/stationReadings'
+import type { SecondaryReading } from '@/types'
 
 const LABEL_STYLE = {
   fontFamily: 'var(--font-body)',
@@ -23,7 +24,7 @@ const FIGURE_STYLE = {
  * Points the way the waves are travelling. NDBC's MWD is the direction they come *from*, so
  * "from NE" draws an arrow toward SW.
  */
-function WaveArrow({ fromDeg }: { fromDeg: number }) {
+function WaveArrow({ fromDeg }: { fromDeg: number }): ReactElement {
   return (
     <svg width={11} height={11} viewBox="0 0 20 20" aria-hidden style={{ flexShrink: 0 }}>
       <g transform={`rotate(${(fromDeg + 180) % 360} 10 10)`}>
@@ -40,12 +41,16 @@ function WaveArrow({ fromDeg }: { fromDeg: number }) {
   )
 }
 
+interface WaveCornerProps {
+  reading: SecondaryReading
+}
+
 /**
  * The Wind Rose's bottom-left readout for a station that measures waves: height, period and
  * direction at the displayed moment. With no reading then it shows "—" and when the last one
  * was, never that last value as if it were current.
  */
-export default function WaveCorner({ reading }: { reading: Reading }) {
+export default function WaveCorner({ reading }: WaveCornerProps): ReactElement {
   const p = reading.point
 
   return (

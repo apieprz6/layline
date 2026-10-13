@@ -33,7 +33,7 @@ async function boxOf(locator: Locator): Promise<Box> {
 const overlaps = (a: Box, b: Box): boolean =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 
-async function open(page: Page, path: string, width: number, height: number) {
+async function open(page: Page, path: string, width: number, height: number): Promise<void> {
   await page.setViewportSize({ width, height })
   await gotoHydrated(page, path)
   // A 404 here is a server started without LAYLINE_STATION_HARNESS, not a broken page.
@@ -54,7 +54,7 @@ for (const [width, height] of WIDTHS) {
       await expect(gust(page)).toHaveText(/^G\d+$/)
       await expect(page.getByText('Wind speed · gust')).toBeVisible()
       await expect(page.getByTestId('gust-band').first()).toBeAttached()
-      await expect(chip(page)).toBeVisible()
+      await expect(chip(page)).toBeInViewport()
 
       await expect(waves(page)).toHaveCount(0)
       await expect(page.getByText(/waves?/i)).toHaveCount(0)
@@ -64,7 +64,7 @@ for (const [width, height] of WIDTHS) {
     test('45198 shows its waves in the rose corner, clear of the SW label, and no chip', async ({ page }) => {
       await open(page, '/dev/station/45198', width, height)
 
-      await expect(waves(page)).toBeVisible()
+      await expect(waves(page)).toBeInViewport()
       await expect(waves(page)).toHaveText(/^Waves\d+\.\dft\d+sS?[NESW]{1,3}$/)
       await expect(gust(page)).toHaveText(/^G\d+$/)
       await expect(page.getByRole('button', { name: /Measured at/ })).toHaveCount(0)
@@ -107,7 +107,7 @@ for (const [width, height] of WIDTHS) {
       await expect(tooltip).toHaveCount(0)
 
       await chip(page).click()
-      await expect(tooltip).toBeVisible()
+      await expect(tooltip).toBeInViewport()
       await page.locator('.station-layout__stats').click()
       await expect(tooltip).toHaveCount(0)
     })
@@ -139,7 +139,7 @@ test.describe('the real station route', () => {
     }) => {
       await page.setViewportSize({ width, height })
       await gotoHydrated(page, '/station/CHII2')
-      await expect(chip(page)).toBeVisible()
+      await expect(chip(page)).toBeInViewport()
       await expect(waves(page)).toHaveCount(0)
       expect(await sideways(page)).toBe(0)
 

@@ -1,4 +1,4 @@
-import { readingAt } from '../stationReadings'
+import { carries, readingAt } from '../stationReadings'
 import type { WindDataPointWithOffset } from '@/types'
 
 const point = (
@@ -46,5 +46,15 @@ describe('readingAt', () => {
 
   it('has nothing to say with nothing displayed', () => {
     expect(readingAt([point(0, { gust: 12 })], undefined, 'gust')).toEqual({ point: null, lastAt: null })
+  })
+})
+
+describe('carries', () => {
+  it('is true when any point has the field, even as null', () => {
+    expect(carries([point(0, { waveHeight: null }), point(10)], 'waveHeight')).toBe(true)
+  })
+
+  it('is false when no point has the field at all', () => {
+    expect(carries([point(0), point(10)], 'waveHeight')).toBe(false)
   })
 })

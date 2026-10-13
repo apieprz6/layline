@@ -957,8 +957,8 @@
     width: 220px;
     padding: 8px 10px;
     border-radius: 8px;
-    background: #0A0A0A;
-    color: white;
+    background: var(--text-primary);
+    color: var(--surface-raised);
     font-family: var(--font-body);
     font-size: 11px;
     line-height: 1.4;

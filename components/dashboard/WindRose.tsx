@@ -11,7 +11,7 @@ import { TIME_SCALES, exceedsGapThreshold } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
-import { readingAt } from "@/lib/utils/stationReadings";
+import { carries, readingAt } from "@/lib/utils/stationReadings";
 import WaveCorner from "./WaveCorner";
 
 interface WindRoseProps {
@@ -281,11 +281,14 @@ export default function WindRose({
   }, [displayPoint]);
 
   // Both follow the displayed moment, as speed and direction do. A station that can't measure a
-  // quantity gets nothing drawn for it; one that can but has no reading then shows "—".
-  const gust = capability?.gust ? (displayPoint?.gust ?? null) : undefined;
+  // quantity, or whose history never carried it, gets nothing drawn for it; one that can but has
+  // no reading then shows "—".
+  const showGust = (capability?.gust ?? false) && carries(data, "gust");
+  const showWaves = (capability?.waves ?? false) && carries(data, "waveHeight");
+  const gust = showGust ? (displayPoint?.gust ?? null) : undefined;
   const waveReading = useMemo(
-    () => (capability?.waves ? readingAt(dataWithOffset, displayPoint, "waveHeight") : null),
-    [capability?.waves, dataWithOffset, displayPoint],
+    () => (showWaves ? readingAt(dataWithOffset, displayPoint, "waveHeight") : null),
+    [showWaves, dataWithOffset, displayPoint],
   );
 
   return (

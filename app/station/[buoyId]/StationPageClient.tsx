@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import type { BuoyMetadata, WindDataPoint, WindDataPointWithOffset } from "@/types";
 import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
 import { getMinutesAgo } from "@/lib/utils/time";
+import { carries } from "@/lib/utils/stationReadings";
 import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
 import WindRose from "@/components/dashboard/WindRose";
@@ -164,7 +165,7 @@ export default function StationPageClient({
                 }}
               >
                 Wind speed
-                {metadata.capability.gust && <span style={{ color: "#C47000" }}> · gust</span>}
+                {metadata.capability.gust && carries(data, "gust") && <span style={{ color: "var(--wind-heavy)" }}> · gust</span>}
               </span>
               <span
                 style={{

@@ -125,4 +125,21 @@ describe('WindRose wave corner', () => {
     expect(screen.queryByTestId('rose-waves')).not.toBeInTheDocument()
     expect(screen.queryByText('Waves')).not.toBeInTheDocument()
   })
+
+  it("says nothing about waves when the history's fetch path never carried them", () => {
+    // Absent is not null: Purdue's NDBC fallback reads speed, direction and gust only, so its
+    // history can't say whether the buoy had a wave reading, and "No reading" would be a claim.
+    const data: WindDataPoint[] = purdue.map(({ timestamp, spd, dir, gust }) => ({ timestamp, spd, dir, gust }))
+    renderRose(data, withOffset(data[0]), BOTH)
+
+    expect(screen.queryByTestId('rose-waves')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rose-gust')).toHaveTextContent('G18')
+  })
+
+  it('says nothing about gust either when no point carries it', () => {
+    const data: WindDataPoint[] = purdue.map(({ timestamp, spd, dir }) => ({ timestamp, spd, dir }))
+    renderRose(data, withOffset(data[0]), BOTH)
+
+    expect(screen.queryByTestId('rose-gust')).not.toBeInTheDocument()
+  })
 })
