@@ -120,6 +120,9 @@ export default defineConfig({
     // harness mounts the real component over the real drawing function; see the route's own
     // comment. A server reused via `reuseExistingServer` that was started without this will 404,
     // which the spec reports as a missing harness rather than as a broken map.
-    env: { ...process.env, LAYLINE_TRACK_HARNESS: '1' },
+    //
+    // `/dev/station/[buoyId]` is the same kind of harness for the station page: its readings are
+    // live NDBC data, so a station with no current wave reading can't be asked for on demand.
+    env: { ...process.env, LAYLINE_TRACK_HARNESS: '1', LAYLINE_STATION_HARNESS: '1' },
   },
 })

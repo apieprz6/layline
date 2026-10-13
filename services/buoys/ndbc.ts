@@ -26,8 +26,8 @@ const BUOY_CONFIGS = {
       latitude: 41.87,
       longitude: -87.59,
     },
-    adjustmentNote:
-      'Wind measured at 85ft typically reads 20-30% higher than surface',
+    // The claim only: the height is its own field, and the station page's elevation note says it.
+    adjustmentNote: 'Wind at this height typically reads 20–30% higher than at the surface.',
     // CHII2 is a water-intake crib, not a wave buoy — its NDBC feed reliably reports GST but
     // WVHT is structurally always MM. See docs/adr/0008.
     capability: { gust: true, waves: false },
@@ -54,6 +54,11 @@ function buildMetadata(config: (typeof BUOY_CONFIGS)[keyof typeof BUOY_CONFIGS])
     adjustmentNote: config.adjustmentNote,
     capability: config.capability,
   }
+}
+
+/** A station's metadata as its history fetch reports it, for the station page's test harness. */
+export function buoyMetadata(buoyId: keyof typeof BUOY_CONFIGS): BuoyMetadata {
+  return buildMetadata(BUOY_CONFIGS[buoyId])
 }
 
 /**

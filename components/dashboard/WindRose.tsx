@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect } from "react";
-import type { WindDataPoint, WindDataPointWithOffset } from "@/types";
+import type { StationCapability, WindDataPoint, WindDataPointWithOffset } from "@/types";
 import {
   getWindColorHex,
   getWindCondition,
@@ -11,6 +11,8 @@ import { TIME_SCALES, exceedsGapThreshold } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
+import { readingAt } from "@/lib/utils/stationReadings";
+import WaveCorner from "./WaveCorner";
 
 interface WindRoseProps {
   data: WindDataPoint[];
@@ -21,6 +23,8 @@ interface WindRoseProps {
   onHoverChange?: (point: WindDataPointWithOffset | null) => void;
   displayPoint?: WindDataPointWithOffset; // NEW: Data point to display in overlays
   mode?: "reference" | "touch"; // NEW: Display mode for header label
+  // What the station can measure. Decides whether gust and waves appear at all; absent, neither does.
+  capability?: StationCapability;
 }
 
 const SIZE = 360;
@@ -54,6 +58,7 @@ export default function WindRose({
   onHoverChange,
   displayPoint,
   mode = "reference",
+  capability,
 }: WindRoseProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
@@ -275,6 +280,14 @@ export default function WindRose({
     return `${timeString} · ${offsetString}`;
   }, [displayPoint]);
 
+  // Both follow the displayed moment, as speed and direction do. A station that can't measure a
+  // quantity gets nothing drawn for it; one that can but has no reading then shows "—".
+  const gust = capability?.gust ? (displayPoint?.gust ?? null) : undefined;
+  const waveReading = useMemo(
+    () => (capability?.waves ? readingAt(dataWithOffset, displayPoint, "waveHeight") : null),
+    [capability?.waves, dataWithOffset, displayPoint],
+  );
+
   return (
     <div
       className="wind-rose-card"
@@ -303,7 +316,7 @@ export default function WindRose({
           style={{
             fontWeight: "600",
             color:
-              mode === "reference" ? "var(--text-muted)" : "var(--accent-blue)",
+              mode === "reference" ? "var(--text-muted)" : "var(--accent-primary)",
           }}
         >
           {mode === "reference" ? "At reference" : "● At touch"}
@@ -362,7 +375,7 @@ export default function WindRose({
                 fontFamily: "var(--font-display)",
                 fontSize: "12px",
                 fontWeight: "600",
-                color: "var(--accent-blue)",
+                color: "var(--accent-primary)",
                 marginTop: "1px",
               }}
             >
@@ -435,6 +448,37 @@ export default function WindRose({
             >
               {getWindCondition(displayPoint.spd).label}
             </div>
+            {gust !== undefined && (
+              <div
+                data-testid="rose-gust"
+                style={{
+                  marginTop: "3px",
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "3px",
+                  justifyContent: "flex-end",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>G</span>
+                <span
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: "600",
+                    color: gust === null ? "var(--text-muted)" : getWindColorHex(gust),
+                  }}
+                >
+                  {gust === null ? "—" : Math.round(gust)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bottom-left overlay: Waves */}
+        {waveReading && displayPoint && svgDimensions.width > 0 && (
+          <div style={{ position: "absolute", left: 0, bottom: 0, zIndex: 2 }}>
+            <WaveCorner reading={waveReading} />
           </div>
         )}
 

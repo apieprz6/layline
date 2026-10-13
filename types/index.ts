@@ -28,7 +28,7 @@ export interface BuoyMetadata {
     longitude: number
   }
   windMeasurementHeight: number // feet above water
-  adjustmentNote?: string // Context for interpretation (e.g., "Wind measured at 85ft typically reads 20-30% higher than surface")
+  adjustmentNote?: string // Context for interpretation (e.g., "Wind at this height typically reads 20–30% higher than at the surface.")
   capability: StationCapability
 }
 

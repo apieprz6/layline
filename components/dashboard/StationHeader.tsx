@@ -4,19 +4,26 @@ import { useRouter } from 'next/navigation'
 import { useCallback } from 'react'
 import { formatTimeHHMM, formatOffset } from '@/lib/utils/timeFormatting'
 import { safeBack } from '@/lib/utils/navigation'
+import type { BuoyMetadata } from '@/types'
+import ElevationNote from './ElevationNote'
 
 interface StationHeaderProps {
   stationName: string
   buoyId: string
+  metadata: BuoyMetadata
   latestDataTime: Date
   nowOffset: number
   onReturnToLive: () => void
 }
 
-/** The station page's sticky one-row header: back, name and id, latest sample, live pill. */
+/**
+ * The station page's sticky one-row header: back, name and id, the elevation note for an elevated
+ * anemometer, latest sample, live pill.
+ */
 export default function StationHeader({
   stationName,
   buoyId,
+  metadata,
   latestDataTime,
   nowOffset,
   onReturnToLive,
@@ -36,6 +43,7 @@ export default function StationHeader({
       <div className="station-header__title">
         <h1 className="station-header__name">{stationName}</h1>
         <span className="station-header__id">{buoyId}</span>
+        <ElevationNote metadata={metadata} />
         <span className="station-header__latest">· Latest {formatTimeHHMM(latestDataTime)}</span>
       </div>
 

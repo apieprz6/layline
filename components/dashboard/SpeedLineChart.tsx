@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
+import type { StationCapability, WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from '@/lib/utils/time'
 import { exceedsGapThreshold } from '@/lib/utils/windowing'
 
@@ -12,6 +12,8 @@ interface SpeedLineChartProps {
   referenceTime?: Date
   hoverPoint: WindDataPointWithOffset | null
   onHoverChange: (point: WindDataPointWithOffset | null) => void
+  // What the station can measure. With gust, the chart shades the gust band; absent, it doesn't.
+  capability?: StationCapability
 }
 
 export default function SpeedLineChart({
@@ -21,7 +23,9 @@ export default function SpeedLineChart({
   referenceTime,
   hoverPoint,
   onHoverChange,
+  capability,
 }: SpeedLineChartProps) {
+  const showGust = capability?.gust ?? false
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
   const dataWithOffset: WindDataPointWithOffset[] = useMemo(() => {
     const now = referenceTime || new Date()
@@ -57,10 +61,14 @@ export default function SpeedLineChart({
   const maxSpeed = useMemo(() => {
     if (visibleData.length === 0) return 8
 
-    const dataMax = visibleData.reduce((max, p) => Math.max(max, p.spd), 0)
+    // Gust is on the same axis, so its peaks set the scale too rather than clipping.
+    const dataMax = visibleData.reduce(
+      (max, p) => Math.max(max, p.spd, showGust && p.gust != null ? p.gust : 0),
+      0
+    )
     // Round up to nearest 5, minimum 8
     return Math.max(8, Math.ceil((dataMax + 2) / 5) * 5)
-  }, [visibleData])
+  }, [visibleData, showGust])
 
   // Y-axis step: 5 for speeds <= 20, 10 for speeds > 20
   const yStep = maxSpeed > 20 ? 10 : 5
@@ -126,6 +134,45 @@ export default function SpeedLineChart({
     flush()
     return { areaPaths: shapes, isolatedPoints: isolated }
   }, [visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed, innerW, innerH, PAD_T, PAD_L])
+
+  /**
+   * The gust band: one closed shape per unbroken run of gust readings, from the speed trace up to
+   * the gust trace — the lull-to-puff range a trimmer feels, read as one shape.
+   *
+   * A null gust ends a run the way an outage ends the speed trace, so nothing is shaded where
+   * nothing was measured. A run of one has no width and is dropped: unlike the speed trace's lone
+   * dot, the speed reading there is still drawn, and the hover label still gives its gust.
+   */
+  const gustBands = useMemo(() => {
+    if (!showGust) return []
+    const windowStart = nowOffsetMinutes
+    const windowEnd = nowOffsetMinutes + timeWindowMinutes
+    const xOf = (m: number) => PAD_L + (1 - (m - windowStart) / (windowEnd - windowStart)) * innerW
+    const yOf = (v: number) => PAD_T + (1 - v / maxSpeed) * innerH
+
+    const shapes: string[] = []
+    let run: Array<{ x: number; top: number; bottom: number }> = []
+    const flush = (): void => {
+      if (run.length > 1) {
+        const top = run.map((p) => `${p.x.toFixed(1)},${p.top.toFixed(1)}`)
+        const bottom = [...run].reverse().map((p) => `${p.x.toFixed(1)},${p.bottom.toFixed(1)}`)
+        shapes.push(`M${top.join(' L')} L${bottom.join(' L')} Z`)
+      }
+      run = []
+    }
+
+    visibleData.forEach((p, i) => {
+      const previous = visibleData[i - 1]
+      if (previous && exceedsGapThreshold(previous.minsAgo, p.minsAgo)) flush()
+      if (p.gust == null) {
+        flush()
+        return
+      }
+      run.push({ x: xOf(p.minsAgo), top: yOf(p.gust), bottom: yOf(p.spd) })
+    })
+    flush()
+    return shapes
+  }, [showGust, visibleData, nowOffsetMinutes, timeWindowMinutes, maxSpeed, innerW, innerH, PAD_T, PAD_L])
 
   // Helper for Y coordinate
   const yFor = (speed: number) => {
@@ -317,6 +364,19 @@ export default function SpeedLineChart({
         <path key={`area${i}`} d={d} fill="url(#spdGradient)" />
       ))}
 
+      {/* Gust band — between the speed trace and the gust trace */}
+      {gustBands.map((d, i) => (
+        <path
+          key={`gust${i}`}
+          data-testid="gust-band"
+          d={d}
+          fill="rgba(196,112,0,0.14)"
+          stroke="rgba(196,112,0,0.5)"
+          strokeWidth={0.6}
+          strokeDasharray="2 2"
+        />
+      ))}
+
       {/* Colored line segments */}
       {visibleData.length > 1 && visibleData.slice(0, -1).map((p, i) => {
         const b = visibleData[i + 1]
@@ -371,6 +431,10 @@ export default function SpeedLineChart({
         const t = 1 - (hoverPoint.minsAgo - windowStart) / (windowEnd - windowStart)
         const x = PAD_L + t * innerW
         const y = PAD_T + (1 - hoverPoint.spd / maxSpeed) * innerH
+        const gust = showGust ? (hoverPoint.gust ?? null) : null
+        const label =
+          gust !== null ? `${hoverPoint.spd.toFixed(1)} G${Math.round(gust)}` : `${hoverPoint.spd.toFixed(1)} kt`
+        const labelWidth = gust !== null ? 58 : 42
 
         return (
           <g pointerEvents="none">
@@ -396,9 +460,9 @@ export default function SpeedLineChart({
             {/* Speed label tooltip */}
             <g transform={`translate(${x}, ${Math.max(PAD_T + 11, y - 14)})`}>
               <rect
-                x={-21}
+                x={-labelWidth / 2}
                 y={-13}
-                width={42}
+                width={labelWidth}
                 height={14}
                 rx={3}
                 fill="#0A0A0A"
@@ -412,7 +476,7 @@ export default function SpeedLineChart({
                 fontWeight={600}
                 fill="white"
               >
-                {hoverPoint.spd.toFixed(1)} kt
+                {label}
               </text>
             </g>
           </g>

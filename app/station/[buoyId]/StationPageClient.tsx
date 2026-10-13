@@ -113,6 +113,7 @@ export default function StationPageClient({
         <StationHeader
           stationName={stationName}
           buoyId={buoyId}
+          metadata={metadata}
           latestDataTime={latestDataTime}
           nowOffset={nowOffset}
           onReturnToLive={() => setNowOffset(0)}
@@ -129,6 +130,7 @@ export default function StationPageClient({
             onHoverChange={setHoverPoint}
             displayPoint={displayPoint}
             mode={mode}
+            capability={metadata.capability}
           />
         ) : null
       }
@@ -162,6 +164,7 @@ export default function StationPageClient({
                 }}
               >
                 Wind speed
+                {metadata.capability.gust && <span style={{ color: "#C47000" }}> · gust</span>}
               </span>
               <span
                 style={{
@@ -180,6 +183,7 @@ export default function StationPageClient({
               nowOffsetMinutes={nowOffset}
               hoverPoint={hoverPoint}
               onHoverChange={setHoverPoint}
+              capability={metadata.capability}
             />
           </div>
         ) : null
@@ -190,7 +194,6 @@ export default function StationPageClient({
             dataWithOffset={dataWithOffset}
             timeWindowMinutes={timeWindowMinutes}
             nowOffsetMinutes={nowOffset}
-            metadata={metadata}
           />
         ) : null
       }
