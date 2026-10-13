@@ -7,6 +7,47 @@ the header and dock are LAY-168's winning Variant A, imported from
 `app/station/[buoyId]`). **Gust and wave values are invented fixtures** (`fixtures.ts`)
 whose shapes mirror what LAY-170 (PR #133) adds to `WindDataPoint` and `BuoyMetadata`.
 
+## Verdict — Variant A won (2026-10-13)
+
+The owner picked **A — Folded in**. Gust and waves fold into the charts already on the
+page, with **no modules of their own**. What the build inherits:
+
+- **No third column.** LAY-168 A's `3fr 2fr 1fr` / `1fr 1fr 0.8fr` track is dropped, and
+  the grid stays LAY-61's two columns at every width. That also settles LAY-168's open
+  question about the column being ~190px wide at 1280. LAY-168's header and dock are
+  unaffected.
+- **Gust on `SpeedLineChart`:** a shaded band from the speed trace up to the gust trace.
+  A null gust breaks the band the way an outage breaks the trace. The y-axis scales to
+  include gust, the title reads "Wind speed · gust", and the hover label reads
+  "12.4 G18".
+- **Gust on `WindRose`:** "G 18" under the speed readout. It shows "G —" when the station
+  can measure gust but has no reading at that moment, and is absent when it can't.
+- **Waves on `WindRose`:** a readout in the chart's bottom-left corner with height (ft),
+  period (s), and a direction arrow plus compass word. The arrow points where the waves
+  are going. When the station has the capability but no current reading, it shows "—"
+  and "No reading since HH:MM".
+- **Elevation note: a chip in the header**, "85 ft ⓘ", beside the station id. It
+  qualifies every wind number on the page, which is why it sits there. Tap toggles it.
+  The text comes from `windMeasurementHeight` + `adjustmentNote` and names speed and gust
+  both. It appears only above 33 ft, so Purdue shows nothing.
+- **Station Capability decides presence**, as in all three variants. CHII2 shows nothing
+  wave-shaped anywhere.
+
+Left open for the build:
+
+- `WindRose` and `SpeedLineChart` need real props for this. The prototype copies them
+  (`GustWindRose.tsx`, `GustSpeedLineChart.tsx`), and the build adds the props to the
+  real components instead.
+- At 390px the wave corner sits close to the rose's SW label. It fits, but check it
+  once real readings arrive.
+- "G —" on the rose has no "since HH:MM" line, unlike the wave corner. Decide whether
+  gust needs one too.
+- Not checked: the band on 1-minute data at 6h+ scales, and touch-dragging.
+- Recommended: reword CHII2's `adjustmentNote` to the height-free claim used in
+  `fixtures.ts`, and fix the undefined `--accent-blue` that `WindRose` uses.
+
+B and C stay in this folder as the record of what A was chosen against.
+
 ## Run it
 
 ```bash
