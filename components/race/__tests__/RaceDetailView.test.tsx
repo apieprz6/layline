@@ -21,6 +21,7 @@
  */
 
 import { cleanup, render, screen, within } from '@testing-library/react'
+import { raceInstrumentCheck } from '@/services/analysis/instrument-tuning'
 import type {
   RaceAnnotations,
   RaceBoatSetup,
@@ -166,6 +167,11 @@ function raceOf(
     findings: [],
     annotations,
     boat_setup: boatSetup,
+    instruments: raceInstrumentCheck({
+      race_id: 'race-1',
+      rows: [],
+      window: { window_start: '2026-06-03T19:00:00', window_finish: '2026-06-03T20:30:00' },
+    }),
   }
 }
 
@@ -183,9 +189,36 @@ function renderRace(race: RaceDetail, canDelete = false, canAmend = canDelete): 
       canAmend={canAmend}
       deleteRace={deleteRace}
       season={null}
+      sailChart={{ ok: false, reason: 'no-chart' }}
     />
   )
 }
+
+describe('below the two cards', () => {
+  it('runs performance, sail-vs-chart, calibration check, then Coverage — the map’s numbers first', () => {
+    renderRace(raceOf())
+
+    const headings = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent ?? '')
+    const at = (name: string): number => headings.findIndex((text) => text === name)
+
+    expect(at('Polar & VMG efficiency')).toBeGreaterThan(-1)
+    expect(at('Sail selection vs. chart')).toBe(at('Polar & VMG efficiency') + 1)
+    expect(at('Instrument calibration check')).toBe(at('Sail selection vs. chart') + 1)
+    expect(at('Coverage')).toBe(at('Instrument calibration check') + 1)
+  })
+
+  it('sits after both cards, with nothing between the map and the plot', () => {
+    renderRace(raceOf())
+
+    const plotCard = screen.getByTestId('polar-plot-card')
+    const performance = screen.getByTestId('race-performance')
+    // DOCUMENT_POSITION_FOLLOWING: the tile comes after the second card in the page.
+    expect(plotCard.compareDocumentPosition(performance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(plotCard.contains(performance)).toBe(false)
+  })
+})
 
 describe('a race nobody annotated', () => {
   it('says the sail plan and the sea state were not recorded', () => {

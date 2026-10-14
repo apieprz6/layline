@@ -28,9 +28,11 @@ import type { PolarDomain } from '@/services/analysis/polar-targets'
 import {
   cellBreakdown,
   cellTotals,
+  chartAgreement,
   cellViews,
   getSailSelectionData,
   gridCoverage,
+  raceChartAgreement,
   unreachableReason,
   type SailSelectionCell,
 } from '@/services/analysis/sail-selection'
@@ -476,5 +478,78 @@ describe('what the grid says about itself', () => {
 
     expect(coverage.reached).toBe(0)
     expect(coverage.ghosted).toBe(1)
+  })
+})
+
+describe('one Race’s own Cell Agreement', () => {
+  const sailed = (): MatchableRow[] => [
+    row({ race_id: 'race-a', twa: 95, tws: 14, sail: carrying(KITE) }),
+    row({ race_id: 'race-a', twa: 95, tws: 14, sail: carrying(JIB) }),
+    row({ race_id: 'race-a', twa: 45, tws: 8, sail: carrying(JIB) }),
+    row({ race_id: 'race-a', twa: 45, tws: 8, sail: { recorded: 'not-recorded' } }),
+    row({ race_id: 'race-b', twa: 45, tws: 8, sail: carrying(KITE) }),
+    row({ race_id: 'race-b', twa: 95, tws: 14, sail: carrying(KITE) }),
+  ]
+
+  function race(rows: readonly MatchableRow[], raceId: string) {
+    return raceChartAgreement(rows, raceId, CHART, DOMAIN, CHART_VERSION)
+  }
+
+  it('is the Sail Selection Screen’s own fold, over this Race’s rows and nobody else’s', () => {
+    const rows = sailed()
+    const screen = getSailSelectionData(
+      rows.filter((one) => one.race_id === 'race-a'),
+      EMPTY_FILTER,
+      DIMENSIONS,
+      CHART,
+      DOMAIN,
+      CHART_VERSION
+    )
+
+    expect(race(rows, 'race-a')).toMatchObject(chartAgreement(screen.cells))
+    expect(race(rows, 'race-a').agreement).toBeCloseTo(2 / 3)
+  })
+
+  it('adds up across Races to the season’s figures for the same rows', () => {
+    const rows = sailed()
+    const season = chartAgreement(
+      getSailSelectionData(rows, EMPTY_FILTER, DIMENSIONS, CHART, DOMAIN, CHART_VERSION).cells
+    )
+    const [a, b] = [race(rows, 'race-a'), race(rows, 'race-b')]
+
+    expect(a.placed_rows + b.placed_rows).toBe(season.placed_rows)
+    expect(a.judgeable_rows + b.judgeable_rows).toBe(season.judgeable_rows)
+    expect(a.verdicts).toEqual({
+      agrees: 2,
+      differs: 1,
+      'off-chart': 0,
+      'not-recorded': 1,
+      'other-version': 0,
+    })
+  })
+
+  it('counts the cells this Race reached by what its own rows say about each', () => {
+    // 95° at 14 kt holds the kite (agrees) and the jib (differs): mixed. 45° at 8 kt holds the
+    // jib (agrees) and a row nobody annotated, which is no disagreement.
+    expect(race(sailed(), 'race-a').cells).toEqual({ agrees: 1, mixed: 1 })
+  })
+
+  it('places a row sailed under another chart Version and judges it against nothing', () => {
+    const rows = [
+      { ...row({ race_id: 'race-c', sail: carrying(JIB) }), crossover_chart_version_id: 'old' },
+    ]
+    const read = race(rows, 'race-c')
+
+    expect(read.placed_rows).toBe(1)
+    expect(read.verdicts['other-version']).toBe(1)
+    expect(read.agreement).toBeNull()
+  })
+
+  it('is nothing placed, never a nought percent, for a Race with no rows on the chart', () => {
+    const read = race(sailed(), 'race-z')
+
+    expect(read.placed_rows).toBe(0)
+    expect(read.agreement).toBeNull()
+    expect(read.cells).toEqual({})
   })
 })

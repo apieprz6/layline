@@ -44,7 +44,7 @@
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { countableRows, mergeEfficiency, sumEfficiency } from '@/services/analysis/efficiency'
-import { NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
+import { EMPTY_FILTER, NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
 import type {
   AnalysisDimension,
@@ -792,6 +792,65 @@ export function chartAgreement(cells: readonly SailSelectionCell[]): ChartAgreem
     following: mergeEfficiency(following),
     differing: mergeEfficiency(differing),
   }
+}
+
+/** One Race's **Cell Agreement** slice, as its own page states it. */
+export interface RaceChartAgreement extends ChartAgreement {
+  /** This Race's placed Countable rows by how each stood against its own cell. */
+  verdicts: Record<CellVerdict, number>
+  /** The cells this Race reached, by the Cell Agreement its own rows give each. No empty cells. */
+  cells: Partial<Record<CellAgreement, number>>
+}
+
+/**
+ * What a Race's page can say about its sails against the chart: its slice, or why there is none.
+ *
+ * Two reasons and not one, because they are different facts — no chart uploaded is the boat's
+ * state, an archive that could not be read is a failure — and the page says each in its own words.
+ */
+export type RaceSailChartRead =
+  | { ok: true; agreement: RaceChartAgreement }
+  | { ok: false; reason: 'no-chart' | 'unreadable' }
+
+/**
+ * The Sail Selection Screen's own fold, over one Race's rows.
+ *
+ * Rows are judged one at a time against their own cell, so the Race's share of the screen's season
+ * figures is exactly this — the same chart, the same Version, the same unnarrowed match — and the
+ * Race page can never disagree with the screen about the same sailing. Filtered by Race before the
+ * fold rather than after it, because a cell's slices pool every Race that reached it.
+ */
+export function raceChartAgreement(
+  rows: readonly MatchableRow[],
+  raceId: string,
+  chart: CrossoverChartPayload,
+  domain: PolarDomain | null,
+  chartVersionId: string | null
+): RaceChartAgreement {
+  const { cells } = getSailSelectionData(
+    rows.filter((row) => row.race_id === raceId),
+    EMPTY_FILTER,
+    // Nothing is narrowed, so no dimension is read; the screen's registry would only name chips.
+    [],
+    chart,
+    domain,
+    chartVersionId
+  )
+
+  const verdicts = { ...NO_VERDICTS }
+  const reached: Partial<Record<CellAgreement, number>> = {}
+
+  for (const cell of cells) {
+    const totals = cellTotals(cell.slices)
+    if (totals.agreement === 'no-rows') continue
+
+    reached[totals.agreement] = (reached[totals.agreement] ?? 0) + 1
+    for (const verdict of Object.keys(verdicts) as CellVerdict[]) {
+      verdicts[verdict] += totals.verdicts[verdict]
+    }
+  }
+
+  return { ...chartAgreement(cells), verdicts, cells: reached }
 }
 
 /**

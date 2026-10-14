@@ -2210,6 +2210,13 @@ export interface RacePolarPlot {
   /** That Polar's Version id. */
   polar_version_id: string
   undrawn: PolarPlotUndrawn
+  /**
+   * The Race's **Polar Efficiency** and **VMG Efficiency**: `sumEfficiency` over the very rows the
+   * dots are drawn from, computed once on the server beside them (ADR 0040). The figures under the
+   * picture and the picture rest on one set of sums, so neither can be re-scored apart from the
+   * other.
+   */
+  performance: EfficiencyAggregate
 }
 
 /** What the **Polar Plot**'s radius means: two readings of one state (ADR 0040). */
@@ -2808,6 +2815,53 @@ export type RaceAwaAsymmetryResult =
       segment_count: number
     }
 
+/** Why a population carries no line of its own. Data, not an absence (ADR 0032). */
+export type NoFitReason =
+  /** No Countable row carried both speeds. */
+  | 'no-points'
+  /** Fewer than `MIN_FIT_POINTS`. */
+  | 'too-few-points'
+  /** Less than `MIN_SOG_SPREAD_KNOTS` of `SOG` between the slowest row and the fastest. */
+  | 'narrow-spread'
+  /** The two channels never varied together, so no line through them is defined. */
+  | 'flat'
+
+/** The fitted line's gap from 1:1 at one speed through the water. */
+export interface RaceSpeedGap {
+  stw_knots: number
+  /** `SOG − STW` on the line there. Null where the line was never fitted over that speed. */
+  gap_knots: number | null
+}
+
+/**
+ * One Race's `STW` check, via `SOG`: its own line, or the reason it carries none.
+ *
+ * The line's gap at the speeds the season's headline reads (ADR 0035) and its `R²`, which is what
+ * the per-Race tile draws a coverage bar from (ADR 0034). Never a slope or an intercept (ADR 0027).
+ */
+export type RaceSpeedCheck =
+  | { fitted: true; r_squared: number; gaps: RaceSpeedGap[] }
+  | { fitted: false; reason: NoFitReason }
+
+/**
+ * One Race's contribution to each of the three **Calibration Channels** the Instrument Tuning
+ * screen checks — `HDG`, the **Apparent Wind Asymmetry**, `STW` — read by the season's own
+ * per-Race functions, so the Race page and that screen cannot read one Race two ways.
+ *
+ * Every channel either carries its figure or the reason it has none, as data (ADR 0032). Diagnostic
+ * only: nothing here is a value to type into an instrument (LAY-138 decision 7).
+ */
+export interface RaceInstrumentCheck {
+  heading: RaceHeadingOffsetResult
+  /**
+   * This Race's highest heading bin less its lowest — the compass headline (ADR 0035). Null under
+   * two headings with a figure, where a spread has nothing to span.
+   */
+  heading_swing_deg: number | null
+  asymmetry: RaceAwaAsymmetryResult
+  speed: RaceSpeedCheck
+}
+
 /** One **Calibration Era**'s Apparent Wind Asymmetry, the two points of sail kept apart. */
 export interface EraAwaAsymmetry {
   era: CalibrationEra
@@ -3341,6 +3395,11 @@ export interface RaceDetail {
   annotations: RaceAnnotations
   /** Which Boat Setup Versions the race was sailed under, and the Wind Band the rig was set to. */
   boat_setup: RaceBoatSetup
+  /**
+   * This race's contribution to each **Calibration Channel**, derived at read like the track and
+   * stored nowhere. A channel the race produced nothing for carries its reason, never a zero.
+   */
+  instruments: RaceInstrumentCheck
 }
 
 /**

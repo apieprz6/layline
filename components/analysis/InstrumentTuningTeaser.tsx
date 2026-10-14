@@ -4,6 +4,7 @@ import {
   CHANNEL_TITLE,
   NO_FIT_WORDS,
   signedKnots,
+  widerReading,
   type CheckedChannel,
 } from '@/components/boat/instrument-tuning/chart-text'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
@@ -438,20 +439,6 @@ function windAngle(season: EraAwaAsymmetry): ChannelPanel {
       Math.min(upwind?.pair_count ?? 0, downwind?.pair_count ?? 0) / ASYMMETRY_SOLID_PAIRS
     ),
   }
-}
-
-/**
- * Which tack read wider at one point of sail, and by how much.
- *
- * `wider_by_deg` and the tack rather than the signed Asymmetry, which is half of it and needs the
- * sign convention explained — a row has nowhere to explain one. "Even" where the two tacks held the
- * same angle, which is a real reading and not a missing one.
- */
-function widerReading(figure: EraAwaAsymmetry['upwind']): string {
-  if (figure === null) return 'no pairs'
-  if (figure.wider_tack === null) return 'even'
-
-  return `${figure.wider_tack === 'port' ? 'port' : 'stbd'} ${figure.wider_by_deg.toFixed(1)}°`
 }
 
 function boatSpeed(era: EraDivergence | null): ChannelPanel {

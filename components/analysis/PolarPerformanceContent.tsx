@@ -4,10 +4,9 @@ import { useMemo, useState, type ReactElement } from 'react'
 import AnalysisFilterRail from '@/components/analysis/AnalysisFilterRail'
 import { NOTE_STYLE, PILL_STYLE } from '@/components/analysis/chrome'
 import CoverageLedgerPanel from '@/components/analysis/CoverageLedgerPanel'
+import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
 import SeasonPolarPlot from '@/components/analysis/SeasonPolarPlot'
-import { EYEBROW_STYLE } from '@/components/common/eyebrow'
-import { radius, spacing } from '@/lib/utils/design'
-import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { spacing } from '@/lib/utils/design'
 import { filterToSearchParams } from '@/services/analysis/filter-url'
 import {
   EMPTY_FILTER,
@@ -106,13 +105,14 @@ export default function PolarPerformanceContent({
       />
 
       <div style={{ display: 'flex', gap: spacing(2) }}>
-        <Figure
+        <EfficiencyFigure
           label="Polar efficiency"
           ratio={data.overall.polar_efficiency}
           filler={fillerAnchoredShare(data.overall)}
           testId="polar-efficiency"
+          instead={NOTHING_SCORED}
         />
-        <Figure
+        <EfficiencyFigure
           label="VMG efficiency"
           ratio={data.overall.vmg_efficiency}
           // Its own share, over its own rows. The two figures are summed over different subsets —
@@ -120,6 +120,7 @@ export default function PolarPerformanceContent({
           // would print a caveat about rows that are not in the number beside it.
           filler={vmgFillerAnchoredShare(data.overall)}
           testId="vmg-efficiency"
+          instead={NOTHING_SCORED}
         />
       </div>
 
@@ -152,80 +153,5 @@ export default function PolarPerformanceContent({
   )
 }
 
-/**
- * One figure, with what it rests on under it.
- *
- * A **Filler-Anchored** share is printed *beside the number*, never in place of it. ADR 0036 is
- * explicit: a row the boat actually sailed is real however weak the grid cell it is compared
- * against, so the doubt belongs on the figure and never instead of it — no dash, no blank, no
- * hairline.
- *
- * Null is the one case with no number, and it says why in words rather than showing a dash: no row
- * in the match could be scored, which is a different fact from a boat that went nowhere.
- */
-function Figure({
-  label,
-  ratio,
-  filler,
-  testId,
-}: {
-  label: string
-  ratio: number | null
-  /** How much of *this* figure's own rows rest on the Polar's filler. Null where none was summed. */
-  filler: number | null
-  testId: string
-}): ReactElement {
-  const percent = efficiencyPercent(ratio)
-
-  return (
-    <div
-      data-testid={testId}
-      style={{
-        flex: 1,
-        minWidth: 0,
-        background: 'var(--surface-raised)',
-        border: '1px solid var(--surface-border)',
-        borderRadius: radius('md'),
-        padding: `${spacing(2)} ${spacing(3)}`,
-      }}
-    >
-      <div style={{ ...EYEBROW_STYLE, marginBottom: 2 }}>{label}</div>
-
-      {percent === null ? (
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-          Nothing in this match could be scored against the Polar.
-        </div>
-      ) : (
-        <div
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-2xl)',
-            fontWeight: 700,
-            color: 'var(--text-accent)',
-          }}
-        >
-          {percent}
-        </div>
-      )}
-
-      {filler !== null && filler > 0 && (
-        <div
-          data-testid={`${testId}-filler-anchored`}
-          style={{
-            marginTop: 4,
-            display: 'inline-block',
-            padding: '1px 6px',
-            borderRadius: radius('sm'),
-            border: '1px dashed var(--state-warning)',
-            fontSize: 'var(--text-xs)',
-            fontStyle: 'italic',
-            color: 'var(--state-warning)',
-          }}
-        >
-          Filler-anchored: {sharePercent(filler)} of this is compared against a cell the Polar
-          manufactured rather than measured
-        </div>
-      )}
-    </div>
-  )
-}
+/** Where a figure has no number: nothing in the match could be scored. */
+const NOTHING_SCORED = 'Nothing in this match could be scored against the Polar.'

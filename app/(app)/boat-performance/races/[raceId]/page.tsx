@@ -5,7 +5,11 @@ import { canWrite } from '@/lib/account/canWrite'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { seasonTrace } from '@/services/analysis/polar-plot'
-import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { polarDomain } from '@/services/analysis/polar-targets'
+import { readAnalysisArchive, type AnalysisArchive } from '@/services/analysis/readArchive'
+import { raceChartAgreement, type RaceSailChartRead } from '@/services/analysis/sail-selection'
+import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
+import { readPolarScreen } from '@/services/boat/readPolarVersions'
 import { readRace } from '@/services/races/readRace'
 
 import { deleteRace } from './actions'
@@ -38,9 +42,15 @@ export default async function RacePage({
   // This race, not the tab: a sailor sent a link to one race lands on it after signing in.
   if (!account) signInFirst(`/boat-performance/races/${raceId}`)
 
-  // Together: the season behind this Race's Polar Plot waits on no part of the Race. An archive
-  // that cannot be read costs the trace and nothing else — the race is still true without it.
-  const [race, archive] = await Promise.all([readRace(raceId), readAnalysisArchive()])
+  // Together: the season behind this Race's Polar Plot, and the chart its sails are laid over, wait
+  // on no part of the Race. An archive that cannot be read costs the trace and the sail tile and
+  // nothing else — the race is still true without them.
+  const [race, archive, chart, polar] = await Promise.all([
+    readRace(raceId),
+    readAnalysisArchive(),
+    readCrossoverChartScreen(),
+    readPolarScreen(),
+  ])
 
   if (!race) notFound()
 
@@ -53,6 +63,37 @@ export default async function RacePage({
       canAmend={writable}
       deleteRace={deleteRace}
       season={archive === null ? null : seasonTrace(archive.rows)}
+      sailChart={sailChart(raceId, archive, chart, polar)}
     />
   )
+}
+
+/**
+ * This race's sails against the chart, exactly as the Sail Selection screen reads them.
+ *
+ * The same archive rows, the same current Crossover Chart, the same Version id and the same Polar
+ * domain as that screen, so the race's figures are the screen's figures for its rows. A row sailed
+ * under another chart Version is placed there and judged against nothing, and so it is here.
+ */
+function sailChart(
+  raceId: string,
+  archive: AnalysisArchive | null,
+  chart: Awaited<ReturnType<typeof readCrossoverChartScreen>>,
+  polar: Awaited<ReturnType<typeof readPolarScreen>>
+): RaceSailChartRead {
+  if (archive === null) return { ok: false, reason: 'unreadable' }
+
+  const current = chart?.current ?? null
+  if (current === null) return { ok: false, reason: 'no-chart' }
+
+  return {
+    ok: true,
+    agreement: raceChartAgreement(
+      archive.rows,
+      raceId,
+      current.payload,
+      polar?.current == null ? null : polarDomain(polar.current.payload),
+      current.id
+    ),
+  }
 }

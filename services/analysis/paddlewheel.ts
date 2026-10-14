@@ -29,7 +29,13 @@
 
 import { calibrationEras, withinEra } from '@/services/analysis/calibration-eras'
 import { notCountableReason } from '@/services/analysis/countable'
-import type { AnalysisRow, CalibrationEra, CalibrationLogEntry, TranscriptionChannels } from '@/types'
+import type {
+  AnalysisRow,
+  CalibrationEra,
+  CalibrationLogEntry,
+  NoFitReason,
+  TranscriptionChannels,
+} from '@/types'
 
 /**
  * Rows a fit needs before it may draw a line.
@@ -91,16 +97,8 @@ export interface FittedLine {
   points: number
 }
 
-/** Why a population carries no line of its own. Data, not an absence (ADR 0032). */
-export type NoFitReason =
-  /** No Countable row carried both speeds. */
-  | 'no-points'
-  /** Fewer than `MIN_FIT_POINTS`. */
-  | 'too-few-points'
-  /** Less than `MIN_SOG_SPREAD_KNOTS` of `SOG` between the slowest row and the fastest. */
-  | 'narrow-spread'
-  /** The two channels never varied together, so no line through them is defined. */
-  | 'flat'
+/** Why a population carries no line of its own — in `@/types`, since a Race's page carries it. */
+export type { NoFitReason }
 
 /** A line, or the reason there is none — never a line computed anyway and flagged afterwards. */
 export type FitOutcome =

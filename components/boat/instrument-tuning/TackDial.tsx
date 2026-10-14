@@ -57,6 +57,7 @@ import {
   type ChipOption,
 } from './chart-furniture'
 import {
+  asymmetryAbsence,
   raceLabel,
   races as racesPhrase,
   rows as rowsPhrase,
@@ -189,7 +190,7 @@ export default function TackDial({
     ...[...season.excluded].reverse().map((missing) => ({
       id: missing.race_id,
       label: raceLabel(labels, missing.race_id, missing.window_start),
-      emptyReason: reasonWords(missing),
+      emptyReason: asymmetryAbsence(missing),
     })),
   ]
 
@@ -261,7 +262,7 @@ export default function TackDial({
         ) : excluded !== null ? (
           <div>
             {raceLabel(labels, excluded.race_id, excluded.window_start)} paired no tacks —{' '}
-            {reasonWords(excluded)}.
+            {asymmetryAbsence(excluded)}.
           </div>
         ) : (
           <Verdict figures={figures} raceCount={raceCount} />
@@ -345,15 +346,6 @@ function spansEverything(shown: EraAwaAsymmetry): boolean {
   return shown.era.from_date === null && shown.era.until_date === null
 }
 
-function reasonWords(excluded: Extract<EraAwaAsymmetry['excluded'][number], object>): string {
-  if (excluded.reason === 'too-few-rows') {
-    return `only ${rowsPhrase(excluded.row_count)} this check could read`
-  }
-  if (excluded.reason === 'too-few-segments') {
-    return `${excluded.segment_count} steady segment${excluded.segment_count === 1 ? '' : 's'}, too few to pair`
-  }
-  return 'no two steady segments on opposite tacks close enough together'
-}
 
 /* ----------------------------------------------------------------------- the dial */
 
