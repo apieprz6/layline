@@ -1,9 +1,8 @@
 import { Children, type ReactElement, type ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
+import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { RACES, ROWS } from '@/components/analysis/__tests__/fixture'
-import type { RaceSet } from '@/services/analysis/readArchive'
-import type { CrossoverChartScreen } from '@/types'
-import OverallCards, { RaceWindowCards } from '../OverallCards'
+import OverallCards from '../OverallCards'
 
 jest.mock('@/services/analysis/readArchive', () => ({
   readRecentRaceRows: jest.fn(),
@@ -29,24 +28,21 @@ describe('OverallCards', () => {
   })
 
   it('paints the Polar performance card without waiting for the Crossover Chart read', async () => {
-    const racesPromise: Promise<RaceSet | null> = Promise.resolve({
-      rows: ROWS,
-      races: RACES,
-      polars: {},
-    })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
     // Held back on purpose, standing in for a Crossover Chart read still on the wire: this
-    // promise is never resolved anywhere in the test. Calling `RaceWindowCards` directly, rather
-    // than going through `OverallCards` and a full `resolveServerTree`, is what lets the test
-    // stop there — resolving the whole piece would also chase the Sail selection card nested
-    // behind this same held-back promise and hang.
-    const chartPromise: Promise<CrossoverChartScreen | null> = new Promise(() => {})
+    // promise is never resolved anywhere in the test.
+    readCrossoverChartScreen.mockReturnValue(new Promise(() => {}))
 
-    const raceWindow = await RaceWindowCards({ racesPromise, chartPromise })
-    const [polarCard] = Children.toArray(
-      (raceWindow as ReactElement<{ children: ReactNode }>).props.children
+    const overall = await OverallCards()
+    // Polar performance's own boundary, first of the three siblings. Resolved on its own via the
+    // suite's usual `resolveServerTree` rather than through the whole tree: the Sail selection
+    // boundary beside it awaits the same held-back chart promise and would never settle, so
+    // resolving the full tree here would hang.
+    const [polarBoundary] = Children.toArray(
+      (overall as ReactElement<{ children: ReactNode }>).props.children
     )
 
-    render(polarCard as ReactElement)
+    render(await resolveServerTree(polarBoundary))
 
     expect(screen.getByTestId('polar-performance-teaser')).toBeInTheDocument()
   })

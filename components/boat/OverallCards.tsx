@@ -24,34 +24,32 @@ import type { CrossoverChartScreen } from '@/types'
  *
  * The ten-race read and the Crossover Chart read go out the moment this is called, before either
  * is awaited — a plain function call starts a `Promise`, and nothing here `await`s one until a
- * card actually needs its value. So does the Instrument tuning read, a sibling of the other two
- * rather than something kicked off only once they have settled. The slowest of the three sets the
- * time to everything painted, never their sum.
+ * card actually needs its value. So does the Instrument tuning read. The slowest of the three sets
+ * the time to everything painted, never their sum.
  *
- * ## One boundary per dependency, not per card
+ * ## One boundary per card, each the shape the page actually settles into
  *
- * **Polar performance never waits on the Crossover Chart.** Its only dependency is the ten-race
- * read, so its `<Suspense>` is the same boundary that decides whether there is a race window to
- * show at all (`RaceWindowCards`, below) — once that resolves, the Polar card paints inline, with
- * nothing further to wait on. **Sail selection** needs the chart too, so it carries a second,
- * nested boundary of its own that the Polar card never sits behind. **Instrument tuning** reads the
- * whole archive on its own query, so it is a sibling boundary at the top of this piece, never
- * nested inside the race window's.
+ * Three `<Suspense>` boundaries, one per card, each with a skeleton of that card's own height —
+ * what a sailor sees on first paint is the shape of the finished tab, not a placeholder standing in
+ * for two cards at once. **Polar performance never waits on the Crossover Chart.** It depends only
+ * on the ten-race read, so its boundary resolves the moment that read does, independently of
+ * **Sail selection**, which needs the chart too and carries its own, separate boundary beside it.
+ * **Instrument tuning** reads the whole archive on its own query and never touches the other two.
  *
  * ## Where the unreadable and empty states land
  *
- * They replace **the pair that shares the ten-race read**, not all three cards. `RaceWindowCards`
- * decides this off the one read both Polar performance and Sail selection depend on, before either
- * card exists, so a failed or empty read is one `ArchiveUnreadable` or one "nothing to summarise"
- * in the place both cards would have taken — never the same card's-width message printed twice.
+ * **Per card**, honestly duplicated when it happens. Polar performance and Sail selection each
+ * depend on the same ten-race read, and each decides for itself, inside its own boundary, whether
+ * that read came back `null` (`ArchiveUnreadable`) or empty (`EmptyState`) — because giving every
+ * card a boundary that matches its own eventual place rules out a single shared boundary that could
+ * print the message once for both. A failed or empty read is rare, and the cost of that rarity is a
+ * sentence that appears twice rather than a boundary shape that lies about what the tab becomes
+ * once the archive is readable.
  *
- * Instrument tuning is deliberately not folded into that decision, even though today's single
- * `Promise.all` happened to hide it whenever the ten-race read failed. That was the sequential
- * code's accident, not a rule: its read is a different query against the same table, says its own
- * `ok: false` honestly when it fails, and the one case the two reads must agree on — no races at
- * all — they already do, independently, because both ask the same database for the same archive.
- * Coupling its visibility to a sibling's read would be withholding a card over a failure that was
- * never its own.
+ * Instrument tuning never joins that decision. Its read is a different query against the same
+ * table, says its own `ok: false` honestly when it fails, and the one case the two reads must agree
+ * on — no races at all — they already do, independently, because both ask the same database for the
+ * same archive.
  */
 export default async function OverallCards(): Promise<ReactElement> {
   const racesPromise = readRecentRaceRows(Math.max(TEASER_RACES, SAIL_SELECTION_TEASER_RACES))
@@ -61,7 +59,11 @@ export default async function OverallCards(): Promise<ReactElement> {
   return (
     <>
       <Suspense fallback={polarFallback()}>
-        <RaceWindowCards racesPromise={racesPromise} chartPromise={chartPromise} />
+        <PolarPerformanceCard racesPromise={racesPromise} />
+      </Suspense>
+
+      <Suspense fallback={rowFallback()}>
+        <SailSelectionCard racesPromise={racesPromise} chartPromise={chartPromise} />
       </Suspense>
 
       <Suspense fallback={rowFallback()}>
@@ -72,24 +74,15 @@ export default async function OverallCards(): Promise<ReactElement> {
 }
 
 /**
- * The Polar performance card, and the Sail selection card behind its own nested boundary — both
- * gated on the one read they share.
- *
- * A failed or empty read is reported here, once, in the place the two cards would have taken: see
- * the "Where the unreadable and empty states land" section above.
- *
- * Exported only so `OverallCards.test.tsx` can call it directly with a races read that resolves
- * and a chart read that never does, which is how that suite proves Polar performance paints
- * without the Crossover Chart. Resolving the whole piece the way `resolveServerTree` normally
- * does would also try to resolve the Sail selection card nested below it — and hang forever on
- * the chart promise the test deliberately never settles.
+ * The Polar performance card: the last five races, or the "unreadable"/"empty" state in its own
+ * slot when the ten-race read it depends on did not come back with races to show — see "Where the
+ * unreadable and empty states land" above on why that message is this card's own to print rather
+ * than a sibling's.
  */
-export async function RaceWindowCards({
+async function PolarPerformanceCard({
   racesPromise,
-  chartPromise,
 }: {
   racesPromise: Promise<RaceSet | null>
-  chartPromise: Promise<CrossoverChartScreen | null>
 }): Promise<ReactElement> {
   const recent = await racesPromise
 
@@ -113,34 +106,41 @@ export async function RaceWindowCards({
   const polarRows = recent.rows.filter((row) => polarRaceIds.has(row.race_id))
 
   return (
-    <>
-      <PolarPerformanceTeaser
-        // What the figure is actually over, which on a young archive is fewer than five.
-        races={polarRaces.length}
-        efficiency={sumEfficiency(polarRows)}
-        rows={polarRows}
-        polars={recent.polars}
-      />
-
-      <Suspense fallback={rowFallback()}>
-        <SailSelectionCard recent={recent} chartPromise={chartPromise} />
-      </Suspense>
-    </>
+    <PolarPerformanceTeaser
+      // What the figure is actually over, which on a young archive is fewer than five.
+      races={polarRaces.length}
+      efficiency={sumEfficiency(polarRows)}
+      rows={polarRows}
+      polars={recent.polars}
+    />
   )
 }
 
 /**
- * The Sail selection card, behind its own boundary so the Crossover Chart read never holds back
- * the Polar card beside it.
+ * The Sail selection card: the same ten-race read Polar performance reads, plus the Crossover
+ * Chart, behind a boundary of its own so neither read ever holds back the Polar card beside it.
  */
 async function SailSelectionCard({
-  recent,
+  racesPromise,
   chartPromise,
 }: {
-  recent: RaceSet
+  racesPromise: Promise<RaceSet | null>
   chartPromise: Promise<CrossoverChartScreen | null>
 }): Promise<ReactElement> {
-  const chart = await chartPromise
+  const [recent, chart] = await Promise.all([racesPromise, chartPromise])
+
+  if (recent === null) return <ArchiveUnreadable />
+
+  if (recent.races.length === 0) {
+    return (
+      <EmptyState
+        mark="📈"
+        title="Nothing to summarise yet"
+        detail="Season figures appear here once a race has been uploaded."
+      />
+    )
+  }
+
   const payload = chart?.current?.payload ?? null
 
   return (
@@ -168,9 +168,9 @@ async function SailSelectionCard({
 /**
  * The **Instrument tuning** card: the worst of the three channels' coverage words, as a door.
  *
- * Its own read and its own boundary, a sibling of the race window's rather than something nested
- * inside it — see "Where the unreadable and empty states land" on why its visibility never rides
- * on that other read's outcome.
+ * Its own read and its own boundary, never nested inside or gated on either read above it — see
+ * "Where the unreadable and empty states land" on why its visibility never rides on a sibling's
+ * read.
  *
  * The whole-archive read this card is built on was measured at 9.12s against a hosted database on
  * LAY-155 (`services/analysis/readInstrumentTuning` says why it costs that much), which is the

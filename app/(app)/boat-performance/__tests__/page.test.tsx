@@ -195,8 +195,12 @@ describe('the Overall tab', () => {
 
     await renderOverall()
 
-    expect(screen.getByText('Nothing to summarise yet')).toBeInTheDocument()
+    // Polar performance and Sail selection each depend on the same ten-race read, and each has
+    // its own boundary sized to its own eventual card — so each decides for itself that there is
+    // nothing to summarise, rather than one message standing in for both.
+    expect(screen.getAllByText('Nothing to summarise yet')).toHaveLength(2)
     expect(screen.queryByTestId('polar-performance-teaser')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('sail-selection-teaser')).not.toBeInTheDocument()
   })
 
   it('tells a failed read apart from an empty archive', async () => {
@@ -206,9 +210,9 @@ describe('the Overall tab', () => {
 
     // "No races" over a failed read would be Layline claiming the sailor has sailed nothing — and
     // it is the same sentence the detail screen shows, from the same component, so the two cannot
-    // drift into disagreeing about what happened. One message, standing in for the pair of cards
-    // that share this read — not printed once per card.
-    expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
+    // drift into disagreeing about what happened. Printed once per card that depends on this read
+    // — Polar performance and Sail selection each decide independently, in their own boundary.
+    expect(screen.getAllByText('The archive could not be read')).toHaveLength(2)
     expect(screen.queryByTestId('polar-performance-teaser')).not.toBeInTheDocument()
     expect(screen.queryByTestId('sail-selection-teaser')).not.toBeInTheDocument()
   })
@@ -227,7 +231,7 @@ describe('the Overall tab', () => {
     // The ten-race read failing is a fact about that query alone — the Instrument tuning card
     // reads the archive on a different query and says what it found, independently of a sibling
     // it never asked anything of.
-    expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
+    expect(screen.getAllByText('The archive could not be read')).toHaveLength(2)
     expect(screen.getByTestId('instrument-tuning-teaser')).toBeInTheDocument()
     expect(screen.getByTestId('tuning-coverage')).toBeInTheDocument()
   })
