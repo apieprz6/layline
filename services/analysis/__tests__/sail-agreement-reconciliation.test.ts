@@ -92,6 +92,7 @@ function bothReadings(
       vmg_efficiency: 1,
     },
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: 'polar-version-1',
   }
 
   const grid = getSailSelectionData(
@@ -223,6 +224,7 @@ describe('the rows the grid places nowhere', () => {
             vmg_efficiency: null,
           },
           crossover_chart_version_id: CHART_VERSION,
+          polar_version_id: 'polar-version-1',
         },
       ],
       EMPTY_FILTER,
@@ -271,6 +273,7 @@ describe('the one thing only the grid has to answer', () => {
             vmg_efficiency: 1,
           },
           crossover_chart_version_id: 'a-retired-version',
+          polar_version_id: 'polar-version-1',
         },
       ],
       EMPTY_FILTER,

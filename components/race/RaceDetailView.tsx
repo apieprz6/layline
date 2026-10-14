@@ -61,6 +61,7 @@ import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordi
 import type {
   BoatSetupVersionRef,
   DeleteRaceResult,
+  PolarPlotTraceBin,
   RaceBoatSetup,
   RaceDetail,
   RaceSailAnnotation,
@@ -86,6 +87,12 @@ interface RaceDetailViewProps {
    */
   canAmend: boolean
   deleteRace: (raceId: string) => Promise<DeleteRaceResult>
+  /**
+   * The whole archive as ten-degree sums, drawn behind this Race on its **Polar Plot** so the
+   * picture answers "was this good *for us*" (ADR 0040). Null where the archive could not be read:
+   * the race is still true without it.
+   */
+  season: PolarPlotTraceBin[] | null
 }
 
 export default function RaceDetailView({
@@ -93,6 +100,7 @@ export default function RaceDetailView({
   canDelete,
   canAmend,
   deleteRace,
+  season,
 }: RaceDetailViewProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
@@ -226,28 +234,15 @@ export default function RaceDetailView({
         <TranscriptionBoundary canAmend={canAmend} />
 
         {/*
-         * Everything below the line, and the split happens *under* it rather than across it.
-         *
-         * The map is the recording drawn, so it belongs on this side — and on a wide screen the
-         * figures derived from the same rows read better beside it than a scroll away. Putting the
-         * two columns below the boundary rather than either side of it keeps ADR 0010's line
-         * exactly what it is: one rule across the whole page, with Testimony above and nothing but
-         * the recording beneath.
-         *
-         * The map's column is bounded because the frame's *shape* is fixed (ADR 0033): a fluid
-         * portrait box 1,000px wide would be 1,200px tall, so width past about 620 buys height
-         * nobody wants rather than detail.
+         * Everything below the line. The map opens it (ADR 0033), as one of two cards: the race
+         * drawn where it happened, and the same race drawn at the angles it was sailed (ADR 0040).
+         * They share one selection and one readout, so they are one section, not two.
          */}
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)] xl:items-start xl:gap-8">
-          {/* The map opens the half of the page that is the recording (ADR 0033). It is below the
-              line because a track is not Testimony — it is what the file said, drawn. */}
-          <RaceTrackSection track={race.track} />
+        <RaceTrackSection track={race.track} season={season} />
 
-          {/* Capped at a measure, not at the column: every one of these is a label on the left and
-              a figure on the right, and across 800px of desktop the two stop reading as a pair. */}
-          <div
-            style={{ display: 'flex', flexDirection: 'column', gap: spacing(4), maxWidth: 560 }}
-          >
+        {/* Capped at a measure: every one of these is a label on the left and a figure on the
+            right, and across 800px of desktop the two stop reading as a pair. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(4), maxWidth: 560 }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
           <h2 style={SECTION_HEADING}>Coverage</h2>
           <CoverageReadout coverage={race.coverage} />
@@ -284,7 +279,6 @@ export default function RaceDetailView({
             deleteRace={deleteRace}
           />
         )}
-          </div>
         </div>
       </div>
     </div>

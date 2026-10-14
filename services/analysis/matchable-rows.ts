@@ -22,6 +22,7 @@
  */
 
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
+import type { ScorableRow } from '@/services/analysis/efficiency'
 import { computeRowEfficiency, rowIntervalSeconds } from '@/services/analysis/efficiency'
 import { detectManeuvers, sameRowOrder } from '@/services/analysis/maneuvers'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
@@ -59,6 +60,8 @@ export interface BuildableRace {
   id: string
   window: RaceWindow
   crossover_chart_version_id?: string | null
+  /** The **Polar Version** `targets` was resolved from, or null where the Race names none. */
+  polar_version_id?: string | null
 }
 
 /** An unscored row: what a Race with no **Polar** pointer, or a channel-less row, answers with. */
@@ -138,7 +141,7 @@ export function buildMatchableRows<Row extends MatchableSource>(
   }))
 
   const inWindow = analysisRowsWithin(joined, race.window)
-  const intervals = rowIntervalSeconds(inWindow)
+  const measured = measureAndScore(inWindow, targets)
 
   return inWindow.map((row, index) => ({
     race_id: race.id,
@@ -150,9 +153,33 @@ export function buildMatchableRows<Row extends MatchableSource>(
     sea_state: annotationInForce(annotations.sea_state, row.row_time)?.sea_state ?? null,
     sail: sailInForce(annotations, row.row_time),
     countable: row.countable,
-    interval_seconds: intervals[index],
+    interval_seconds: measured[index].interval_seconds,
     sog: channelValue(row.sog),
-    efficiency: targets === null ? NO_EFFICIENCY(row.row_index) : computeRowEfficiency(row, targets),
+    efficiency: measured[index].efficiency,
     crossover_chart_version_id: race.crossover_chart_version_id ?? null,
+    polar_version_id: targets === null ? null : (race.polar_version_id ?? null),
+  }))
+}
+
+/**
+ * Each in-window row's measured interval and its score: the two facts a row carries about itself
+ * in its own race.
+ *
+ * Shared with the per-Race page's **Polar Plot** (`readRaceTrack`), which draws the same rows the
+ * season sums and so must measure and score them the same way. Two copies of this would be two
+ * chances for a dot on one Race to disagree with the same moment on the season screen.
+ *
+ * `rows` must already be clipped to the window: an interval measured across the window's edge, or
+ * across an excluded neighbour that was dropped first, is not a span anything happened over.
+ */
+export function measureAndScore(
+  rows: readonly ScorableRow[],
+  targets: PolarTargets | null
+): { interval_seconds: number | null; efficiency: RowEfficiency }[] {
+  const intervals = rowIntervalSeconds(rows)
+
+  return rows.map((row, index) => ({
+    interval_seconds: intervals[index],
+    efficiency: targets === null ? NO_EFFICIENCY(row.row_index) : computeRowEfficiency(row, targets),
   }))
 }

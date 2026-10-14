@@ -1,22 +1,23 @@
 'use client'
 
 /**
- * One stretch of track, read out **on the map**: what the row the sailor tapped actually holds.
+ * One moment of the race, read out: what the row the sailor tapped actually holds.
  *
  * The map answers *where* without a number; this answers *what*, for one row, and it is the reason
  * the track is tappable at all — a sailor points at the place they remember being slow, not at a
  * moment on an axis.
  *
- * ## Why it is an overlay and not a card below
+ * ## Where it sits, which is its caller's business
  *
- * It was a panel under the map first, and that was wrong for the only screen that matters: at 390px
- * the map is 440 units tall, so the answer to a tap landed below the fold and the sailor had to
- * scroll away from the thing they were pointing at to read about it. A readout you have to go and
- * find is not a readout.
+ * It used to float over the map frame and dodge the selection, which was right while the map was
+ * the only picture of it (ADR 0038). On the per-Race page the **Polar Plot** shares the selection
+ * (ADR 0040), and two readouts describing one row in two places meant scrolling up and down to
+ * compare them. So this is a card in the flow now, and the page renders it once below both
+ * pictures, sticky, opening on a tap. Keeping the stretch visible is the page's job: it nudges the
+ * scroll when the tapped mark lands under the card, the page-level form of what dodging was.
  *
- * So it floats over the frame, and it moves: the card sits in the half of the frame the selection is
- * *not* in, which keeps the stretch being described visible while it is described. It also keeps
- * clear of the zoom knobs, which own the top-right corner.
+ * Nothing *in* the card changed, which is the point: the overlay's own headline, the provenance on
+ * every figure and "All figures" are what a sailor loses if a second screen reimplements this.
  *
  * ## Compact, then everything
  *
@@ -65,14 +66,11 @@ export default function TrackReadout({
   overlay,
   scoring,
   onDismiss,
-  /** Which half of the frame the selected stretch is in, so the card can sit in the other one. */
-  selectionInTopHalf,
 }: {
   row: TrackRowFacts
   overlay: TrackOverlay
   scoring: RaceTrack['scoring']
   onDismiss: () => void
-  selectionInTopHalf: boolean
 }): ReactElement {
   const [everything, setEverything] = useState(false)
   const paint = overlayPaint(overlay, row, scoring === 'polar')
@@ -86,14 +84,8 @@ export default function TrackReadout({
       role="status"
       aria-live="polite"
       style={{
-        position: 'absolute',
-        left: spacing(2),
-        right: spacing(2),
-        // The half the selection is not in. The top placement also clears the zoom knobs, which
-        // sit in that corner and are 32 wide plus their own gutter.
-        ...(selectionInTopHalf
-          ? { bottom: spacing(2) }
-          : { top: spacing(2), marginRight: 40 }),
+        flex: 1,
+        minWidth: 0,
         padding: spacing(3),
         border: '1px solid var(--surface-border)',
         borderRadius: 'var(--radius-sm)',

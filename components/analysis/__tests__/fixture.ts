@@ -9,7 +9,13 @@
  */
 
 import type { PolarDomain } from '@/services/analysis/polar-targets'
-import type { AnalysisArchiveRace, CrossoverChartPayload, MatchableRow, RowSail } from '@/types'
+import type {
+  AnalysisArchiveRace,
+  CrossoverChartPayload,
+  MatchableRow,
+  PolarPayload,
+  RowSail,
+} from '@/types'
 
 /**
  * The **Crossover Chart Version** every fixture row was sailed under, which is `CHART`'s own.
@@ -48,6 +54,27 @@ export const CHART: CrossoverChartPayload = {
   ],
 }
 
+/** The **Polar Version** every scored fixture row was scored against: `POLAR`'s own. */
+export const POLAR_VERSION = 'polar-version-1'
+
+/**
+ * A small certificate for the **Polar Plot** to draw behind the rows: 4 to 20 knots, with the
+ * lightest column ramped up from zero below 52° the way this boat's own is.
+ */
+export const POLAR: PolarPayload = {
+  twa_axis: [30, 35, 40, 52, 90, 135, 165],
+  tws_axis: [4, 8, 12, 16, 20],
+  boat_speed: [
+    [1, 1.6, 2.1, 2.3, 2.4],
+    [2, 3.2, 4.6, 5, 5.2],
+    [3, 5, 5.7, 6, 6.2],
+    [4, 5.6, 6.4, 6.7, 6.9],
+    [4.6, 6.5, 7.3, 7.7, 8],
+    [4.1, 6.1, 7.2, 7.9, 8.4],
+    [3.1, 4.8, 6, 6.9, 7.6],
+  ],
+}
+
 /** A Polar that stops at 14 knots, so the chart's 16 kt column is past its last (ADR 0028). */
 export const POLAR_RANGE: PolarDomain = {
   twa_from: 30,
@@ -77,6 +104,7 @@ export function matchableRow(over: Partial<MatchableRow> = {}): MatchableRow {
     twa: 42,
     sea_state: 'calm',
     crossover_chart_version_id: CHART_VERSION,
+    polar_version_id: POLAR_VERSION,
     sail: { recorded: 'definition', definition_number: 1, label: 'Main + Jib 1' } satisfies RowSail,
     countable: true,
     interval_seconds: 60,

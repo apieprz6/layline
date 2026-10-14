@@ -2,14 +2,14 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ROWS, RACES, VOCABULARY } from '@/components/analysis/__tests__/fixture'
 import AnalysisFilterRail from '@/components/analysis/AnalysisFilterRail'
-import {
-  EMPTY_FILTER,
-  POLAR_PERFORMANCE_DIMENSIONS,
-  analysisDimensions,
-} from '@/services/analysis/filter'
+import { EMPTY_FILTER, analysisDimensions } from '@/services/analysis/filter'
 import type { AnalysisFilter } from '@/types'
 
-const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, VOCABULARY)
+/**
+ * All six, which no one screen offers any more (ADR 0040 took `wind` off Polar performance): the
+ * rail is one component across every screen, and this suite is about the rail.
+ */
+const DIMENSIONS = analysisDimensions(['wind', 'pos', 'sail', 'sea', 'time', 'when'], VOCABULARY)
 
 function renderRail(filter: AnalysisFilter = EMPTY_FILTER) {
   const onChange = jest.fn()

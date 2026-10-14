@@ -1,56 +1,29 @@
 /**
- * The **Race Track Heatmap** section: the first thing below the Transcription boundary.
+ * The **Race Track Heatmap** and the **Polar Plot**: the first thing below the Transcription
+ * boundary.
  *
- * ADR 0033 makes the map the opening of the per-Race breakdown, and this is where that lands on
- * the page the archive already has. It sits *below* the Testimony/Transcription line rather than at
- * the very top, because the track is not something the sailor said — it is the recording, drawn,
- * and everything derived from the recording belongs under the line ADR 0010 draws (the same reason
- * Coverage and the Row Quality notes sit there). It opens that half of the page: the tiles that
- * follow are the same numbers the map is made of, which reads as a summary of what was just seen
- * rather than a preamble to it.
+ * ADR 0033 makes the map the opening of the per-Race breakdown, with "Boat performance vs. polars"
+ * beside it, and ADR 0040 gives that section its form. Both sit *below* the Testimony/Transcription
+ * line rather than at the very top, because neither is something the sailor said — they are the
+ * recording, drawn twice: once where it happened on the water and once at the angles it was
+ * sailed. Everything derived from the recording belongs under the line ADR 0010 draws.
  *
- * A Server Component. It computes and draws; the client owns only the camera, and the legend
- * beneath is a client component solely because the theme is resolved in the browser.
- *
- * A recording with no position fixes says so, in words, where the map would be. It is a real case
- * in the archive and an empty frame explains nothing.
+ * A Server Component. It computes nothing and holds nothing; the two pictures share a selection,
+ * so the state lives in the one client component that holds both of them.
  */
 
 import type { ReactElement } from 'react'
-import { spacing } from '@/lib/utils/design'
-import type { RaceTrack } from '@/types'
+import type { PolarPlotTraceBin, RaceTrack } from '@/types'
 
-import TrackHeatmap from './TrackHeatmap'
+import RaceTrackAndPolarPlot from './RaceTrackAndPolarPlot'
 
-const SECTION_HEADING = {
-  margin: 0,
-  fontSize: 'var(--text-xs)',
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.1em',
-  color: 'var(--text-muted)',
-}
-
-export default function RaceTrackSection({ track }: { track: RaceTrack }): ReactElement {
-  return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
-      <h2 style={SECTION_HEADING}>Race track</h2>
-
-      {track.heatmap === null ? (
-        <p
-          data-testid="track-no-fixes"
-          style={{
-            margin: 0,
-            fontSize: 'var(--text-sm)',
-            color: 'var(--text-muted)',
-            fontStyle: 'italic',
-            lineHeight: 1.5,
-          }}
-        >
-          No position was logged anywhere in this race window, so there is no track to draw.
-        </p>
-      ) : (
-        <TrackHeatmap heatmap={track.heatmap} scoring={track.scoring} />
-      )}
-    </section>
-  )
+export default function RaceTrackSection({
+  track,
+  season,
+}: {
+  track: RaceTrack
+  /** The whole archive behind this Race on the Polar Plot. Null where it could not be read. */
+  season: PolarPlotTraceBin[] | null
+}): ReactElement {
+  return <RaceTrackAndPolarPlot track={track} season={season} />
 }

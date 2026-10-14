@@ -44,10 +44,11 @@ test.describe('the Analysis Filter, to an admin', () => {
 
     const rail = page.getByTestId('analysis-filter-rail')
     await expect(rail).toBeInViewport()
-    // Six dimensions on this screen (ADR 0029), and the rail scrolls sideways rather than wrapping
+    // Five dimensions on this screen (ADR 0029; `wind` went to the Polar Plot's window, ADR 0040),
+    // and the rail scrolls sideways rather than wrapping
     // — so the last chip is in the DOM and off-screen until it is scrolled to, which is the design
     // and not a defect.
-    await expect(rail.getByRole('button')).toHaveCount(6)
+    await expect(rail.getByRole('button')).toHaveCount(5)
 
     // The ledger is permanent, not a warning that appears on narrowing.
     await expect(page.getByTestId('coverage-ledger')).toBeInViewport()
@@ -63,20 +64,20 @@ test.describe('the Analysis Filter, to an admin', () => {
       ;(window as unknown as { __survived?: boolean }).__survived = true
     })
 
-    await page.getByTestId('filter-chip-wind').click()
+    await page.getByTestId('filter-chip-pos').click()
     const popover = page.getByTestId('filter-popover')
     await expect(popover).toBeInViewport()
 
-    const medium = popover.locator('[data-bucket="medium"]')
+    const upwind = popover.locator('[data-bucket="upwind"]')
     test.skip(
-      await medium.isDisabled(),
-      'No row in this archive is in the Medium band, so there is no enabled chip to tap.'
+      await upwind.isDisabled(),
+      'No row in this archive was sailed upwind, so there is no enabled chip to tap.'
     )
 
-    await medium.click()
+    await upwind.click()
 
-    await expect(page).toHaveURL(/[?&]wind=medium(&|$)/)
-    await expect(page.getByTestId('filter-chip-wind')).toContainText('Medium')
+    await expect(page).toHaveURL(/[?&]pos=upwind(&|$)/)
+    await expect(page.getByTestId('filter-chip-pos')).toContainText('Upwind')
     expect(
       await page.evaluate(() => (window as unknown as { __survived?: boolean }).__survived)
     ).toBe(true)
@@ -85,11 +86,11 @@ test.describe('the Analysis Filter, to an admin', () => {
   test('a copied URL reproduces the same narrowed view', async ({ page }) => {
     await railOrSkip(page)
 
-    await page.getByTestId('filter-chip-wind').click()
+    await page.getByTestId('filter-chip-pos').click()
     const popover = page.getByTestId('filter-popover')
-    const medium = popover.locator('[data-bucket="medium"]')
-    test.skip(await medium.isDisabled(), 'No row in this archive is in the Medium band.')
-    await medium.click()
+    const upwind = popover.locator('[data-bucket="upwind"]')
+    test.skip(await upwind.isDisabled(), 'No row in this archive was sailed upwind.')
+    await upwind.click()
 
     const narrowed = page.url()
     const ledger = await page.getByTestId('coverage-ledger-headline').textContent()
@@ -99,7 +100,7 @@ test.describe('the Analysis Filter, to an admin', () => {
     // archive first.
     await gotoHydrated(page, narrowed)
 
-    await expect(page.getByTestId('filter-chip-wind')).toContainText('Medium')
+    await expect(page.getByTestId('filter-chip-pos')).toContainText('Upwind')
     expect(await page.getByTestId('coverage-ledger-headline').textContent()).toBe(ledger)
   })
 

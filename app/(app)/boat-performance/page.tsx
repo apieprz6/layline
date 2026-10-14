@@ -141,13 +141,16 @@ async function OverallTab(): Promise<ReactElement> {
   // wildly between them, so slicing rows would put some fraction of a sixth race in the figure.
   const polarRaces = recent.races.slice(0, TEASER_RACES)
   const polarRaceIds = new Set(polarRaces.map((race) => race.id))
+  const polarRows = recent.rows.filter((row) => polarRaceIds.has(row.race_id))
 
   return (
     <>
       <PolarPerformanceTeaser
         // What the figure is actually over, which on a young archive is fewer than five.
         races={polarRaces.length}
-        efficiency={sumEfficiency(recent.rows.filter((row) => polarRaceIds.has(row.race_id)))}
+        efficiency={sumEfficiency(polarRows)}
+        rows={polarRows}
+        polars={recent.polars}
       />
 
       <SailSelectionTeaser

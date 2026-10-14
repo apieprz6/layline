@@ -129,7 +129,7 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
 }
 
 function trackOf(over: Partial<RaceTrack> = {}): RaceTrack {
-  return { heatmap: heatmapOf(), scoring: 'polar', ...over }
+  return { heatmap: heatmapOf(), scoring: 'polar', plot: null, ...over }
 }
 
 function legs(container: HTMLElement): SVGPolylineElement[] {
@@ -148,7 +148,7 @@ beforeEach(() => {
 
 describe('the track, drawn', () => {
   it('draws every leg, and colours only the ones that carry a measurement', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // Three legs and the selection halo's absence: the halo is only drawn once a stretch is read.
     expect(legs(container)).toHaveLength(3)
@@ -162,7 +162,7 @@ describe('the track, drawn', () => {
   })
 
   it('marks a Filler-Anchored leg as well as colouring it', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // By stroke, not by position: the unscored hairlines are drawn first and underneath, so the
     // coloured track overlays them rather than competing with them.
@@ -180,7 +180,7 @@ describe('the track, drawn', () => {
   })
 
   it('carries the reason a leg is grey into the DOM, even though all of them draw alike', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // ADR 0033 wants the excluded reason discriminated all the way to the renderer. Several states
     // share one hairline on purpose — geometry with no claim on it should not look like several
@@ -193,7 +193,7 @@ describe('the track, drawn', () => {
   })
 
   it('plots a fix no leg could reach, with its own reading on it', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // A run of one cannot be a polyline, and the boat was there. Chicago–Waukegan's window really
     // holds two of these (see `archive-track-heatmap.test.ts`).
@@ -204,7 +204,7 @@ describe('the track, drawn', () => {
   })
 
   it('draws what the sailor said, in a treatment no overlay’s scale uses', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // Testimony is neither measured nor computed, and on a screen where six scales spend every hue
     // the design system has, the only honest way to say "a different kind of thing" is to stop
@@ -230,7 +230,7 @@ describe('the track, drawn', () => {
   })
 
   it('says in the legend that the markers are Testimony, with the count', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     expect(screen.getByText(/What the sailor said — 2 notes/)).toBeInTheDocument()
   })
@@ -238,6 +238,7 @@ describe('the track, drawn', () => {
   it('says when an annotation was given about a time the track cannot place', () => {
     render(
       <RaceTrackSection
+        season={null}
         track={trackOf({
           heatmap: heatmapOf({ counts: { ...COUNTS, annotations_not_placed: 1 } }),
         })}
@@ -248,21 +249,21 @@ describe('the track, drawn', () => {
   })
 
   it('draws no Testimony row where nobody wrote anything down', () => {
-    render(<RaceTrackSection track={trackOf({ heatmap: heatmapOf({ annotations: [] }) })} />)
+    render(<RaceTrackSection season={null} track={trackOf({ heatmap: heatmapOf({ annotations: [] }) })} />)
 
     expect(screen.queryByTestId('track-testimony-sail')).not.toBeInTheDocument()
     expect(screen.queryByText(/What the sailor said/)).not.toBeInTheDocument()
   })
 
   it('names a token for every colour, so the night-vision theme stays in charge', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const svg = container.querySelector('svg')?.outerHTML ?? ''
     expect(svg).not.toMatch(/#[0-9a-f]{3,8}\b|\brgba?\(/i)
   })
 
   it('rings a frozen run and bridges it with its own duration', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // By stroke: the lone-fix point is a circle in the same group, and a ring is the one with a
     // stroke and no fill.
@@ -285,6 +286,7 @@ describe('the track, drawn', () => {
     // bare gap is the thing ADR 0014's obligation is against; zooming in brings the label.
     render(
       <RaceTrackSection
+        season={null}
         track={trackOf({
           heatmap: heatmapOf({
             bridges: [{ x1: 100, y1: 100, x2: 104, y2: 102, seconds: 95, rows: 3 }],
@@ -298,7 +300,7 @@ describe('the track, drawn', () => {
   })
 
   it('keeps every stroke the width it was drawn at, however far the sailor zooms', () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // Zooming in separates the segments; it does not fatten them. Without this the track becomes
     // one blue band at 12× and the heatmap stops being readable exactly where it is being read.
@@ -308,7 +310,7 @@ describe('the track, drawn', () => {
   })
 
   it('starts showing the whole track, with only zoom-in offered', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     expect(screen.getByTestId('track-camera')).toHaveAttribute(
       'transform',
@@ -322,14 +324,14 @@ describe('the track, drawn', () => {
   })
 
   it('states a scale bar, so nobody has to guess how far the boat went', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // 360 units at 5 m per unit: a fifth of the box is 360m, 1-2-5-rounded to 200.
     expect(screen.getByTestId('track-scale-bar')).toHaveTextContent('200 m')
   })
 
   it('says there is no track where the recording logged no position', () => {
-    render(<RaceTrackSection track={trackOf({ heatmap: null })} />)
+    render(<RaceTrackSection season={null} track={trackOf({ heatmap: null })} />)
 
     // A real case in the archive. An empty frame explains nothing, so the words go where the map
     // would be.
@@ -340,7 +342,7 @@ describe('the track, drawn', () => {
 
 describe('switching what the track is coloured by', () => {
   it('paints sail agreement green and red, and says a difference is not a fault', async () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Sail vs chart' }))
 
@@ -358,6 +360,7 @@ describe('switching what the track is coloured by', () => {
   it('says which of the four ways a row has no sail verdict, in the readout’s words', async () => {
     render(
       <RaceTrackSection
+        season={null}
         track={trackOf({
           heatmap: heatmapOf({
             segments: [
@@ -382,7 +385,7 @@ describe('switching what the track is coloured by', () => {
   })
 
   it('offers all six overlays, opening on percent of target', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const chips = screen.getByTestId('track-overlays')
     expect(chips.children).toHaveLength(6)
@@ -396,7 +399,7 @@ describe('switching what the track is coloured by', () => {
   })
 
   it('repaints the track on the new scale, and nothing else moves', async () => {
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
     const before = strokes(container)
 
     await userEvent.click(screen.getByRole('button', { name: 'Wind speed' }))
@@ -416,7 +419,7 @@ describe('switching what the track is coloured by', () => {
   it('colours a parked row on a reading overlay and refuses it on a ratio', () => {
     // ADR 0038's asymmetry, drawn: the mid-manoeuvre row has no percent of target and does have a
     // speed over the ground, which is simply what the GPS recorded.
-    const { container } = render(<RaceTrackSection track={trackOf()} />)
+    const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const hairlines = () =>
       legs(container).filter((leg) => leg.getAttribute('stroke') === 'var(--text-muted)')
@@ -429,7 +432,7 @@ describe('switching what the track is coloured by', () => {
   })
 
   it('swaps the legend and its wording with the overlay', async () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent('slower than target')
     expect(screen.getByTestId('track-ramp').children).toHaveLength(7)
@@ -441,7 +444,7 @@ describe('switching what the track is coloured by', () => {
   })
 
   it('states the caveat that travels with Target VMG and with every wind figure', async () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // Percent of target speed needs none, so none is claimed.
     expect(screen.queryByTestId('track-caveat')).not.toBeInTheDocument()
@@ -456,7 +459,7 @@ describe('switching what the track is coloured by', () => {
   it('offers no ratio overlay on a race that records no Polar', () => {
     // A chip that painted a uniformly grey track would invite "no comparison recorded" to be read
     // as "slow everywhere".
-    render(<RaceTrackSection track={trackOf({ scoring: 'no-polar-version' })} />)
+    render(<RaceTrackSection season={null} track={trackOf({ scoring: 'no-polar-version' })} />)
 
     expect(screen.getByTestId('track-overlays').children).toHaveLength(4)
     expect(screen.queryByRole('button', { name: '% of target' })).not.toBeInTheDocument()
@@ -469,7 +472,7 @@ describe('switching what the track is coloured by', () => {
 
 describe('reading one stretch out', () => {
   it('says nothing, and asks for a tap on the map’s own line, until there is something to say', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // The readout is a card *over* the map now, so there is no empty state to fill the page with:
     // the invitation lives on the frame's own line, and the card appears when a stretch is tapped.
@@ -481,7 +484,7 @@ describe('reading one stretch out', () => {
 
 describe('the legend beneath it', () => {
   it('reads as a polarity by day, which is what the diverging ramp is for', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const wording = screen.getByTestId('track-ramp-wording')
     expect(wording).toHaveTextContent('slower than target')
@@ -491,7 +494,7 @@ describe('the legend beneath it', () => {
 
   it('stops claiming a side after dark, because the ramp no longer carries one', () => {
     mockTheme = 'nightvision'
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const wording = screen.getByTestId('track-ramp-wording')
     expect(wording).toHaveTextContent(/depth is distance from target/)
@@ -503,7 +506,7 @@ describe('the legend beneath it', () => {
 
   it('says what a tack scale loses after dark, which is the tack', async () => {
     mockTheme = 'nightvision'
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Wind angle' }))
 
@@ -513,7 +516,7 @@ describe('the legend beneath it', () => {
   })
 
   it('states in words how much of the race it could not colour', () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     // The proportion is stated rather than inferred from how much grey is on screen (ADR 0033),
     // and it is one line, because a line nobody reads states nothing.
@@ -530,7 +533,7 @@ describe('the legend beneath it', () => {
   })
 
   it('counts a reading’s coverage by its own gate, not by the ratio’s', async () => {
-    render(<RaceTrackSection track={trackOf()} />)
+    render(<RaceTrackSection season={null} track={trackOf()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Boat speed' }))
 
@@ -545,7 +548,7 @@ describe('the legend beneath it', () => {
   })
 
   it('says a race with no Polar Version has nothing to compare, and shows no ramp', async () => {
-    render(<RaceTrackSection track={trackOf({ scoring: 'no-polar-version' })} />)
+    render(<RaceTrackSection season={null} track={trackOf({ scoring: 'no-polar-version' })} />)
 
     // It opens on a channel overlay, which this race *can* draw…
     expect(screen.getByTestId('track-ramp')).toBeInTheDocument()

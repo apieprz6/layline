@@ -52,7 +52,7 @@ describe('/boat-performance', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(null)
-    readRecentRaceRows.mockResolvedValue({ rows: [], races: [] })
+    readRecentRaceRows.mockResolvedValue({ rows: [], races: [], polars: {} })
     readCrossoverChartScreen.mockResolvedValue(null)
   })
 
@@ -114,7 +114,7 @@ describe('the Overall tab', () => {
   }
 
   it('heroes the Polar performance teaser, which taps through to the detail screen', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
 
     await renderOverall()
 
@@ -125,7 +125,7 @@ describe('the Overall tab', () => {
   })
 
   it('asks the database for the wider of the two windows, once', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
 
     await renderOverall()
 
@@ -151,6 +151,7 @@ describe('the Overall tab', () => {
     readRecentRaceRows.mockResolvedValue({
       rows: races.map((race) => matchableRow({ race_id: race.id })),
       races,
+      polars: {},
     })
 
     await renderOverall()
@@ -162,7 +163,7 @@ describe('the Overall tab', () => {
   })
 
   it('adds the Sail selection chart row, stating agreement and tapping through', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
 
     await renderOverall()
 
@@ -177,7 +178,7 @@ describe('the Overall tab', () => {
   })
 
   it('says there is no chart yet rather than drawing an agreement figure over none', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
     readCrossoverChartScreen.mockResolvedValue({ list: [], current: null })
 
     await renderOverall()
@@ -190,7 +191,7 @@ describe('the Overall tab', () => {
   })
 
   it('says there is nothing to summarise rather than drawing a figure over no rows', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: [], races: [] })
+    readRecentRaceRows.mockResolvedValue({ rows: [], races: [], polars: {} })
 
     await renderOverall()
 
@@ -210,7 +211,7 @@ describe('the Overall tab', () => {
   })
 
   it('adds the Instrument tuning row beneath the other two, tapping through to the charts', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
     readInstrumentTuning.mockResolvedValue({
       ok: true,
       // One `ANECDOTAL` channel among two solid ones, which is the word under the three figures.
@@ -236,7 +237,7 @@ describe('the Overall tab', () => {
   })
 
   it('asks the archive for the instrument season once, and only for this row', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
 
     await renderOverall()
 
@@ -248,7 +249,7 @@ describe('the Overall tab', () => {
   })
 
   it('keeps a failed instrument read to its own row', async () => {
-    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES })
+    readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
     readInstrumentTuning.mockResolvedValue({ ok: false, reason: 'unreadable' })
 
     await renderOverall()
