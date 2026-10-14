@@ -79,8 +79,8 @@ describe('HamburgerMenu', () => {
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual([
       '/',
       '/wind-data',
-      '/boat-management',
       '/boat-performance',
+      '/boat-management',
       '/settings',
     ])
   })
@@ -93,8 +93,8 @@ describe('HamburgerMenu', () => {
     expect(navLabels(container)).toEqual([
       'Dashboard',
       'Wind Data',
-      'Boat management',
       'Boat performance',
+      'Boat management',
       'Settings',
     ])
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual([
@@ -258,8 +258,8 @@ describe('HamburgerMenu', () => {
       expect(guestNav).toEqual([
         'Dashboard',
         'Wind Data',
-        'Boat management',
         'Boat performance',
+        'Boat management',
         'Settings',
       ])
     })

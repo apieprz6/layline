@@ -34,8 +34,8 @@ test.describe('the locked boat sections', () => {
     await expect(rows).toHaveCount(2)
     await expect(rows.first()).toBeInViewport()
     await expect(rows.last()).toBeInViewport()
-    await expect(rows.first()).toContainText('Boat management')
-    await expect(rows.last()).toContainText('Boat performance')
+    await expect(rows.first()).toContainText('Boat performance')
+    await expect(rows.last()).toContainText('Boat management')
 
     // Nowhere to go: there is no signed-out version of either screen, so neither
     // row is a link, and the invitation on the row is the only affordance.
@@ -63,7 +63,7 @@ test.describe('the locked boat sections', () => {
     // "Boat performance" is the longest label in the drawer, so it is the one that
     // would wrap — and a second line would push every row below it down. One line
     // of 14px Inter is ~17px tall; anything near 34px is two.
-    const label = page.getByTestId('locked-entry').last().locator('span').first()
+    const label = page.getByTestId('locked-entry').first().locator('span').first()
     const box = await label.boundingBox()
     expect(box?.height).toBeLessThan(26)
 
