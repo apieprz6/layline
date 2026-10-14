@@ -8,7 +8,7 @@
 import { raceAwaAsymmetry } from '@/services/analysis/awa-asymmetry'
 import { raceHeadingOffset } from '@/services/analysis/compass-deviation'
 import {
-  RACE_SPEED_GAP_KNOTS,
+  HEADLINE_SPEEDS_KNOTS,
   raceInstrumentCheck,
   tuningRaceRows,
   type TuningRace,
@@ -67,7 +67,7 @@ describe('one Race, checked against each channel', () => {
     expect(check.speed.r_squared).toBe(divergence.fit.line.r_squared)
     // The gap at the two speeds the season's own headline reads, off the same line.
     expect(check.speed.gaps).toEqual(
-      RACE_SPEED_GAP_KNOTS.map((knots) => ({
+      HEADLINE_SPEEDS_KNOTS.map((knots) => ({
         stw_knots: knots,
         gap_knots: lineGapAt(divergence.fit.fitted ? divergence.fit.line : (null as never), knots),
       }))

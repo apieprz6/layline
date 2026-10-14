@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import type { ReactElement } from 'react'
 import {
-  CHANNEL_TITLE,
   NO_FIT_WORDS,
   signedKnots,
   widerReading,
   type CheckedChannel,
 } from '@/components/boat/instrument-tuning/chart-text'
+import ChannelColumns, { type ChannelFigure } from '@/components/boat/instrument-tuning/ChannelColumns'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import {
@@ -16,7 +16,10 @@ import {
   headingCoverage,
   speedCoverage,
 } from '@/services/analysis/coverage-verdict'
-import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
+import {
+  HEADLINE_SPEEDS_KNOTS,
+  type InstrumentTuningSeason,
+} from '@/services/analysis/instrument-tuning'
 import { lineGapAt, type EraDivergence } from '@/services/analysis/paddlewheel'
 import type { InstrumentTuningRead } from '@/services/analysis/readInstrumentTuning'
 import type { CoverageStatement, CoverageVerdict, EraAwaAsymmetry, EraHeadingOffset } from '@/types'
@@ -109,35 +112,21 @@ export default function InstrumentTuningTeaser({
 function Season({ panels }: { panels: readonly ChannelPanel[] }): ReactElement {
   return (
     <>
-      {/*
-        Laid out a row at a time rather than a column at a time — three names, then three sets of
-        figures, then three reasons, then three bars. A grid of three columns fills in that order by
-        itself, so the four bands line up across the three channels without a subgrid: otherwise the
-        Wind angle column's two points of sail would push its bar below the other two, and the three
-        would stop reading as one picture.
-      */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          columnGap: spacing(2),
-          rowGap: 2,
-          alignItems: 'start',
+      <ChannelColumns
+        columns={panels.map((panel) => ({
+          channel: panel.channel,
+          figures: panel.figures,
+          instead: panel.instead,
+          basis: panel.coverage.reason,
+          bar: panel.towardsSolid,
+        }))}
+        testIds={{
+          name: 'tuning-channel',
+          figures: 'tuning-figures',
+          basis: 'tuning-reason',
+          bar: 'coverage-bar',
         }}
-      >
-        {panels.map((panel) => (
-          <ChannelName key={panel.channel} panel={panel} />
-        ))}
-        {panels.map((panel) => (
-          <ChannelFigures key={panel.channel} panel={panel} />
-        ))}
-        {panels.map((panel) => (
-          <ChannelReason key={panel.channel} panel={panel} />
-        ))}
-        {panels.map((panel) => (
-          <ChannelBar key={panel.channel} panel={panel} />
-        ))}
-      </div>
+      />
 
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         {/* The coverage word ADR 0035 chose, kept as a clause rather than as the row's whole
@@ -149,132 +138,6 @@ function Season({ panels }: { panels: readonly ChannelPanel[] }): ReactElement {
         archive. Tap for the three charts.
       </span>
     </>
-  )
-}
-
-/** The channel's own name — the title of the card a tap lands on, never a second word for it. */
-function ChannelName({ panel }: { panel: ChannelPanel }): ReactElement {
-  return (
-    <span
-      data-testid="tuning-channel"
-      data-channel={panel.channel}
-      style={{
-        fontSize: 8.5,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: 'var(--text-muted)',
-        lineHeight: 1.3,
-        minWidth: 0,
-      }}
-    >
-      {CHANNEL_TITLE[panel.channel]}
-    </span>
-  )
-}
-
-/** Its figure, or the words that stand where the figure would have been. */
-function ChannelFigures({ panel }: { panel: ChannelPanel }): ReactElement {
-  if (panel.instead !== null) {
-    return (
-      // Words, never a dash and never a nought: the prototype's `—` is the one thing from its tile
-      // that cannot ship (ADR 0012). An absence is a finding and reads as one.
-      <span
-        data-testid="tuning-figures"
-        data-channel={panel.channel}
-        style={{ fontSize: 10.5, color: 'var(--text-muted)', fontStyle: 'italic', minWidth: 0 }}
-      >
-        {panel.instead}
-      </span>
-    )
-  }
-
-  return (
-    <span
-      data-testid="tuning-figures"
-      data-channel={panel.channel}
-      style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}
-    >
-      {panel.figures.map((figure) => (
-        <span
-          key={figure.at ?? figure.reading}
-          style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}
-        >
-          {/* Which speed or which point of sail, small and ahead of the figure it belongs to, so
-              two readings in one column can never be read in the wrong order. */}
-          {figure.at !== undefined && (
-            <span style={{ fontSize: 8.5, color: 'var(--text-muted)', flexShrink: 0 }}>
-              {figure.at}
-            </span>
-          )}
-          {/*
-            Never wrapped, and 12px rather than the 13 the prototype's tile used: `stbd 10.0°` with
-            its point of sail ahead of it is the widest reading any channel produces, and at 13px it
-            broke across two lines in a third of a 390px screen — splitting a figure from its unit,
-            which is the one thing a figure may not do. `e2e/authenticated/instrument-tuning-charts`
-            measures the column, so a wider reading fails there rather than wrapping quietly.
-          */}
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {figure.reading}
-          </span>
-        </span>
-      ))}
-    </span>
-  )
-}
-
-/** What the figure rests on, in the coverage verdict's own words. */
-function ChannelReason({ panel }: { panel: ChannelPanel }): ReactElement {
-  return (
-    <span
-      data-testid="tuning-reason"
-      data-channel={panel.channel}
-      style={{ fontSize: 8.5, color: 'var(--text-muted)', lineHeight: 1.4, minWidth: 0 }}
-    >
-      {panel.coverage.reason}
-    </span>
-  )
-}
-
-/**
- * The bar, or nothing at all where the channel produced no figure.
- *
- * A bar is a drawing of how much a figure rests on, so an empty track under no figure would be
- * drawing the evidence for a measurement nobody made. The cell still stands, keeping the three
- * columns in step.
- */
-function ChannelBar({ panel }: { panel: ChannelPanel }): ReactElement {
-  if (panel.towardsSolid === null) return <span />
-
-  return (
-    <span
-      data-testid="coverage-bar"
-      data-channel={panel.channel}
-      data-share={panel.towardsSolid.toFixed(2)}
-      style={{
-        display: 'block',
-        height: 4,
-        background: 'var(--surface-divider)',
-        borderRadius: 2,
-        marginTop: 3,
-      }}
-    >
-      <span
-        style={{
-          display: 'block',
-          width: `${Math.round(panel.towardsSolid * 100)}%`,
-          height: 4,
-          background: 'var(--text-primary)',
-          borderRadius: 2,
-        }}
-      />
-    </span>
   )
 }
 
@@ -314,13 +177,6 @@ function WithoutASeason({
       </span>
     </>
   )
-}
-
-/** One figure, with the speed or point of sail it belongs to where there are two of them. */
-interface ChannelFigure {
-  /** `4 kt`, `up`, `down` — absent where the column has one figure and nothing to tell apart. */
-  at?: string
-  reading: string
 }
 
 /** One channel's column, computed. */
@@ -471,7 +327,7 @@ function boatSpeed(era: EraDivergence | null): ChannelPanel {
   // arithmetic. A speed the line was never fitted over is off the chart rather than extrapolated.
   return {
     channel: 'STW',
-    figures: [4, 8].map((knots) => {
+    figures: HEADLINE_SPEEDS_KNOTS.map((knots) => {
       const gap = lineGapAt(line, knots)
       return {
         at: `${knots} kt`,

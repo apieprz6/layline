@@ -30,15 +30,14 @@ import { NOTE_STYLE } from '@/components/analysis/chrome'
 import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
 import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-selection-chrome'
 import {
-  CHANNEL_TITLE,
   NO_FIT_WORDS,
   asymmetryAbsence,
   rows as rowsPhrase,
   signedKnots,
   tackPairs,
   widerReading,
-  type CheckedChannel,
 } from '@/components/boat/instrument-tuning/chart-text'
+import ChannelColumns, { type ChannelColumn } from '@/components/boat/instrument-tuning/ChannelColumns'
 import Explainer from '@/components/common/Explainer'
 import { radius, spacing } from '@/lib/utils/design'
 import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
@@ -285,19 +284,6 @@ function cellMix({ cells }: RaceChartAgreement): string {
 
 /* ------------------------------------------------------------------------------ calibration */
 
-/** One channel's column. */
-interface ChannelColumn {
-  channel: CheckedChannel
-  /** The figures, each with the speed or point of sail it belongs to where there are two. */
-  figures: { at?: string; reading: string }[]
-  /** Words in place of the figures, where the race produced none. Null where it did. */
-  instead: string | null
-  /** What the figure rests on, in words. Null where there is no figure to rest on anything. */
-  basis: string | null
-  /** 0–1, or null where there is no figure to draw evidence for. */
-  bar: number | null
-}
-
 /**
  * This race's share of each **Calibration Channel**: the figure, what it rests on, and a bar.
  *
@@ -311,34 +297,10 @@ function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElemen
 
   return (
     <Tile title="Instrument calibration check" testId="race-calibration">
-      {/* A row at a time — names, figures, what each rests on, bars — so the three columns stay in
-          step whatever one of them has to say, as on the Overall tab's row. */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          columnGap: spacing(2),
-          rowGap: 2,
-          alignItems: 'start',
-        }}
-      >
-        {columns.map((column) => (
-          <span key={column.channel} style={CHANNEL_NAME_STYLE}>
-            {CHANNEL_TITLE[column.channel]}
-          </span>
-        ))}
-        {columns.map((column) => (
-          <ChannelFigures key={column.channel} column={column} />
-        ))}
-        {columns.map((column) => (
-          <span key={column.channel} style={BASIS_STYLE}>
-            {column.basis}
-          </span>
-        ))}
-        {columns.map((column) => (
-          <ChannelBar key={column.channel} column={column} />
-        ))}
-      </div>
+      <ChannelColumns
+        columns={columns}
+        testIds={{ figures: 'race-calibration-figures', bar: 'race-calibration-bar' }}
+      />
 
       <p style={NOTE_STYLE}>
         This race alone, which is thin evidence for any instrument. Diagnostic only — never a value
@@ -439,85 +401,6 @@ function boatSpeed({ speed }: RaceInstrumentCheck): ChannelColumn {
   }
 }
 
-function ChannelFigures({ column }: { column: ChannelColumn }): ReactElement {
-  if (column.instead !== null) {
-    return (
-      <span
-        data-testid="race-calibration-figures"
-        data-channel={column.channel}
-        style={{ fontSize: 10.5, color: 'var(--text-muted)', fontStyle: 'italic', minWidth: 0 }}
-      >
-        {column.instead}
-      </span>
-    )
-  }
-
-  return (
-    <span
-      data-testid="race-calibration-figures"
-      data-channel={column.channel}
-      style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}
-    >
-      {column.figures.map((figure) => (
-        <span
-          key={figure.at ?? figure.reading}
-          style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}
-        >
-          {figure.at !== undefined && (
-            <span style={{ fontSize: 8.5, color: 'var(--text-muted)', flexShrink: 0 }}>
-              {figure.at}
-            </span>
-          )}
-          {/* Never wrapped: a figure split from its unit is the one thing a figure may not do. */}
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {figure.reading}
-          </span>
-        </span>
-      ))}
-    </span>
-  )
-}
-
-/**
- * The bar, or nothing where the race produced no figure: an empty track under no figure would draw
- * the evidence for a measurement nobody made. The cell still stands, keeping the columns in step.
- */
-function ChannelBar({ column }: { column: ChannelColumn }): ReactElement {
-  if (column.bar === null) return <span />
-
-  return (
-    <span
-      data-testid="race-calibration-bar"
-      data-channel={column.channel}
-      data-share={column.bar.toFixed(2)}
-      style={{
-        display: 'block',
-        height: 4,
-        background: 'var(--surface-divider)',
-        borderRadius: 2,
-        marginTop: 3,
-      }}
-    >
-      <span
-        style={{
-          display: 'block',
-          width: `${Math.round(column.bar * 100)}%`,
-          height: 4,
-          background: 'var(--text-primary)',
-          borderRadius: 2,
-        }}
-      />
-    </span>
-  )
-}
-
 /* -------------------------------------------------------------------------------- furniture */
 
 /** One row of the breakdown: a heading over a card. */
@@ -573,20 +456,4 @@ const LINK_STYLE: CSSProperties = {
   alignSelf: 'flex-start',
   fontSize: 'var(--text-xs)',
   color: 'var(--text-accent)',
-}
-
-const CHANNEL_NAME_STYLE: CSSProperties = {
-  fontSize: 8.5,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: 'var(--text-muted)',
-  lineHeight: 1.3,
-  minWidth: 0,
-}
-
-const BASIS_STYLE: CSSProperties = {
-  fontSize: 8.5,
-  color: 'var(--text-muted)',
-  lineHeight: 1.4,
-  minWidth: 0,
 }

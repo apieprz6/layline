@@ -221,7 +221,7 @@ function speedRaces<Row extends TuningRow>(
 /**
  * The speeds the `STW` headline reads its gap from 1:1 at, season and Race alike (ADR 0035).
  */
-export const RACE_SPEED_GAP_KNOTS: readonly number[] = [4, 8]
+export const HEADLINE_SPEEDS_KNOTS: readonly number[] = [4, 8]
 
 /**
  * One Race's contribution to each of the three channels, for the per-Race page's calibration tile.
@@ -266,7 +266,7 @@ function speedCheck(divergence: ReturnType<typeof raceDivergence>): RaceSpeedChe
   return {
     fitted: true,
     r_squared: fit.line.r_squared,
-    gaps: RACE_SPEED_GAP_KNOTS.map((knots) => ({
+    gaps: HEADLINE_SPEEDS_KNOTS.map((knots) => ({
       stw_knots: knots,
       gap_knots: lineGapAt(fit.line, knots),
     })),
