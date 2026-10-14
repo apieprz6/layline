@@ -201,12 +201,16 @@ describe('/boat-management while it loads', () => {
 })
 
 describe('/boat-performance while it loads', () => {
-  it('is the Races tab, with no upload the Role has not been checked for', () => {
+  it('is the rail and the table, with no upload the Role has not been checked for', () => {
     render(<BoatPerformanceSkeleton />)
 
     expect(screen.getByRole('heading', { name: 'Boat performance' })).toBeInTheDocument()
+    expect(screen.getByText('This season')).toBeInTheDocument()
+    // The heading without its count, which is exactly what the read has not returned yet.
     expect(screen.getByText('Races')).toBeInTheDocument()
-    expect(screen.getByText('Overall')).toBeInTheDocument()
+    for (const column of ['Race', 'Window', 'Duration', 'File']) {
+      expect(screen.getByText(column)).toBeInTheDocument()
+    }
     expect(screen.queryByText(/Upload a race/)).not.toBeInTheDocument()
   })
 })

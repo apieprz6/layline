@@ -252,10 +252,8 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     }
   })
 
-  test('taps through from the Overall tab’s instrument tuning row', async ({ page }) => {
+  test('taps through from the season rail’s instrument tuning row', async ({ page }) => {
     await gotoHydrated(page, '/boat-performance')
-
-    await page.getByRole('tab', { name: 'Overall' }).click()
 
     // Waited for rather than expected in the first paint: the row has a `Suspense` boundary of its
     // own, because its read is the whole archive where the two rows above it are a ten-Race window.
@@ -293,7 +291,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     // screens inside them, so this link is the only way up from here.
     await page.getByRole('link', { name: '← Boat performance' }).click()
     await expect(page).toHaveURL(/\/boat-performance$/)
-    await expect(page.getByRole('tab', { name: 'Overall' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'This season' })).toBeVisible()
   })
 })
 

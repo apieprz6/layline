@@ -1,5 +1,4 @@
-import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, within } from '@testing-library/react'
 import type { RaceListEntry } from '@/types'
 import BoatPerformanceContent from '../BoatPerformanceContent'
 
@@ -17,87 +16,111 @@ function race(overrides: Partial<RaceListEntry> = {}): RaceListEntry {
 }
 
 /**
- * The Overall tab's content, which is a Server Component read on the real page.
+ * The season's figures, which are a Server Component read on the real page.
  *
- * A stand-in here rather than a mock of the read: the tab's job in this component is to render
+ * A stand-in here rather than a mock of the read: the rail's job in this component is to render
  * whatever it was handed, and what that node *is* belongs to the page's own test.
  */
 const OVERALL = <div data-testid="overall-stub">Season figures</div>
 
-/** Empty archive and a viewer, which is what every tab test below only cares about. */
-function renderEmpty() {
-  return render(<BoatPerformanceContent races={[]} canWrite={false} overall={OVERALL} />)
-}
-
 describe('BoatPerformanceContent', () => {
-  it('ships both tabs, with Races the one it opens on', () => {
-    renderEmpty()
+  it('names the section, with no tabs left to choose between', () => {
+    render(<BoatPerformanceContent races={[race()]} canWrite={false} overall={OVERALL} />)
 
-    const races = screen.getByRole('tab', { name: 'Races' })
-    const overall = screen.getByRole('tab', { name: 'Overall' })
-
-    expect(races).toHaveAttribute('aria-selected', 'true')
-    expect(overall).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('heading', { level: 1, name: 'Boat performance' })).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
   })
 
-  it('points each tab at the panel below it, and moves on the arrow keys', async () => {
-    const user = userEvent.setup({ delay: null })
-    renderEmpty()
+  it('shows the season and the races at once, the season first', () => {
+    // A rail beside the races rather than a tab behind them. First in the document, which is what
+    // puts it above the races on a phone, where the two stack.
+    render(<BoatPerformanceContent races={[race()]} canWrite={false} overall={OVERALL} />)
 
-    // A tab that names no panel is a button wearing the role. The selected tab is
-    // also the only stop in the tablist, which is what makes the arrows the way
-    // between them rather than a second Tab press.
-    const races = screen.getByRole('tab', { name: 'Races' })
-    const panel = screen.getByRole('tabpanel')
-    expect(races).toHaveAttribute('aria-controls', panel.id)
-    expect(races).toHaveAttribute('tabindex', '0')
-    expect(screen.getByRole('tab', { name: 'Overall' })).toHaveAttribute('tabindex', '-1')
+    const season = screen.getByRole('region', { name: 'This season' })
+    const races = screen.getByRole('region', { name: /^Races/ })
 
-    races.focus()
-    await user.keyboard('{ArrowRight}')
-
-    const overall = screen.getByRole('tab', { name: 'Overall' })
-    expect(overall).toHaveAttribute('aria-selected', 'true')
-    expect(overall).toHaveFocus()
-    expect(overall).toHaveAttribute('aria-controls', screen.getByRole('tabpanel').id)
-
-    // And it wraps, so the pair is a loop rather than a dead end at each end.
-    await user.keyboard('{ArrowRight}')
-    expect(screen.getByRole('tab', { name: 'Races' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(season).getByTestId('overall-stub')).toBeInTheDocument()
+    expect(within(races).getByRole('link', { name: /Verve Cup/ })).toBeInTheDocument()
+    expect(season.compareDocumentPosition(races) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('says the archive is empty rather than leaving the tab blank', () => {
-    renderEmpty()
+  it('says the archive is empty rather than leaving the list blank, and still shows the rail', () => {
+    render(<BoatPerformanceContent races={[]} canWrite={false} overall={OVERALL} />)
 
     expect(screen.getByTestId('empty-state')).toBeInTheDocument()
     expect(screen.getByText('No races uploaded yet')).toBeInTheDocument()
-  })
-
-  it('switches to Overall and shows what the server read for it', async () => {
-    const user = userEvent.setup({ delay: null })
-    renderEmpty()
-
-    await user.click(screen.getByRole('tab', { name: 'Overall' }))
-
-    expect(screen.getByRole('tab', { name: 'Overall' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('overall-stub')).toBeInTheDocument()
   })
 
-  it('keeps the Overall tab’s content out of the Races tab, rather than hiding it with CSS', () => {
-    // One panel at a time. A node that is in the DOM behind the selected tab would be read out by
-    // a screen reader and found by every `getByText` in this file.
-    renderEmpty()
-    expect(screen.queryByTestId('overall-stub')).not.toBeInTheDocument()
+  it('counts the races in their heading, and states no count of none', () => {
+    const { unmount } = render(
+      <BoatPerformanceContent
+        races={[race(), race({ id: 'race-2', title: 'Tri-State' })]}
+        canWrite={false}
+        overall={OVERALL}
+      />
+    )
+    expect(screen.getByRole('heading', { level: 2, name: 'Races · 2' })).toBeInTheDocument()
+    unmount()
+
+    // "Races · 0" over an empty state says the same thing twice.
+    render(<BoatPerformanceContent races={[]} canWrite={false} overall={OVERALL} />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Races' })).toBeInTheDocument()
+  })
+
+  it('offers Upload to an admin, in the races’ own toolbar, and to nobody else', () => {
+    const { unmount } = render(<BoatPerformanceContent races={[]} canWrite={false} overall={OVERALL} />)
+    expect(screen.queryByRole('link', { name: 'Upload a race' })).not.toBeInTheDocument()
+    unmount()
+
+    render(<BoatPerformanceContent races={[]} canWrite overall={OVERALL} />)
+    const upload = within(screen.getByRole('region', { name: /^Races/ })).getByRole('link', {
+      name: 'Upload a race',
+    })
+    expect(upload).toHaveAttribute('href', '/boat-performance/upload')
   })
 })
 
-describe('the Races tab, with an archive in it', () => {
+describe('the race table', () => {
   it('lists a race and opens to its own page', () => {
     render(<BoatPerformanceContent races={[race()]} canWrite={false} overall={OVERALL} />)
 
     const link = screen.getByRole('link', { name: /Verve Cup/ })
     expect(link).toHaveAttribute('href', '/boat-performance/races/race-1')
     expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument()
+  })
+
+  it('heads its four columns, and fills each row with all four', () => {
+    render(<BoatPerformanceContent races={[race()]} canWrite={false} overall={OVERALL} />)
+
+    for (const column of ['Race', 'Window', 'Duration', 'File']) {
+      expect(screen.getByText(column)).toBeInTheDocument()
+    }
+
+    // The whole row is the door, so all four figures are in the link a screen reader announces —
+    // the column headers being for the eye only.
+    const link = screen.getByRole('link', { name: /Verve Cup/ })
+    expect(link).toHaveTextContent('Verve Cup')
+    expect(link).toHaveTextContent('Aug 22 · 11:05 – 13:20')
+    expect(link).toHaveTextContent('2h 15m')
+    expect(link).toHaveTextContent('08-22-26-glr.csv')
+  })
+
+  it('keeps the newest-first order it was handed', () => {
+    render(
+      <BoatPerformanceContent
+        races={[race({ id: 'b', title: 'Second' }), race({ id: 'a', title: 'First' })]}
+        canWrite={false}
+        overall={OVERALL}
+      />
+    )
+
+    const links = within(screen.getByRole('list')).getAllByRole('link')
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/boat-performance/races/b',
+      '/boat-performance/races/a',
+    ])
   })
 
   it('states the window in the recording’s own clock, and a duration rather than a row count', () => {
@@ -108,7 +131,7 @@ describe('the Races tab, with an archive in it', () => {
     expect(screen.getByText('Aug 22 · 11:05 – 13:20')).toBeInTheDocument()
     // A duration a sailor can check against the afternoon. A row count is meaningless without the
     // cadence and counts a dead feed's copies as evidence (ADR 0009).
-    expect(screen.getByText(/2h 15m/)).toBeInTheDocument()
+    expect(screen.getByText('2h 15m')).toBeInTheDocument()
     expect(screen.queryByText(/rows?$/i)).not.toBeInTheDocument()
   })
 
@@ -118,17 +141,5 @@ describe('the Races tab, with an archive in it', () => {
     render(<BoatPerformanceContent races={[race({ title: null })]} canWrite={false} overall={OVERALL} />)
 
     expect(screen.getByText('Untitled race')).toBeInTheDocument()
-  })
-
-  it('offers Upload to an admin and to nobody else', () => {
-    const { unmount } = render(<BoatPerformanceContent races={[]} canWrite={false} overall={OVERALL} />)
-    expect(screen.queryByRole('link', { name: 'Upload a race' })).not.toBeInTheDocument()
-    unmount()
-
-    render(<BoatPerformanceContent races={[]} canWrite overall={OVERALL} />)
-    expect(screen.getByRole('link', { name: 'Upload a race' })).toHaveAttribute(
-      'href',
-      '/boat-performance/upload'
-    )
   })
 })

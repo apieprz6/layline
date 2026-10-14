@@ -1,21 +1,42 @@
 import type { ReactElement } from 'react'
-import { SkeletonScreen, SkeletonText } from '@/components/common/Skeleton'
-import SectionTabsChrome from '@/components/common/SectionTabsChrome'
-import { spacing } from '@/lib/utils/design'
+import Skeleton, { SkeletonScreen, SkeletonText } from '@/components/common/Skeleton'
+import {
+  BODY_CLASS,
+  COLUMNS,
+  HEADER_CELL_STYLE,
+  HEADER_ROW_CLASS,
+  HEADER_STYLE,
+  ROW_CLASS,
+  ROW_RULE,
+  ROW_STYLE,
+  SECTION_HEADING_STYLE,
+  SECTION_STYLE,
+  TABLE_STYLE,
+  TITLE_STYLE,
+  TOOLBAR_STYLE,
+  WIDE_CELL_CLASS,
+} from './boatPerformanceLayout'
 
 /**
  * Boat performance while the archive is still being read.
  *
- * `BoatPerformanceContent`'s Races tab, which is the tab it opens on: the section
- * header, then one card per race. Three cards — a guess at a length, and the only
- * honest kind of guess available, since the count is exactly what the read returns.
- * Each card is the real card's three lines: title, window, duration and filename.
+ * `BoatPerformanceContent`'s own shape, from the same `boatPerformanceLayout` geometry: the section
+ * header, the "This season" rail, and the races' toolbar over a table. What is already known is
+ * drawn as itself — the section's name, both section headings, the four column names — and what
+ * the read returns is a bar.
+ *
+ * The rail holds one row's height, which is what its own `<Suspense>` boundary on the page shows
+ * next: the season's figures are a second read, so this skeleton gives way to the rail's fallback
+ * and not straight to its teasers. The table holds three rows — a guess at a length, and the only
+ * honest kind of guess available, since the count is exactly what the read returns. For the same
+ * reason the "Races" heading has no count beside it.
  *
  * No "Upload a race" button. It belongs to an admin only (ADR 0019) and the **Role**
  * has not been resolved yet, so drawing one would promise a control most sailors
- * never get — and a button that vanishes shifts the whole list up.
+ * never get. `TOOLBAR_STYLE` holds the button's height whether it is drawn or not, so an admin's
+ * table does not drop when it arrives.
  *
- * An empty archive replaces all of this with an empty state, which is the one case
+ * An empty archive replaces the table with an empty state, which is the one case
  * this skeleton cannot match: nothing here can know the archive is empty before it
  * has been read.
  *
@@ -30,27 +51,47 @@ export default function BoatPerformanceSkeleton(): ReactElement {
       className="min-h-screen"
       style={{ background: 'var(--page-bg)' }}
     >
-      <SectionTabsChrome title="Boat performance" tabs={['Races', 'Overall']} />
+      <div style={HEADER_STYLE}>
+        <h1 style={TITLE_STYLE}>Boat performance</h1>
+      </div>
 
-      <div style={{ padding: spacing(4) }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(2) }}>
+      <div className={BODY_CLASS}>
+        <div style={SECTION_STYLE}>
+          <div style={TOOLBAR_STYLE}>
+            <h2 style={SECTION_HEADING_STYLE}>This season</h2>
+          </div>
+          {/* The page's `rowFallback`, which is what this rail shows next. */}
+          <Skeleton height="92px" radius="var(--radius-md)" />
+        </div>
+
+        <div style={SECTION_STYLE}>
+          <div style={TOOLBAR_STYLE}>
+            <h2 style={SECTION_HEADING_STYLE}>Races</h2>
+          </div>
+
+          <div style={TABLE_STYLE}>
+            <div className={HEADER_ROW_CLASS} style={{ ...ROW_STYLE, borderBottom: ROW_RULE }}>
+              {COLUMNS.map((column) => (
+                <span key={column} style={HEADER_CELL_STYLE}>
+                  {column}
+                </span>
+              ))}
+            </div>
+
             {[0, 1, 2].map((row) => (
               <div
                 key={row}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: spacing(1),
-                  background: 'var(--surface-raised)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: spacing(3),
-                }}
+                className={ROW_CLASS}
+                style={{ ...ROW_STYLE, borderTop: row === 0 ? 'none' : ROW_RULE }}
               >
-                <SkeletonText fontSize="var(--text-base)" width="58%" />
-                <SkeletonText fontSize="var(--text-sm)" width="44%" />
-                <SkeletonText fontSize="var(--text-xs)" width="70%" />
+                <span className={WIDE_CELL_CLASS}>
+                  <SkeletonText fontSize="var(--text-base)" width="70%" />
+                </span>
+                <span className={WIDE_CELL_CLASS}>
+                  <SkeletonText fontSize="var(--text-sm)" width="160px" />
+                </span>
+                <SkeletonText fontSize="var(--text-xs)" width="48px" />
+                <SkeletonText fontSize="var(--text-xs)" width="80%" />
               </div>
             ))}
           </div>
