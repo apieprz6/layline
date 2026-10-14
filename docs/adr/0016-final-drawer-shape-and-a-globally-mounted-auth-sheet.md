@@ -137,6 +137,27 @@ decisions. The five entries, the fixed order and the two dividers are unchanged.
   padlock and a "Sign in" on the same line, which `e2e/boat-sections.spec.ts` measures rather than
   assumes.
 
+## Amendment (LAY-177, 2026-10-14)
+
+The locked pair's internal order swaps: **Boat performance now sits directly above Boat
+management.**
+
+```
+Dashboard
+Wind Data
+────────────────
+Boat performance   🔒
+Boat management    🔒
+────────────────
+Settings
+```
+
+Boat performance is the section the owner opens most once the boat is set up — the pair's
+original order, management then performance, matched the sequence a boat gets *built* in, not the
+one it gets *used* in. Everything else this ADR fixed is unchanged: five flat entries, two
+dividers, the same order for a Guest and a signed-in sailor, the Locked Entry treatment and its
+per-section "Sign in to open …" labels, and the account block in the footer.
+
 ## Alternatives considered
 
 - **Drop Wind Data, following the mockup.** Rejected: it is a real section with an index-to-detail

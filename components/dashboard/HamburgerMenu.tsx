@@ -32,8 +32,9 @@ interface NavEntry {
 }
 
 /**
- * The final drawer shape (ADR 0016): five flat entries in one fixed order, the
- * two boat sections grouped between dividers.
+ * The final drawer shape (ADR 0016, amended LAY-177): five flat entries in one
+ * fixed order, the two boat sections grouped between dividers with Boat
+ * performance first — the section the owner opens most once the boat is set up.
  *
  * Membership and order are the same for a Guest and a signed-in sailor. What
  * changes is that the boat pair stops being inert, and the account block swaps —
@@ -70,6 +71,17 @@ const navGroups: NavEntry[][] = [
   ],
   [
     {
+      href: '/boat-performance',
+      label: 'Boat performance',
+      locksForGuest: true,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+          <polyline points="16 7 22 7 22 13" />
+        </svg>
+      ),
+    },
+    {
       href: '/boat-management',
       label: 'Boat management',
       locksForGuest: true,
@@ -78,17 +90,6 @@ const navGroups: NavEntry[][] = [
           <path d="M22 18H2a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z" />
           <path d="M21 14 10 2 3 14h18Z" />
           <path d="M10 2v16" />
-        </svg>
-      ),
-    },
-    {
-      href: '/boat-performance',
-      label: 'Boat performance',
-      locksForGuest: true,
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-          <polyline points="16 7 22 7 22 13" />
         </svg>
       ),
     },
