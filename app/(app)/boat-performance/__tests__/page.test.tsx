@@ -206,8 +206,30 @@ describe('the Overall tab', () => {
 
     // "No races" over a failed read would be Layline claiming the sailor has sailed nothing — and
     // it is the same sentence the detail screen shows, from the same component, so the two cannot
-    // drift into disagreeing about what happened.
+    // drift into disagreeing about what happened. One message, standing in for the pair of cards
+    // that share this read — not printed once per card.
     expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
+    expect(screen.queryByTestId('polar-performance-teaser')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('sail-selection-teaser')).not.toBeInTheDocument()
+  })
+
+  it('keeps the Instrument tuning card independent even when the race window read fails', async () => {
+    readRecentRaceRows.mockResolvedValue(null)
+    readInstrumentTuning.mockResolvedValue({
+      ok: true,
+      season: tuningSeason(),
+      log: [],
+      races: [],
+    })
+
+    await renderOverall()
+
+    // The ten-race read failing is a fact about that query alone — the Instrument tuning card
+    // reads the archive on a different query and says what it found, independently of a sibling
+    // it never asked anything of.
+    expect(screen.getByText('The archive could not be read')).toBeInTheDocument()
+    expect(screen.getByTestId('instrument-tuning-teaser')).toBeInTheDocument()
+    expect(screen.getByTestId('tuning-coverage')).toBeInTheDocument()
   })
 
   it('adds the Instrument tuning row beneath the other two, tapping through to the charts', async () => {
