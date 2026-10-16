@@ -47,17 +47,20 @@ export const ROOT_CLASS =
  * 390px phone the season sat 340px wide over a table 358px wide. Here a phone gets one column the
  * full width of the screen, and the rail only stands beside the races from 1024px.
  *
- * 440px from `lg` and 560px from `2xl`, by the owner's call on LAY-178 that 360px read too small on
- * a desktop and on an ultrawide. Never under 360px whatever happens to these: the teasers were
- * designed for a 390px phone's 358px column, and the Instrument tuning row's three channel tiles
- * each hold a mono figure that spills out of a third of anything less (3px at 320).
+ * 38% of the viewport, between 440px and 760px, by the owner's calls on LAY-178: 360px read too
+ * small on a desktop and an ultrawide, and fixed steps still left the season's cards scrolling on a
+ * 14" MacBook (1512px) while the race table beside them sat mostly empty. A share of the screen
+ * gives the cards the room the table was not using, so they wrap less and stand shorter: 575px at
+ * 1512, 760px from 2000. Never under 360px whatever happens to these: the teasers were designed for
+ * a 390px phone's 358px column, and the Instrument tuning row's three channel tiles each hold a
+ * mono figure that spills out of a third of anything less (3px at 320).
  *
  * From `lg` the one row is the full height left under the section header (`minmax(0,1fr)`), so
  * each column can scroll inside it — see `ROOT_CLASS`.
  */
 export const BODY_CLASS =
   'grid gap-4 p-4 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)] ' +
-  'lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]'
+  'lg:grid-cols-[minmax(0,clamp(440px,38vw,760px))_minmax(0,1fr)]'
 
 /**
  * The rail, which scrolls in its own column from `lg` when the season is taller than the screen.
