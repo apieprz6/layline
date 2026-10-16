@@ -2013,6 +2013,45 @@ export interface TrackRing {
 }
 
 /**
+ * A race's track as the Dashboard's **Most recent race** card draws it: one ink, no scoring.
+ *
+ * Still broken, ringed and bridged at every **Dropout** (ADR 0014, ADR 0033) — a small map is not
+ * a map excused from saying where the feed died.
+ */
+export interface TrackThumbnail {
+  width: number
+  height: number
+  /** One polyline's `points` per run of joined fixes. */
+  runs: string[]
+  /** Runs of a single fix, which a polyline cannot draw. */
+  points: { x: number; y: number }[]
+  bridges: DropoutBridge[]
+  rings: TrackRing[]
+}
+
+/** The newest Race by `window_start`, as the Dashboard shows it. */
+export interface LatestRace {
+  id: string
+  /** Null where the sailor gave none, shown as untitled and never filled in (ADR 0010). */
+  title: string | null
+  window_start: string
+  window_finish: string
+  window_seconds: number
+  /** Null for a race whose window holds no GPS fix at all — said in words, never an empty frame. */
+  track: TrackThumbnail | null
+}
+
+/**
+ * The newest race, or which of the two other states the archive is in.
+ *
+ * `no-races` and `unreadable` stay apart: an archive that could not be read is never shown as one
+ * with nothing in it.
+ */
+export type LatestRaceRead =
+  | { ok: true; race: LatestRace }
+  | { ok: false; reason: 'no-races' | 'unreadable' }
+
+/**
  * One piece of **Testimony**, at the place on the water it was given about.
  *
  * A sail change and a sea state are what the *sailor* said, not what the instruments recorded —

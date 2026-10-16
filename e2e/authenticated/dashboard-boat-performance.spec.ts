@@ -2,14 +2,16 @@ import { test, expect, type Page } from '@playwright/test'
 import { gotoHydrated } from '../hydrated'
 
 /**
- * The Boat performance Overall cards on the **Dashboard**, where a real browser puts them.
+ * The Boat performance Overall cards and the Most recent race card on the **Dashboard**, where a
+ * real browser puts them.
  *
  * Which cards a sailor gets, and that a Guest gets none, is Jest's (`(dashboard)/__tests__`). What
  * only a browser can see is the arrangement: each card is a cell of the Dashboard's own grid, the
  * width of the Live Wind card, flowing on after it — one column on a phone, two on a desktop,
  * three on an ultrawide.
  *
- * The archive project's synthetic race is what guarantees each card has something to draw.
+ * The archive project's synthetic race is what guarantees each card has something to draw — the
+ * race card included, which is whichever race is newest and so is asked for by its route alone.
  */
 
 type Box = { x: number; y: number; width: number; height: number }
@@ -20,7 +22,7 @@ const CARD_HREFS = [
   '/boat-performance/instrument-tuning',
 ]
 
-/** Live Wind, then the three cards, in the order the grid lays them out. */
+/** Live Wind, the three Overall cards, then the newest race, in the order the grid lays them out. */
 async function measureCells(page: Page): Promise<Box[]> {
   const wind = page.locator('.layline-card', { hasText: 'Live Wind' })
   await expect(wind).toBeVisible()
@@ -33,6 +35,11 @@ async function measureCells(page: Page): Promise<Box[]> {
     await expect(card).toBeVisible()
     cells.push((await card.boundingBox())!)
   }
+
+  const race = grid.locator('a[href^="/boat-performance/races/"]')
+  // The skeleton is no link, so a visible one is the settled card at its finished height.
+  await expect(race).toBeVisible()
+  cells.push((await race.boundingBox())!)
 
   return cells
 }
@@ -60,7 +67,7 @@ function expectGrid(cells: Box[], columns: number): void {
 }
 
 test.describe('The Dashboard, to a signed-in sailor', () => {
-  test('flows the three Overall cards on after Live Wind, one column on a phone and two on a desktop', async ({
+  test('flows the Overall cards and the newest race on after Live Wind, one column on a phone and two on a desktop', async ({
     page,
   }) => {
     await gotoHydrated(page, '/')

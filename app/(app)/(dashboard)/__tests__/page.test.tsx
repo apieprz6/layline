@@ -4,6 +4,7 @@ import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { RACES, ROWS } from '@/components/analysis/__tests__/fixture'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import type { LatestRace } from '@/types'
 import DashboardPage from '../page'
 
 // The station rows inside the live wind card navigate on tap.
@@ -36,6 +37,31 @@ jest.mock('@/services/analysis/readInstrumentTuning', () => ({
   readInstrumentTuning: jest.fn(),
 }))
 
+jest.mock('@/services/races/readLatestRace', () => ({
+  readLatestRace: jest.fn(),
+}))
+
+/** The newest race, with a track that went dark for seven minutes in the middle of it. */
+const LATEST: LatestRace = {
+  id: 'race-newest',
+  title: 'Verve Cup',
+  window_start: '2026-08-22T11:05:00',
+  window_finish: '2026-08-22T13:20:00',
+  window_seconds: 8100,
+  track: {
+    width: 360,
+    height: 180,
+    runs: ['20.0,100.0 80.0,40.0', '200.0,60.0 340.0,160.0'],
+    points: [],
+    bridges: [{ x1: 80, y1: 40, x2: 200, y2: 60, seconds: 420, rows: 6 }],
+    rings: [{ cx: 80, cy: 40 }],
+  },
+}
+
+/** The Overall tab's three doors, and not the race card's. */
+const OVERALL_CARDS = 'a[href^="/boat-performance"]:not([href^="/boat-performance/races/"])'
+const RACE_CARD = 'a[href^="/boat-performance/races/"]'
+
 describe('Dashboard', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
   const { readRecentRaceRows } = jest.requireMock('@/services/analysis/readArchive')
@@ -43,12 +69,14 @@ describe('Dashboard', () => {
     '@/services/boat/readCrossoverChartVersions'
   )
   const { readInstrumentTuning } = jest.requireMock('@/services/analysis/readInstrumentTuning')
+  const { readLatestRace } = jest.requireMock('@/services/races/readLatestRace')
 
   beforeEach(() => {
     jest.clearAllMocks()
     readRecentRaceRows.mockResolvedValue({ rows: ROWS, races: RACES, polars: {} })
     readCrossoverChartScreen.mockResolvedValue(null)
     readInstrumentTuning.mockResolvedValue({ ok: false, reason: 'no-races' })
+    readLatestRace.mockResolvedValue({ ok: true, race: LATEST })
   })
 
   it('shows a Guest the live wind and no boat performance, without reading the archive', async () => {
@@ -61,6 +89,7 @@ describe('Dashboard', () => {
     expect(readRecentRaceRows).not.toHaveBeenCalled()
     expect(readCrossoverChartScreen).not.toHaveBeenCalled()
     expect(readInstrumentTuning).not.toHaveBeenCalled()
+    expect(readLatestRace).not.toHaveBeenCalled()
   })
 
   it('shows a signed-in sailor the three Overall cards below the live wind, each a door to its screen', async () => {
@@ -68,7 +97,7 @@ describe('Dashboard', () => {
 
     render(await resolveServerTree(await DashboardPage()))
 
-    const cards = Array.from(document.querySelectorAll('a[href^="/boat-performance"]'))
+    const cards = Array.from(document.querySelectorAll(OVERALL_CARDS))
     expect(cards.map((a) => a.getAttribute('href'))).toEqual([
       '/boat-performance/polar',
       '/boat-performance/sail-selection',
@@ -107,6 +136,7 @@ describe('Dashboard', () => {
     readRecentRaceRows.mockReturnValue(new Promise(() => {}))
     readCrossoverChartScreen.mockReturnValue(new Promise(() => {}))
     readInstrumentTuning.mockReturnValue(new Promise(() => {}))
+    readLatestRace.mockReturnValue(new Promise(() => {}))
 
     // The page itself resolves, live wind card and all: the archive is awaited only inside
     // `OverallCards`' own boundaries, never by the page around them.
@@ -116,5 +146,76 @@ describe('Dashboard', () => {
     ) as ReactElement[]
 
     expect(children.some((child) => child.type === LiveWindCard)).toBe(true)
+  })
+
+  describe('the most recent race', () => {
+    it('is a card after the Overall cards, tapping through to that race', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      const card = document.querySelector(RACE_CARD) as HTMLAnchorElement
+      expect(card.getAttribute('href')).toBe('/boat-performance/races/race-newest')
+      expect(card).toHaveTextContent('Verve Cup')
+      expect(card).toHaveTextContent('Aug 22 · 11:05 – 13:20')
+      expect(card).toHaveTextContent('2h 15m')
+
+      const overall = Array.from(document.querySelectorAll(OVERALL_CARDS))
+      const last = overall[overall.length - 1]
+      expect(last.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('draws the track broken at the Dropout and bridged with its duration', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      const card = document.querySelector(RACE_CARD) as HTMLAnchorElement
+      expect(card.querySelectorAll('polyline')).toHaveLength(2)
+      expect(card.querySelectorAll('[data-testid="track-bridge"]')).toHaveLength(1)
+      expect(card).toHaveTextContent('feed dead 7m')
+    })
+
+    it('calls an untitled race untitled, and writes it no name', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+      readLatestRace.mockResolvedValue({ ok: true, race: { ...LATEST, title: null } })
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      expect(document.querySelector(RACE_CARD)).toHaveTextContent('Untitled race')
+    })
+
+    it('says in words that a race with no GPS fix has no track, rather than drawing an empty frame', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+      readLatestRace.mockResolvedValue({ ok: true, race: { ...LATEST, track: null } })
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      const card = document.querySelector(RACE_CARD) as HTMLAnchorElement
+      expect(card.querySelector('svg')).toBeNull()
+      expect(card).toHaveTextContent('No GPS fix was recorded in this race’s window')
+    })
+
+    it('says the archive could not be read, never that it is empty', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+      readLatestRace.mockResolvedValue({ ok: false, reason: 'unreadable' })
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      expect(document.querySelector(RACE_CARD)).toBeNull()
+      // The two ten-race cards read fine here, so this is the race card's own.
+      expect(screen.getAllByText('The archive could not be read')).toHaveLength(1)
+    })
+
+    it('is left off the Dashboard altogether when there are no races', async () => {
+      resolveAccount.mockResolvedValue(CREW)
+      readLatestRace.mockResolvedValue({ ok: false, reason: 'no-races' })
+
+      render(await resolveServerTree(await DashboardPage()))
+
+      expect(document.querySelector(RACE_CARD)).toBeNull()
+      expect(document.querySelector('[data-testid="latest-race-card"]')).toBeNull()
+      expect(screen.queryByText('The archive could not be read')).not.toBeInTheDocument()
+    })
   })
 })

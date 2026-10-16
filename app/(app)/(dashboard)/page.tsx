@@ -4,6 +4,7 @@ import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
 import RigRecommendation from '@/components/dashboard/RigRecommendation'
 import ModelComparison from '@/components/dashboard/ModelComparison'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import LatestRaceCard from '@/components/dashboard/LatestRaceCard'
 import OverallCards from '@/components/boat/OverallCards'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
@@ -79,6 +80,10 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
           all. Each card streams behind its own `<Suspense>`, so the wind paints the moment the
           buoys answer. */}
       {account && <OverallCards />}
+
+      {/* The newest race, a fourth cell after them and a door to its page. Its own read of that
+          race's Transcription, behind its own boundary, so nothing above waits on it paging. */}
+      {account && <LatestRaceCard />}
 
       {SHOW_RACE_BRIEFING && (
         <TacticalBriefing

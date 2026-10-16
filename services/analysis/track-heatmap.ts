@@ -42,18 +42,17 @@ import { channelValue } from '@/services/analysis/readable-rows'
 import type { SailComparison } from '@/services/analysis/sail-agreement'
 import { TRACK_OVERLAYS, overlayPaint } from '@/services/analysis/track-overlays'
 import type { TrackBox } from '@/services/recordings/track-projection'
+import { breakTrack } from '@/services/recordings/track-breaks'
 import { projectTrack, type TrackProjection } from '@/services/recordings/track-projection'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
   AnalysisRow,
-  DropoutBridge,
   TrackAnnotation,
   RaceTrackHeatmap,
   TrackHeatmapCounts,
   TrackOverlay,
   TrackOverlayCounts,
   TrackPoint,
-  TrackRing,
   TrackRowFacts,
   TrackSegment,
 } from '@/types'
@@ -272,84 +271,37 @@ export function raceTrackHeatmap(
   const hasPolar = targets !== null
   const segments: TrackSegment[] = []
   const points: TrackPoint[] = []
-  const rings: TrackRing[] = []
-  const bridges: DropoutBridge[] = []
   const counts = emptyCounts(rows.length)
 
-  /** The previous drawable point, or null where a break interrupted the run. */
-  let previous: { x: number; y: number } | null = null
-  /** The last row either side of a Dropout: where the bridge starts, and when. */
-  let before: { x: number; y: number; seconds: number } | null = null
-  /** Rows of the Dropout being crossed. Zero outside one. */
-  let frozenRun = 0
-  /** The run in progress: how many fixes long, and the first of them, in case it is the only one. */
-  let runLength = 0
-  let runFirst: TrackPoint | null = null
+  const facts = rows.map((row, index) => {
+    const rowFacts = factsOf(row, targets)
 
-  /**
-   * End the run of joined fixes, plotting it as a point if it turned out to be one fix long.
-   *
-   * A run of one cannot be a polyline, so without this the row would be in the counts and nowhere
-   * on the map — and "every recorded row is drawn" would be false exactly where it matters most, on
-   * a feed that surfaced for a single fix between two dropouts. Two rows of this archive are like
-   * that.
-   */
-  const closeRun = (): void => {
-    if (runLength === 1 && runFirst !== null) points.push(runFirst)
-    runLength = 0
-    runFirst = null
-    previous = null
-  }
+    if (rowFacts.excluded !== null) counts[rowFacts.excluded] += 1
+    tally(counts, rowFacts, hasPolar)
+    if (fixes[index].latitude !== null && fixes[index].longitude !== null) counts.with_fix += 1
 
-  rows.forEach((row, index) => {
-    const facts = factsOf(row, targets)
+    return rowFacts
+  })
 
-    if (facts.excluded !== null) counts[facts.excluded] += 1
-    tally(counts, facts, hasPolar)
+  // Where the track breaks, rings and bridges is the walk every map shares (ADR 0014, ADR 0033).
+  const { runs, bridges, rings } = breakTrack(
+    rows.map((row, index) => ({ ...fixes[index], frozen: row.quality.frozen, row_time: row.row_time })),
+    projection
+  )
 
-    const fix = fixes[index]
-    const lat = fix.latitude
-    const lon = fix.longitude
-
-    if (lat !== null && lon !== null) counts.with_fix += 1
-
-    if (row.quality.frozen) {
-      // A frozen row still has a position — it is the previous row's, verbatim — and ringing it is
-      // the only way the run is visible at all. The track breaks here, so nothing draws a line
-      // through water the boat may not have crossed.
-      if (lat !== null && lon !== null) {
-        const ring = at(projection, lat, lon)
-        rings.push({ cx: ring.x, cy: ring.y })
-      }
-      frozenRun += 1
-      closeRun()
-      return
+  for (const run of runs) {
+    if (run.length === 1) {
+      // A run of one cannot be a polyline, so without this the row would be in the counts and
+      // nowhere on the map — and "every recorded row is drawn" would be false exactly where it
+      // matters most, on a feed that surfaced for a single fix between two dropouts. Two rows of
+      // this archive are like that.
+      points.push({ x: run[0].x, y: run[0].y, row: facts[run[0].index] })
+      continue
     }
 
-    if (lat === null || lon === null) {
-      // A missing fix is a break too, but it is not a Dropout and carries no duration claim: the
-      // boat was somewhere and the file does not say where.
-      closeRun()
-      before = null
-      frozenRun = 0
-      return
-    }
-
-    const here = at(projection, lat, lon)
-    const seconds = wallClockSeconds(row.row_time)
-
-    if (frozenRun > 0 && before !== null) {
-      bridges.push({
-        x1: before.x,
-        y1: before.y,
-        x2: here.x,
-        y2: here.y,
-        seconds: seconds - before.seconds,
-        rows: frozenRun,
-      })
-    }
-
-    if (previous !== null) {
+    for (let step = 1; step < run.length; step += 1) {
+      const previous = run[step - 1]
+      const here = run[step]
       // Attributed to the row it *arrives at*, which is the row whose reading it is showing. One
       // segment per row transition rather than one polyline per run, because a heatmap needs the
       // colour to change where the boat's performance changed.
@@ -359,20 +311,10 @@ export function raceTrackHeatmap(
         y1: previous.y,
         x2: here.x,
         y2: here.y,
-        row: facts,
+        row: facts[here.index],
       })
     }
-
-    runLength += 1
-    if (runLength === 1) runFirst = { x: here.x, y: here.y, row: facts }
-
-    previous = here
-    before = { ...here, seconds }
-    frozenRun = 0
-  })
-
-  // The last run ends at the end of the window, which is a break like any other.
-  closeRun()
+  }
 
   const placed = placeAnnotations(annotations, rows, fixes, projection)
   counts.annotations_not_placed = annotations.length - placed.length
