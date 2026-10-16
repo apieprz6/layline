@@ -1,7 +1,9 @@
+import { Children, type ReactElement, type ReactNode } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { RACES, ROWS } from '@/components/analysis/__tests__/fixture'
+import LiveWindCard from '@/components/dashboard/LiveWindCard'
 import DashboardPage from '../page'
 
 // The station rows inside the live wind card navigate on tap.
@@ -89,5 +91,33 @@ describe('Dashboard', () => {
     expect(boat).not.toHaveTextContent('Nothing to summarise yet')
     // The Overall tab's own words, once per card that depends on the ten-race read.
     expect(within(boat).getAllByText('The archive could not be read')).toHaveLength(2)
+  })
+
+  it('tells a signed-in sailor an empty archive is empty, in the Overall tab\'s words', async () => {
+    resolveAccount.mockResolvedValue(CREW)
+    readRecentRaceRows.mockResolvedValue({ rows: [], races: [], polars: {} })
+
+    render(await resolveServerTree(await DashboardPage()))
+
+    const boat = screen.getByRole('region', { name: 'Boat performance' })
+    expect(within(boat).getAllByText('Nothing to summarise yet')).toHaveLength(2)
+    expect(boat).not.toHaveTextContent('The archive could not be read')
+  })
+
+  it('hands back the live wind without waiting on any archive read', async () => {
+    resolveAccount.mockResolvedValue(CREW)
+    // Every archive read held on the wire, never to resolve.
+    readRecentRaceRows.mockReturnValue(new Promise(() => {}))
+    readCrossoverChartScreen.mockReturnValue(new Promise(() => {}))
+    readInstrumentTuning.mockReturnValue(new Promise(() => {}))
+
+    // The page itself resolves, live wind card and all: the archive is awaited only inside
+    // `OverallCards`' own boundaries, never by the page around them.
+    const page = await DashboardPage()
+    const children = Children.toArray(
+      (page as ReactElement<{ children: ReactNode }>).props.children
+    ) as ReactElement[]
+
+    expect(children.some((child) => child.type === LiveWindCard)).toBe(true)
   })
 })

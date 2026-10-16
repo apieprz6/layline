@@ -12,18 +12,20 @@ import { gotoHydrated } from '../hydrated'
  * The archive project's synthetic race is what guarantees each card has something to draw.
  */
 
+type Box = { x: number; y: number; width: number; height: number }
+
 const CARD_HREFS = [
   '/boat-performance/polar',
   '/boat-performance/sail-selection',
   '/boat-performance/instrument-tuning',
 ]
 
-async function measure(page: Page) {
+async function measure(page: Page): Promise<{ wind: Box; cards: Box[] }> {
   const wind = page.getByText('Live Wind', { exact: true })
   const boat = page.getByRole('region', { name: 'Boat performance' })
   await expect(boat).toBeVisible()
 
-  const cards = []
+  const cards: Box[] = []
   for (const href of CARD_HREFS) {
     const card = boat.locator(`a[href="${href}"]`)
     await expect(card).toBeVisible()
@@ -70,7 +72,7 @@ test.describe('The Dashboard, to a signed-in sailor', () => {
 })
 
 /** Same top, left to right in order without overlapping, and none under the teasers' 360px. */
-function expectOneRow(cards: { x: number; y: number; width: number }[]): void {
+function expectOneRow(cards: Box[]): void {
   for (let i = 0; i < cards.length; i++) {
     expect(Math.abs(cards[i].y - cards[0].y)).toBeLessThanOrEqual(1)
     expect(cards[i].width).toBeGreaterThanOrEqual(360)

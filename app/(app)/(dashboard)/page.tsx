@@ -8,6 +8,7 @@ import OverallCards from '@/components/boat/OverallCards'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { spacing } from '@/lib/utils/design'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
+import type { ReactElement } from 'react'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ const SHOW_WIND_FORECAST = false
 const SHOW_MODEL_COMPARISON = false
 const SHOW_RIG_SETUP = false
 
-export default async function DashboardPage() {
+export default async function DashboardPage(): Promise<ReactElement> {
   // The Account is resolved a second time here, beside the layout's, for the reason
   // `/boat-performance` gives; alongside the buoys, so it never adds a wait of its own.
   const [chii2Result, purdueResult, account] = await Promise.all([
@@ -129,4 +130,3 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
     </div>
   )
 }
-
