@@ -35,6 +35,7 @@ import {
   type GridCoverage,
 } from '@/services/analysis/sail-selection'
 import { sailBands } from '@/services/boat/crossoverSailBands'
+import { crossoverSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -108,6 +109,10 @@ export default function SailSelectionContent({
   const [selected, setSelected] = useState<string | null>(null)
 
   const bands = useMemo(() => sailBands(chart), [chart])
+  const regions = useMemo(() => {
+    const labels = new Map(chart.sail_definitions.map((each) => [each.number, each.label]))
+    return crossoverSailRegions(chart, (sail) => labels.get(sail) ?? null)
+  }, [chart])
 
   // 338 cells folded **once** per narrowing and read by five grids — four thumbnails and the
   // full-size one — plus the summary line. Everything downstream reads the fold rather than
@@ -182,6 +187,7 @@ export default function SailSelectionContent({
         tws_axis={data.tws_axis}
         layer={active}
         bands={bands}
+        regions={regions}
         selected={selected}
         onSelect={setSelected}
       />
@@ -202,7 +208,13 @@ export default function SailSelectionContent({
           `${countOf(data.rows_off_grid)} sailed below the chart's own first row or column, where it makes no recommendation to have agreed or disagreed with.`}
       </p>
 
-      <Legend layer={layer} coverage={coverage} reasons={reasons} />
+      <Legend
+        layer={layer}
+        coverage={coverage}
+        reasons={reasons}
+        regions={regions}
+        chart={chart}
+      />
 
       {narrowed && (
         <button
@@ -262,13 +274,17 @@ function Legend({
   layer,
   coverage,
   reasons,
+  regions,
+  chart,
 }: {
   layer: SailSelectionLayer
   coverage: GridCoverage
   /** Why each unreachable cell is unreachable, deduplicated — never one asserted reason. */
   reasons: readonly string[]
+  regions: SailRegions
+  chart: CrossoverChartPayload
 }): ReactElement | null {
-  if (layer === 'chart') return null
+  if (layer === 'chart') return <ChartLegend regions={regions} chart={chart} />
 
   return (
     <ul data-testid="sail-selection-legend" style={LEGEND_STYLE}>
@@ -342,6 +358,41 @@ function Legend({
         A cell with a dotted edge held sailing before this filter and holds none under it. The Chart
         layer never filters.
       </li>
+    </ul>
+  )
+}
+
+/**
+ * The Chart layer's key: the name behind every number still printed, and nothing where none is.
+ *
+ * A number is printed only where a region was too small to hold its sail's name, so the list is of
+ * those sails alone — each once, in Definition order, however many small regions it has.
+ */
+function ChartLegend({
+  regions,
+  chart,
+}: {
+  regions: SailRegions
+  chart: CrossoverChartPayload
+}): ReactElement | null {
+  const numbered = new Set<number>()
+  regions.region.forEach((cells, row) =>
+    cells.forEach((index, column) => {
+      const sail = chart.cells[row]?.[column]
+      if (index !== null && regions.labels[index] === null && sail != null) numbered.add(sail)
+    })
+  )
+  const listed = chart.sail_definitions.filter((each) => numbered.has(each.number))
+  if (listed.length === 0) return null
+
+  return (
+    <ul data-testid="sail-selection-legend" style={LEGEND_STYLE}>
+      {listed.map((definition) => (
+        <li key={definition.number} data-testid="sail-selection-legend-sail">
+          {definition.number} is {definition.label}, printed as a number where its block is too
+          small for the name.
+        </li>
+      ))}
     </ul>
   )
 }
