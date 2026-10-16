@@ -8,6 +8,13 @@ const createJestConfig = nextJest({
 /** @type {import('jest').Config} */
 const config = {
   testEnvironment: 'jsdom',
+  // The sandbox is 4 vCPU / 8 GB with no swap and often has several agent
+  // sessions running suites at once. Jest's default of one worker per core
+  // (less one) at 400–700 MB each OOM-killed sshd. Half the cores still scales
+  // on a bigger CI runner; recycling a worker past 512 MB stops jsdom heaps
+  // from growing over a long run.
+  maxWorkers: '50%',
+  workerIdleMemoryLimit: '512MB',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
