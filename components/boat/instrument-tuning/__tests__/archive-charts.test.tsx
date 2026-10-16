@@ -266,6 +266,7 @@ describeArchive('the STW chart over the owner’s season', () => {
 
   it('draws the fit, and never prints a coefficient of it under either method', async () => {
     renderSpeed()
+    await userEvent.click(screen.getByRole('radio', { name: 'Scatter' }))
 
     for (const method of ['both noisy', 'SOG on STW']) {
       await userEvent.click(screen.getByRole('radio', { name: method }))
@@ -291,22 +292,35 @@ describeArchive('the STW chart over the owner’s season', () => {
     )
   })
 
-  it('shows the U-shaped gap in the gap view, which the straight line cannot follow', async () => {
+  it('answers no: spot on where the boat sails, and slow only where no calibration could follow', () => {
     renderSpeed()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
+    // ADR 0034's U, as the verdict reads it (ADR 0041): slow at 2–4 kt where every Race agrees,
+    // spot on from 4 to 9 kt, and a curve no multiplier and offset could follow.
+    const verdict = screen.getByTestId('speed-verdict')
+    expect(verdict).toHaveTextContent('No recalibration needed')
+    expect(verdict).toHaveTextContent('Spot on at 4–9 kt, where 89% of your sailing is.')
+    expect(verdict).toHaveTextContent('It reads slow at 2–4 kt')
 
-    // ~+0.45 kt at 2–3 kt, near zero at 4–6, +0.3 to +0.5 at 8–9. The bands are drawn; the
-    // disagreement with the line is what a tap on one says.
-    const bands = new Map(
-      archive().season.speed.orthogonal[0].gap_by_speed.map((band) => [
-        band.band,
-        band.mean_gap_knots,
-      ])
-    )
-    expect(bands.get(2)).toBeGreaterThan(0.3)
-    expect(Math.abs(bands.get(5) ?? 1)).toBeLessThan(0.2)
-    expect(screen.getByTestId('speed-gap')).toBeInTheDocument()
+    const means = screen.getAllByTestId('speed-band-mean')
+    expect(means.map((mean) => mean.getAttribute('data-verdict'))).toEqual([
+      'reads-slow',
+      'reads-slow',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+    ])
+  })
+
+  it('rules out current and weed on the checklist, which the scatter could not', async () => {
+    renderSpeed()
+    await userEvent.click(screen.getByRole('radio', { name: 'Checklist' }))
+
+    const checklist = screen.getByTestId('speed-checklist')
+    expect(checklist).toHaveTextContent('Yes, within 0.24 kt on every heading sailed — so it isn’t current.')
+    expect(checklist).toHaveTextContent('Yes — it moved 0.12 kt between the first Races and the last, so it isn’t weed.')
   })
 
   it('states coverage off the Races carrying a line of their own', () => {

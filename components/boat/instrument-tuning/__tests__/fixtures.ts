@@ -288,10 +288,14 @@ const NO_COVERAGE: EraDivergence['coverage'] = {
 }
 
 /** `count` rows climbing from 2 kt, each reading `gap` knots high on the GPS. */
-export function speedPoints(count: number, gap: number): RaceDivergence['points'] {
+export function speedPoints(
+  count: number,
+  gap: number,
+  cog: number | null = null
+): RaceDivergence['points'] {
   return Array.from({ length: count }, (_, index) => {
     const stw = 2 + (index / Math.max(1, count - 1)) * 6
-    return { row_index: index + 1, stw, sog: stw + gap }
+    return { row_index: index + 1, stw, sog: stw + gap, cog }
   })
 }
 
