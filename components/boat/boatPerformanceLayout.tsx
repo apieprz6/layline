@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 
 /**
@@ -71,7 +71,20 @@ export const TOOLBAR_STYLE: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: spacing(3),
+  // The button below: 8px padding twice, and 12px type at the body's 1.5.
   minHeight: '34px',
+}
+
+/** "Upload a race", whose height `TOOLBAR_STYLE` holds — so the two are written side by side. */
+export const UPLOAD_BUTTON_STYLE: CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 7,
+  background: 'var(--btn-primary-bg)',
+  color: 'var(--btn-primary-fg)',
+  fontSize: 12,
+  fontWeight: 600,
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
 }
 
 export const TABLE_STYLE: CSSProperties = {
@@ -99,12 +112,9 @@ export const ROW_STYLE: CSSProperties = {
 }
 
 /** Between two rows, and under the header row; never above the first. */
-export const ROW_RULE = '1px solid var(--surface-border)'
+const ROW_RULE = '1px solid var(--surface-border)'
 
-/** The header row, which a phone does not draw: there, the columns it names do not exist. */
-export const HEADER_ROW_CLASS = `hidden sm:grid ${ROW_COLUMNS}`
-
-export const HEADER_CELL_STYLE: CSSProperties = {
+const HEADER_CELL_STYLE: CSSProperties = {
   fontSize: 'var(--text-xs)',
   fontWeight: 'var(--weight-semibold)',
   color: 'var(--text-muted)',
@@ -112,7 +122,34 @@ export const HEADER_CELL_STYLE: CSSProperties = {
   letterSpacing: '0.04em',
 }
 
-export const COLUMNS = ['Race', 'Window', 'Duration', 'File'] as const
+/**
+ * The table's column names, which a phone does not draw: there, the columns they name do not
+ * exist.
+ *
+ * Hidden from a screen reader on both screens, the real one and the skeleton. Each row carries its
+ * own labels instead (see `RaceRow`), because a row is one link and a header row a list of
+ * links cannot point at would be four words read once and never again.
+ */
+export function ColumnHeaderRow(): ReactElement {
+  return (
+    <div
+      aria-hidden="true"
+      className={`hidden sm:grid ${ROW_COLUMNS}`}
+      style={{ ...ROW_STYLE, borderBottom: ROW_RULE }}
+    >
+      {['Race', 'Window', 'Duration', 'File'].map((column) => (
+        <span key={column} style={HEADER_CELL_STYLE}>
+          {column}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** A row's rule: none above the first, `ROW_RULE` above every other. */
+export function rowRule(index: number): CSSProperties {
+  return { borderTop: index === 0 ? 'none' : ROW_RULE }
+}
 
 /** The cells that span the whole row on a phone and take a column of their own from `sm`. */
 export const WIDE_CELL_CLASS = 'col-span-2 sm:col-span-1'

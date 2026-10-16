@@ -2,12 +2,9 @@ import type { ReactElement } from 'react'
 import Skeleton, { SkeletonScreen, SkeletonText } from '@/components/common/Skeleton'
 import {
   BODY_CLASS,
-  COLUMNS,
-  HEADER_CELL_STYLE,
-  HEADER_ROW_CLASS,
+  ColumnHeaderRow,
   HEADER_STYLE,
   ROW_CLASS,
-  ROW_RULE,
   ROW_STYLE,
   SECTION_HEADING_STYLE,
   SECTION_STYLE,
@@ -15,6 +12,7 @@ import {
   TITLE_STYLE,
   TOOLBAR_STYLE,
   WIDE_CELL_CLASS,
+  rowRule,
 } from './boatPerformanceLayout'
 
 /**
@@ -70,19 +68,13 @@ export default function BoatPerformanceSkeleton(): ReactElement {
           </div>
 
           <div style={TABLE_STYLE}>
-            <div className={HEADER_ROW_CLASS} style={{ ...ROW_STYLE, borderBottom: ROW_RULE }}>
-              {COLUMNS.map((column) => (
-                <span key={column} style={HEADER_CELL_STYLE}>
-                  {column}
-                </span>
-              ))}
-            </div>
+            <ColumnHeaderRow />
 
             {[0, 1, 2].map((row) => (
               <div
                 key={row}
                 className={ROW_CLASS}
-                style={{ ...ROW_STYLE, borderTop: row === 0 ? 'none' : ROW_RULE }}
+                style={{ ...ROW_STYLE, ...rowRule(row) }}
               >
                 <span className={WIDE_CELL_CLASS}>
                   <SkeletonText fontSize="var(--text-base)" width="70%" />

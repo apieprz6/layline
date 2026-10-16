@@ -65,7 +65,7 @@ async function RaceArchiveScreen({
       // Its own boundary, inside this one. The race table is a single `races` read and the season
       // rail is the whole archive scored, so a shared `await` would make the list a sailor came to
       // open wait on figures they may only glance at.
-      overall={
+      season={
         <Suspense fallback={rowFallback()}>
           <ThisSeason />
         </Suspense>

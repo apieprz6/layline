@@ -20,7 +20,7 @@ import { FIXTURE_HDG_ACT_DATE, FIXTURE_STW_ACT_DATE } from '../fixtures/syntheti
  *   whole reason ADR 0034 chose a toggle over two stacked charts.
  * - **That a chart fits 390px.** A chart wider than the screen is not a chart.
  *
- * And, since LAY-160, the door: that the Overall tab's **Instrument tuning** row reaches this route
+ * And, since LAY-160, the door: that the "This season" rail's **Instrument tuning** row reaches this route
  * when a thumb lands on it. What the row *says* is Jest's — `InstrumentTuningTeaser.test.tsx` — and
  * what is left for a browser is the tap and the 390px screen it happens on.
  */

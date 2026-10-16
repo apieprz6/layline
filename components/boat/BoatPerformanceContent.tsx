@@ -6,19 +6,18 @@ import { wallClockWindow } from '@/services/recordings/wall-clock'
 import type { RaceListEntry } from '@/types'
 import {
   BODY_CLASS,
-  COLUMNS,
-  HEADER_CELL_STYLE,
-  HEADER_ROW_CLASS,
+  ColumnHeaderRow,
   HEADER_STYLE,
   ROW_CLASS,
-  ROW_RULE,
   ROW_STYLE,
   SECTION_HEADING_STYLE,
   SECTION_STYLE,
   TABLE_STYLE,
   TITLE_STYLE,
   TOOLBAR_STYLE,
+  UPLOAD_BUTTON_STYLE,
   WIDE_CELL_CLASS,
+  rowRule,
 } from './boatPerformanceLayout'
 
 interface BoatPerformanceContentProps {
@@ -33,7 +32,7 @@ interface BoatPerformanceContentProps {
    * thousands of rows, scored — and the race list must not wait on it. The page wraps it in its
    * own `<Suspense>`, so the archive list paints and the season figures stream in beside it.
    */
-  overall: ReactNode
+  season: ReactNode
 }
 
 /**
@@ -59,12 +58,12 @@ interface BoatPerformanceContentProps {
  * and the row falls back to a card — would mean changing the `display` of table elements, which
  * costs some browsers the table's semantics anyway. So it is a list of links, as it was before, and
  * the header row is drawn for the eye and hidden from a screen reader, which hears each race as one
- * link carrying all four figures.
+ * link carrying all four figures, each named (see `RaceRow`).
  */
 export default function BoatPerformanceContent({
   races,
   canWrite,
-  overall,
+  season,
 }: BoatPerformanceContentProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
@@ -81,7 +80,7 @@ export default function BoatPerformanceContent({
               This season
             </h2>
           </div>
-          {overall}
+          {season}
         </section>
 
         <section aria-labelledby="races-heading" style={SECTION_STYLE}>
@@ -97,19 +96,7 @@ export default function BoatPerformanceContent({
             </h2>
 
             {canWrite && (
-              <Link
-                href="/boat-performance/upload"
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 7,
-                  background: 'var(--btn-primary-bg)',
-                  color: 'var(--btn-primary-fg)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <Link href="/boat-performance/upload" style={UPLOAD_BUTTON_STYLE}>
                 Upload a race
               </Link>
             )}
@@ -123,21 +110,11 @@ export default function BoatPerformanceContent({
             />
           ) : (
             <div style={TABLE_STYLE}>
-              <div
-                aria-hidden="true"
-                className={HEADER_ROW_CLASS}
-                style={{ ...ROW_STYLE, borderBottom: ROW_RULE }}
-              >
-                {COLUMNS.map((column) => (
-                  <span key={column} style={HEADER_CELL_STYLE}>
-                    {column}
-                  </span>
-                ))}
-              </div>
+              <ColumnHeaderRow />
 
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {races.map((race, index) => (
-                  <li key={race.id} style={{ borderTop: index === 0 ? 'none' : ROW_RULE }}>
+                  <li key={race.id} style={rowRule(index)}>
                     <RaceRow race={race} />
                   </li>
                 ))}
@@ -150,7 +127,13 @@ export default function BoatPerformanceContent({
   )
 }
 
-/** One race: its title, its window in the recording's own clock, its duration, and its file. */
+/**
+ * One race: its title, its window in the recording's own clock, its duration, and its file.
+ *
+ * Each figure after the title carries its column's name for a screen reader only, since the header
+ * row is hidden from one: the link then reads "Verve Cup, window Aug 22 · 11:05 – 13:20, duration
+ * 2h 15m, file …" rather than four figures run together with nothing to say which is which.
+ */
 function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
   return (
     <Link
@@ -178,11 +161,13 @@ function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
           whiteSpace: 'nowrap',
         }}
       >
+        <span className="sr-only">, window </span>
         {wallClockWindow(race.window_start, race.window_finish)}
       </span>
       <span
         style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
       >
+        <span className="sr-only">, duration </span>
         {describeDuration(race.window_seconds)}
       </span>
       <span
@@ -197,6 +182,7 @@ function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
           whiteSpace: 'nowrap',
         }}
       >
+        <span className="sr-only">, file </span>
         {race.filename}
       </span>
     </Link>
