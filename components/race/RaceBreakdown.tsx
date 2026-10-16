@@ -168,7 +168,7 @@ const CELL_ORDER: readonly CellAgreement[] = [
  * the tile and the map beside it judge the same sailing in the same vocabulary (ADR 0012), and the
  * tile says which Version it is so nobody has to assume.
  *
- * The share is of *judgeable* sailing — Agrees plus Differs — as on the Overall tab and the screen,
+ * The share is of *judgeable* sailing — Agrees plus Differs — as on the season rail and the screen,
  * and what it rests on is said beside it, so a race that recorded its sails for a third of the
  * evening does not read as one that followed the chart all night. The word is never "wrong", about
  * the chart or about the crew (ADR 0030).
@@ -311,7 +311,7 @@ function cellMix({ cells }: RaceChartAgreement): string {
  *
  * ADR 0034's per-Race tile — numbers over thin coverage bars, the bars being this race's own share
  * of the rose, its Tack Pairs, and its line's `R²` — with the headlines ADR 0035 shaped per channel,
- * as the Overall tab's row prints them. Neutral throughout: a figure here says go and look at an
+ * as the season rail's row prints them. Neutral throughout: a figure here says go and look at an
  * instrument and never what to set it to (LAY-138 decision 7).
  */
 function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElement {

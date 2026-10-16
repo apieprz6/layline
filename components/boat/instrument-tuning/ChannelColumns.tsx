@@ -2,7 +2,7 @@
  * The three **Calibration Channels** side by side: each one's name, its figure, what that figure
  * rests on, and a bar.
  *
- * LAY-149 variant D's tile, which two places draw — the Overall tab's **Instrument tuning** row,
+ * LAY-149 variant D's tile, which two places draw — the "This season" rail's **Instrument tuning** row,
  * over the season, and a Race page's calibration check, over one race. One grid for both, so the
  * same `stbd 4.2°` cannot be laid out two ways a tap apart.
  *

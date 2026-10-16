@@ -138,8 +138,8 @@ through the water only in a breeze, so a gap read there was more often off the l
 6 kt is where it spends most of its racing. Same shape, same rule — two readings of the drawn line,
 never a slope or an intercept (ADR 0027) — at a speed the boat actually sails.
 
-It applies to every place the headline is printed: the `STW` chart's readout, the Overall tab's
-Instrument tuning row, and a Race page's calibration tile, which all read one constant
+It applies to every place the headline is printed: the `STW` chart's readout, the "This season"
+rail's Instrument tuning row (the Overall tab's, before LAY-178), and a Race page's calibration tile, which all read one constant
 (`HEADLINE_SPEEDS_KNOTS` in `services/analysis/paddlewheel.ts`). ADR 0034's "at 4 kt and at 8 kt"
 for the readout is superseded the same way.
 
