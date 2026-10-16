@@ -20,7 +20,7 @@ import { FIXTURE_HDG_ACT_DATE, FIXTURE_STW_ACT_DATE } from '../fixtures/syntheti
  *   whole reason ADR 0034 chose a toggle over two stacked charts.
  * - **That a chart fits 390px.** A chart wider than the screen is not a chart.
  *
- * And, since LAY-160, the door: that the Overall tab's **Instrument tuning** row reaches this route
+ * And, since LAY-160, the door: that the "This season" rail's **Instrument tuning** row reaches this route
  * when a thumb lands on it. What the row *says* is Jest's — `InstrumentTuningTeaser.test.tsx` — and
  * what is left for a browser is the tap and the 390px screen it happens on.
  */
@@ -252,10 +252,8 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     }
   })
 
-  test('taps through from the Overall tab’s instrument tuning row', async ({ page }) => {
+  test('taps through from the season rail’s instrument tuning row', async ({ page }) => {
     await gotoHydrated(page, '/boat-performance')
-
-    await page.getByRole('tab', { name: 'Overall' }).click()
 
     // Waited for rather than expected in the first paint: the row has a `Suspense` boundary of its
     // own, because its read is the whole archive where the two rows above it are a ten-Race window.
@@ -269,11 +267,13 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
 
     // Three channels across a 390px screen, which is the question this shape actually raises: a
     // tile designed as a third of a phone has to hold a mono figure without spilling out of its
-    // column. Jest can see the words; only a browser can see the width.
+    // column. Jest can see the words; only a browser can see the width. The row ends inside the
+    // screen it is on — the viewport's own width rather than 390, since on a desktop it sits in
+    // Boat performance's rail (LAY-178) and that rail's width is its own business.
     await expect(row.getByTestId('tuning-channel')).toHaveCount(3)
     const rowBox = await row.boundingBox()
     expect(rowBox).not.toBeNull()
-    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(390)
+    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
 
     for (const channel of ['HDG', 'AWA', 'STW']) {
       const figures = row.locator(`[data-testid="tuning-figures"][data-channel="${channel}"]`)
@@ -293,7 +293,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     // screens inside them, so this link is the only way up from here.
     await page.getByRole('link', { name: '← Boat performance' }).click()
     await expect(page).toHaveURL(/\/boat-performance$/)
-    await expect(page.getByRole('tab', { name: 'Overall' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'This season' })).toBeVisible()
   })
 })
 

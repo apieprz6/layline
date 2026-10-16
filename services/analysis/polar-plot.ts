@@ -195,6 +195,23 @@ export function rimKnots(
   return Math.ceil(fastest / 2) * 2
 }
 
+/**
+ * Every speed the certificate columns in `families` reach: `rimKnots`'s `also`, for a picture that
+ * draws only those columns and so need not leave room for the rest of the certificate.
+ *
+ * The teaser's case. It draws the columns the sailing was scored against and has no focus window to
+ * move, so a rim set by the whole Polar — its 20 kt column, on an afternoon of eight — is a ring
+ * nothing on the card reaches, and the drawing sits in the middle of an empty frame. Nothing is
+ * clamped by fitting it: the moments still go to `rimKnots` alongside, and still clear it.
+ */
+export function familyKnots(families: readonly CertificateFamily[]): number[] {
+  return families.flatMap((family) =>
+    family.curves.flatMap((curve) =>
+      curve.runs.flatMap((run) => run.points.map((point) => point.knots))
+    )
+  )
+}
+
 // ---------------------------------------------------------------------------------------------
 // The focus window
 // ---------------------------------------------------------------------------------------------

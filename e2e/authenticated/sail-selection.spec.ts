@@ -140,10 +140,8 @@ test.describe('the Sail Selection Screen, to an admin', () => {
     expect(await page.locator('[data-testid="sail-selection-cell"][data-ghost]').count()).toBeGreaterThan(0)
   })
 
-  test('taps through from the Overall tab’s sail selection row', async ({ page }) => {
+  test('taps through from the season rail’s sail selection row', async ({ page }) => {
     await gotoHydrated(page, '/boat-performance')
-
-    await page.getByRole('tab', { name: 'Overall' }).click()
 
     const row = page.getByTestId('sail-selection-teaser')
     test.skip((await row.count()) === 0, 'The local archive has no races.')

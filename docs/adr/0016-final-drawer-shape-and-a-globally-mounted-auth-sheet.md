@@ -176,3 +176,14 @@ per-section "Sign in to open …" labels, and the account block in the footer.
 - **Give the locked boat screens a self-contained invite so they can ship before LAY-53.** Rejected: it
   means building an invitation twice and deciding its copy twice, for a ticket that is already
   `ready-for-agent`.
+
+## Amendment (LAY-178, 2026-10-14)
+
+**Boat performance no longer has tabs.** The Races/Overall pair this ADR drew from Wind Data's
+precedent is replaced by one screen: the season's figures in a persistent "This season" rail, and
+the race archive as a table beside it, stacking rail-first on a phone. The LAY-174 prototype weighed
+three tab-free arrangements and the owner chose this one (variant B): a tab hid whichever half the
+sailor was not on, and the season's rows are doors a sailor glances at on the way to a race rather
+than a destination of their own. "Overall tab" in older ADRs now means the rail; `CONTEXT.md` says so.
+
+Wind Data keeps its tabs, and `SectionTabs` stays as its component; nothing else here changes.

@@ -24,6 +24,8 @@ import {
   inFocus,
   plotMoments,
   plotPatches,
+  familyKnots,
+  rimKnots,
   racePolarPlot,
   seasonTrace,
   timeNotDrawn,
@@ -248,6 +250,29 @@ describe('the certificate family', () => {
       ['polar-1', [8]],
       ['polar-2', [10]],
     ])
+  })
+})
+
+describe('the rim', () => {
+  it('can be fitted to the columns a picture draws, rather than the whole certificate', () => {
+    // The teaser draws only the columns the sailing was scored against. Its rim from the whole
+    // Polar would be set by the 12 kt column's 7.6 kt reach, which a 5 kt afternoon never draws —
+    // so the drawing would sit inside a ring nothing reaches.
+    const families = familiesFor([row({ tws: 4, polar_version_id: 'polar-1', sog: 3 })], {
+      'polar-1': POLAR,
+    })
+
+    expect(Math.max(...familyKnots(families))).toBe(4.6)
+    expect(rimKnots(plotMoments([row({ tws: 4, sog: 3 })]), [], familyKnots(families))).toBe(6)
+    expect(rimKnots(plotMoments([row({ tws: 4, sog: 3 })]), [POLAR])).toBe(8)
+  })
+
+  it('still clears the fastest moment, so no speed is drawn slower than it was', () => {
+    // A moment past every drawn column still sets the rim: fitting it to the certificate never
+    // clamps the sailing down.
+    const families = familiesFor([row({ tws: 4, polar_version_id: 'polar-1' })], { 'polar-1': POLAR })
+
+    expect(rimKnots(plotMoments([row({ tws: 4, sog: 9 })]), [], familyKnots(families))).toBeGreaterThan(9)
   })
 })
 
