@@ -105,13 +105,17 @@ export default function WindowStats({
     )
   }
 
-  // Render 2x2 grid of stat cards
+  // Render 2x2 grid of stat cards, filling whatever height the panel is given
+  // (the desktop layout stretches it to its grid row) with the stats spaced evenly
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: '1fr 1fr',
+        alignItems: 'center',
         gap: '14px',
+        flex: 1,
       }}
     >
       <Stat
