@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { CHART, ROWS, RACES, VOCABULARY } from '@/components/analysis/__tests__/fixture'
@@ -87,13 +87,18 @@ describe('/boat-performance/sail-selection', () => {
     expect(document.body.textContent).toBe('')
   })
 
-  it('draws the rail, the ledger, the four thumbnails and the grid to a signed-in sailor', async () => {
+  it('draws the rail, the ledger, and each pane’s four thumbnails and grid to a signed-in sailor', async () => {
     await renderPage()
 
     expect(screen.getByTestId('analysis-filter-rail')).toBeInTheDocument()
     expect(screen.getByTestId('coverage-ledger')).toBeInTheDocument()
-    expect(screen.getAllByTestId('sail-selection-layer')).toHaveLength(4)
-    expect(screen.getAllByTestId('sail-selection-cell')).toHaveLength(6)
+    // Two panes, the second hidden by CSS below 1440px — which jsdom does not apply.
+    const panes = screen.getAllByTestId('sail-selection-pane')
+    expect(panes).toHaveLength(2)
+    for (const pane of panes) {
+      expect(within(pane).getAllByTestId('sail-selection-layer')).toHaveLength(4)
+      expect(within(pane).getAllByTestId('sail-selection-cell')).toHaveLength(6)
+    }
     expect(redirect).not.toHaveBeenCalled()
   })
 
@@ -147,8 +152,8 @@ describe('/boat-performance/sail-selection', () => {
     // Every figure still holds: each row's Target Speed came from the Polar its own Race was
     // sailed under (ADR 0012) and is not re-derived here. What is gone is the claim that a region
     // can *never* hold one, so no cell is called structurally hopeless.
-    expect(screen.getByTestId('sail-selection-grid')).toBeInTheDocument()
-    expect(screen.getByTestId('sail-selection-summary')).toBeInTheDocument()
+    expect(screen.getAllByTestId('sail-selection-grid')).toHaveLength(2)
+    expect(screen.getAllByTestId('sail-selection-summary')).toHaveLength(2)
   })
 
   it('keeps the way back to the section it belongs to', async () => {

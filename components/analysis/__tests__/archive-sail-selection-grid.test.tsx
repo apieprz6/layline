@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within, type BoundFunctions, type queries } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SailSelectionContent from '@/components/analysis/SailSelectionContent'
 import {
@@ -35,6 +35,19 @@ import { SAIL_SELECTION_LAYERS } from '@/components/analysis/sail-selection-chro
  * Needs the owner's recordings and his two Boat Setup artifacts; skips loudly without them.
  */
 
+type Scope = BoundFunctions<typeof queries>
+
+/**
+ * The left pane, which is the whole screen below 1440px. The right one is always rendered too and
+ * hidden by CSS jsdom does not apply; `SailSelectionContent.test.tsx` holds what it draws.
+ */
+const left = (): Scope =>
+  within(
+    screen
+      .getAllByTestId('sail-selection-pane')
+      .find((each) => each.dataset.pane === 'left') as HTMLElement
+  )
+
 describeArchiveScreen('the real chart, with the real archive over it', () => {
   function renderScreen(): ReturnType<typeof userEvent.setup> {
     render(
@@ -57,8 +70,8 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
   it('draws all 338 cells, 26 rows of 13', () => {
     renderScreen()
 
-    expect(screen.getAllByTestId('sail-selection-cell')).toHaveLength(338)
-    expect(screen.getAllByTestId('sail-selection-row')).toHaveLength(26)
+    expect(left().getAllByTestId('sail-selection-cell')).toHaveLength(338)
+    expect(left().getAllByTestId('sail-selection-row')).toHaveLength(26)
   })
 
   it('switches between the four layers from the thumbnails', async () => {
@@ -66,15 +79,15 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
 
     for (const layer of SAIL_SELECTION_LAYERS) {
       await user.click(
-        screen
+        left()
           .getAllByTestId('sail-selection-layer')
           .find((button) => button.dataset.layer === layer.id) as HTMLElement
       )
 
-      expect(screen.getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', layer.id)
-      expect(screen.getByTestId('sail-selection-layer-title')).toHaveTextContent(layer.name)
+      expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', layer.id)
+      expect(left().getByTestId('sail-selection-layer-title')).toHaveTextContent(layer.name)
       // And the grid is redrawn whole on every one of them: no layer renders a subset.
-      expect(screen.getAllByTestId('sail-selection-cell')).toHaveLength(338)
+      expect(left().getAllByTestId('sail-selection-cell')).toHaveLength(338)
     }
   })
 
@@ -83,12 +96,12 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
 
     for (const layer of SAIL_SELECTION_LAYERS) {
       await user.click(
-        screen
+        left()
           .getAllByTestId('sail-selection-layer')
           .find((button) => button.dataset.layer === layer.id) as HTMLElement
       )
 
-      const unprinted = screen
+      const unprinted = left()
         .getAllByTestId('sail-selection-cell')
         .filter((cell) => cell.dataset.print === '')
         .filter((cell) => {
@@ -105,12 +118,12 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
     const reached = new Set<string>()
 
     await user.click(
-      screen
+      left()
         .getAllByTestId('sail-selection-layer')
         .find((button) => button.dataset.layer === 'coverage') as HTMLElement
     )
 
-    for (const cell of screen.getAllByTestId('sail-selection-cell')) {
+    for (const cell of left().getAllByTestId('sail-selection-cell')) {
       if (cell.dataset.print !== '') reached.add(cell.dataset.cell as string)
     }
 
@@ -119,12 +132,12 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
 
     for (const layer of ['target', 'agreement']) {
       await user.click(
-        screen
+        left()
           .getAllByTestId('sail-selection-layer')
           .find((button) => button.dataset.layer === layer) as HTMLElement
       )
 
-      const blank = screen
+      const blank = left()
         .getAllByTestId('sail-selection-cell')
         .filter((cell) => reached.has(cell.dataset.cell as string) && cell.dataset.print === '')
 
@@ -135,12 +148,12 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
   it('prints a dash across the two columns past the certificate’s last, reached or not', async () => {
     const user = renderScreen()
     await user.click(
-      screen
+      left()
         .getAllByTestId('sail-selection-layer')
         .find((button) => button.dataset.layer === 'target') as HTMLElement
     )
 
-    const past = screen
+    const past = left()
       .getAllByTestId('sail-selection-cell')
       .filter((cell) => Number(cell.dataset.tws) > 24)
 
@@ -163,12 +176,12 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
 
     for (const layer of SAIL_SELECTION_LAYERS) {
       await user.click(
-        screen
+        left()
           .getAllByTestId('sail-selection-layer')
           .find((button) => button.dataset.layer === layer.id) as HTMLElement
       )
       printsPerLayer.push(
-        screen.getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
+        left().getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
       )
     }
 
@@ -177,13 +190,13 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
     try {
       for (const [index, layer] of SAIL_SELECTION_LAYERS.entries()) {
         await user.click(
-          screen
+          left()
             .getAllByTestId('sail-selection-layer')
             .find((button) => button.dataset.layer === layer.id) as HTMLElement
         )
 
         expect(
-          screen.getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
+          left().getAllByTestId('sail-selection-cell').map((cell) => cell.dataset.print as string)
         ).toEqual(printsPerLayer[index])
       }
     } finally {
@@ -196,7 +209,7 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
 
     // 140° at 10 kt: the cell ADR 0030 argues the whole breakdown from, a hundred rows across
     // seven races whose sub-figures pull in different directions.
-    const cell = screen
+    const cell = left()
       .getAllByTestId('sail-selection-cell')
       .find((each) => each.dataset.twa === '140' && each.dataset.tws === '10') as HTMLElement
 
