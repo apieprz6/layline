@@ -27,7 +27,7 @@ function Stat({ label, big, sub }: StatProps) {
       <div
         style={{
           fontFamily: 'var(--font-body)',
-          fontSize: '9.5px',
+          fontSize: 'var(--window-stat-label-size, 9.5px)',
           fontWeight: 600,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
@@ -41,7 +41,7 @@ function Stat({ label, big, sub }: StatProps) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '19px',
+            fontSize: 'var(--window-stat-big-size, 19px)',
             fontWeight: 600,
             color: 'var(--text-primary)',
           }}
@@ -50,7 +50,7 @@ function Stat({ label, big, sub }: StatProps) {
         </span>
         <span
           style={{
-            fontSize: '11px',
+            fontSize: 'var(--window-stat-sub-size, 11px)',
             color: 'var(--text-muted)',
           }}
         >
@@ -106,14 +106,13 @@ export default function WindowStats({
   }
 
   // Render 2x2 grid of stat cards, filling whatever height the panel is given
-  // (the desktop layout stretches it to its grid row) with the stats spaced evenly
+  // (the desktop layout stretches it to its grid row, and scales the type to suit)
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr 1fr',
-        alignItems: 'center',
+        alignContent: 'space-evenly',
         gap: '14px',
         flex: 1,
       }}
