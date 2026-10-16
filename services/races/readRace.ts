@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { raceInstrumentCheck } from '@/services/analysis/instrument-tuning'
 import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
 import { readRaceTrack } from '@/services/races/readRaceTrack'
 import { readRecordingRows } from '@/services/races/recording-rows'
@@ -445,6 +446,9 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
       ],
       annotations,
       boat_setup: boatSetup,
+      // This Race's share of each Calibration Channel, by the Instrument Tuning screen's own
+      // per-Race functions over the rows already in hand — so no second read of the Transcription.
+      instruments: raceInstrumentCheck({ race_id: race.id, rows, window: race }),
     }
   } catch (thrown: unknown) {
     // A stamp the wall clock refuses: a fractional second, or an offset, in a column Layline only

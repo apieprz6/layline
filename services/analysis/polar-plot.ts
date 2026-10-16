@@ -476,6 +476,8 @@ export function racePolarPlot(
     polar,
     polar_version_id: race.polar_version_id,
     undrawn: timeNotDrawn(plottable),
+    // The rows the dots are, summed: the Race's two figures, from the same payload as the picture.
+    performance: sumEfficiency(plottable),
   }
 }
 

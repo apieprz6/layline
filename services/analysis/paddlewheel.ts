@@ -29,7 +29,13 @@
 
 import { calibrationEras, withinEra } from '@/services/analysis/calibration-eras'
 import { notCountableReason } from '@/services/analysis/countable'
-import type { AnalysisRow, CalibrationEra, CalibrationLogEntry, TranscriptionChannels } from '@/types'
+import type {
+  AnalysisRow,
+  CalibrationEra,
+  CalibrationLogEntry,
+  NoFitReason,
+  TranscriptionChannels,
+} from '@/types'
 
 /**
  * Rows a fit needs before it may draw a line.
@@ -48,6 +54,15 @@ export const MIN_FIT_POINTS = 5
  * ranges once the archive is larger.
  */
 export const MIN_SOG_SPREAD_KNOTS = 3
+
+/**
+ * The speeds through the water the `STW` check reads its line's gap from 1:1 at — on the chart's
+ * readout, the season rail's row and a Race's calibration tile alike (ADR 0035, amended).
+ *
+ * 4 and 6 kt, not the 4 and 8 ADR 0035 first chose: this boat reaches 8 kt through the water only
+ * in a breeze, so a gap read there was mostly off the line, and 6 kt is where it spends its races.
+ */
+export const HEADLINE_SPEEDS_KNOTS: readonly number[] = [4, 6]
 
 /** Which way the line was fitted, since the slope depends on it and the gap does not. */
 export type FitMethod =
@@ -91,16 +106,8 @@ export interface FittedLine {
   points: number
 }
 
-/** Why a population carries no line of its own. Data, not an absence (ADR 0032). */
-export type NoFitReason =
-  /** No Countable row carried both speeds. */
-  | 'no-points'
-  /** Fewer than `MIN_FIT_POINTS`. */
-  | 'too-few-points'
-  /** Less than `MIN_SOG_SPREAD_KNOTS` of `SOG` between the slowest row and the fastest. */
-  | 'narrow-spread'
-  /** The two channels never varied together, so no line through them is defined. */
-  | 'flat'
+/** Why a population carries no line of its own — in `@/types`, since a Race's page carries it. */
+export type { NoFitReason }
 
 /** A line, or the reason there is none — never a line computed anyway and flagged afterwards. */
 export type FitOutcome =

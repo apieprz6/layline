@@ -56,6 +56,7 @@ import type { ReactElement, ReactNode } from 'react'
 import Link from 'next/link'
 import { formatBandRange } from '@/lib/boat/rigTune'
 import { spacing } from '@/lib/utils/design'
+import type { RaceSailChartRead } from '@/services/analysis/sail-selection'
 import { noteText, sailWithNote, seaStateLabel, SEA_STATES } from '@/services/races/annotations'
 import { wallClockDay, wallClockTime, wallClockWindow } from '@/services/recordings/wall-clock'
 import type {
@@ -71,6 +72,7 @@ import type {
 import Explainer from '@/components/common/Explainer'
 
 import CoverageReadout from './CoverageReadout'
+import RaceBreakdown from './RaceBreakdown'
 import RaceDeletePanel from './RaceDeletePanel'
 import RaceFindings from './RaceFindings'
 import RaceTrackSection from './RaceTrackSection'
@@ -93,6 +95,11 @@ interface RaceDetailViewProps {
    * the race is still true without it.
    */
   season: PolarPlotTraceBin[] | null
+  /**
+   * This race's sailing laid over the Crossover Chart Version the race names — the one its map's
+   * sail overlay reads — or why it cannot be. Its rows are the same archive's as the season trace.
+   */
+  sailChart: RaceSailChartRead
 }
 
 export default function RaceDetailView({
@@ -101,6 +108,7 @@ export default function RaceDetailView({
   canAmend,
   deleteRace,
   season,
+  sailChart,
 }: RaceDetailViewProps): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
@@ -239,6 +247,13 @@ export default function RaceDetailView({
          * They share one selection and one readout, so they are one section, not two.
          */}
         <RaceTrackSection track={race.track} season={season} />
+
+        {/*
+         * The rest of the breakdown, each its own row under the two cards and nothing between
+         * them: the race's two figures, its sails against the chart, its calibration check
+         * (ADR 0033). The sticky readout floats over these as the page scrolls, by design.
+         */}
+        <RaceBreakdown track={race.track} sailChart={sailChart} instruments={race.instruments} />
 
         {/* Capped at a measure: every one of these is a label on the left and a figure on the
             right, and across 800px of desktop the two stop reading as a pair. */}

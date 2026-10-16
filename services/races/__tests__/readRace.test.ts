@@ -771,6 +771,25 @@ describe('readRace', () => {
       ).toHaveLength(2)
     })
 
+    it('carries the Race’s two figures beside its Polar Plot, summed over the dots’ own rows', async () => {
+      const plot = (await readRace('race-1'))?.track.plot
+
+      expect(plot?.performance.rows).toBe(plot?.moments.length)
+      expect(plot?.performance.elapsed_seconds).toBe(
+        plot?.moments.reduce((sum, moment) => sum + moment.seconds, 0)
+      )
+    })
+
+    it('checks each Calibration Channel over the window, saying why where it found nothing', async () => {
+      const instruments = (await readRace('race-1'))?.instruments
+
+      // Five rows in the window, two of them frozen: too few for any of the three checks, and each
+      // says so as data rather than as a zero.
+      expect(instruments?.heading).toMatchObject({ ok: false, reason: 'too-few-rows' })
+      expect(instruments?.asymmetry).toMatchObject({ ok: false })
+      expect(instruments?.speed.fitted).toBe(false)
+    })
+
     it('scores it against the Polar Version the Race holds, by id', async () => {
       await readRace('race-1')
 

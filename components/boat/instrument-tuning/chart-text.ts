@@ -15,7 +15,7 @@ import {
   type NoFitReason,
 } from '@/services/analysis/paddlewheel'
 import { countOf } from '@/services/analysis/figures'
-import type { CalibrationChannel } from '@/types'
+import type { AsymmetryFigure, CalibrationChannel, RaceAwaAsymmetryResult } from '@/types'
 
 /**
  * The three channels this screen checks, in the causal order it reads them in: `HDG → AWA → STW`.
@@ -194,4 +194,33 @@ export function races(count: number): string {
 /** `3 Tack Pairs` / `1 Tack Pair` / `no Tack Pair`. */
 export function tackPairs(count: number): string {
   return count === 0 ? 'no Tack Pair' : `${countOf(count)} Tack Pair${count === 1 ? '' : 's'}`
+}
+
+/**
+ * Why a Race paired no tacks, in words — the Tack Dial's and the Race page's one sentence for it.
+ */
+export function asymmetryAbsence(
+  excluded: Extract<RaceAwaAsymmetryResult, { ok: false }>
+): string {
+  if (excluded.reason === 'too-few-rows') {
+    return `only ${rows(excluded.row_count)} this check could read`
+  }
+  if (excluded.reason === 'too-few-segments') {
+    return `${excluded.segment_count} steady segment${excluded.segment_count === 1 ? '' : 's'}, too few to pair`
+  }
+  return 'no two steady segments on opposite tacks close enough together'
+}
+
+/**
+ * Which tack read wider at one point of sail, and by how much.
+ *
+ * `wider_by_deg` and the tack rather than the signed Asymmetry, which is half of it and needs the
+ * sign convention explained — a row has nowhere to explain one. "Even" where the two tacks held the
+ * same angle, which is a real reading and not a missing one.
+ */
+export function widerReading(figure: AsymmetryFigure | null): string {
+  if (figure === null) return 'no pairs'
+  if (figure.wider_tack === null) return 'even'
+
+  return `${figure.wider_tack === 'port' ? 'port' : 'stbd'} ${figure.wider_by_deg.toFixed(1)}°`
 }

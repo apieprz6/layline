@@ -26,6 +26,7 @@ import {
   plotPatches,
   familyKnots,
   rimKnots,
+  racePlottableRows,
   racePolarPlot,
   seasonTrace,
   timeNotDrawn,
@@ -349,5 +350,21 @@ describe('one Race', () => {
     // The manoeuvre is drawn nowhere and said; the last row lasted no measured span at all.
     expect(plot.undrawn).toEqual({ seconds: 10, parts: [{ reason: 'not_countable', seconds: 10 }] })
     expect(plot.polar).toBe(POLAR)
+  })
+
+  it('carries the Race’s two figures, summed over exactly the rows its dots are', () => {
+    const plot = racePolarPlot(transcription, { id: 'race-a', polar_version_id: 'polar-1' }, POLAR, targets)
+
+    // One set of sums: the dots' own speeds and targets, weighted by their own seconds, are the
+    // figure — so the tiles under the picture cannot disagree with it.
+    const sailed = plot.moments.reduce((sum, moment) => sum + moment.sog * moment.seconds, 0)
+    const target = plot.moments.reduce((sum, moment) => sum + moment.target_knots * moment.seconds, 0)
+
+    expect(plot.performance.rows).toBe(plot.moments.length)
+    expect(plot.performance.elapsed_seconds).toBe(90)
+    expect(plot.performance.polar_efficiency).toBeCloseTo(sailed / target)
+    expect(plot.performance).toEqual(
+      sumEfficiency(racePlottableRows(transcription, { id: 'race-a', polar_version_id: 'polar-1' }, targets))
+    )
   })
 })

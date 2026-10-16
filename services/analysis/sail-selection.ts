@@ -44,7 +44,7 @@
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { countableRows, mergeEfficiency, sumEfficiency } from '@/services/analysis/efficiency'
-import { NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
+import { EMPTY_FILTER, NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
 import type {
   AnalysisDimension,
@@ -792,6 +792,72 @@ export function chartAgreement(cells: readonly SailSelectionCell[]): ChartAgreem
     following: mergeEfficiency(following),
     differing: mergeEfficiency(differing),
   }
+}
+
+/** One Race's **Cell Agreement** slice, as its own page states it. */
+export interface RaceChartAgreement extends ChartAgreement {
+  /** This Race's placed Countable rows by how each stood against its own cell. */
+  verdicts: Record<CellVerdict, number>
+  /** The cells this Race reached, by the Cell Agreement its own rows give each. No empty cells. */
+  cells: Partial<Record<CellAgreement, number>>
+}
+
+/**
+ * What a Race's page can say about its sails against the chart: its slice, or why there is none.
+ *
+ * Always against the **Crossover Chart Version the Race names**, the one its track's sail overlay
+ * reads (ADR 0012) — never the chart in force now, which would put the tile and the map beside it
+ * on two vocabularies. Three reasons for no slice, because they are three different facts: the race
+ * names no Version, the Version it names could not be read, or the archive could not be.
+ */
+export type RaceSailChartRead =
+  | {
+      ok: true
+      agreement: RaceChartAgreement
+      /** Which Version of the chart the slice is against, so the tile can say so. */
+      chart_version_number: number
+    }
+  | { ok: false; reason: 'no-chart-version' | 'chart-unreadable' | 'archive-unreadable' }
+
+/**
+ * The Sail Selection Screen's own fold, over one Race's rows and the chart Version handed in.
+ *
+ * Rows are judged one at a time against their own cell, so with the Version the screen draws this
+ * is exactly the Race's share of the screen's season figures; the Race page hands it the Race's own
+ * Version instead, which is the one its map judges against. Filtered by Race before the fold rather
+ * than after it, because a cell's slices pool every Race that reached it.
+ */
+export function raceChartAgreement(
+  rows: readonly MatchableRow[],
+  raceId: string,
+  chart: CrossoverChartPayload,
+  domain: PolarDomain | null,
+  chartVersionId: string | null
+): RaceChartAgreement {
+  const { cells } = getSailSelectionData(
+    rows.filter((row) => row.race_id === raceId),
+    EMPTY_FILTER,
+    // Nothing is narrowed, so no dimension is read; the screen's registry would only name chips.
+    [],
+    chart,
+    domain,
+    chartVersionId
+  )
+
+  const verdicts = { ...NO_VERDICTS }
+  const reached: Partial<Record<CellAgreement, number>> = {}
+
+  for (const cell of cells) {
+    const totals = cellTotals(cell.slices)
+    if (totals.agreement === 'no-rows') continue
+
+    reached[totals.agreement] = (reached[totals.agreement] ?? 0) + 1
+    for (const verdict of Object.keys(verdicts) as CellVerdict[]) {
+      verdicts[verdict] += totals.verdicts[verdict]
+    }
+  }
+
+  return { ...chartAgreement(cells), verdicts, cells: reached }
 }
 
 /**
