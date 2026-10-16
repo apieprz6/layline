@@ -4,7 +4,10 @@ import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
 import RigRecommendation from '@/components/dashboard/RigRecommendation'
 import ModelComparison from '@/components/dashboard/ModelComparison'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import OverallCards from '@/components/boat/OverallCards'
+import { resolveAccount } from '@/lib/account/resolveAccount'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
+import type { ReactElement } from 'react'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,10 +17,13 @@ const SHOW_WIND_FORECAST = false
 const SHOW_MODEL_COMPARISON = false
 const SHOW_RIG_SETUP = false
 
-export default async function DashboardPage() {
-  const [chii2Result, purdueResult] = await Promise.all([
+export default async function DashboardPage(): Promise<ReactElement> {
+  // The Account is resolved a second time here, beside the layout's, for the reason
+  // `/boat-performance` gives; alongside the buoys, so it never adds a wait of its own.
+  const [chii2Result, purdueResult, account] = await Promise.all([
     fetchCHII2(),
     fetchPurdueBuoy(),
+    resolveAccount(),
   ])
   const buoyData = [chii2Result, purdueResult]
 
@@ -65,6 +71,14 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
       )}
 
       <LiveWindCard buoys={buoyData} />
+
+      {/* The Boat performance Overall tab's three cards, for a signed-in sailor only, as cells
+          of this same grid: `OverallCards` hands back its three boundaries as siblings, so each
+          card takes one column — beside Live Wind on a desktop, the next two along on an
+          ultrawide. A Guest never reaches it, so a signed-out request makes no archive read at
+          all. Each card streams behind its own `<Suspense>`, so the wind paints the moment the
+          buoys answer. */}
+      {account && <OverallCards />}
 
       {SHOW_RACE_BRIEFING && (
         <TacticalBriefing
