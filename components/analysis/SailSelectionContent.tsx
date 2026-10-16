@@ -9,11 +9,14 @@ import SailSelectionGrid, { SailSelectionThumbnails } from '@/components/analysi
 import {
   AGREEMENT_GLYPHS,
   NO_FIGURE,
+  PANES_CLASS,
+  SECOND_PANE_CLASS,
   SWATCH_STYLE,
   agreementTint,
   coverageTint,
   sailSelectionLayer,
   targetTint,
+  type CellView,
   type SailSelectionLayer,
 } from '@/components/analysis/sail-selection-chrome'
 import { radius, spacing } from '@/lib/utils/design'
@@ -35,6 +38,7 @@ import {
   type GridCoverage,
 } from '@/services/analysis/sail-selection'
 import { sailBands } from '@/services/boat/crossoverSailBands'
+import { crossoverSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -90,7 +94,19 @@ interface SailSelectionContentProps {
  * an effect would also run on mount and would silently rewrite a sailor's bad link into a good
  * one, dropping the narrowing they asked for without ever saying it did not exist.
  *
- * The **layer** and the **open cell** are deliberately *not* mirrored. They are where a sailor is
+ * ## Two panes from 1440px
+ *
+ * An ultrawide window has room for two full-size grids, so from 1440px the screen draws a second
+ * pane beside the first, each with its own thumbnails and its own layer — Chart on the left and
+ * Agreement on the right to begin with, since the sail carried against the sail printed is the
+ * comparison two grids are most for. Below 1440px the second pane is hidden by CSS and the first is
+ * the screen exactly as it was. Both are always rendered, so the server's markup is the right
+ * layout at every width; the right pane keeps its layer across a resize down and back.
+ *
+ * The **open cell** is one, shared: it is highlighted in both grids and opens one sheet, because
+ * the sheet already reads a cell every way and two panes are two of those ways side by side.
+ *
+ * The **layers** and the **open cell** are deliberately *not* mirrored. They are where a sailor is
  * looking rather than which rows they are reasoning about, and a URL that changed on every glance
  * would make the back button a history of glances.
  */
@@ -104,10 +120,17 @@ export default function SailSelectionContent({
   chartVersionId = null,
 }: SailSelectionContentProps): ReactElement {
   const [filter, setFilter] = useState<AnalysisFilter>(initialFilter)
-  const [layer, setLayer] = useState<SailSelectionLayer>('chart')
+  const [layers, setLayers] = useState<readonly [SailSelectionLayer, SailSelectionLayer]>([
+    'chart',
+    'agreement',
+  ])
   const [selected, setSelected] = useState<string | null>(null)
 
   const bands = useMemo(() => sailBands(chart), [chart])
+  const regions = useMemo(() => {
+    const labels = new Map(chart.sail_definitions.map((each) => [each.number, each.label]))
+    return crossoverSailRegions(chart, (sail) => labels.get(sail) ?? null)
+  }, [chart])
 
   // 338 cells folded **once** per narrowing and read by five grids — four thumbnails and the
   // full-size one — plus the summary line. Everything downstream reads the fold rather than
@@ -128,7 +151,6 @@ export default function SailSelectionContent({
     }
   }, [rows, filter, dimensions, chart, domain, chartVersionId])
 
-  const active = sailSelectionLayer(layer)
   const open = views.find((view) => cellKey(view.cell.row, view.cell.column) === selected) ?? null
   const narrowed = data.ledger.matched_rows < rows.length
 
@@ -157,42 +179,36 @@ export default function SailSelectionContent({
         onRecordedRowsChange={(include) => change(setRecordedRows(filter, dimensions, include))}
       />
 
-      <SailSelectionThumbnails
-        views={views}
-        tws_axis={data.tws_axis}
-        layer={layer}
-        bands={bands}
-        onSelect={(next) => {
-          setLayer(next)
-          // The open cell stays open across a layer change: the sailor is reading one cell four
-          // ways, which is the comparison the small multiples exist to make.
-        }}
-      />
-
-      <div>
-        <h2 data-testid="sail-selection-layer-title" style={LAYER_TITLE_STYLE}>
-          {active.name}
-        </h2>
-        <p style={{ ...NOTE_STYLE, marginTop: 2 }}>{active.blurb}</p>
+      <div className={PANES_CLASS}>
+        {layers.map((layer, pane) => (
+          <Pane
+            key={pane}
+            className={pane === 0 ? 'flex' : SECOND_PANE_CLASS}
+            pane={pane === 0 ? 'left' : 'right'}
+            layer={layer}
+            // The open cell stays open across a layer change: the sailor is reading one cell four
+            // ways, which is the comparison the small multiples exist to make.
+            onLayer={(next) =>
+              setLayers((current) => (pane === 0 ? [next, current[1]] : [current[0], next]))
+            }
+            twa_axis={data.twa_axis}
+            tws_axis={data.tws_axis}
+            views={views}
+            coverage={coverage}
+            reasons={reasons}
+            bands={bands}
+            regions={regions}
+            chart={chart}
+            selected={selected}
+            onSelect={setSelected}
+          />
+        ))}
       </div>
-
-      <SailSelectionGrid
-        views={views}
-        twa_axis={data.twa_axis}
-        tws_axis={data.tws_axis}
-        layer={active}
-        bands={bands}
-        selected={selected}
-        onSelect={setSelected}
-      />
-
-      <p data-testid="sail-selection-summary" style={SUMMARY_STYLE}>
-        {summary(layer, coverage)}
-      </p>
 
       {/* ADR 0025 asks every screen to state what its figures leave out, wherever there is room.
           This is that room: the rows the Countable rule excluded, and the two ways a row reaches no
-          cell at all — no wind recorded, or below the chart's own first row or column. */}
+          cell at all — no wind recorded, or below the chart's own first row or column. It is about
+          the matched rows rather than a layer, so it spans both panes. */}
       <p style={NOTE_STYLE}>
         {countOf(data.excluded_rows)} matched rows are excluded as Frozen, Low-Speed or inside a
         Maneuver Window.{' '}
@@ -201,8 +217,6 @@ export default function SailSelectionContent({
         {data.rows_off_grid > 0 &&
           `${countOf(data.rows_off_grid)} sailed below the chart's own first row or column, where it makes no recommendation to have agreed or disagreed with.`}
       </p>
-
-      <Legend layer={layer} coverage={coverage} reasons={reasons} />
 
       {narrowed && (
         <button
@@ -225,6 +239,93 @@ export default function SailSelectionContent({
         />
       )}
     </div>
+  )
+}
+
+/**
+ * One grid and everything that describes it: the thumbnails that pick its layer, the layer's name
+ * and blurb, the grid, the line under it and its legend.
+ */
+function Pane({
+  className,
+  pane,
+  layer,
+  onLayer,
+  twa_axis,
+  tws_axis,
+  views,
+  coverage,
+  reasons,
+  bands,
+  regions,
+  chart,
+  selected,
+  onSelect,
+}: {
+  /** Carries `display`, which is how the second pane is hidden below 1440px. */
+  className: string
+  pane: 'left' | 'right'
+  layer: SailSelectionLayer
+  onLayer: (layer: SailSelectionLayer) => void
+  twa_axis: readonly number[]
+  tws_axis: readonly number[]
+  views: readonly CellView[]
+  coverage: GridCoverage
+  reasons: readonly string[]
+  bands: ReadonlyMap<number, string>
+  regions: SailRegions
+  chart: CrossoverChartPayload
+  selected: string | null
+  onSelect: (key: string | null) => void
+}): ReactElement {
+  const active = sailSelectionLayer(layer)
+
+  return (
+    <section
+      data-testid="sail-selection-pane"
+      data-pane={pane}
+      aria-label={`${active.name} layer`}
+      className={className}
+      style={PANE_STYLE}
+    >
+      <SailSelectionThumbnails
+        views={views}
+        tws_axis={tws_axis}
+        layer={layer}
+        bands={bands}
+        onSelect={onLayer}
+      />
+
+      <div>
+        <h2 data-testid="sail-selection-layer-title" style={LAYER_TITLE_STYLE}>
+          {active.name}
+        </h2>
+        <p style={{ ...NOTE_STYLE, marginTop: 2 }}>{active.blurb}</p>
+      </div>
+
+      <SailSelectionGrid
+        views={views}
+        twa_axis={twa_axis}
+        tws_axis={tws_axis}
+        layer={active}
+        bands={bands}
+        regions={regions}
+        selected={selected}
+        onSelect={onSelect}
+      />
+
+      <p data-testid="sail-selection-summary" style={SUMMARY_STYLE}>
+        {summary(layer, coverage)}
+      </p>
+
+      <Legend
+        layer={layer}
+        coverage={coverage}
+        reasons={reasons}
+        regions={regions}
+        chart={chart}
+      />
+    </section>
   )
 }
 
@@ -262,13 +363,17 @@ function Legend({
   layer,
   coverage,
   reasons,
+  regions,
+  chart,
 }: {
   layer: SailSelectionLayer
   coverage: GridCoverage
   /** Why each unreachable cell is unreachable, deduplicated — never one asserted reason. */
   reasons: readonly string[]
+  regions: SailRegions
+  chart: CrossoverChartPayload
 }): ReactElement | null {
-  if (layer === 'chart') return null
+  if (layer === 'chart') return <ChartLegend regions={regions} chart={chart} />
 
   return (
     <ul data-testid="sail-selection-legend" style={LEGEND_STYLE}>
@@ -346,8 +451,54 @@ function Legend({
   )
 }
 
+/**
+ * The Chart layer's key: the name behind every number still printed, and nothing where none is.
+ *
+ * A number is printed only where a region was too small to hold its sail's name, so the list is of
+ * those sails alone — each once, in Definition order, however many small regions it has.
+ */
+function ChartLegend({
+  regions,
+  chart,
+}: {
+  regions: SailRegions
+  chart: CrossoverChartPayload
+}): ReactElement | null {
+  const numbered = new Set<number>()
+  regions.region.forEach((cells, row) =>
+    cells.forEach((index, column) => {
+      const sail = chart.cells[row]?.[column]
+      if (index !== null && regions.labels[index] === null && sail != null) numbered.add(sail)
+    })
+  )
+  const listed = chart.sail_definitions.filter((each) => numbered.has(each.number))
+  if (listed.length === 0) return null
+
+  return (
+    <ul data-testid="sail-selection-legend" style={LEGEND_STYLE}>
+      {listed.map((definition) => (
+        <li key={definition.number} data-testid="sail-selection-legend-sail">
+          {definition.number} is {definition.label}, printed as a number where its block is too
+          small for the name.
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function Swatch({ fill }: { fill: string }): ReactElement {
   return <span aria-hidden="true" style={{ ...SWATCH_STYLE, background: fill }} />
+}
+
+/**
+ * A column at the screen's own rhythm, with `minWidth: 0` so its table can never widen the pane.
+ * No `display` here: it comes from the class, and an inline one would beat the class that hides
+ * the second pane.
+ */
+const PANE_STYLE: CSSProperties = {
+  flexDirection: 'column',
+  gap: spacing(3),
+  minWidth: 0,
 }
 
 const LAYER_TITLE_STYLE: CSSProperties = {

@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactElement } from 'react'
 import {
+  GRID_BLEED_CLASS,
   GRID_CORNER_STYLE,
   GRID_HEAD_STYLE,
   GRID_ROW_HEAD_STYLE,
@@ -17,6 +18,7 @@ import {
 } from '@/components/analysis/sail-selection-chrome'
 import { radius, spacing } from '@/lib/utils/design'
 import { cellKey } from '@/services/analysis/sail-selection'
+import type { SailRegionLabel, SailRegions } from '@/services/boat/crossoverSailRegions'
 
 interface SailSelectionGridProps {
   /** Row-major, every cell of the chart, with its figures already folded. */
@@ -26,6 +28,8 @@ interface SailSelectionGridProps {
   layer: SailSelectionLayerSpec
   /** Which definition number is drawn in which band — the chart's own, shared with Boat Setup. */
   bands: ReadonlyMap<number, string>
+  /** The chart's sail regions, drawn on a layer that `draws_regions`. */
+  regions: SailRegions
   /** The `cellKey` of the cell whose breakdown is open, or null. */
   selected: string | null
   onSelect: (key: string | null) => void
@@ -39,9 +43,14 @@ interface SailSelectionGridProps {
  * number. The thumbnails above are the switcher, so comparing coverage against performance is a
  * glance up rather than a decoding exercise (ADR 0030).
  *
- * **The grid takes the full width of the screen**, out through the page's own padding, with
- * `table-layout: fixed` — so thirteen wind-speed columns divide a 390px phone between them at
+ * **The grid takes the full width of its pane**, out through the page's own padding on a phone,
+ * with `table-layout: fixed` — so thirteen wind-speed columns divide a 390px phone between them at
  * ~27px each with no sideways scroll, and the angle column stays pinned for anything narrower.
+ *
+ * **On the Chart layer a sail is named once per region**, not numbered per cell: a name does not
+ * fit 27px, and a region of several cells does hold one (`crossoverSailRegions`). The name is
+ * printed across the region's label rectangle, every region is outlined so its shape survives the
+ * night-vision theme's flattened colours, and a region too small for its name keeps its number.
  *
  * A cell is a `<button>` and a tap **never navigates**: the rows arrived once and the breakdown is
  * a re-render (ADR 0029). Its accessible name is the cell's sentence rather than its glyph, because
@@ -53,11 +62,17 @@ export default function SailSelectionGrid({
   tws_axis,
   layer,
   bands,
+  regions,
   selected,
   onSelect,
 }: SailSelectionGridProps): ReactElement {
   return (
-    <div data-testid="sail-selection-grid" data-layer={layer.id} style={BLEED_STYLE}>
+    <div
+      data-testid="sail-selection-grid"
+      data-layer={layer.id}
+      className={GRID_BLEED_CLASS}
+      style={SCROLL_STYLE}
+    >
       <table style={GRID_TABLE_STYLE}>
         <thead>
           <tr>
@@ -85,7 +100,14 @@ export default function SailSelectionGrid({
                 const key = cellKey(row, column)
                 const ghost = isGhost(view, layer)
                 const open = selected === key
-                const print = layer.print(view)
+                const index = layer.draws_regions ? regions.region[row]?.[column] ?? null : null
+                const named: SailRegionLabel | null =
+                  index === null ? null : regions.labels[index] ?? null
+                const anchor = named !== null && named.row === row && named.column === column
+                const edges = layer.draws_regions ? regions.edges[row]?.[column] ?? null : null
+                // A named region's cells are identified by the name drawn across the region, so
+                // that is what they print: the name, never a blank (ADR 0030).
+                const print = named === null ? layer.print(view) : named.label
 
                 return (
                   <td key={tws} style={CELL_WRAP_STYLE}>
@@ -119,6 +141,33 @@ export default function SailSelectionGrid({
                         aria-hidden="true"
                         style={{ ...FILL_STYLE, background: layer.tint(view, bands) }}
                       />
+                      {edges !== null && (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            ...EDGE_STYLE,
+                            borderTopWidth: edges.top ? 1 : 0,
+                            borderRightWidth: edges.right ? 1 : 0,
+                            borderBottomWidth: edges.bottom ? 1 : 0,
+                            borderLeftWidth: edges.left ? 1 : 0,
+                          }}
+                        />
+                      )}
+                      {named !== null && anchor && (
+                        <span
+                          aria-hidden="true"
+                          data-testid="sail-selection-region-name"
+                          style={{
+                            ...REGION_NAME_STYLE,
+                            // Measured from this cell's border edge, so `columns` cells of it is
+                            // exactly the rectangle: every cell is the same width and 24px tall.
+                            width: `calc(${named.columns} * (100% + 2px))`,
+                            height: named.rows * CELL_HEIGHT,
+                          }}
+                        >
+                          {named.label}
+                        </span>
+                      )}
                       <span
                         aria-hidden="true"
                         style={{
@@ -128,7 +177,7 @@ export default function SailSelectionGrid({
                           fontStyle: isFillerAnchored(view, layer) ? 'italic' : 'normal',
                         }}
                       >
-                        {print}
+                        {named === null ? print : ''}
                       </span>
                     </button>
                   </td>
@@ -202,24 +251,23 @@ export function SailSelectionThumbnails({
 }
 
 /**
- * The grid is the screen's subject, so it takes the whole width: out through the page's own
- * padding. `overflowX` keeps a sideways scroll as the fallback below 390px rather than crushing
- * the cells, with the angle column pinned so a cell always has a row to belong to.
+ * The grid is the screen's subject, so on a phone it takes the whole width: out through the page's
+ * own padding (`GRID_BLEED_CLASS`). `overflowX` keeps a sideways scroll as the fallback below 390px
+ * rather than crushing the cells, with the angle column pinned so a cell always has a row to belong
+ * to.
  */
-const BLEED_STYLE: CSSProperties = {
-  marginLeft: `calc(-1 * ${spacing(4)})`,
-  marginRight: `calc(-1 * ${spacing(4)})`,
-  overflowX: 'auto',
-}
+const SCROLL_STYLE: CSSProperties = { overflowX: 'auto' }
 
 const CELL_WRAP_STYLE: CSSProperties = { padding: 0 }
+
+/** 24px of height: a row a finger can be run along, and 26 of them still fit a phone screen. */
+const CELL_HEIGHT = 24
 
 const CELL_STYLE: CSSProperties = {
   position: 'relative',
   display: 'block',
   width: '100%',
-  // 24px of height: a row a finger can be run along, and 26 of them still fit a phone screen.
-  height: 24,
+  height: CELL_HEIGHT,
   padding: 0,
   boxSizing: 'border-box',
   background: 'var(--surface-raised)',
@@ -228,6 +276,41 @@ const CELL_STYLE: CSSProperties = {
 }
 
 const FILL_STYLE: CSSProperties = { position: 'absolute', inset: 0 }
+
+/** A region boundary: drawn over the cell's own border, so neighbours' edges meet in one line. */
+const EDGE_STYLE: CSSProperties = {
+  position: 'absolute',
+  inset: -1,
+  borderStyle: 'solid',
+  borderColor: 'var(--text-secondary)',
+  pointerEvents: 'none',
+}
+
+/**
+ * A region's name, lifted over the cells it spans so the cells after it in the row cannot paint
+ * over it, and transparent to taps so each of those cells is still its own button.
+ */
+const REGION_NAME_STYLE: CSSProperties = {
+  position: 'absolute',
+  top: -1,
+  left: -1,
+  zIndex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '0 2px',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
+  // A button does not wrap its text, and this name is placed on the strength of wrapping.
+  whiteSpace: 'normal',
+  textAlign: 'center',
+  // The grid's own print, the same face and size as every other layer's numbers and glyphs.
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-xs)',
+  lineHeight: '12px',
+  color: 'var(--text-primary)',
+  pointerEvents: 'none',
+}
 
 const PRINT_STYLE: CSSProperties = {
   position: 'absolute',

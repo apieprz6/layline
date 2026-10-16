@@ -2,6 +2,7 @@ import { Suspense, type ReactElement } from 'react'
 import ArchiveUnreadable from '@/components/analysis/ArchiveUnreadable'
 import SailSelectionContent from '@/components/analysis/SailSelectionContent'
 import SailSelectionSkeleton from '@/components/analysis/SailSelectionSkeleton'
+import { SCREEN_MEASURE_CLASS } from '@/components/analysis/sail-selection-chrome'
 import ScreenHeading from '@/components/analysis/ScreenHeading'
 import EmptyState from '@/components/common/EmptyState'
 import { resolveAccount } from '@/lib/account/resolveAccount'
@@ -132,7 +133,10 @@ async function SailSelectionScreen({ params }: { params: SearchParams }): Promis
 function Screen({ children }: { children: ReactElement }): ReactElement {
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)', padding: spacing(4) }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+      <div
+        className={SCREEN_MEASURE_CLASS}
+        style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}
+      >
         <ScreenHeading title="Sail selection" />
 
         {children}

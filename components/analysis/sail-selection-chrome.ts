@@ -165,6 +165,13 @@ export interface SailSelectionLayerSpec {
   narrows: boolean
   /** Whether this layer's figure can rest on the Polar's own filler, and so be flagged. */
   flags_filler: boolean
+  /**
+   * Whether the grid draws the chart's sail **regions** on this layer: each region outlined and
+   * named once inside it, in place of a number per cell (`crossoverSailRegions`). True on Chart
+   * alone, because the sail is that layer's whole answer. A region too small for its name falls
+   * back to `print`.
+   */
+  draws_regions: boolean
   /** What the cell prints. The empty string is blank, and blank means blank. */
   print(view: CellView): string
   /** The cell's fill. `transparent` where nothing was reached: empty reads as empty. */
@@ -181,6 +188,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'The sail the chart calls for. Never narrowed, never ghosted.',
     narrows: false,
     flags_filler: false,
+    draws_regions: true,
     print: (view) => (view.cell.sail_number === null ? '' : String(view.cell.sail_number)),
     tint: (view, bands) => {
       const band = view.cell.sail_number === null ? undefined : bands.get(view.cell.sail_number)
@@ -196,6 +204,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Races that reached the cell.',
     narrows: true,
     flags_filler: false,
+    draws_regions: false,
     print: (view) => (view.totals.rows === 0 ? '' : String(view.totals.races)),
     tint: (view) => (view.totals.rows === 0 ? 'transparent' : coverageTint(view.totals.races)),
     detail: () => '',
@@ -206,6 +215,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Percent of Target Speed over the cell’s Countable rows.',
     narrows: true,
     flags_filler: true,
+    draws_regions: false,
     print: (view) => {
       // A figure first, always: a computed figure is never suppressed on the strength of a claim
       // about the Polar's domain (ADR 0036). Then the structural dash — which prints whether or
@@ -238,6 +248,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Whether the sail carried was the one the cell prints.',
     narrows: true,
     flags_filler: false,
+    draws_regions: false,
     print: (view) => (view.totals.rows === 0 ? '' : AGREEMENT_GLYPHS[view.totals.agreement]),
     tint: (view) =>
       view.totals.rows === 0 ? 'transparent' : agreementTint(view.totals.agreement),
@@ -354,7 +365,9 @@ export const GRID_ROW_HEAD_STYLE: CSSProperties = {
 export const GRID_STICKY_STYLE: CSSProperties = {
   position: 'sticky',
   left: 0,
-  zIndex: 1,
+  // Above a Chart-layer region name, which is lifted over the cells it spans and would otherwise
+  // slide over the angles when the grid scrolls sideways.
+  zIndex: 2,
   borderRight: '1px solid var(--surface-border)',
 }
 
@@ -368,3 +381,39 @@ export const SWATCH_STYLE: CSSProperties = {
   border: '1px solid var(--surface-border)',
   borderRadius: radius('xs'),
 }
+
+/**
+ * The screen's measure: the full width up to 1700px, and centred past it.
+ *
+ * Each grid's cells are 24px tall whatever their width, so on a 2560px window two panes of thirteen
+ * columns each would draw cells ~95px wide — a strip rather than a grid. The same bound
+ * `RaceDetailView` takes, and above the two-pane breakpoint, so nothing narrower moves.
+ */
+export const SCREEN_MEASURE_CLASS = 'mx-auto max-w-[1700px]'
+
+/**
+ * The grids: one below 1440px, and two side by side from there — the app's widest step, the one
+ * `globals.css` already gives the station layout and the bottom dock.
+ *
+ * Two panes, each with its own layer, so a sailor can hold the Chart beside Agreement (or any two)
+ * instead of glancing between thumbnails. `minmax(0, 1fr)` rather than `1fr`, so a pane's table can
+ * never push its column wider than half.
+ */
+export const PANES_CLASS = 'grid gap-6 min-[1440px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+
+/**
+ * The second pane, which exists only from 1440px.
+ *
+ * Hidden by CSS rather than mounted by a media query, so the server's markup is already the right
+ * layout at every width and nothing jumps on hydration. `display: none` also takes it out of the
+ * accessibility tree and the tab order, so a phone's screen reader meets one grid, not two.
+ */
+export const SECOND_PANE_CLASS = 'hidden min-[1440px]:flex'
+
+/**
+ * The page's own padding, which a grid bleeds out through on a phone so thirteen columns get every
+ * pixel of 390 (`SailSelectionGrid`). Two panes side by side would bleed into the gap between them
+ * and overlap, and at that width there is no pixel to win, so from 1440px the grid sits inside.
+ * `-mx-4` is `--space-4`'s 16px.
+ */
+export const GRID_BLEED_CLASS = '-mx-4 min-[1440px]:mx-0'
