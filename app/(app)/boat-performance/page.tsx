@@ -62,15 +62,12 @@ async function RaceArchiveScreen({
     <BoatPerformanceContent
       races={races}
       canWrite={writable}
-      // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
-      // tab is the whole archive scored, so a shared `await` would make the list wait on the
-      // figures behind a tab the sailor may never open.
-      // Its own boundary, inside this one. The Races tab is a single `races` read and the Overall
-      // tab is the whole archive scored, so a shared `await` would make the list wait on the
-      // figures behind a tab the sailor may never open.
-      overall={
+      // Its own boundary, inside this one. The race table is a single `races` read and the season
+      // rail is the whole archive scored, so a shared `await` would make the list a sailor came to
+      // open wait on figures they may only glance at.
+      season={
         <Suspense fallback={rowFallback()}>
-          <OverallTab />
+          <ThisSeason />
         </Suspense>
       }
     />
@@ -78,8 +75,8 @@ async function RaceArchiveScreen({
 }
 
 /**
- * The Overall tab: the Polar performance teaser, how well the Sail selection chart matches what the
- * boat actually does, and how much of a season the instrument checks rest on.
+ * The "This season" rail: the Polar performance teaser, how well the Sail selection chart matches
+ * what the boat actually does, and how much of a season the instrument checks rest on.
  *
  * Three rows, which are a list of doors: each states one figure and taps through to the screen that
  * can be reasoned on. The third reads the whole archive and so has a boundary of its own, which the
@@ -104,7 +101,7 @@ async function RaceArchiveScreen({
  * backfilled in one afternoon still teases the races last sailed, and "the first five" is a
  * meaningful slice rather than an accident of insertion order.
  *
- * It is still a limit and not the whole archive, which is most of what this tab costs: the
+ * It is still a limit and not the whole archive, which is most of what this rail costs: the
  * remaining races' Transcriptions would be read, assessed and scored to produce rows nobody here
  * would ever see.
  *
@@ -116,7 +113,7 @@ async function RaceArchiveScreen({
  * travels with it. The one thing a Polar would add is which region of the chart can never carry a
  * figure, which this card does not state and the screen itself does.
  */
-async function OverallTab(): Promise<ReactElement> {
+async function ThisSeason(): Promise<ReactElement> {
   const [recent, chart] = await Promise.all([
     readRecentRaceRows(Math.max(TEASER_RACES, SAIL_SELECTION_TEASER_RACES)),
     readCrossoverChartScreen(),
@@ -186,7 +183,7 @@ async function OverallTab(): Promise<ReactElement> {
 /**
  * What a boundary holds the place of: one teaser row's own height.
  *
- * Both boundaries on this screen are waiting for a row of this shape — the tab's first one for
+ * Both boundaries on this screen are waiting for a row of this shape — the rail's first one for
  * whichever row paints first, and the Instrument tuning row's for itself — so the placeholder is one
  * function rather than the same two numbers written twice.
  */
@@ -203,7 +200,7 @@ function rowFallback(): ReactElement {
  * `readInstrumentTuning` on what that costs and why). LAY-155 measured a smaller read of the same
  * shape at 9.12 s against a hosted database, essentially all of it latency.
  *
- * So it is deliberately **not** awaited beside the other two. Put in that `Promise.all`, a tab a
+ * So it is deliberately **not** awaited beside the other two. Put in that `Promise.all`, a rail a
  * sailor reads at a glance would hold its two measured rows back for seconds to print one word
  * whose only job is to say whether the screen behind it is worth opening. Behind this boundary, the
  * rows above paint and this one arrives when the archive has been read.

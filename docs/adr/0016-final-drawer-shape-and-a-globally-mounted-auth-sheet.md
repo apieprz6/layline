@@ -137,6 +137,27 @@ decisions. The five entries, the fixed order and the two dividers are unchanged.
   padlock and a "Sign in" on the same line, which `e2e/boat-sections.spec.ts` measures rather than
   assumes.
 
+## Amendment (LAY-177, 2026-10-14)
+
+The locked pair's internal order swaps: **Boat performance now sits directly above Boat
+management.**
+
+```
+Dashboard
+Wind Data
+────────────────
+Boat performance   🔒
+Boat management    🔒
+────────────────
+Settings
+```
+
+Boat performance is the section the owner opens most once the boat is set up — the pair's
+original order, management then performance, matched the sequence a boat gets *built* in, not the
+one it gets *used* in. Everything else this ADR fixed is unchanged: five flat entries, two
+dividers, the same order for a Guest and a signed-in sailor, the Locked Entry treatment and its
+per-section "Sign in to open …" labels, and the account block in the footer.
+
 ## Alternatives considered
 
 - **Drop Wind Data, following the mockup.** Rejected: it is a real section with an index-to-detail
@@ -155,3 +176,14 @@ decisions. The five entries, the fixed order and the two dividers are unchanged.
 - **Give the locked boat screens a self-contained invite so they can ship before LAY-53.** Rejected: it
   means building an invitation twice and deciding its copy twice, for a ticket that is already
   `ready-for-agent`.
+
+## Amendment (LAY-178, 2026-10-14)
+
+**Boat performance no longer has tabs.** The Races/Overall pair this ADR drew from Wind Data's
+precedent is replaced by one screen: the season's figures in a persistent "This season" rail, and
+the race archive as a table beside it, stacking rail-first on a phone. The LAY-174 prototype weighed
+three tab-free arrangements and the owner chose this one (variant B): a tab hid whichever half the
+sailor was not on, and the season's rows are doors a sailor glances at on the way to a race rather
+than a destination of their own. "Overall tab" in older ADRs now means the rail; `CONTEXT.md` says so.
+
+Wind Data keeps its tabs, and `SectionTabs` stays as its component; nothing else here changes.

@@ -46,6 +46,10 @@ export default function RaceHeader({ onOpenMenu }: RaceHeaderProps) {
   return (
     <div
       style={{
+        // Held to the token rather than left to its content, so a screen below can fill exactly
+        // what is left of the viewport (`--app-header-height` in globals.css).
+        boxSizing: 'border-box',
+        height: 'var(--app-header-height)',
         padding: '14px 14px 12px',
         borderBottom: '1px solid var(--surface-border)',
         display: 'flex',

@@ -1,20 +1,28 @@
-'use client'
-
 import Link from 'next/link'
-import { useState, type ReactElement, type ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import EmptyState from '@/components/common/EmptyState'
-import SectionTabs, { tabPanelId } from '@/components/common/SectionTabs'
-import { spacing } from '@/lib/utils/design'
 import { describeDuration } from '@/services/recordings/coverage'
 import { wallClockWindow } from '@/services/recordings/wall-clock'
 import type { RaceListEntry } from '@/types'
-
-type Tab = 'races' | 'overall'
-
-const TABS = [
-  { id: 'races', label: 'Races' },
-  { id: 'overall', label: 'Overall' },
-] as const satisfies readonly { id: Tab; label: string }[]
+import {
+  BODY_CLASS,
+  ColumnHeaderRow,
+  HEADER_STYLE,
+  LIST_CLASS,
+  RACES_CLASS,
+  RAIL_CLASS,
+  ROOT_CLASS,
+  ROW_CLASS,
+  ROW_STYLE,
+  SECTION_HEADING_STYLE,
+  SECTION_STYLE,
+  TABLE_CLASS,
+  TABLE_STYLE,
+  TITLE_STYLE,
+  TOOLBAR_STYLE,
+  UPLOAD_BUTTON_STYLE,
+  rowRule,
+} from './boatPerformanceLayout'
 
 interface BoatPerformanceContentProps {
   /** Newest first, as `readRaces` orders them. */
@@ -22,19 +30,25 @@ interface BoatPerformanceContentProps {
   /** An admin, who may add one. Everyone signed in reads the same list (ADR 0019). */
   canWrite: boolean
   /**
-   * The Overall tab's own content, rendered on the server and passed in.
+   * The season's figures, rendered on the server and passed in.
    *
-   * A node rather than data, because what fills this tab is a read across the whole archive —
-   * thousands of rows, scored — and the Races tab must not wait on it. The page wraps it in its
-   * own `<Suspense>`, so the archive list paints and the season figures stream in behind it.
+   * A node rather than data, because what fills the rail is a read across the whole archive —
+   * thousands of rows, scored — and the race list must not wait on it. The page wraps it in its
+   * own `<Suspense>`, so the archive list paints and the season figures stream in beside it.
    */
-  overall: ReactNode
+  season: ReactNode
 }
 
 /**
- * **Boat performance**: the archive on the Races tab, the season's figures on Overall.
+ * **Boat performance**: the season's figures in a rail, and the archive as a table beside it.
  *
- * The list states a **duration** and never a row count. A duration can be held against a sailor's
+ * Both at once, where they used to be two tabs (LAY-174's variant B, built on LAY-178): the rail
+ * is a row of doors into the season's screens and the table is the way into one race, and neither
+ * is the one a sailor should have to click past to reach the other. On a phone the rail stacks
+ * above the table — see `BODY_CLASS`. On a desktop the page holds still and the race list scrolls
+ * under its own column headers — see `ROOT_CLASS`.
+ *
+ * The table states a **duration** and never a row count. A duration can be held against a sailor's
  * memory of the afternoon; "6,337 rows" cannot be held against anything, and counts a dead feed's
  * verbatim copies as evidence (ADR 0009). The race's own page states how much of that duration was
  * actually recorded.
@@ -42,109 +56,123 @@ interface BoatPerformanceContentProps {
  * A race with no title shows its window and says so. An untitled race is normal (ADR 0010), and
  * generating "Race on Sep 4" here would be Layline writing Testimony the sailor withheld.
  *
- * **Overall** is no longer the empty state ADR 0016 called for: LAY-155 gave it its first real
- * card, the Polar performance teaser, which tap through to the filterable detail screen.
+ * ## A list of rows, not a `<table>`
+ *
+ * Each row is one door, so each row is one link, and a `<tr>` cannot be one: a table would mean a
+ * link in the title cell stretched over its siblings, and a phone — where three columns do not fit
+ * and the row falls back to a card — would mean changing the `display` of table elements, which
+ * costs some browsers the table's semantics anyway. So it is a list of links, as it was before, and
+ * the header row is drawn for the eye and hidden from a screen reader, which hears each race as one
+ * link carrying all three figures, each named (see `RaceRow`).
  */
 export default function BoatPerformanceContent({
   races,
   canWrite,
-  overall,
+  season,
 }: BoatPerformanceContentProps): ReactElement {
-  const [activeTab, setActiveTab] = useState<Tab>('races')
-
   return (
-    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
-      <SectionTabs
-        title="Boat performance"
-        tabs={TABS}
-        activeTab={activeTab}
-        onSelect={setActiveTab}
-      />
+    <div className={ROOT_CLASS} style={{ background: 'var(--page-bg)' }}>
+      <div style={HEADER_STYLE}>
+        <h1 style={TITLE_STYLE}>Boat performance</h1>
+      </div>
 
-      <div role="tabpanel" id={tabPanelId(activeTab)} style={{ padding: spacing(4) }}>
-        {activeTab === 'races' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>
+      <div className={BODY_CLASS}>
+        <section aria-labelledby="this-season-heading" className={RAIL_CLASS} style={SECTION_STYLE}>
+          {/* In a toolbar row of its own, with nothing else in it, so it lines up with "Races"
+              beside it rather than sitting half a button higher. */}
+          <div style={TOOLBAR_STYLE}>
+            <h2 id="this-season-heading" style={SECTION_HEADING_STYLE}>
+              This season
+            </h2>
+          </div>
+          {season}
+        </section>
+
+        <section aria-labelledby="races-heading" className={RACES_CLASS} style={SECTION_STYLE}>
+          <div style={TOOLBAR_STYLE}>
+            <h2 id="races-heading" style={SECTION_HEADING_STYLE}>
+              Races
+              {/* No count of none: "Races · 0" above an empty state says the same thing twice. */}
+              {races.length > 0 && (
+                <span style={{ color: 'var(--text-muted)', fontWeight: 'var(--weight-regular)' }}>
+                  {` · ${races.length}`}
+                </span>
+              )}
+            </h2>
+
             {canWrite && (
-              <Link
-                href="/boat-performance/upload"
-                style={{
-                  alignSelf: 'flex-start',
-                  padding: '10px 14px',
-                  borderRadius: 7,
-                  background: 'var(--btn-primary-bg)',
-                  color: 'var(--btn-primary-fg)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                }}
-              >
+              <Link href="/boat-performance/upload" style={UPLOAD_BUTTON_STYLE}>
                 Upload a race
               </Link>
             )}
+          </div>
 
-            {races.length === 0 ? (
-              <EmptyState
-                mark="⛵"
-                title="No races uploaded yet"
-                detail="Races appear here once one has been logged, newest first."
-              />
-            ) : (
-              <ul
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  listStyle: 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: spacing(2),
-                }}
-              >
-                {races.map((race) => (
-                  <li key={race.id}>
-                    <Link
-                      href={`/boat-performance/races/${race.id}`}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: spacing(1),
-                        background: 'var(--surface-raised)',
-                        border: '1px solid var(--surface-border)',
-                        borderRadius: 'var(--radius-md)',
-                        padding: spacing(3),
-                        textDecoration: 'none',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-display)',
-                          fontSize: 'var(--text-base)',
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        {race.title ?? 'Untitled race'}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: 'var(--text-sm)',
-                          color: 'var(--text-accent)',
-                        }}
-                      >
-                        {wallClockWindow(race.window_start, race.window_finish)}
-                      </span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                        {describeDuration(race.window_seconds)} · {race.filename}
-                      </span>
-                    </Link>
+          {races.length === 0 ? (
+            <EmptyState
+              mark="⛵"
+              title="No races uploaded yet"
+              detail="Races appear here once one has been logged, newest first."
+            />
+          ) : (
+            <div className={TABLE_CLASS} style={TABLE_STYLE}>
+              <ColumnHeaderRow />
+
+              <ul className={LIST_CLASS} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {races.map((race, index) => (
+                  <li key={race.id} style={rowRule(index)}>
+                    <RaceRow race={race} />
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(3) }}>{overall}</div>
-        )}
+            </div>
+          )}
+        </section>
       </div>
     </div>
+  )
+}
+
+/**
+ * One race: its title, its window in the recording's own clock, and its duration.
+ *
+ * Each figure after the title carries its column's name for a screen reader only, since the header
+ * row is hidden from one: the link then reads "Verve Cup, window Aug 22 · 11:05 – 13:20, duration
+ * 2h 15m" rather than three figures run together with nothing to say which is which.
+ */
+function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
+  return (
+    <Link
+      href={`/boat-performance/races/${race.id}`}
+      className={ROW_CLASS}
+      style={{ ...ROW_STYLE, textDecoration: 'none' }}
+    >
+      <span
+        style={{
+          minWidth: 0,
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--text-base)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        {race.title ?? 'Untitled race'}
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--text-accent)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span className="sr-only">, window </span>
+        {wallClockWindow(race.window_start, race.window_finish)}
+      </span>
+      <span
+        style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+      >
+        <span className="sr-only">, duration </span>
+        {describeDuration(race.window_seconds)}
+      </span>
+    </Link>
   )
 }
