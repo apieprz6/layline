@@ -1,5 +1,5 @@
 import { Children, type ReactElement, type ReactNode } from 'react'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { RACES, ROWS } from '@/components/analysis/__tests__/fixture'
@@ -57,7 +57,7 @@ describe('Dashboard', () => {
     render(await resolveServerTree(await DashboardPage()))
 
     expect(screen.getByText('Live Wind')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Boat performance' })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="/boat-performance"]')).toBeNull()
     expect(readRecentRaceRows).not.toHaveBeenCalled()
     expect(readCrossoverChartScreen).not.toHaveBeenCalled()
     expect(readInstrumentTuning).not.toHaveBeenCalled()
@@ -68,9 +68,8 @@ describe('Dashboard', () => {
 
     render(await resolveServerTree(await DashboardPage()))
 
-    const boat = screen.getByRole('region', { name: 'Boat performance' })
-    const hrefs = Array.from(boat.querySelectorAll('a')).map((a) => a.getAttribute('href'))
-    expect(hrefs).toEqual([
+    const cards = Array.from(document.querySelectorAll('a[href^="/boat-performance"]'))
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual([
       '/boat-performance/polar',
       '/boat-performance/sail-selection',
       '/boat-performance/instrument-tuning',
@@ -78,7 +77,7 @@ describe('Dashboard', () => {
 
     // Below the live wind card in document order, which is what stacks it beneath on a phone.
     const wind = screen.getByText('Live Wind')
-    expect(wind.compareDocumentPosition(boat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wind.compareDocumentPosition(cards[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('tells a signed-in sailor an unreadable archive is unreadable, not empty', async () => {
@@ -87,10 +86,9 @@ describe('Dashboard', () => {
 
     render(await resolveServerTree(await DashboardPage()))
 
-    const boat = screen.getByRole('region', { name: 'Boat performance' })
-    expect(boat).not.toHaveTextContent('Nothing to summarise yet')
+    expect(screen.queryByText('Nothing to summarise yet')).not.toBeInTheDocument()
     // The Overall tab's own words, once per card that depends on the ten-race read.
-    expect(within(boat).getAllByText('The archive could not be read')).toHaveLength(2)
+    expect(screen.getAllByText('The archive could not be read')).toHaveLength(2)
   })
 
   it('tells a signed-in sailor an empty archive is empty, in the Overall tab\'s words', async () => {
@@ -99,9 +97,8 @@ describe('Dashboard', () => {
 
     render(await resolveServerTree(await DashboardPage()))
 
-    const boat = screen.getByRole('region', { name: 'Boat performance' })
-    expect(within(boat).getAllByText('Nothing to summarise yet')).toHaveLength(2)
-    expect(boat).not.toHaveTextContent('The archive could not be read')
+    expect(screen.getAllByText('Nothing to summarise yet')).toHaveLength(2)
+    expect(screen.queryByText('The archive could not be read')).not.toBeInTheDocument()
   })
 
   it('hands back the live wind without waiting on any archive read', async () => {
