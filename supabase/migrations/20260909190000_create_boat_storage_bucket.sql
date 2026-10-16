@@ -63,6 +63,7 @@ ON CONFLICT (id) DO NOTHING;
 --   recordings/{recording_id}/{filename}         one qtVlm VDR export, as one Recording
 --   boat-setup/{kind}/{version_id}/{filename}    one file-backed Boat Setup Version
 --   tmp/{user_id}/{upload_id}/{filename}         an upload wizard not yet submitted
+--   boat-identity/icon/{icon_id}/{filename}      the boat's one current icon
 --
 -- Keyed on recording_id and never on race_id: one export file may back several
 -- Recordings, because a regatta day is uploaded once per race, and a Recording is
@@ -75,6 +76,14 @@ ON CONFLICT (id) DO NOTHING;
 -- (Comment corrected in LAY-101, which settled the artifact list at four and made
 -- boat_setup_versions.file_backed_kinds_only enforce this. The statements below are
 -- unchanged and already applied; only the prose moved.)
+--
+-- boat-identity/ is identity, not a Boat Setup artifact: one current object, no versions, and the
+-- old one deleted when it is replaced or removed. {icon_id} is fresh per upload, so a replacement
+-- never overwrites the bytes the row still names. Unlike every path above it is stored, as
+-- boats.icon_path, since the id lives in no column of its own. Nothing sweeps it.
+--
+-- (Path added in LAY-180, by 20261016190000_boat_icon.sql. As with LAY-101, only this comment
+-- changed; the statements below already cover it.)
 --
 -- {filename} is the sailor's own filename, sanitised only as far as a Storage key
 -- requires. The verbatim original is a column on the row, so nothing ever parses a

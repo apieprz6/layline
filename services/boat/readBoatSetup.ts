@@ -56,7 +56,7 @@ export async function readBoatSetup(): Promise<BoatSetup | null> {
 
   const { data: boat, error: boatError } = await supabase
     .from('boats')
-    .select('id, name, model, created_at, updated_at')
+    .select('id, name, model, icon_path, icon_updated_at, created_at, updated_at')
     .maybeSingle<Boat>()
 
   if (boatError) {

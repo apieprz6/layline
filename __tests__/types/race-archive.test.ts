@@ -86,6 +86,8 @@ describe('the eleven row types', () => {
       id: 'b',
       name: 'Handsome Pete',
       model: 'Beneteau 10R',
+      icon_path: null,
+      icon_updated_at: null,
       created_at: '2026-09-10T00:00:00Z',
       updated_at: '2026-09-10T00:00:00Z',
     }

@@ -45,6 +45,11 @@ jest.mock('@/lib/account/resolveAccount', () => ({
   resolveAccount: jest.fn(async () => null),
 }))
 
+// The boat the signed-in header names: one small row, read only once there is an Account.
+jest.mock('@/services/boat/readBoatHeaderIdentity', () => ({
+  readBoatHeaderIdentity: jest.fn(async () => null),
+}))
+
 import AppGroupLayout from '../layout'
 import { CREW } from '@/__tests__/fixtures/accounts'
 
@@ -57,10 +62,12 @@ function readLayoutCode(): string {
 
 describe('(app) route group layout', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
+  const { readBoatHeaderIdentity } = jest.requireMock('@/services/boat/readBoatHeaderIdentity')
 
   beforeEach(() => {
     jest.clearAllMocks()
     resolveAccount.mockResolvedValue(null)
+    readBoatHeaderIdentity.mockResolvedValue(null)
   })
 
   // An async Server Component is a function returning a promise of an element;
@@ -96,6 +103,25 @@ describe('(app) route group layout', () => {
     // so the whole object — Role and user id included — is in the RSC payload.
     // What is asserted here is that nothing renders it, which is the claim.
     expect(screen.queryByText(/admin/i)).not.toBeInTheDocument()
+  })
+
+  it('names the boat in a signed-in sailor’s header', async () => {
+    resolveAccount.mockResolvedValue(CREW)
+    readBoatHeaderIdentity.mockResolvedValue({ name: 'Handsome Pete', iconUpdatedAt: null })
+
+    await renderLayout()
+
+    // The header's own swap of wordmark for name is RaceHeader's suite; the drawer keeps
+    // its own wordmark, so "layline" is still on the page here.
+    expect(screen.getByText('Handsome Pete')).toBeInTheDocument()
+  })
+
+  it('reads nothing about the boat for a Guest', async () => {
+    // ADR 0015: the boat's name is never served signed-out — so it is never read either.
+    await renderLayout()
+
+    expect(readBoatHeaderIdentity).not.toHaveBeenCalled()
+    expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
   })
 
   it('shows a Guest the guest footer', async () => {

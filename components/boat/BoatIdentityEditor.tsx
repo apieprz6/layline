@@ -1,9 +1,23 @@
 'use client'
 
-import { useState, type CSSProperties, type FormEvent, type ReactElement } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type FormEvent,
+  type ReactElement,
+} from 'react'
 import BoatIdentityHeader from '@/components/boat/BoatIdentityHeader'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { saveBoatIdentity } from '@/app/(app)/boat-management/actions'
+import {
+  BOAT_ICON_ACCEPT,
+  MAX_BOAT_ICON_BYTES,
+  boatIconTooLarge,
+  boatIconUrl,
+} from '@/lib/boat/icon'
 import { spacing } from '@/lib/utils/design'
 import type { Boat } from '@/types'
 
@@ -37,12 +51,30 @@ const BUTTON_STYLE: CSSProperties = {
   cursor: 'pointer',
 }
 
+const SMALL_BUTTON_STYLE: CSSProperties = {
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 'var(--weight-medium)',
+  padding: '6px 12px',
+  cursor: 'pointer',
+  background: 'var(--btn-ghost-bg)',
+  border: '1px solid var(--btn-ghost-border)',
+  borderRadius: 'var(--btn-primary-radius)',
+  color: 'var(--btn-ghost-fg)',
+}
+
+/** Shown when the save never got an answer — a dropped connection, or a body Next refused. */
+const UNREACHABLE = 'The boat could not be saved. Try again.'
+
 /**
  * The boat's identity, edited in place by an **admin**.
  *
  * Closed until asked for: the header reads as the boat, not as a form, and the
  * pencil is the only thing added to it. Which is also why this is the one client
  * island on the screen — everything else here is a Server Component.
+ *
+ * The icon is staged like the two fields: chosen or removed here, previewed locally, and
+ * committed by the same Save — or dropped by Cancel — so there is never a half-saved edit.
  *
  * The write itself is authorized on the server, in `saveBoatIdentity`, and again by
  * RLS. This component is rendered only for an admin, but that is a courtesy to the
@@ -52,6 +84,51 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  /** A chosen file and its local preview, until Save or Cancel. */
+  const [stagedFile, setStagedFile] = useState<File | null>(null)
+  const [stagedPreview, setStagedPreview] = useState<string | null>(null)
+  const [removeStaged, setRemoveStaged] = useState(false)
+  const iconInput = useRef<HTMLInputElement>(null)
+
+  // An object URL holds the file in memory until revoked, so each one goes when it is replaced.
+  useEffect(() => {
+    if (stagedPreview === null) return
+    return () => URL.revokeObjectURL(stagedPreview)
+  }, [stagedPreview])
+
+  function clearChosenFile(): void {
+    if (iconInput.current) iconInput.current.value = ''
+    setStagedFile(null)
+    setStagedPreview(null)
+  }
+
+  function discard(): void {
+    clearChosenFile()
+    setRemoveStaged(false)
+    setMessage(null)
+  }
+
+  function onChooseIcon(event: ChangeEvent<HTMLInputElement>): void {
+    const file = event.currentTarget.files?.[0]
+    if (!file) return
+
+    // A courtesy, so a photo straight off a phone is refused before it travels. The server checks
+    // the size again, and the bytes' type, which only it does.
+    if (file.size > MAX_BOAT_ICON_BYTES) {
+      clearChosenFile()
+      setMessage(boatIconTooLarge(file.size))
+      return
+    }
+
+    setMessage(null)
+    setRemoveStaged(false)
+    setStagedFile(file)
+    setStagedPreview(URL.createObjectURL(file))
+  }
+
+  const preview =
+    stagedPreview ??
+    (!removeStaged && boat.icon_updated_at !== null ? boatIconUrl(boat.icon_updated_at) : null)
 
   // A plain submit handler rather than `useActionState`: the form is reachable only
   // through a button that needs JavaScript to open it, so there is no no-JS
@@ -60,13 +137,24 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
+    // Set from state rather than read off the input, which carries no `name`: the staged file is
+    // the one this component previewed, and a cleared input can never send a stale one.
+    if (stagedFile !== null) formData.set('icon', stagedFile)
 
     setSaving(true)
     setMessage(null)
-    const result = await saveBoatIdentity(formData)
+
+    let result: Awaited<ReturnType<typeof saveBoatIdentity>>
+    try {
+      result = await saveBoatIdentity(formData)
+    } catch (thrown: unknown) {
+      console.error('Boat identity: save did not complete:', thrown)
+      result = { ok: false, message: UNREACHABLE }
+    }
     setSaving(false)
 
     if (result.ok) {
+      discard()
       setOpen(false)
       return
     }
@@ -81,11 +169,12 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
       <BoatIdentityHeader
         name={boat.name}
         model={boat.model}
+        iconUpdatedAt={boat.icon_updated_at}
         action={
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label="Edit the boat’s name and model"
+            aria-label="Edit the boat’s name, model and icon"
             style={{
               background: 'transparent',
               border: 'none',
@@ -156,6 +245,48 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
         />
       </div>
 
+      <div>
+        <span style={LABEL_STYLE}>Icon</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing(3) }}>
+          {preview !== null && (
+            // eslint-disable-next-line @next/next/no-img-element -- a local object URL, or the private route
+            <img
+              src={preview}
+              width={48}
+              height={48}
+              alt="Icon preview"
+              style={{ borderRadius: 'var(--radius-md)', objectFit: 'cover', flexShrink: 0 }}
+            />
+          )}
+          <label htmlFor="boat-icon" style={SMALL_BUTTON_STYLE}>
+            Upload icon
+          </label>
+          {/* Visually hidden rather than `display: none`, so it stays reachable by keyboard
+              through its label. */}
+          <input
+            ref={iconInput}
+            id="boat-icon"
+            type="file"
+            accept={BOAT_ICON_ACCEPT}
+            onChange={onChooseIcon}
+            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
+          />
+          {preview !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                clearChosenFile()
+                setRemoveStaged(boat.icon_path !== null)
+              }}
+              style={SMALL_BUTTON_STYLE}
+            >
+              Remove icon
+            </button>
+          )}
+          {removeStaged && <input type="hidden" name="removeIcon" value="true" />}
+        </div>
+      </div>
+
       {message !== null && (
         <p
           role="alert"
@@ -174,8 +305,8 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
         <button
           type="button"
           onClick={() => {
+            discard()
             setOpen(false)
-            setMessage(null)
           }}
           style={{
             ...BUTTON_STYLE,

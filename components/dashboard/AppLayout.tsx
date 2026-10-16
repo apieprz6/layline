@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, ReactNode } from 'react'
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import RaceHeader from './RaceHeader'
 import HamburgerMenu from './HamburgerMenu'
@@ -9,7 +9,7 @@ import { signInWithGoogle, signOutHere } from '@/lib/account/browserAuth'
 import { relativePathOrHome } from '@/lib/account/nextPath'
 import { useThemeSync } from '@/lib/hooks/useTheme'
 import { useRefreshOnIdentityChange } from '@/lib/hooks/useRefreshOnIdentityChange'
-import type { Account } from '@/types'
+import type { Account, BoatHeaderIdentity } from '@/types'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -19,9 +19,18 @@ interface AppLayoutProps {
    * (ADR 0018). `null` is a **Guest**.
    */
   account: Account | null
+  /**
+   * The boat the header names, read on the server alongside the Account. Always `null`
+   * for a **Guest**, whom no screen names the boat to (ADR 0015).
+   */
+  boat?: BoatHeaderIdentity | null
 }
 
-export default function AppLayout({ children, account }: AppLayoutProps) {
+export default function AppLayout({
+  children,
+  account,
+  boat = null,
+}: AppLayoutProps): ReactElement {
   const [menuOpen, setMenuOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   /**
@@ -77,6 +86,9 @@ export default function AppLayout({ children, account }: AppLayoutProps) {
     <div className="min-h-screen">
       <RaceHeader
         onOpenMenu={() => setMenuOpen(true)}
+        // Never passed to a Guest even if one arrived: the Account is the gate, here as
+        // on the server.
+        boat={account ? boat : null}
       />
 
       <HamburgerMenu

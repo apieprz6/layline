@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import AppLayout from '@/components/dashboard/AppLayout'
 import { resolveAccount } from '@/lib/account/resolveAccount'
+import { readBoatHeaderIdentity } from '@/services/boat/readBoatHeaderIdentity'
 
 /**
  * Layout for the routes that carry the app chrome — `/`, `/wind-data`,
@@ -13,11 +14,19 @@ import { resolveAccount } from '@/lib/account/resolveAccount'
  * every route in the group dynamic, which costs `/settings` the static render it
  * was the only page to have.
  *
+ * The boat the header names is read here too, and only once there is an Account: a
+ * **Guest** costs no read and is served no name (ADR 0015, amended by LAY-180).
+ *
  * `/station/[buoyId]` stays outside the group; `StationLayout` supplies its own
  * header and dock, and nothing on a station screen is gated.
  */
 export default async function AppGroupLayout({ children }: { children: ReactNode }) {
   const account = await resolveAccount()
+  const boat = account ? await readBoatHeaderIdentity() : null
 
-  return <AppLayout account={account}>{children}</AppLayout>
+  return (
+    <AppLayout account={account} boat={boat}>
+      {children}
+    </AppLayout>
+  )
 }
