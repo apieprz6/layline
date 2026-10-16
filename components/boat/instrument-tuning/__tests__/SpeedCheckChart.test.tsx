@@ -145,13 +145,14 @@ describe('the fit-method toggle', () => {
     renderChart()
 
     // The two fits read the same rows and disagree about the line through them: orthogonal sits
-    // +0.24 kt from 1:1 at 4 kt, SOG-on-STW +0.30 kt — and by 8 kt the second has crossed over.
+    // +0.24 kt from 1:1 at 4 kt, SOG-on-STW +0.30 kt — and by 6 kt the second has closed to a third
+    // of that, its line (2, 2.5) → (9, 8.8) sitting 2.5 + 4 × 0.9 − 6 = +0.10 kt off 1:1.
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.24 ktline vs 1:1 at 4 kt')
 
     await userEvent.click(screen.getByRole('radio', { name: 'SOG on STW' }))
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.30 ktline vs 1:1 at 4 kt')
-    expect(screen.getByTestId('chart-readout')).toHaveTextContent('−0.10 ktat 8 kt')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.10 ktat 6 kt')
     expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
       'noise in STW flattens this line'
     )
@@ -297,12 +298,13 @@ describe('the line’s coefficients', () => {
     }
   })
 
-  it('gives the line’s gap from 1:1 at 4 kt and at 8 kt, which is a reading of the drawn line', () => {
+  it('gives the line’s gap from 1:1 at 4 kt and at 6 kt, which is a reading of the drawn line', () => {
     renderChart()
 
     const readout = screen.getByTestId('chart-readout')
     expect(readout).toHaveTextContent('+0.24 ktline vs 1:1 at 4 kt')
-    expect(readout).toHaveTextContent('+0.13 ktat 8 kt')
+    // (2, 2.3) → (9, 9.1): 2.3 + 4 × 6.8/7 − 6 = +0.19 kt.
+    expect(readout).toHaveTextContent('+0.19 ktat 6 kt')
   })
 
   it('keeps R² and the knot gap, which depend on no fit at all', () => {

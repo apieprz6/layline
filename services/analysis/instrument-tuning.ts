@@ -28,6 +28,7 @@ import { awaAsymmetryByEra, eraAwaAsymmetry, raceAwaAsymmetry } from '@/services
 import { headingOffsetByEra, raceHeadingOffset } from '@/services/analysis/compass-deviation'
 import { detectManeuvers, type ManeuverAssessableRow } from '@/services/analysis/maneuvers'
 import {
+  HEADLINE_SPEEDS_KNOTS,
   lineGapAt,
   paddlewheelDivergence,
   raceDivergence,
@@ -217,11 +218,6 @@ function speedRaces<Row extends TuningRow>(
     rows: race.rows,
   }))
 }
-
-/**
- * The speeds the `STW` headline reads its gap from 1:1 at, season and Race alike (ADR 0035).
- */
-export const HEADLINE_SPEEDS_KNOTS: readonly number[] = [4, 8]
 
 /**
  * One Race's contribution to each of the three channels, for the per-Race page's calibration tile.

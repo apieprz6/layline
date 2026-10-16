@@ -16,7 +16,7 @@
  * - **Performance** is the Polar Plot's own `performance` — `sumEfficiency` over the rows its dots
  *   are drawn from, summed once on the server (ADR 0040). No second payload, no re-scoring.
  * - **Sail selection vs. chart** is `raceChartAgreement`: the Sail Selection Screen's fold over this
- *   race's rows, against the same chart Version that screen draws.
+ *   race's rows, against the Crossover Chart Version the race names — the one its map reads.
  * - **The calibration check** is `raceInstrumentCheck`: the Instrument Tuning screen's three per-Race
  *   functions, with the reason in words wherever a channel produced nothing — never a zero and
  *   never a gap (ADR 0034).
@@ -162,7 +162,11 @@ const CELL_ORDER: readonly CellAgreement[] = [
 ]
 
 /**
- * This race's own **Cell Agreement** slice.
+ * This race's own **Cell Agreement** slice, against the chart Version the race names.
+ *
+ * That Version and not the chart in force now, because it is the one the map's sail overlay reads:
+ * the tile and the map beside it judge the same sailing in the same vocabulary (ADR 0012), and the
+ * tile says which Version it is so nobody has to assume.
  *
  * The share is of *judgeable* sailing — Agrees plus Differs — as on the Overall tab and the screen,
  * and what it rests on is said beside it, so a race that recorded its sails for a third of the
@@ -172,7 +176,16 @@ const CELL_ORDER: readonly CellAgreement[] = [
 function SailChartTile({ read }: { read: RaceSailChartRead }): ReactElement {
   return (
     <Tile title="Sail selection vs. chart" testId="race-sail-chart">
-      {read.ok ? <Agreement agreement={read.agreement} /> : <Absent>{noChart(read.reason)}</Absent>}
+      {read.ok ? (
+        <>
+          <p style={NOTE_STYLE}>
+            Against Crossover Chart v{read.chart_version_number}, the Version this race names.
+          </p>
+          <Agreement agreement={read.agreement} />
+        </>
+      ) : (
+        <Absent>{noChart(read.reason)}</Absent>
+      )}
 
       <Link href="/boat-performance/sail-selection" style={LINK_STYLE}>
         The whole archive on the chart →
@@ -181,15 +194,27 @@ function SailChartTile({ read }: { read: RaceSailChartRead }): ReactElement {
   )
 }
 
+/** Why there is no slice, in words — the map's sail overlay says the same of the same race. */
+const NO_CHART_WORDS: Readonly<Record<Extract<RaceSailChartRead, { ok: false }>['reason'], string>> = {
+  'no-chart-version':
+    'This race names no Crossover Chart Version, so there is nothing to lay its sails over.',
+  'chart-unreadable':
+    'The Crossover Chart Version this race names could not be read, so its sails cannot be laid over it.',
+  'archive-unreadable':
+    'The archive could not be read, so this race’s sailing cannot be laid over the chart.',
+}
+
 function noChart(reason: Extract<RaceSailChartRead, { ok: false }>['reason']): string {
-  return reason === 'no-chart'
-    ? 'No Crossover Chart has been uploaded, so there is nothing to lay this race’s sails over.'
-    : 'The archive could not be read, so this race’s sailing cannot be laid over the chart.'
+  return NO_CHART_WORDS[reason]
 }
 
 function Agreement({ agreement }: { agreement: RaceChartAgreement }): ReactElement {
   if (agreement.placed_rows === 0) {
-    return <Absent>This race’s Countable sailing falls on no cell of the chart, so there is nothing to compare.</Absent>
+    return (
+      <Absent>
+        This race’s Countable sailing falls on no cell of the chart, so there is nothing to compare.
+      </Absent>
+    )
   }
 
   const share = efficiencyPercent(agreement.agreement)
@@ -233,9 +258,6 @@ function Agreement({ agreement }: { agreement: RaceChartAgreement }): ReactEleme
 
 /** Why sailing on the chart produced no share, from what it was instead. */
 function unjudged({ verdicts, placed_rows }: RaceChartAgreement): string {
-  if (verdicts['other-version'] === placed_rows) {
-    return 'This race was sailed under a different Crossover Chart Version from the one the Sail Selection screen draws, so its sails are placed on the chart and not judged against it.'
-  }
   if (verdicts['not-recorded'] === placed_rows) {
     return 'This race recorded no sail for any of its sailing on the chart, so none of it can be judged.'
   }

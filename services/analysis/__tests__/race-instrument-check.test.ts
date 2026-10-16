@@ -8,13 +8,12 @@
 import { raceAwaAsymmetry } from '@/services/analysis/awa-asymmetry'
 import { raceHeadingOffset } from '@/services/analysis/compass-deviation'
 import {
-  HEADLINE_SPEEDS_KNOTS,
   raceInstrumentCheck,
   tuningRaceRows,
   type TuningRace,
   type TuningRow,
 } from '@/services/analysis/instrument-tuning'
-import { lineGapAt, raceDivergence } from '@/services/analysis/paddlewheel'
+import { HEADLINE_SPEEDS_KNOTS, lineGapAt, raceDivergence } from '@/services/analysis/paddlewheel'
 
 const WINDOW = { window_start: '2026-07-11T14:00:00', window_finish: '2026-07-11T15:00:00' }
 

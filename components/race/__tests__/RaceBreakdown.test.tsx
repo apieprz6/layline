@@ -62,6 +62,7 @@ function agreement(over: Partial<RaceChartAgreement> = {}): RaceSailChartRead {
       cells: { agrees: 3, mixed: 1, 'not-recorded': 1 },
       ...over,
     },
+    chart_version_number: 2,
   }
 }
 
@@ -115,7 +116,7 @@ const MEASURED: RaceInstrumentCheck = {
     r_squared: 0.82,
     gaps: [
       { stw_knots: 4, gap_knots: 0.31 },
-      { stw_knots: 8, gap_knots: null },
+      { stw_knots: 6, gap_knots: null },
     ],
   },
 }
@@ -221,6 +222,16 @@ describe('the sail-vs-chart tile', () => {
     expect(within(tile).getByRole('link')).toHaveAttribute('href', '/boat-performance/sail-selection')
   })
 
+  it('names the chart Version it judged against: the one this race was sailed under', () => {
+    renderBreakdown()
+
+    // The Version the map's sail overlay reads too, so the tile and the map cannot disagree about
+    // which vocabulary a sail was in (ADR 0012).
+    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(
+      'Against Crossover Chart v2, the Version this race names'
+    )
+  })
+
   it('says why there is no share — never a nought percent', () => {
     renderBreakdown({
       sailChart: agreement({
@@ -237,19 +248,6 @@ describe('the sail-vs-chart tile', () => {
     expect(tile).not.toHaveTextContent(/\b0(\.0)?%/)
   })
 
-  it('names a different chart Version as the reason, rather than calling it disagreement', () => {
-    renderBreakdown({
-      sailChart: agreement({
-        judgeable_rows: 0,
-        agreement: null,
-        verdicts: { ...NO_VERDICTS, 'other-version': 20 },
-        cells: { 'other-version': 4 },
-      }),
-    })
-
-    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(/different Crossover Chart Version/)
-  })
-
   it('says nothing of this race reached the chart, where nothing did', () => {
     renderBreakdown({
       sailChart: agreement({
@@ -264,13 +262,21 @@ describe('the sail-vs-chart tile', () => {
     expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(/falls on no cell of the chart/)
   })
 
-  it('says there is no chart, or no archive, in words', () => {
-    renderBreakdown({ sailChart: { ok: false, reason: 'no-chart' } })
-    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(/No Crossover Chart/)
+  it('says, in words, that the race names no chart, or that its chart or the archive is unreadable', () => {
+    renderBreakdown({ sailChart: { ok: false, reason: 'no-chart-version' } })
+    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(
+      /names no Crossover Chart Version/
+    )
 
     cleanup()
-    renderBreakdown({ sailChart: { ok: false, reason: 'unreadable' } })
-    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(/could not be read/)
+    renderBreakdown({ sailChart: { ok: false, reason: 'chart-unreadable' } })
+    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(
+      /Crossover Chart Version this race names could not be read/
+    )
+
+    cleanup()
+    renderBreakdown({ sailChart: { ok: false, reason: 'archive-unreadable' } })
+    expect(screen.getByTestId('race-sail-chart')).toHaveTextContent(/archive could not be read/)
   })
 })
 

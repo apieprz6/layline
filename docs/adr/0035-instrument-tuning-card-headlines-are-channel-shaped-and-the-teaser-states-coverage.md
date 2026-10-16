@@ -130,6 +130,19 @@ recorded here so a reader is not left with them:
   the Overall tab had exactly two rows before this one. The renaming question stays parked on
   LAY-138 with nothing to decide against.
 
+## Amendment — LAY-162: the `STW` gap is read at 4 kt and 6 kt, not 8
+
+Everywhere this ADR says the `STW` headline is the line's gap from 1:1 "at 4 kt and at 8 kt", read
+**4 kt and 6 kt**. The owner's call on LAY-162, for the boat this archive is from: it reaches 8 kt
+through the water only in a breeze, so a gap read there was more often off the line than on it, and
+6 kt is where it spends most of its racing. Same shape, same rule — two readings of the drawn line,
+never a slope or an intercept (ADR 0027) — at a speed the boat actually sails.
+
+It applies to every place the headline is printed: the `STW` chart's readout, the Overall tab's
+Instrument tuning row, and a Race page's calibration tile, which all read one constant
+(`HEADLINE_SPEEDS_KNOTS` in `services/analysis/paddlewheel.ts`). ADR 0034's "at 4 kt and at 8 kt"
+for the readout is superseded the same way.
+
 ## Consequences
 
 - **`services/analysis/` must expose the swing (per-Era max/min heading bin) and the upwind/downwind

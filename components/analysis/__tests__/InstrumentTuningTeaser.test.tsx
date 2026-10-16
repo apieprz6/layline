@@ -88,15 +88,15 @@ describe('the three channels, side by side', () => {
     expect(figures('AWA')).toHaveTextContent('stbd 10.0°')
   })
 
-  it('gives boat speed the line’s gap at 4 kt and at 8 kt, and no slope', () => {
+  it('gives boat speed the line’s gap at 4 kt and at 6 kt, and no slope', () => {
     render(<InstrumentTuningTeaser read={read()} />)
 
-    // The fixture's line runs (2, 2.3) → (9, 9.1), so it sits +0.24 kt off 1:1 at 4 kt and +0.14 at
-    // 8 — a gap that narrows, which one scalar could not say.
+    // The fixture's line runs (2, 2.3) → (9, 9.1), so it sits +0.24 kt off 1:1 at 4 kt and +0.19 at
+    // 6 — a gap that narrows, which one scalar could not say.
     expect(figures('STW')).toHaveTextContent('4 kt')
     expect(figures('STW')).toHaveTextContent('+0.24 kt')
-    expect(figures('STW')).toHaveTextContent('8 kt')
-    expect(figures('STW')).toHaveTextContent('+0.13 kt')
+    expect(figures('STW')).toHaveTextContent('6 kt')
+    expect(figures('STW')).toHaveTextContent('+0.19 kt')
     // A slope or an intercept is a drafted correction however it is labelled (ADR 0027).
     expect(row().textContent).not.toMatch(/slope|intercept|multiplier|R²/i)
   })

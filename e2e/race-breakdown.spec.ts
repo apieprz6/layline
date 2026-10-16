@@ -81,7 +81,7 @@ test.describe('a race that produced no figure under the map', () => {
     await expect(page.getByTestId('race-performance')).toContainText('records no Polar Version')
     await expect(page.getByTestId('race-polar-efficiency')).toHaveCount(0)
 
-    await expect(page.getByTestId('race-sail-chart')).toContainText('No Crossover Chart')
+    await expect(page.getByTestId('race-sail-chart')).toContainText('names no Crossover Chart Version')
     await expect(page.getByTestId('race-chart-agreement')).toHaveCount(0)
 
     const calibration = page.getByTestId('race-calibration')

@@ -805,20 +805,27 @@ export interface RaceChartAgreement extends ChartAgreement {
 /**
  * What a Race's page can say about its sails against the chart: its slice, or why there is none.
  *
- * Two reasons and not one, because they are different facts — no chart uploaded is the boat's
- * state, an archive that could not be read is a failure — and the page says each in its own words.
+ * Always against the **Crossover Chart Version the Race names**, the one its track's sail overlay
+ * reads (ADR 0012) — never the chart in force now, which would put the tile and the map beside it
+ * on two vocabularies. Three reasons for no slice, because they are three different facts: the race
+ * names no Version, the Version it names could not be read, or the archive could not be.
  */
 export type RaceSailChartRead =
-  | { ok: true; agreement: RaceChartAgreement }
-  | { ok: false; reason: 'no-chart' | 'unreadable' }
+  | {
+      ok: true
+      agreement: RaceChartAgreement
+      /** Which Version of the chart the slice is against, so the tile can say so. */
+      chart_version_number: number
+    }
+  | { ok: false; reason: 'no-chart-version' | 'chart-unreadable' | 'archive-unreadable' }
 
 /**
- * The Sail Selection Screen's own fold, over one Race's rows.
+ * The Sail Selection Screen's own fold, over one Race's rows and the chart Version handed in.
  *
- * Rows are judged one at a time against their own cell, so the Race's share of the screen's season
- * figures is exactly this — the same chart, the same Version, the same unnarrowed match — and the
- * Race page can never disagree with the screen about the same sailing. Filtered by Race before the
- * fold rather than after it, because a cell's slices pool every Race that reached it.
+ * Rows are judged one at a time against their own cell, so with the Version the screen draws this
+ * is exactly the Race's share of the screen's season figures; the Race page hands it the Race's own
+ * Version instead, which is the one its map judges against. Filtered by Race before the fold rather
+ * than after it, because a cell's slices pool every Race that reached it.
  */
 export function raceChartAgreement(
   rows: readonly MatchableRow[],

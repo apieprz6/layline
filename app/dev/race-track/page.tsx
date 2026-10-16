@@ -113,7 +113,7 @@ export default async function RaceTrackHarnessPage({
     window: HARNESS_WINDOW,
   })
   const sailChart: RaceSailChartRead = empty
-    ? { ok: false, reason: 'no-chart' }
+    ? { ok: false, reason: 'no-chart-version' }
     : {
         ok: true,
         agreement: raceChartAgreement(
@@ -123,6 +123,8 @@ export default async function RaceTrackHarnessPage({
           polarDomain(HARNESS_POLAR),
           'harness-chart'
         ),
+        // The Version `harnessRace` names in its Boat Setup, which the map's overlay reads too.
+        chart_version_number: 2,
       }
 
   return (

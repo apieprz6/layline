@@ -8,9 +8,9 @@ import { seasonTrace } from '@/services/analysis/polar-plot'
 import { polarDomain } from '@/services/analysis/polar-targets'
 import { readAnalysisArchive, type AnalysisArchive } from '@/services/analysis/readArchive'
 import { raceChartAgreement, type RaceSailChartRead } from '@/services/analysis/sail-selection'
-import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
-import { readPolarScreen } from '@/services/boat/readPolarVersions'
+import { readCrossoverChartVersion } from '@/services/boat/readCrossoverChartVersions'
 import { readRace } from '@/services/races/readRace'
+import type { RaceDetail } from '@/types'
 
 import { deleteRace } from './actions'
 
@@ -42,17 +42,15 @@ export default async function RacePage({
   // This race, not the tab: a sailor sent a link to one race lands on it after signing in.
   if (!account) signInFirst(`/boat-performance/races/${raceId}`)
 
-  // Together: the season behind this Race's Polar Plot, and the chart its sails are laid over, wait
-  // on no part of the Race. An archive that cannot be read costs the trace and the sail tile and
-  // nothing else — the race is still true without them.
-  const [race, archive, chart, polar] = await Promise.all([
-    readRace(raceId),
-    readAnalysisArchive(),
-    readCrossoverChartScreen(),
-    readPolarScreen(),
-  ])
+  // Together: the season behind this Race's Polar Plot waits on no part of the Race. An archive
+  // that cannot be read costs the trace and the sail tile and nothing else — the race is still true
+  // without them.
+  const [race, archive] = await Promise.all([readRace(raceId), readAnalysisArchive()])
 
   if (!race) notFound()
+
+  // After the race and not beside it, because which chart to read is a fact the race holds.
+  const sailChart = await raceSailChart(race, archive)
 
   const writable = canWrite(account)
 
@@ -63,37 +61,45 @@ export default async function RacePage({
       canAmend={writable}
       deleteRace={deleteRace}
       season={archive === null ? null : seasonTrace(archive.rows)}
-      sailChart={sailChart(raceId, archive, chart, polar)}
+      sailChart={sailChart}
     />
   )
 }
 
 /**
- * This race's sails against the chart, exactly as the Sail Selection screen reads them.
+ * This race's sails against the Crossover Chart Version the race itself names.
  *
- * The same archive rows, the same current Crossover Chart, the same Version id and the same Polar
- * domain as that screen, so the race's figures are the screen's figures for its rows. A row sailed
- * under another chart Version is placed there and judged against nothing, and so it is here.
+ * The Version its map's sail overlay reads (ADR 0012), so the tile and the map beside it judge the
+ * same sailing against the same vocabulary — never the chart in force now, which would re-judge an
+ * older race against a chart written after it. The rows are the archive's own for this race, judged
+ * by the Sail Selection Screen's fold, so on a race sailed under the Version that screen draws the
+ * two agree exactly.
  */
-function sailChart(
-  raceId: string,
-  archive: AnalysisArchive | null,
-  chart: Awaited<ReturnType<typeof readCrossoverChartScreen>>,
-  polar: Awaited<ReturnType<typeof readPolarScreen>>
-): RaceSailChartRead {
-  if (archive === null) return { ok: false, reason: 'unreadable' }
+async function raceSailChart(
+  race: RaceDetail,
+  archive: AnalysisArchive | null
+): Promise<RaceSailChartRead> {
+  const named = race.boat_setup.crossover_chart
+  if (named === null) return { ok: false, reason: 'no-chart-version' }
+  if (archive === null) return { ok: false, reason: 'archive-unreadable' }
 
-  const current = chart?.current ?? null
-  if (current === null) return { ok: false, reason: 'no-chart' }
+  const chart = await readCrossoverChartVersion(named.version_id)
+  if (chart === null) return { ok: false, reason: 'chart-unreadable' }
+
+  // The race's own Polar, as the archive already read it, for the legend's words about the cells it
+  // cannot score; it moves no figure.
+  const polar =
+    race.boat_setup.polar === null ? undefined : archive.polars[race.boat_setup.polar.version_id]
 
   return {
     ok: true,
     agreement: raceChartAgreement(
       archive.rows,
-      raceId,
-      current.payload,
-      polar?.current == null ? null : polarDomain(polar.current.payload),
-      current.id
+      race.id,
+      chart.payload,
+      polar === undefined ? null : polarDomain(polar),
+      named.version_id
     ),
+    chart_version_number: named.version_number,
   }
 }

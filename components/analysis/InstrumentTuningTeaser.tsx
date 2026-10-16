@@ -16,11 +16,12 @@ import {
   headingCoverage,
   speedCoverage,
 } from '@/services/analysis/coverage-verdict'
+import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
 import {
   HEADLINE_SPEEDS_KNOTS,
-  type InstrumentTuningSeason,
-} from '@/services/analysis/instrument-tuning'
-import { lineGapAt, type EraDivergence } from '@/services/analysis/paddlewheel'
+  lineGapAt,
+  type EraDivergence,
+} from '@/services/analysis/paddlewheel'
 import type { InstrumentTuningRead } from '@/services/analysis/readInstrumentTuning'
 import type { CoverageStatement, CoverageVerdict, EraAwaAsymmetry, EraHeadingOffset } from '@/types'
 
@@ -59,7 +60,7 @@ interface InstrumentTuningTeaserProps {
  * - **Wind angle: both points of sail**, each saying which tack reads wider. Their mean sits near
  *   zero and states the opposite of the finding, because the two lean opposite ways. A side that
  *   paired no tacks says so on its own line rather than leaving the other to stand alone.
- * - **Boat speed: the line's gap from 1:1 at 4 kt and at 8 kt** — the one reading of the fitted
+ * - **Boat speed: the line's gap from 1:1 at 4 kt and at 6 kt** — the one reading of the fitted
  *   line that may be printed. Never a slope or an intercept (ADR 0027), and never one scalar for a
  *   gap that is U-shaped by speed.
  *

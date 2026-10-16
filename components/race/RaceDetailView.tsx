@@ -96,8 +96,8 @@ interface RaceDetailViewProps {
    */
   season: PolarPlotTraceBin[] | null
   /**
-   * This race's sailing laid over the Crossover Chart the Sail Selection screen draws, or why it
-   * cannot be — read off the same archive as the season trace, so it costs no read of its own.
+   * This race's sailing laid over the Crossover Chart Version the race names — the one its map's
+   * sail overlay reads — or why it cannot be. Its rows are the same archive's as the season trace.
    */
   sailChart: RaceSailChartRead
 }

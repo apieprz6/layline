@@ -189,7 +189,7 @@ function renderRace(race: RaceDetail, canDelete = false, canAmend = canDelete): 
       canAmend={canAmend}
       deleteRace={deleteRace}
       season={null}
-      sailChart={{ ok: false, reason: 'no-chart' }}
+      sailChart={{ ok: false, reason: 'no-chart-version' }}
     />
   )
 }

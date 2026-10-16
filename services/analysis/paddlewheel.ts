@@ -55,6 +55,15 @@ export const MIN_FIT_POINTS = 5
  */
 export const MIN_SOG_SPREAD_KNOTS = 3
 
+/**
+ * The speeds through the water the `STW` check reads its line's gap from 1:1 at — on the chart's
+ * readout, the Overall tab's row and a Race's calibration tile alike (ADR 0035, amended).
+ *
+ * 4 and 6 kt, not the 4 and 8 ADR 0035 first chose: this boat reaches 8 kt through the water only
+ * in a breeze, so a gap read there was mostly off the line, and 6 kt is where it spends its races.
+ */
+export const HEADLINE_SPEEDS_KNOTS: readonly number[] = [4, 6]
+
 /** Which way the line was fitted, since the slope depends on it and the gap does not. */
 export type FitMethod =
   /** Both channels treated as noisy. The default, and the only one that assumes neither is truth. */
