@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, type BoundFunctions, type queries } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   CHART,
@@ -77,10 +77,27 @@ function renderScreen(
   return { user: userEvent.setup({ delay: null }) }
 }
 
-/** Every cell of the grid, keyed the way a sailor would name it: `40°/10 kt`. */
-function cells(): Map<string, HTMLElement> {
-  return new Map(
+type Scope = BoundFunctions<typeof queries>
+
+/**
+ * One of the two panes. Both are always rendered and CSS hides the right one below 1440px, which
+ * jsdom does not apply — so a query about "the grid" is asked of the left pane, which is the whole
+ * screen on anything narrower than an ultrawide.
+ */
+function pane(side: 'left' | 'right'): Scope {
+  return within(
     screen
+      .getAllByTestId('sail-selection-pane')
+      .find((each) => each.dataset.pane === side) as HTMLElement
+  )
+}
+
+const left = (): Scope => pane('left')
+
+/** Every cell of the grid, keyed the way a sailor would name it: `40°/10 kt`. */
+function cells(scope: Scope = left()): Map<string, HTMLElement> {
+  return new Map(
+    scope
       .getAllByTestId('sail-selection-cell')
       .map((cell) => [`${cell.dataset.twa}/${cell.dataset.tws}`, cell])
   )
@@ -90,10 +107,11 @@ const printOf = (at: string): string => cells().get(at)?.dataset.print ?? ''
 
 async function showLayer(
   user: ReturnType<typeof userEvent.setup>,
-  layer: string
+  layer: string,
+  scope: Scope = left()
 ): Promise<void> {
   await user.click(
-    screen
+    scope
       .getAllByTestId('sail-selection-layer')
       .find((button) => button.dataset.layer === layer) as HTMLElement
   )
@@ -112,15 +130,15 @@ describe('four layers over one grid', () => {
   it('opens on the Chart layer, which is the chart and nothing else', () => {
     renderScreen()
 
-    expect(screen.getByTestId('sail-selection-layer-title')).toHaveTextContent('Chart')
-    expect(screen.getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'chart')
-    expect(screen.getAllByTestId('sail-selection-cell')).toHaveLength(6)
+    expect(left().getByTestId('sail-selection-layer-title')).toHaveTextContent('Chart')
+    expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'chart')
+    expect(left().getAllByTestId('sail-selection-cell')).toHaveLength(6)
   })
 
   it('offers all four grids as thumbnails, with the open one pressed', async () => {
     const { user } = renderScreen()
 
-    const thumbs = screen.getAllByTestId('sail-selection-layer')
+    const thumbs = left().getAllByTestId('sail-selection-layer')
     expect(thumbs.map((thumb) => thumb.dataset.layer)).toEqual([
       'chart',
       'coverage',
@@ -130,8 +148,8 @@ describe('four layers over one grid', () => {
     expect(thumbs[0]).toHaveAttribute('aria-pressed', 'true')
 
     await showLayer(user, 'agreement')
-    expect(screen.getByTestId('sail-selection-layer-title')).toHaveTextContent('Agreement')
-    expect(screen.getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'agreement')
+    expect(left().getByTestId('sail-selection-layer-title')).toHaveTextContent('Agreement')
+    expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'agreement')
   })
 
   it('prints each sail’s name in every cell of its region, reached or not', () => {
@@ -154,11 +172,11 @@ describe('four layers over one grid', () => {
     renderScreen()
 
     expect(
-      screen.getAllByTestId('sail-selection-region-name').map((name) => name.textContent)
+      left().getAllByTestId('sail-selection-region-name').map((name) => name.textContent)
     ).toEqual(['Main + Jib 1', 'Reef + Jib 2'])
     expect(cells().get('40/16')).toHaveTextContent(/^2$/)
     expect(
-      screen.getAllByTestId('sail-selection-legend-sail').map((each) => each.textContent)
+      left().getAllByTestId('sail-selection-legend-sail').map((each) => each.textContent)
     ).toEqual([expect.stringMatching(/^2 is Main \+ Jib 2/)])
   })
 
@@ -166,7 +184,7 @@ describe('four layers over one grid', () => {
     const { user } = renderScreen()
 
     await showLayer(user, 'coverage')
-    expect(screen.queryAllByTestId('sail-selection-region-name')).toEqual([])
+    expect(left().queryAllByTestId('sail-selection-region-name')).toEqual([])
   })
 
   it('prints a race count on Coverage and a glyph on Agreement', async () => {
@@ -287,19 +305,19 @@ describe('what the screen says about itself', () => {
   it('states what each layer is over, and how much of the grid can never hold a figure', async () => {
     const { user } = renderScreen()
 
-    expect(screen.getByTestId('sail-selection-summary')).toHaveTextContent(
+    expect(left().getByTestId('sail-selection-summary')).toHaveTextContent(
       '6 cells, and the chart’s recommendation in every one of them.'
     )
 
     await showLayer(user, 'coverage')
-    expect(screen.getByTestId('sail-selection-summary')).toHaveTextContent(
+    expect(left().getByTestId('sail-selection-summary')).toHaveTextContent(
       '3 of 6 cells have Countable sailing in them.'
     )
 
     await showLayer(user, 'target')
     // The 18 kt cell holds a row and no computable target, and its whole column is past this
     // Polar's last — the two `–` states ADR 0030 keeps apart, in one sentence.
-    expect(screen.getByTestId('sail-selection-summary')).toHaveTextContent(
+    expect(left().getByTestId('sail-selection-summary')).toHaveTextContent(
       '2 of 6 cells carry a percent of target · 1 with sailing and no computable one · 2 where none can ever exist.'
     )
   })
@@ -320,10 +338,10 @@ describe('what the screen says about itself', () => {
 
     // Null is not nought. With no Polar in hand the question has no answer, and "0 where none can
     // ever exist" would be a plausible number standing in for a missing one.
-    const summary = screen.getByTestId('sail-selection-summary')
+    const summary = left().getByTestId('sail-selection-summary')
     expect(summary).toHaveTextContent('no Polar read, so where none can exist is unknown')
     expect(summary).not.toHaveTextContent('0 where none can ever exist')
-    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(
+    expect(left().getByTestId('sail-selection-legend')).toHaveTextContent(
       'How much of the grid can never hold one is unknown here'
     )
 
@@ -340,7 +358,7 @@ describe('what the screen says about itself', () => {
     await user.click(screen.getByTestId('filter-chip-wind'))
     await user.click(bucket('heavy') as HTMLButtonElement)
 
-    expect(screen.getByTestId('sail-selection-summary')).toHaveTextContent(
+    expect(left().getByTestId('sail-selection-summary')).toHaveTextContent(
       '2 were emptied by this filter'
     )
   })
@@ -356,7 +374,7 @@ describe('what the screen says about itself', () => {
     const { user } = renderScreen()
     await showLayer(user, 'target')
 
-    const legend = screen.getByTestId('sail-selection-legend')
+    const legend = left().getByTestId('sail-selection-legend')
     expect(legend).toHaveTextContent('2 of the 6 cells can never hold one')
     expect(legend).toHaveTextContent(
       "Past the Polar's last column (14 kt) a Target Speed is never extrapolated."
@@ -370,10 +388,10 @@ describe('what the screen says about itself', () => {
     const { user } = renderScreen()
 
     // The Chart layer's legend is only the names behind the numbers it could not replace.
-    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(/^2 is Main \+ Jib 2/)
+    expect(left().getByTestId('sail-selection-legend')).toHaveTextContent(/^2 is Main \+ Jib 2/)
 
     await showLayer(user, 'agreement')
-    const legend = screen.getByTestId('sail-selection-legend')
+    const legend = left().getByTestId('sail-selection-legend')
     expect(legend).toHaveTextContent('the sail carried was the one printed')
     expect(legend).toHaveTextContent('the vocabulary running out, and never disagreement')
   })
@@ -482,5 +500,75 @@ describe('tapping a cell', () => {
     await showLayer(user, 'target')
 
     expect(screen.getByTestId('sail-selection-cell-sheet')).toHaveTextContent('40° · 10 kt')
+  })
+})
+
+describe('two panes, for an ultrawide window', () => {
+  it('draws a second pane that opens on Agreement beside the Chart', () => {
+    renderScreen()
+
+    expect(screen.getAllByTestId('sail-selection-pane').map((each) => each.dataset.pane)).toEqual([
+      'left',
+      'right',
+    ])
+    expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'chart')
+    expect(pane('right').getByTestId('sail-selection-grid')).toHaveAttribute(
+      'data-layer',
+      'agreement'
+    )
+    expect(pane('right').getByTestId('sail-selection-layer-title')).toHaveTextContent('Agreement')
+  })
+
+  it('hides the second pane below 1440px, with CSS rather than by leaving it out', () => {
+    renderScreen()
+
+    // jsdom applies no Tailwind, so this pins the class that does it rather than the hiding.
+    expect(pane('right').getByTestId('sail-selection-grid').closest('section')).toHaveClass(
+      'hidden',
+      'min-[1440px]:flex'
+    )
+  })
+
+  it('switches each pane on its own thumbnails, and lets both show the same layer', async () => {
+    const { user } = renderScreen()
+
+    await showLayer(user, 'coverage', pane('right'))
+    expect(pane('right').getByTestId('sail-selection-grid')).toHaveAttribute(
+      'data-layer',
+      'coverage'
+    )
+    expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'chart')
+
+    await showLayer(user, 'coverage')
+    expect(left().getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'coverage')
+    expect(pane('right').getByTestId('sail-selection-grid')).toHaveAttribute(
+      'data-layer',
+      'coverage'
+    )
+  })
+
+  it('gives each pane its own summary and legend', () => {
+    renderScreen()
+
+    expect(left().getByTestId('sail-selection-summary')).toHaveTextContent(
+      'the chart’s recommendation in every one of them'
+    )
+    expect(pane('right').getByTestId('sail-selection-summary')).toHaveTextContent(
+      'cells hold both agreeing and differing rows'
+    )
+    expect(pane('right').getByTestId('sail-selection-legend')).toHaveTextContent(
+      'the sail carried was the one printed'
+    )
+  })
+
+  it('opens one sheet for a cell tapped in either pane, and marks it in both', async () => {
+    const { user } = renderScreen()
+
+    await user.click(cells(pane('right')).get('40/10') as HTMLElement)
+
+    expect(screen.getAllByTestId('sail-selection-cell-sheet')).toHaveLength(1)
+    expect(screen.getByTestId('sail-selection-cell-sheet')).toHaveTextContent('40° · 10 kt')
+    expect(cells().get('40/10')).toHaveAttribute('aria-pressed', 'true')
+    expect(cells(pane('right')).get('40/10')).toHaveAttribute('aria-pressed', 'true')
   })
 })

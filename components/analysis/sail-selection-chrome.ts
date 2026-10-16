@@ -381,3 +381,39 @@ export const SWATCH_STYLE: CSSProperties = {
   border: '1px solid var(--surface-border)',
   borderRadius: radius('xs'),
 }
+
+/**
+ * The screen's measure: the full width up to 1700px, and centred past it.
+ *
+ * Each grid's cells are 24px tall whatever their width, so on a 2560px window two panes of thirteen
+ * columns each would draw cells ~95px wide — a strip rather than a grid. The same bound
+ * `RaceDetailView` takes, and above the two-pane breakpoint, so nothing narrower moves.
+ */
+export const SCREEN_MEASURE_CLASS = 'mx-auto max-w-[1700px]'
+
+/**
+ * The grids: one below 1440px, and two side by side from there — the app's widest step, the one
+ * `globals.css` already gives the station layout and the bottom dock.
+ *
+ * Two panes, each with its own layer, so a sailor can hold the Chart beside Agreement (or any two)
+ * instead of glancing between thumbnails. `minmax(0, 1fr)` rather than `1fr`, so a pane's table can
+ * never push its column wider than half.
+ */
+export const PANES_CLASS = 'grid gap-6 min-[1440px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+
+/**
+ * The second pane, which exists only from 1440px.
+ *
+ * Hidden by CSS rather than mounted by a media query, so the server's markup is already the right
+ * layout at every width and nothing jumps on hydration. `display: none` also takes it out of the
+ * accessibility tree and the tab order, so a phone's screen reader meets one grid, not two.
+ */
+export const SECOND_PANE_CLASS = 'hidden min-[1440px]:flex'
+
+/**
+ * The page's own padding, which a grid bleeds out through on a phone so thirteen columns get every
+ * pixel of 390 (`SailSelectionGrid`). Two panes side by side would bleed into the gap between them
+ * and overlap, and at that width there is no pixel to win, so from 1440px the grid sits inside.
+ * `-mx-4` is `--space-4`'s 16px.
+ */
+export const GRID_BLEED_CLASS = '-mx-4 min-[1440px]:mx-0'
