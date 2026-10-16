@@ -5,9 +5,9 @@ import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import Skeleton, { SkeletonText } from '@/components/common/Skeleton'
 import { DROPOUT } from '@/components/race/track-ink'
 import { radius, spacing } from '@/lib/utils/design'
-import { dropoutDuration } from '@/services/analysis/track-heatmap'
 import { readLatestRace } from '@/services/races/readLatestRace'
 import { describeDuration } from '@/services/recordings/coverage'
+import { dropoutDuration } from '@/services/recordings/track-breaks'
 import { THUMBNAIL_BOX } from '@/services/recordings/track-thumbnail'
 import { wallClockWindow } from '@/services/recordings/wall-clock'
 import type { LatestRace, LatestRaceRead, TrackThumbnail } from '@/types'
@@ -92,9 +92,15 @@ function LatestRaceTeaser({ race }: { race: LatestRace }): ReactElement {
       </span>
 
       {race.track === null ? (
+        // In a box the thumbnail's own shape, so this cell is the height its skeleton promised.
         <span
           style={{
+            display: 'grid',
+            placeItems: 'center',
+            aspectRatio: `${THUMBNAIL_BOX.width} / ${THUMBNAIL_BOX.height}`,
             marginTop: spacing(1),
+            padding: spacing(3),
+            textAlign: 'center',
             fontSize: 'var(--text-sm)',
             color: 'var(--text-muted)',
             fontStyle: 'italic',

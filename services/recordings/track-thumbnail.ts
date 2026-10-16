@@ -42,19 +42,22 @@ function pathPoint({ x, y }: { x: number; y: number }): string {
  */
 export function trackThumbnail(
   rows: readonly QualityAssessableRow[],
-  window: RaceWindow
+  raceWindow: RaceWindow
 ): TrackThumbnail | null {
   const quality = assessRowQuality(rows)
-  const inWindow = withinRaceWindow(quality, window).rows
-  const byIndex = new Map(rows.map((row) => [row.row_index, row]))
+  // Row Quality hands back one verdict per row, in order, and the clip keeps those same verdicts,
+  // so each verdict is paired with its row by position and the pairs are clipped — no lookup that
+  // could miss.
+  const kept = new Set(withinRaceWindow(quality, raceWindow).rows)
 
-  const drawn = inWindow.map((assessed) => {
-    const row = byIndex.get(assessed.row_index) as QualityAssessableRow
+  const drawn = quality.rows.flatMap((verdict, index) => {
+    if (!kept.has(verdict)) return []
+    const row = rows[index]
     return {
       latitude: channelValue(row.latitude),
       longitude: channelValue(row.longitude),
-      frozen: assessed.frozen,
-      row_time: assessed.row_time,
+      frozen: verdict.frozen,
+      row_time: verdict.row_time,
     }
   })
 

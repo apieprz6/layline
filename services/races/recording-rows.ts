@@ -131,6 +131,42 @@ async function readRecordingPages(
   return rows
 }
 
+/** Row Quality's eight fields of one returned row, each as the cast promises it. */
+function qualityRow(row: Record<string, unknown>, rowIndex: number): QualityAssessableRow {
+  return {
+    row_index: rowIndex,
+    row_time: String(row.row_time),
+    latitude: recordedText(row.latitude, 'latitude', rowIndex),
+    longitude: recordedText(row.longitude, 'longitude', rowIndex),
+    cog: recordedText(row.cog, 'cog', rowIndex),
+    sog: recordedText(row.sog, 'sog', rowIndex),
+    stw: recordedText(row.stw, 'stw', rowIndex),
+    ctw: recordedText(row.ctw, 'ctw', rowIndex),
+  }
+}
+
+/**
+ * Every returned row shaped by `shape`, or null where a value broke the cast.
+ *
+ * The cast stopped being honoured, which is a deployment fault and not a bad race. Caught here so
+ * it is one line in the log and a not-found page, rather than an exception thrown through a Server
+ * Component.
+ */
+function shapeRows<Row>(
+  data: Record<string, unknown>[],
+  shape: (row: Record<string, unknown>, rowIndex: number) => Row
+): Row[] | null {
+  try {
+    return data.map((row) => shape(row, Number(row.row_index)))
+  } catch (thrown: unknown) {
+    console.error(
+      'Race: a recorded value did not arrive as text:',
+      thrown instanceof Error ? thrown.message : thrown
+    )
+    return null
+  }
+}
+
 /**
  * The whole Transcription in the eleven columns anything downstream reads, or null.
  *
@@ -146,33 +182,12 @@ export async function readRecordingRows(
 
   if (data === null) return null
 
-  try {
-    return data.map((row) => {
-      const rowIndex = Number(row.row_index)
-      return {
-        row_index: rowIndex,
-        row_time: String(row.row_time),
-        latitude: recordedText(row.latitude, 'latitude', rowIndex),
-        longitude: recordedText(row.longitude, 'longitude', rowIndex),
-        cog: recordedText(row.cog, 'cog', rowIndex),
-        sog: recordedText(row.sog, 'sog', rowIndex),
-        stw: recordedText(row.stw, 'stw', rowIndex),
-        ctw: recordedText(row.ctw, 'ctw', rowIndex),
-        tws: recordedText(row.tws, 'tws', rowIndex),
-        twa: recordedText(row.twa, 'twa', rowIndex),
-        awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
-      }
-    })
-  } catch (thrown: unknown) {
-    // The cast stopped being honoured, which is a deployment fault and not a bad race. Caught here so
-    // it is one line in the log and a not-found page, rather than an exception thrown through a Server
-    // Component.
-    console.error(
-      'Race: a recorded value did not arrive as text:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return null
-  }
+  return shapeRows(data, (row, rowIndex) => ({
+    ...qualityRow(row, rowIndex),
+    tws: recordedText(row.tws, 'tws', rowIndex),
+    twa: recordedText(row.twa, 'twa', rowIndex),
+    awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
+  }))
 }
 
 /**
@@ -201,27 +216,7 @@ export async function readRecordingQualityRows(
 
   if (data === null) return null
 
-  try {
-    return data.map((row) => {
-      const rowIndex = Number(row.row_index)
-      return {
-        row_index: rowIndex,
-        row_time: String(row.row_time),
-        latitude: recordedText(row.latitude, 'latitude', rowIndex),
-        longitude: recordedText(row.longitude, 'longitude', rowIndex),
-        cog: recordedText(row.cog, 'cog', rowIndex),
-        sog: recordedText(row.sog, 'sog', rowIndex),
-        stw: recordedText(row.stw, 'stw', rowIndex),
-        ctw: recordedText(row.ctw, 'ctw', rowIndex),
-      }
-    })
-  } catch (thrown: unknown) {
-    console.error(
-      'Race: a recorded value did not arrive as text:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return null
-  }
+  return shapeRows(data, qualityRow)
 }
 
 /**

@@ -70,16 +70,16 @@ export async function readLatestRace(): Promise<LatestRaceRead> {
   if (rows === null) return { ok: false, reason: 'unreadable' }
 
   try {
-    const window = { window_start: race.window_start, window_finish: race.window_finish }
+    const raceWindow = { window_start: race.window_start, window_finish: race.window_finish }
 
     return {
       ok: true,
       race: {
         id: race.id,
         title: race.title,
-        ...window,
+        ...raceWindow,
         window_seconds: wallClockSeconds(race.window_finish) - wallClockSeconds(race.window_start),
-        track: trackThumbnail(rows, window),
+        track: trackThumbnail(rows, raceWindow),
       },
     }
   } catch (thrown: unknown) {

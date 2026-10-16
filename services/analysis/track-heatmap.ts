@@ -395,18 +395,8 @@ function placeAnnotations(
   return placed
 }
 
-/**
- * A **Dropout**'s duration, as a sailor would say it: `34s`, `7m`, `2h11`.
- *
- * Under 90 seconds reads in seconds, because `2m` for 91 seconds is a rounding a sailor would
- * notice on a gap they remember. Beyond an hour reads `h` and minutes, since `131m` is a number
- * nobody converts in their head on the rail.
- */
-export function dropoutDuration(seconds: number): string {
-  if (seconds < 90) return `${Math.round(seconds)}s`
-  const minutes = Math.round(seconds / 60)
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`
-}
+/** Re-exported from where the bridge it labels is built, for the callers that already import it here. */
+export { dropoutDuration } from '@/services/recordings/track-breaks'
 
 /** Which overlays a race can colour at all, for a switcher that offers nothing it cannot draw. */
 export function overlaysWithColour(counts: TrackHeatmapCounts): TrackOverlay[] {
