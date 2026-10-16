@@ -47,6 +47,6 @@ describe('the boat icon migration', () => {
       resolve(MIGRATIONS, '20260909190000_create_boat_storage_bucket.sql'),
       'utf8'
     )
-    expect(bucket).toMatch(/boat-identity\/icon\/\{filename\}/)
+    expect(bucket).toMatch(/boat-identity\/icon\/\{icon_id\}\/\{filename\}/)
   })
 })

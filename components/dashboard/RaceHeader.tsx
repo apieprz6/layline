@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactElement } from 'react'
 import useSWR from 'swr'
 import { boatIconUrl } from '@/lib/boat/icon'
 import type { BoatHeaderIdentity, BuoyDataResult } from '@/types'
@@ -55,7 +55,7 @@ function useHeaderWind(): { speed: number; direction: number } | null {
   }, [data, now])
 }
 
-export default function RaceHeader({ onOpenMenu, boat = null }: RaceHeaderProps) {
+export default function RaceHeader({ onOpenMenu, boat = null }: RaceHeaderProps): ReactElement {
   const currentWind = useHeaderWind()
 
   return (
@@ -108,7 +108,7 @@ export default function RaceHeader({ onOpenMenu, boat = null }: RaceHeaderProps)
             width={24}
             height={24}
             alt={boat.name}
-            style={{ borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }}
+            style={{ borderRadius: 'var(--radius-sm)', objectFit: 'cover', flexShrink: 0 }}
           />
         ) : (
           // No icon yet keeps the layline mark — nothing is invented in its place.

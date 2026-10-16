@@ -1,9 +1,15 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { canWrite } from '@/lib/account/canWrite'
-import { MAX_BOAT_ICON_BYTES, sniffBoatIconType, type BoatIconType } from '@/lib/boat/icon'
+import {
+  MAX_BOAT_ICON_BYTES,
+  boatIconTooLarge,
+  sniffBoatIconType,
+  type BoatIconType,
+} from '@/lib/boat/icon'
 import { BOAT_BUCKET, boatIconObjectPath } from '@/lib/storage/paths'
 import { createClient } from '@/lib/supabase/server'
 
@@ -45,7 +51,7 @@ async function readIconChange(formData: FormData): Promise<IconChange | { messag
 
   if (file instanceof File && file.size > 0) {
     if (file.size > MAX_BOAT_ICON_BYTES) {
-      return { message: `An icon can be at most 1 MB; this one is ${(file.size / 1_048_576).toFixed(1)} MB.` }
+      return { message: boatIconTooLarge(file.size) }
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -55,7 +61,7 @@ async function readIconChange(formData: FormData): Promise<IconChange | { messag
 
     let path: string
     try {
-      path = boatIconObjectPath(file.name)
+      path = boatIconObjectPath(randomUUID(), file.name)
     } catch {
       // A name with nothing storable left in it. A browser will not send one; a caller might.
       return { message: 'That image needs a name Layline can store it under. Rename it and try again.' }
@@ -125,14 +131,14 @@ export async function saveBoatIdentity(formData: FormData): Promise<SaveBoatIden
     return { ok: false, message: UNAVAILABLE }
   }
 
-  const bucket = supabase.storage.from(BOAT_BUCKET)
+  const bucket: BoatBucket = supabase.storage.from(BOAT_BUCKET)
 
-  // The bytes first, then the row that points at them, then the old bytes away: at no point does
-  // the row name an object that is not there. `upsert`, because a replacement may share the old
-  // icon's filename and so its path — the bucket's admin-only UPDATE policy allows that.
+  // The new bytes first, then the row that points at them, then the old bytes away: at no point
+  // does the row name an object that is not there. The key is fresh per upload, so this never
+  // writes over the icon the row still names, and `upsert` stays off to say so.
   if (icon.kind === 'replace') {
     const { error: uploadError } = await bucket.upload(icon.upload.path, icon.upload.bytes, {
-      upsert: true,
+      upsert: false,
       contentType: icon.upload.type,
     })
 
@@ -142,34 +148,21 @@ export async function saveBoatIdentity(formData: FormData): Promise<SaveBoatIden
     }
   }
 
-  const iconColumns =
-    icon.kind === 'replace'
-      ? { icon_path: icon.upload.path, icon_updated_at: new Date().toISOString() }
-      : icon.kind === 'remove'
-        ? { icon_path: null, icon_updated_at: null }
-        : {}
-
   const { error } = await supabase
     .from('boats')
-    .update({ name, model, ...iconColumns })
+    .update({ name, model, ...iconColumns(icon) })
     .eq('id', boat.id)
 
   if (error) {
     console.error('Boat identity: update failed:', error.message)
-    // The new bytes are taken back so the bucket holds only the icon the row still names — unless
-    // they landed on that very path, in which case there is nothing separate to take back.
-    if (icon.kind === 'replace' && icon.upload.path !== boat.icon_path) {
-      await removeIcon(bucket, icon.upload.path)
-    }
+    // The new bytes are taken back, so the bucket holds only the icon the row still names.
+    if (icon.kind === 'replace') await deleteIconObject(bucket, icon.upload.path)
     return { ok: false, message: UNAVAILABLE }
   }
 
-  // Exactly one current icon: the old object goes unless it is still the one the row names —
-  // left alone, or overwritten in place by a replacement with the same filename.
-  const current =
-    icon.kind === 'replace' ? icon.upload.path : icon.kind === 'keep' ? boat.icon_path : null
-  if (boat.icon_path !== null && boat.icon_path !== current) {
-    await removeIcon(bucket, boat.icon_path)
+  // Exactly one current icon: whatever the row named before a replace or a remove goes.
+  if (icon.kind !== 'keep' && boat.icon_path !== null) {
+    await deleteIconObject(bucket, boat.icon_path)
   }
 
   // The layout and not only this screen: the header on every signed-in screen names the boat.
@@ -177,14 +170,27 @@ export async function saveBoatIdentity(formData: FormData): Promise<SaveBoatIden
   return { ok: true }
 }
 
+type BoatBucket = ReturnType<Awaited<ReturnType<typeof createClient>>['storage']['from']>
+
+/** The two icon columns as the change leaves them; nothing at all when the icon is kept. */
+function iconColumns(
+  icon: IconChange
+): { icon_path: string | null; icon_updated_at: string | null } | Record<string, never> {
+  switch (icon.kind) {
+    case 'replace':
+      return { icon_path: icon.upload.path, icon_updated_at: new Date().toISOString() }
+    case 'remove':
+      return { icon_path: null, icon_updated_at: null }
+    case 'keep':
+      return {}
+  }
+}
+
 /**
- * Delete an icon object, logging rather than failing: by the time this runs the row is already
- * right, and an orphaned object is the cheaper kind of wrong.
+ * Delete an icon object from Storage, logging rather than failing: by the time this runs the row
+ * is already right, and an orphaned object is the cheaper kind of wrong.
  */
-async function removeIcon(
-  bucket: ReturnType<Awaited<ReturnType<typeof createClient>>['storage']['from']>,
-  path: string
-): Promise<void> {
+async function deleteIconObject(bucket: BoatBucket, path: string): Promise<void> {
   const { error } = await bucket.remove([path])
   if (error) console.error('Boat identity: could not delete an icon object:', error.message)
 }

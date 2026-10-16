@@ -12,7 +12,12 @@ import {
 import BoatIdentityHeader from '@/components/boat/BoatIdentityHeader'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { saveBoatIdentity } from '@/app/(app)/boat-management/actions'
-import { BOAT_ICON_ACCEPT, MAX_BOAT_ICON_BYTES, boatIconUrl } from '@/lib/boat/icon'
+import {
+  BOAT_ICON_ACCEPT,
+  MAX_BOAT_ICON_BYTES,
+  boatIconTooLarge,
+  boatIconUrl,
+} from '@/lib/boat/icon'
 import { spacing } from '@/lib/utils/design'
 import type { Boat } from '@/types'
 
@@ -111,7 +116,7 @@ export default function BoatIdentityEditor({ boat }: BoatIdentityEditorProps): R
     // the size again, and the bytes' type, which only it does.
     if (file.size > MAX_BOAT_ICON_BYTES) {
       clearChosenFile()
-      setMessage('An icon can be at most 1 MB. Choose a smaller image.')
+      setMessage(boatIconTooLarge(file.size))
       return
     }
 

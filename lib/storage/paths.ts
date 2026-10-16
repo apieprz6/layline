@@ -7,7 +7,7 @@
  *   recordings/{recording_id}/{filename}         one qtVlm VDR export, as one Recording
  *   boat-setup/{kind}/{version_id}/{filename}    one file-backed Boat Setup Version
  *   tmp/{user_id}/{upload_id}/{filename}         an upload wizard not yet submitted
- *   boat-identity/icon/{filename}                the boat's one current icon
+ *   boat-identity/icon/{icon_id}/{filename}      the boat's one current icon
  *
  * There is deliberately no SQL equivalent. Paths are derived from an id plus the stored
  * `filename` and never stored, so a second implementation would be a second thing to drift
@@ -103,14 +103,19 @@ export function boatSetupObjectPath(
 }
 
 /**
- * `boat-identity/icon/{filename}` — the boat's one current icon (LAY-180).
+ * `boat-identity/icon/{icon_id}/{filename}` — the boat's one current icon (LAY-180).
  *
- * The one path that *is* stored, as `boats.icon_path`: there is no id to derive it from, and
- * the old object has to be found again to be deleted when the icon is replaced. It is still
- * built only here, on the way in.
+ * `{icon_id}` is minted per upload and recorded nowhere else, so a replacement never lands on
+ * the bytes the row still names — not even one with the same filename. That is what lets a save
+ * write the new object, then the row, then delete the old one, and never lose an icon to a failed
+ * step in between.
+ *
+ * The one path that *is* stored, as `boats.icon_path`, since the id lives in no column of its own.
+ * It is still built only here, on the way in.
  */
-export function boatIconObjectPath(filename: string): string {
-  return `${BOAT_IDENTITY_PREFIX}/icon/${storageSafeFilename(filename)}`
+export function boatIconObjectPath(iconId: string, filename: string): string {
+  assertPathSegment(iconId, 'icon id')
+  return `${BOAT_IDENTITY_PREFIX}/icon/${iconId}/${storageSafeFilename(filename)}`
 }
 
 /**

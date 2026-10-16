@@ -9,6 +9,12 @@
 /** A megabyte. An icon drawn at 24px needs a fraction of it; a photo straight off a phone may not. */
 export const MAX_BOAT_ICON_BYTES = 1_048_576
 
+/** The refusal for an icon over the limit, in the editor and from the server alike. */
+export function boatIconTooLarge(byteLength: number): string {
+  // In whole kilobytes, rounded up: a file just over the limit would otherwise read as "1.0 MB".
+  return `An icon can be at most 1 MB (1,024 KB); this one is ${Math.ceil(byteLength / 1024).toLocaleString('en-US')} KB.`
+}
+
 /** The only formats an icon may be. SVG is refused: it is a document, and can carry script. */
 export type BoatIconType = 'image/png' | 'image/jpeg' | 'image/webp'
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, ReactNode } from 'react'
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import RaceHeader from './RaceHeader'
 import HamburgerMenu from './HamburgerMenu'
@@ -26,7 +26,11 @@ interface AppLayoutProps {
   boat?: BoatHeaderIdentity | null
 }
 
-export default function AppLayout({ children, account, boat = null }: AppLayoutProps) {
+export default function AppLayout({
+  children,
+  account,
+  boat = null,
+}: AppLayoutProps): ReactElement {
   const [menuOpen, setMenuOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   /**

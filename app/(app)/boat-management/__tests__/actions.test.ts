@@ -46,8 +46,18 @@ function icon(bytes: Uint8Array<ArrayBuffer>, name = 'pete.png', type = 'image/p
   return new File([bytes], name, { type })
 }
 
-/** The boat as it is before the save: with an icon, unless a test says otherwise. */
-const OLD_ICON_PATH = 'boat-identity/icon/old.png'
+/** The icon the boat had before the save, in the tests that give it one. */
+const OLD_ICON_PATH = 'boat-identity/icon/3f1b2c4d-0000-4000-8000-000000000001/pete.png'
+
+/** `boat-identity/icon/{icon_id}/{filename}`, with a fresh id for every upload. */
+function iconPath(filename: string): RegExp {
+  return new RegExp(`^boat-identity/icon/[0-9a-f-]{36}/${filename.replace('.', '\\.')}$`)
+}
+
+/** The key the last upload went to. */
+function uploadedPath(): string {
+  return upload.mock.calls.at(-1)[0] as string
+}
 
 /** What the two inputs would carry if nobody touched them. */
 const AS_IS = { name: 'Handsome Pete', model: 'Beneteau 10R' }
@@ -189,13 +199,14 @@ describe('saveBoatIdentity', () => {
 
       expect(result).toEqual({ ok: true })
       expect(storageFrom).toHaveBeenCalledWith('boat')
-      expect(upload).toHaveBeenCalledWith('boat-identity/icon/pete.png', PNG_BYTES, {
-        upsert: true,
+      // Never `upsert`: a fresh key per upload means no write can land on bytes a row still names.
+      expect(upload).toHaveBeenCalledWith(expect.stringMatching(iconPath('pete.png')), PNG_BYTES, {
+        upsert: false,
         contentType: 'image/png',
       })
       expect(update).toHaveBeenCalledWith({
         ...AS_IS,
-        icon_path: 'boat-identity/icon/pete.png',
+        icon_path: uploadedPath(),
         icon_updated_at: '2026-10-16T18:00:00.000Z',
       })
     })
@@ -211,7 +222,7 @@ describe('saveBoatIdentity', () => {
 
       expect(result).toEqual({ ok: true })
       expect(upload).toHaveBeenCalledWith(
-        'boat-identity/icon/pete.img',
+        expect.stringMatching(iconPath('pete.img')),
         bytes,
         expect.objectContaining({ contentType: type })
       )
@@ -277,15 +288,19 @@ describe('saveBoatIdentity', () => {
       )
     })
 
-    it('does not delete a replacement uploaded under the same name as the icon it replaced', async () => {
+    it('puts a replacement with the same filename at a new key, never over the old bytes', async () => {
+      // OLD_ICON_PATH ends in `pete.png` too. Overwriting it in place would lose the old icon
+      // whenever the row update after it failed.
       boatMaybeSingle.mockResolvedValue({
-        data: { id: 'boat-1', icon_path: 'boat-identity/icon/pete.png' },
+        data: { id: 'boat-1', icon_path: OLD_ICON_PATH },
         error: null,
       })
 
       await saveBoatIdentity(form({ ...AS_IS, icon: icon(PNG_BYTES) }))
 
-      expect(remove).not.toHaveBeenCalled()
+      expect(uploadedPath()).toMatch(iconPath('pete.png'))
+      expect(uploadedPath()).not.toBe(OLD_ICON_PATH)
+      expect(remove).toHaveBeenCalledWith([OLD_ICON_PATH])
     })
 
     it('removes the icon: clears both columns, then deletes the object', async () => {
@@ -334,8 +349,8 @@ describe('saveBoatIdentity', () => {
       const result = await saveBoatIdentity(form({ ...AS_IS, icon: icon(PNG_BYTES) }))
 
       expect(result.ok).toBe(false)
-      expect(remove).toHaveBeenCalledWith(['boat-identity/icon/pete.png'])
-      expect(remove).not.toHaveBeenCalledWith([OLD_ICON_PATH])
+      expect(remove).toHaveBeenCalledTimes(1)
+      expect(remove).toHaveBeenCalledWith([uploadedPath()])
     })
 
     it('still reports a save that landed when the old object could not be deleted', async () => {

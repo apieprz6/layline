@@ -6,7 +6,7 @@
 -- because nothing points at it: no Race, no Version, no annotation. When it is replaced or removed
 -- the old object is deleted, by the Server Action that saves the identity.
 --
--- The bytes live in the private `boat` bucket at boat-identity/icon/{filename}, exactly as
+-- The bytes live in the private `boat` bucket at boat-identity/icon/{icon_id}/{filename}, exactly as
 -- uploaded (the path convention in 20260909190000_create_boat_storage_bucket.sql). The bucket's
 -- existing policies already make that readable to any signed-in user and writable by an admin
 -- only, so no policy changes here; the boats policies cover the two new columns the same way.
@@ -23,6 +23,6 @@ ALTER TABLE boats ADD CONSTRAINT boats_icon_both_or_neither
     CHECK ((icon_path IS NULL) = (icon_updated_at IS NULL));
 
 COMMENT ON COLUMN boats.icon_path IS
-    'The boat''s one current icon: boat-identity/icon/{filename} in the boat bucket, bytes exactly as uploaded (PNG, JPEG or WebP). Null when there is none.';
+    'The boat''s one current icon: boat-identity/icon/{icon_id}/{filename} in the boat bucket, bytes exactly as uploaded (PNG, JPEG or WebP). Null when there is none.';
 COMMENT ON COLUMN boats.icon_updated_at IS
     'When the current icon was saved. The header''s cache key for /boat/icon. Null exactly when icon_path is.';
