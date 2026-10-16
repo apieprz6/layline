@@ -58,8 +58,8 @@ export interface SailRegions {
  * Whether a name fits a rectangle of cells, at the phone's cell size.
  *
  * The 390px viewport is the one checked against (AGENTS.md): a wider screen has wider cells, so a
- * name that fits here fits everywhere. 10px Inter averages under six pixels a character, so four
- * characters to a 27px cell leaves room for a wide one; a 24px row holds two 12px lines.
+ * name that fits here fits everywhere. 10px JetBrains Mono is six pixels a character, so four
+ * characters to a 27px cell is exact with a little to spare; a 24px row holds two 12px lines.
  */
 export const CHARS_PER_CELL = 4
 export const LINES_PER_ROW = 2

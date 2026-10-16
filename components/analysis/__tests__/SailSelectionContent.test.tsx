@@ -369,10 +369,8 @@ describe('what the screen says about itself', () => {
   it('keeps colour out of the legend’s only carrier, on every layer that has one', async () => {
     const { user } = renderScreen()
 
-    // The Chart layer's legend is the outline and the names behind its remaining numbers, in words.
-    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(
-      'Each outlined block is one sail'
-    )
+    // The Chart layer's legend is only the names behind the numbers it could not replace.
+    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(/^2 is Main \+ Jib 2/)
 
     await showLayer(user, 'agreement')
     const legend = screen.getByTestId('sail-selection-legend')

@@ -363,7 +363,7 @@ function Legend({
 }
 
 /**
- * The Chart layer's key: what an outline is, and the name behind every number still printed.
+ * The Chart layer's key: the name behind every number still printed, and nothing where none is.
  *
  * A number is printed only where a region was too small to hold its sail's name, so the list is of
  * those sails alone — each once, in Definition order, however many small regions it has.
@@ -374,7 +374,7 @@ function ChartLegend({
 }: {
   regions: SailRegions
   chart: CrossoverChartPayload
-}): ReactElement {
+}): ReactElement | null {
   const numbered = new Set<number>()
   regions.region.forEach((cells, row) =>
     cells.forEach((index, column) => {
@@ -383,10 +383,10 @@ function ChartLegend({
     })
   )
   const listed = chart.sail_definitions.filter((each) => numbered.has(each.number))
+  if (listed.length === 0) return null
 
   return (
     <ul data-testid="sail-selection-legend" style={LEGEND_STYLE}>
-      <li>Each outlined block is one sail, named inside it. A tapped cell names its sail too.</li>
       {listed.map((definition) => (
         <li key={definition.number} data-testid="sail-selection-legend-sail">
           {definition.number} is {definition.label}, printed as a number where its block is too

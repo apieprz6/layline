@@ -301,9 +301,9 @@ const REGION_NAME_STYLE: CSSProperties = {
   // A button does not wrap its text, and this name is placed on the strength of wrapping.
   whiteSpace: 'normal',
   textAlign: 'center',
-  fontFamily: 'var(--font-body)',
+  // The grid's own print, the same face and size as every other layer's numbers and glyphs.
+  fontFamily: 'var(--font-mono)',
   fontSize: 'var(--text-xs)',
-  fontWeight: 'var(--weight-semibold)',
   lineHeight: '12px',
   color: 'var(--text-primary)',
   pointerEvents: 'none',
