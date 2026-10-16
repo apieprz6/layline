@@ -4,6 +4,9 @@ import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
 import RigRecommendation from '@/components/dashboard/RigRecommendation'
 import ModelComparison from '@/components/dashboard/ModelComparison'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import OverallCards from '@/components/boat/OverallCards'
+import { resolveAccount } from '@/lib/account/resolveAccount'
+import { spacing } from '@/lib/utils/design'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
 
 export const dynamic = 'force-dynamic'
@@ -15,9 +18,12 @@ const SHOW_MODEL_COMPARISON = false
 const SHOW_RIG_SETUP = false
 
 export default async function DashboardPage() {
-  const [chii2Result, purdueResult] = await Promise.all([
+  // The Account is resolved a second time here, beside the layout's, for the reason
+  // `/boat-performance` gives; alongside the buoys, so it never adds a wait of its own.
+  const [chii2Result, purdueResult, account] = await Promise.all([
     fetchCHII2(),
     fetchPurdueBuoy(),
+    resolveAccount(),
   ])
   const buoyData = [chii2Result, purdueResult]
 
@@ -66,6 +72,38 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
 
       <LiveWindCard buoys={buoyData} />
 
+      {/* The Boat performance Overall tab's three cards, for a signed-in sailor only. A Guest
+          never reaches `OverallCards`, so a signed-out request makes no archive read at all. Each
+          card is behind its own `<Suspense>` inside that piece, so the wind above paints the
+          moment the buoys answer and the cards stream in one by one.
+
+          Its own row across the content width rather than cells of the wind grid. One column on
+          a phone; three side by side from `xl`, where 1280px still leaves each card about 400px
+          — the teasers want 360px at least (see `BODY_CLASS` in `boatPerformanceLayout`), which
+          `md` and `lg` would not give three of them. Each column stops at 760px, the widest the
+          owner let the "This season" rail grow on LAY-178, so an ultrawide leaves room on the
+          right rather than stretching a card far past what it was drawn for. `items-start` so a
+          short card never stretches to the Polar card's height beside it. */}
+      {account && (
+        <section
+          aria-labelledby="dashboard-boat-performance"
+          className="col-span-full"
+          style={{ display: 'flex', flexDirection: 'column', gap: spacing(3), minWidth: 0 }}
+        >
+          <h2
+            id="dashboard-boat-performance"
+            className="label"
+            style={{ margin: 0, color: 'var(--text-secondary)' }}
+          >
+            Boat performance
+          </h2>
+
+          <div className="grid gap-4 items-start grid-cols-[minmax(0,760px)] xl:grid-cols-[repeat(3,minmax(0,760px))]">
+            <OverallCards />
+          </div>
+        </section>
+      )}
+
       {SHOW_RACE_BRIEFING && (
         <TacticalBriefing
           briefing={briefing}
@@ -91,3 +129,4 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
     </div>
   )
 }
+
