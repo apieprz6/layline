@@ -137,7 +137,7 @@ describe('the fit-method toggle', () => {
       'true'
     )
     expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
-      'Fitted treating both instruments as noisy'
+      'The fit treats GPS and paddlewheel as equally imperfect.'
     )
   })
 
@@ -154,7 +154,7 @@ describe('the fit-method toggle', () => {
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.30 ktline vs 1:1 at 4 kt')
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.10 ktat 6 kt')
     expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
-      'noise in STW flattens this line'
+      'tilts the line flatter'
     )
   })
 })

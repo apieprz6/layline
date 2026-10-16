@@ -127,11 +127,11 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await gotoHydrated(page, ROUTE)
 
     const chart = page.getByTestId('speed-check-chart')
-    await expect(chart).toContainText('Fitted treating both instruments as noisy')
+    await expect(chart).toContainText('The fit treats GPS and paddlewheel as equally imperfect.')
 
     await chart.getByRole('radio', { name: 'SOG on STW' }).click()
 
-    await expect(chart).toContainText('noise in STW flattens this line')
+    await expect(chart).toContainText('tilts the line flatter')
     // A slope or an intercept is a drafted correction however it is labelled (ADR 0027).
     await expect(chart).not.toContainText(/slope|intercept/i)
     await expect(page.getByTestId('fitted-line').first()).toBeVisible()

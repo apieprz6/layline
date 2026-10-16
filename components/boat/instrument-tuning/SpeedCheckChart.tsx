@@ -3,8 +3,9 @@
 /**
  * `STW` against `SOG`: the same rows drawn two ways, because they answer two questions.
  *
- * - **Scatter** (default): `SOG` on `STW`, with the 1:1 line dashed — the paddlewheel as it is
- *   currently configured — and **the fitted line drawn**, because a straight line is the shape the
+ * - **Scatter** (default): `SOG` on `STW`, with the 1:1 line dashed — where the rows would sit if
+ *   the paddlewheel read true, its multiplier and offset being in every row already — and **the
+ *   fitted line drawn**, because a straight line is the shape the
  *   instrument's constants act on and the owner's review asked for it to stay on screen.
  * - **Gap by speed**: the same rows turned so 1:1 lies flat, with the mean gap per 1 kt band and
  *   the row count beneath. This is the view that shows the gap is **U-shaped** — about +0.45 kt at
@@ -91,14 +92,13 @@ const MIN_AXIS_KNOTS = 10
  */
 const PADDLEWHEEL_CAVEAT =
   'Assumes current is negligible on this venue, since a current would move SOG and leave STW ' +
-  'alone and read here as a paddlewheel error. The 1:1 line is the paddlewheel as currently ' +
-  'configured; no uncorrected reading is reconstructed.'
+  'alone and read here as a paddlewheel error. The display applies the Instrument Calibration ' +
+  'before the recording is written, so every STW here already carries it; no uncorrected ' +
+  'reading is reconstructed.'
 
 const METHOD_WORDS: Record<OfferedFitMethod, string> = {
-  orthogonal:
-    'Fitted treating both instruments as noisy, since both are. Switch to see how far the method moves the line.',
-  'sog-on-stw':
-    'Fitted as SOG on STW (ADR 0027 as written) — noise in STW flattens this line, so it reads the paddlewheel as over-reading at speed.',
+  orthogonal: 'The fit treats GPS and paddlewheel as equally imperfect.',
+  'sog-on-stw': 'The fit treats the paddlewheel as exact, which tilts the line flatter than it should be.',
 }
 
 interface SpeedCheckChartProps {
@@ -254,10 +254,11 @@ export default function SpeedCheckChart({
 
       <Notes>
         <Note label="How to read it">
-          Dashed: the paddlewheel as configured — GPS speed equals paddlewheel speed. Blue: this
-          Era’s fit, over the speeds it was fitted on and no wider.
+          Each dot is one moment: paddlewheel speed across, GPS speed up. Dashed: where the dots
+          would sit if the paddlewheel were spot on — above it the paddlewheel read slow, below it
+          fast. Blue: the trend through the dots.
           {race?.fit.fitted === true &&
-            ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)}’s own line, against the Era’s.`}{' '}
+            ` Amber: ${raceLabel(labels, race.race_id, race.sailed_at)} alone.`}{' '}
           {METHOD_WORDS[method]}
         </Note>
         <Note label="Coverage">
@@ -703,7 +704,7 @@ function Gap({ era, race, band, bands, axisMax, onPick, onKeyDown }: ChartProps)
         textAnchor="end"
         fill="var(--text-muted)"
       >
-        1:1 · as configured
+        1:1 · reads true
       </text>
 
       {shown.map((candidate) =>
