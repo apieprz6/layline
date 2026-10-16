@@ -68,7 +68,11 @@ export default function BoatManagementContent({
             {canWrite ? (
               <BoatIdentityEditor boat={page.boat} />
             ) : (
-              <BoatIdentityHeader name={page.boat.name} model={page.boat.model} />
+              <BoatIdentityHeader
+                name={page.boat.name}
+                model={page.boat.model}
+                iconUpdatedAt={page.boat.icon_updated_at}
+              />
             )}
           </>
         )}

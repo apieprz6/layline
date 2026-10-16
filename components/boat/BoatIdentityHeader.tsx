@@ -1,9 +1,12 @@
 import type { ReactElement, ReactNode } from 'react'
+import { boatIconUrl } from '@/lib/boat/icon'
 import { spacing } from '@/lib/utils/design'
 
 interface BoatIdentityHeaderProps {
   name: string
   model: string
+  /** The boat's `icon_updated_at`, or null when it has no icon — which draws none. */
+  iconUpdatedAt?: string | null
   /** An edit affordance, for an admin. Nothing at all for anybody else. */
   action?: ReactNode
 }
@@ -11,8 +14,8 @@ interface BoatIdentityHeaderProps {
 /**
  * The boat's identity, which is also the header of Boat management.
  *
- * Not Settings. No signed-out screen may name the boat, so identity cannot live in
- * the chrome — and the section's own name is the eyebrow its container renders above
+ * Not Settings. No signed-out screen may name the boat, so identity is edited here
+ * rather than anywhere a Guest can reach — and the section's own name is the eyebrow its container renders above
  * this, precisely so the `h1` can be the boat, which is what a sailor arriving here
  * is looking at.
  *
@@ -22,10 +25,21 @@ interface BoatIdentityHeaderProps {
 export default function BoatIdentityHeader({
   name,
   model,
+  iconUpdatedAt = null,
   action,
 }: BoatIdentityHeaderProps): ReactElement {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing(3) }}>
+      {iconUpdatedAt !== null && (
+        // eslint-disable-next-line @next/next/no-img-element -- a private, cache-keyed route
+        <img
+          src={boatIconUrl(iconUpdatedAt)}
+          width={48}
+          height={48}
+          alt=""
+          style={{ borderRadius: 'var(--radius-md)', objectFit: 'cover', flexShrink: 0 }}
+        />
+      )}
       <div style={{ minWidth: 0, flex: 1 }}>
         <h1
           style={{

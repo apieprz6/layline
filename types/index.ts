@@ -365,8 +365,23 @@ export interface Boat {
   id: string
   name: string
   model: string
+  /** `boat-identity/icon/{filename}` in the `boat` bucket, or null when no icon was uploaded. */
+  icon_path: string | null
+  /** When the current icon was saved. Null exactly when `icon_path` is. */
+  icon_updated_at: string | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * The boat as the signed-in chrome names it: read once in the `(app)` layout and handed
+ * through `AppLayout` to `RaceHeader`. `null` in its place means the header names nothing —
+ * always for a **Guest** (ADR 0015), and for a signed-in sailor whose read failed.
+ */
+export interface BoatHeaderIdentity {
+  name: string
+  /** Doubles as the icon's cache key. Null when the boat has no icon. */
+  iconUpdatedAt: string | null
 }
 
 /** One of exactly four rows, one per kind, holding the current pointer. */

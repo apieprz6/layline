@@ -7,6 +7,7 @@
  *   recordings/{recording_id}/{filename}         one qtVlm VDR export, as one Recording
  *   boat-setup/{kind}/{version_id}/{filename}    one file-backed Boat Setup Version
  *   tmp/{user_id}/{upload_id}/{filename}         an upload wizard not yet submitted
+ *   boat-identity/icon/{filename}                the boat's one current icon
  *
  * There is deliberately no SQL equivalent. Paths are derived from an id plus the stored
  * `filename` and never stored, so a second implementation would be a second thing to drift
@@ -23,13 +24,14 @@ import type { FileBackedBoatSetupKind } from '@/types'
 export const BOAT_BUCKET = 'boat'
 
 /**
- * The three top-level prefixes of the convention above, named because the sweeper walks two of
- * them and must never walk the third (`services/storage/sweep.ts`). Written without a trailing
+ * The top-level prefixes of the convention above, named because the sweeper walks two of them
+ * and must never walk the others (`services/storage/sweep.ts`). Written without a trailing
  * slash: every join below adds its own.
  */
 export const RECORDINGS_PREFIX = 'recordings'
 export const TMP_PREFIX = 'tmp'
 export const BOAT_SETUP_PREFIX = 'boat-setup'
+export const BOAT_IDENTITY_PREFIX = 'boat-identity'
 
 /**
  * storage-api's own object-key charset. Everything outside it is replaced rather than
@@ -98,6 +100,17 @@ export function boatSetupObjectPath(
   }
   assertPathSegment(versionId, 'version id')
   return `${BOAT_SETUP_PREFIX}/${kind}/${versionId}/${storageSafeFilename(filename)}`
+}
+
+/**
+ * `boat-identity/icon/{filename}` — the boat's one current icon (LAY-180).
+ *
+ * The one path that *is* stored, as `boats.icon_path`: there is no id to derive it from, and
+ * the old object has to be found again to be deleted when the icon is replaced. It is still
+ * built only here, on the way in.
+ */
+export function boatIconObjectPath(filename: string): string {
+  return `${BOAT_IDENTITY_PREFIX}/icon/${storageSafeFilename(filename)}`
 }
 
 /**

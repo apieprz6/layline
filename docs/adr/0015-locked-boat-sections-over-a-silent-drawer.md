@@ -102,3 +102,22 @@ once read, so a reload does not reopen a dismissed sheet.
 ADR 0016's note that the sheet lives in the app layout so a locked screen can reach it without
 navigating is now over-general: no screen needs that, but the drawer still does, and it is mounted
 there for the same reason.
+
+## Amendment (LAY-180, 2026-10-16)
+
+**The signed-in header now names the boat.** For any signed-in sailor, `RaceHeader` shows the
+boat's icon and name where the layline mark and wordmark are; an admin uploads the icon on Boat
+management, beside the name and model it is saved with.
+
+Constraint 2 is unchanged, and still binds: **no signed-out screen names the boat.** A **Guest**'s
+header keeps `/logo-icon.svg` and "layline", and the `(app)` layout does not so much as read the
+boat until it holds an **Account** — there is nothing to leak because nothing was fetched. The icon
+is served by `/boat/icon`, which refuses a Guest with a 401, from the private bucket.
+
+The consequence "Boat identity cannot live in the drawer header" was reasoned from signed-out chrome
+only, and that reasoning still holds there. It does not reach the signed-in header, which no Guest is
+ever served. The drawer is unchanged, and the boat's identity is still *edited* on Boat management
+and nowhere else.
+
+Layline stays Layline in the places a Guest or the operating system sees: the tab `<title>`, the
+favicon and the home-screen icon.

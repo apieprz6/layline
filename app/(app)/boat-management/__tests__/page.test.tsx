@@ -41,6 +41,8 @@ const EMPTY_ARCHIVE: BoatSetup = {
     id: 'boat-1',
     name: 'Handsome Pete',
     model: 'Beneteau 10R',
+    icon_path: null,
+    icon_updated_at: null,
     created_at: '2026-09-10T18:30:00Z',
     updated_at: '2026-09-10T18:30:00Z',
   },

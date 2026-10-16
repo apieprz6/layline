@@ -79,4 +79,46 @@ describe('RaceHeader', () => {
 
     expect(screen.getByText('—')).toBeInTheDocument()
   })
+
+  describe('the boat, for a signed-in sailor', () => {
+    it('names the boat exactly as written, in place of the wordmark', () => {
+      render(<RaceHeader boat={{ name: 'Handsome Pete', iconUpdatedAt: null }} />)
+
+      // Not lowercased to look like the wordmark: the name is the sailor's own.
+      expect(screen.getByText('Handsome Pete')).toBeInTheDocument()
+      expect(screen.queryByText('layline')).not.toBeInTheDocument()
+    })
+
+    it('shows the boat’s icon, keyed on when it last changed so the browser can cache it', () => {
+      render(
+        <RaceHeader
+          boat={{ name: 'Handsome Pete', iconUpdatedAt: '2026-10-16T18:00:00.123+00:00' }}
+        />
+      )
+
+      const icon = screen.getByAltText('Handsome Pete')
+      expect(icon).toHaveAttribute(
+        'src',
+        `/boat/icon?v=${encodeURIComponent('2026-10-16T18:00:00.123+00:00')}`
+      )
+      expect(screen.queryByAltText('L')).not.toBeInTheDocument()
+    })
+
+    it('keeps the layline mark beside the name when the boat has no icon yet', () => {
+      // No invented placeholder — no initials standing in for an icon nobody uploaded.
+      render(<RaceHeader boat={{ name: 'Handsome Pete', iconUpdatedAt: null }} />)
+
+      expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
+      expect(document.querySelector('img[src^="/boat/icon"]')).toBeNull()
+    })
+
+    it('names nothing for a Guest', () => {
+      // ADR 0015: no signed-out screen names the boat.
+      render(<RaceHeader boat={null} />)
+
+      expect(screen.getByText('layline')).toBeInTheDocument()
+      expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
+      expect(document.querySelector('img[src^="/boat/icon"]')).toBeNull()
+    })
+  })
 })

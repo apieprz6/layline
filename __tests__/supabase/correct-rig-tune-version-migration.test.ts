@@ -31,10 +31,12 @@ function body(name: string): string {
 }
 
 describe('the Rig Tune correction migration', () => {
-  it('runs after every migration already in the repository', () => {
+  it('runs after every migration that existed when it was written', () => {
     // `supabase db push` refuses a local migration that sorts before one the remote applied.
+    // Later migrations may follow it; what matters is that it follows the ones it amends.
     const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()
-    expect(files[files.length - 1]).toBe(FILENAME)
+    const here = files.indexOf(FILENAME)
+    expect(here).toBeGreaterThan(files.indexOf('20260916170000_amend_a_race.sql'))
   })
 
   it('lets a rig_tune Version be corrected, and its payload still never changes', () => {
