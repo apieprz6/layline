@@ -26,11 +26,12 @@ import {
  * drawn as itself — the section's name, both section headings, the three column names — and what
  * the read returns is a bar.
  *
- * The rail holds one row's height, which is what its own `<Suspense>` boundary on the page shows
- * next: the season's figures are a second read, so this skeleton gives way to the rail's fallback
- * and not straight to its teasers. The table holds three rows — a guess at a length, and the only
- * honest kind of guess available, since the count is exactly what the read returns. For the same
- * reason the "Races" heading has no count beside it.
+ * The rail holds three bars, one per card `OverallCards` goes on to fill — Polar performance's own
+ * taller than the other two, for the Polar Plot under its figure — rather than one guess standing in
+ * for a rail that becomes three independent cards each with a boundary and a skeleton of its own
+ * (`components/boat/OverallCards.tsx`). The table holds three rows — a guess at a length, and the
+ * only honest kind of guess available, since the count is exactly what the read returns. For the
+ * same reason the "Races" heading has no count beside it.
  *
  * No "Upload a race" button. It belongs to an admin only (ADR 0019) and the **Role**
  * has not been resolved yet, so drawing one would promise a control most sailors
@@ -61,7 +62,10 @@ export default function BoatPerformanceSkeleton(): ReactElement {
           <div style={TOOLBAR_STYLE}>
             <h2 style={SECTION_HEADING_STYLE}>This season</h2>
           </div>
-          {/* The page's `rowFallback`, which is what this rail shows next. */}
+          {/* `OverallCards`' own three fallbacks, shown here so the shape does not jump once that
+              piece's own boundaries take over. */}
+          <Skeleton height="320px" radius="var(--radius-md)" />
+          <Skeleton height="92px" radius="var(--radius-md)" />
           <Skeleton height="92px" radius="var(--radius-md)" />
         </div>
 
