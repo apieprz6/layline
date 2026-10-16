@@ -76,12 +76,12 @@ describe('every chart is drawn in one box, so every chart is drawn at one scale'
     expect(viewBoxes(render(dial()).container)).toEqual([TUNING_VIEW_BOX])
   })
 
-  it('draws the scatter and the gap view in the same box as both', async () => {
+  it('draws the speed chart and its scatter in the same box as both', async () => {
     const { container } = render(speed())
 
     expect(viewBoxes(container)).toEqual([TUNING_VIEW_BOX])
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Scatter' }))
 
     expect(viewBoxes(container)).toEqual([TUNING_VIEW_BOX])
   })
@@ -104,8 +104,9 @@ describe('every chart is drawn in one box, so every chart is drawn at one scale'
     }
   })
 
-  it('keeps the scatter’s plot square, so the 1:1 line reads at 45°', () => {
+  it('keeps the scatter’s plot square, so the 1:1 line reads at 45°', async () => {
     render(speed())
+    await userEvent.click(screen.getByRole('radio', { name: 'Scatter' }))
     const oneToOne = screen.getByTestId('one-to-one')
 
     // `SOG` and `STW` are the same quantity, so a knot has to be the same number of pixels on each

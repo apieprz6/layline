@@ -82,6 +82,12 @@ export interface SpeedPoint {
   row_index: number
   stw: number
   sog: number
+  /**
+   * The row's `COG` as recorded, or null where GPS gave none. Not a coordinate of the scatter: it
+   * is what lets the verdict ask whether the gap swings with heading, which current does and a
+   * paddlewheel cannot (`paddlewheel-verdict.ts`).
+   */
+  cog: number | null
 }
 
 /** One end of the drawn line. No `row_index`: the line passes through no row in particular. */
@@ -155,7 +161,9 @@ export interface BlankStwCoverage {
  * two places. The port stays here rather than in `/types` — it is what this module asks a caller
  * for, not a shape two features name.
  */
-export interface SpeedPairRow extends AnalysisRow, Pick<TranscriptionChannels, 'sog' | 'stw'> {}
+export interface SpeedPairRow
+  extends AnalysisRow,
+    Pick<TranscriptionChannels, 'sog' | 'stw' | 'cog'> {}
 
 /** One Race's rows, with where it sits on the Calibration Log's timeline. */
 export interface PaddlewheelRace {
@@ -404,7 +412,7 @@ function readRows(rows: readonly SpeedPairRow[]): {
     }
 
     coverage.points += 1
-    points.push({ row_index: row.row_index, stw, sog })
+    points.push({ row_index: row.row_index, stw, sog, cog: recorded(row.cog) })
   }
 
   return { points, coverage }

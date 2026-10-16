@@ -27,6 +27,7 @@
  */
 
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
+import { paddlewheelVerdict } from '@/services/analysis/paddlewheel-verdict'
 import { calibrationEras } from '@/services/analysis/calibration-eras'
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
@@ -67,7 +68,7 @@ function race(filename: string): PaddlewheelRace {
   const rows: SpeedPairRow[] = analysisRowsWithin(whole, raceWindowFor(filename)).map((row) => {
     const held = speeds.get(row.row_index)
     if (!held) throw new Error(`row ${row.row_index} is not in its own recording`)
-    return { ...row, sog: held.sog, stw: held.stw }
+    return { ...row, sog: held.sog, stw: held.stw, cog: held.cog }
   })
 
   return {
@@ -290,5 +291,37 @@ describeArchive('the archive’s own Calibration Eras', () => {
     expect(eras.every((era) => Math.abs((era.measured_offset_knots as number) - 0.122) > 0.01)).toBe(
       true
     )
+  })
+})
+
+describeArchive('the archive’s answer to "does the paddlewheel need recalibrating?"', () => {
+  it('is no: spot on where the boat sails, and slow only where no calibration could follow it', () => {
+    const verdict = paddlewheelVerdict(season())
+
+    // The U ADR 0034 found, as verdicts: slow at 2–4 kt where every Race agrees, and spot on from
+    // 4 to 9 kt — 8–9 kt's three Races average +0.2005 kt, which prints as 0.20 and so is judged
+    // inside the ±0.2 kt window, not a hair outside it.
+    expect(verdict.bands.map((band) => band.verdict)).toEqual([
+      'thin',
+      'thin',
+      'reads-slow',
+      'reads-slow',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+      'spot-on',
+    ])
+    expect(verdict.spot_on_share).toBeCloseTo(0.894, 3)
+    // A curve, which is why the answer is "leave it" and not "recalibrate the bottom end".
+    expect(verdict.one_calibration_fixes).toBe(false)
+    expect(verdict.recommendation).toBe('leave-it')
+  })
+
+  it('is not current and not weed: the gap neither swings with heading nor moves through the season', () => {
+    const { heading, drift } = paddlewheelVerdict(season())
+
+    expect(heading.swing_knots).toBeCloseTo(0.24, 2)
+    expect(drift.change_knots).toBeCloseTo(-0.12, 2)
   })
 })

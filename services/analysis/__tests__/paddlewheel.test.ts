@@ -29,7 +29,8 @@ function row(
   row_index: number,
   stw: string | null,
   sog: string | null,
-  excluded: 'frozen' | 'low-speed' | Maneuver | null = null
+  excluded: 'frozen' | 'low-speed' | Maneuver | null = null,
+  cog: string | null = null
 ): SpeedPairRow {
   const row_time = `2026-06-03 19:${String(row_index % 60).padStart(2, '0')}:00`
   return {
@@ -48,6 +49,7 @@ function row(
     countable: excluded === null,
     sog,
     stw,
+    cog,
   }
 }
 
@@ -70,8 +72,18 @@ describe('one Race’s divergence', () => {
     const divergence = raceDivergence(line('race-1', 1))
 
     expect(divergence.points).toHaveLength(8)
-    expect(divergence.points[0]).toEqual({ row_index: 1, stw: 3, sog: 3 })
+    expect(divergence.points[0]).toEqual({ row_index: 1, stw: 3, sog: 3, cog: null })
     expect(divergence.coverage.countable).toBe(8)
+  })
+
+  it('carries COG beside the two speeds as recorded, and a blank one as missing rather than north', () => {
+    const divergence = raceDivergence({
+      race_id: 'race-1',
+      sailed_at: '2026-06-03 19:00:00',
+      rows: [row(1, '5.0', '5.2', null, '187.5'), row(2, '5.0', '5.2', null, ''), row(3, '5.0', '5.2')],
+    })
+
+    expect(divergence.points.map((point) => point.cog)).toEqual([187.5, null, null])
   })
 
   it('reads no row that is not Countable, whichever of the three reasons excluded it', () => {

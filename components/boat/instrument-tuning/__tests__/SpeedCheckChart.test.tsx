@@ -1,9 +1,11 @@
 /**
- * The `STW` chart: two views of one set of rows, a line fitted two ways, and no coefficient.
+ * The `STW` chart: the verdict first, three views of one set of rows, a line fitted two ways under
+ * the scatter, and no coefficient anywhere.
  *
  * The rule with the most riding on it is the last `describe`. A slope or an intercept is a drafted
- * correction however it is labelled (ADR 0027, LAY-138 decision 7), and this component is built so
- * it could not print one: the service hands it two end points of a segment and `R²`.
+ * correction however it is labelled (ADR 0027, LAY-138 decision 7), and so is a percentage (ADR
+ * 0041); this component is built so it could not print one: the service hands it two end points of
+ * a segment and `R²`, and the verdict hands it gaps in knots at stated speeds.
  *
  * Driven by the keyboard, for the reason `CompassChart.test.tsx` gives.
  */
@@ -48,6 +50,25 @@ function byMethod() {
   }
 }
 
+/**
+ * Four Races sailing 2 to 8 kt with twenty rows in each knot — enough for every band to carry a
+ * verdict, which the two short Races of `byMethod()` deliberately are not.
+ */
+function fourRaces(gap: number) {
+  const races = [3, 10, 17, 24].map((day) =>
+    raceDivergence(
+      `race-${day}`,
+      `2026-06-${String(day).padStart(2, '0')} 19:00:00`,
+      speedPoints(121, gap)
+    )
+  )
+  return { orthogonal: speedEra(races), 'sog-on-stw': speedEra(races) }
+}
+
+async function show(view: 'Chart' | 'Checklist' | 'Scatter'): Promise<void> {
+  await userEvent.click(screen.getByRole('radio', { name: view }))
+}
+
 /** Picking a Race, which is a dropdown here and not a chip. */
 async function pickRace(label: string): Promise<void> {
   await userEvent.selectOptions(screen.getByRole('combobox', { name: /Which Race/ }), label)
@@ -64,33 +85,86 @@ function renderChart(over: Partial<Parameters<typeof SpeedCheckChart>[0]> = {}) 
   )
 }
 
-describe('the Scatter | Gap-by-speed toggle', () => {
-  it('opens on the scatter, which is where the line the constants act on is visible', () => {
+describe('the verdict', () => {
+  it('says there are not enough Races yet, rather than guessing from two', () => {
     renderChart()
 
-    expect(screen.getByTestId('speed-scatter')).toBeInTheDocument()
-    expect(screen.queryByTestId('speed-gap')).not.toBeInTheDocument()
+    const verdict = screen.getByTestId('speed-verdict')
+    expect(verdict).toHaveTextContent('Not enough Races yet')
+    expect(verdict).toHaveTextContent('A speed needs 3 Races with 10 rows each there')
   })
 
-  it('swaps one view for the other', async () => {
+  it('says recalibrate where every Race reads slow by the same amount at every speed', () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+
+    const verdict = screen.getByTestId('speed-verdict')
+    expect(verdict).toHaveTextContent('Worth recalibrating')
+    expect(verdict).toHaveTextContent('The paddlewheel reads slow at 2–8 kt, the Races agree')
+  })
+
+  it('says leave it where the paddlewheel is within the close-enough window', () => {
+    renderChart({ byMethod: fourRaces(0.05) })
+
+    const verdict = screen.getByTestId('speed-verdict')
+    expect(verdict).toHaveTextContent('No recalibration needed')
+    expect(verdict).toHaveTextContent('Within 0.2 kt of GPS at 2–8 kt.')
+  })
+
+  it('is the same under either fit method, because it reads the rows and not the line', async () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+    const before = screen.getByTestId('speed-verdict').textContent
+
+    await show('Scatter')
+    await userEvent.click(screen.getByRole('radio', { name: 'SOG on STW' }))
+
+    expect(screen.getByTestId('speed-verdict').textContent).toBe(before)
+  })
+})
+
+describe('the Chart | Checklist | Scatter toggle', () => {
+  it('opens on the chart, which is the picture the verdict rests on', () => {
     renderChart()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
-
-    expect(screen.getByTestId('speed-gap')).toBeInTheDocument()
+    expect(screen.getByTestId('speed-bands')).toBeInTheDocument()
     expect(screen.queryByTestId('speed-scatter')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('speed-checklist')).not.toBeInTheDocument()
   })
 
-  it('draws the fitted line in both views, because the line is the point of both', async () => {
+  it('swaps one view for another', async () => {
     renderChart()
 
+    await show('Checklist')
+    expect(screen.getByTestId('speed-checklist')).toBeInTheDocument()
+    expect(screen.queryByTestId('speed-bands')).not.toBeInTheDocument()
+
+    await show('Scatter')
+    expect(screen.getByTestId('speed-scatter')).toBeInTheDocument()
+    expect(screen.queryByTestId('speed-checklist')).not.toBeInTheDocument()
+  })
+
+  it('offers the fit method only under the scatter, the one view with a line in it', async () => {
+    renderChart()
+
+    expect(screen.queryByRole('radio', { name: 'both noisy' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('fitted-line')).not.toBeInTheDocument()
+
+    await show('Scatter')
+
+    expect(screen.getByRole('radio', { name: 'both noisy' })).toBeInTheDocument()
     expect(screen.getByTestId('fitted-line')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
-    expect(screen.getByTestId('fitted-line')).toBeInTheDocument()
+  })
+
+  it('has no Race to lift out on the checklist, which answers for the Era', async () => {
+    renderChart()
+
+    await show('Checklist')
+
+    expect(screen.queryByRole('combobox', { name: /Which Race/ })).not.toBeInTheDocument()
   })
 
   it('keeps the Era’s line drawn behind a picked Race’s own, so the two can be compared', async () => {
     renderChart()
+    await show('Scatter')
 
     expect(screen.getAllByTestId('fitted-line')).toHaveLength(1)
 
@@ -106,13 +180,13 @@ describe('the Scatter | Gap-by-speed toggle', () => {
     ])
   })
 
-  it('carries the selected speed band across the toggle', async () => {
+  it('carries the selected speed band between the chart and the scatter', async () => {
     renderChart()
 
-    fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByTestId('speed-bands'), { key: 'ArrowRight' })
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('0–1 kt')
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
+    await show('Scatter')
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('0–1 kt')
   })
@@ -121,28 +195,129 @@ describe('the Scatter | Gap-by-speed toggle', () => {
     renderChart()
 
     await pickRace('3 Jun · Beer-can')
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
+    await show('Scatter')
 
-    // The picker keeps its Race across the toggle, which is the state the two views share.
+    // The picker keeps its Race across the toggle, which is the state the views share.
     expect(screen.getByRole('combobox', { name: /Which Race/ })).toHaveValue('race-june')
   })
 })
 
-describe('the fit-method toggle', () => {
-  it('starts orthogonal, treating both instruments as noisy', () => {
+describe('the chart', () => {
+  it('draws every counted Race at each speed, and the season’s bar in the band’s verdict', () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+
+    // Bands 2–7 hold twenty rows of each Race; 8 kt holds one row each, too few to count.
+    const means = screen.getAllByTestId('speed-band-mean')
+    expect(means).toHaveLength(6)
+    expect(new Set(means.map((mean) => mean.getAttribute('data-verdict')))).toEqual(
+      new Set(['reads-slow'])
+    )
+    expect(screen.getAllByTestId('speed-race-dot')).toHaveLength(24)
+    expect(screen.getByTestId('close-enough')).toBeInTheDocument()
+  })
+
+  it('hatches a speed no Race sailed, rather than drawing it at zero', () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+
+    // 0, 1 and 9 kt. 8 kt has rows — four of them — so it is drawn, just without a verdict.
+    expect(screen.getAllByTestId('speed-absent-band')).toHaveLength(3)
+  })
+
+  it('says, for a tapped speed, its verdict and how many Races agree', () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+    const chart = screen.getByTestId('speed-bands')
+
+    for (let step = 0; step < 3; step += 1) fireEvent.keyDown(chart, { key: 'ArrowRight' })
+
+    const readout = screen.getByTestId('chart-readout')
+    expect(readout).toHaveTextContent('2–3 kt · reads slow · 0.40 kt slow')
+    expect(readout).toHaveTextContent('4 of 4 Races lean the same way.')
+  })
+
+  it('says a speed sailed too briefly has no verdict, and why', () => {
     renderChart()
+    const chart = screen.getByTestId('speed-bands')
+
+    for (let step = 0; step < 3; step += 1) fireEvent.keyDown(chart, { key: 'ArrowRight' })
+
+    const readout = screen.getByTestId('chart-readout')
+    expect(readout).toHaveTextContent('2–3 kt · too few Races')
+    expect(readout).toHaveTextContent(
+      'No Race sailed long enough at this speed to count — a verdict needs 3.'
+    )
+  })
+
+  it('says the boat never sailed a speed, rather than reading it as spot on', () => {
+    renderChart()
+
+    fireEvent.keyDown(screen.getByTestId('speed-bands'), { key: 'ArrowRight' })
+
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent('0–1 kt · no rows')
+    expect(screen.getByTestId('chart-readout')).toHaveTextContent(
+      'No Race in this Era sailed this speed.'
+    )
+  })
+
+  it('rings a picked Race’s own dot at every speed it counts in', async () => {
+    renderChart({ byMethod: fourRaces(0.4), labels: { 'race-10': '10 Jun · Beer-can' } })
+
+    await pickRace('10 Jun · Beer-can')
+
+    expect(screen.getAllByTestId('speed-picked-dot')).toHaveLength(6)
+  })
+
+  it('never writes a gap as a signed figure', () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+    const chart = screen.getByTestId('speed-bands')
+    for (let step = 0; step < 3; step += 1) fireEvent.keyDown(chart, { key: 'ArrowRight' })
+
+    // "+0.40 kt" asks which instrument was subtracted from which; "0.40 kt slow" does not.
+    expect(screen.getByTestId('speed-check-chart').textContent).not.toMatch(/[+−-]\d\.\d{2} kt/)
+  })
+})
+
+describe('the checklist', () => {
+  it('asks the five questions, each answered in words as well as a mark', async () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+    await show('Checklist')
+
+    const checklist = screen.getByTestId('speed-checklist')
+    expect(checklist).toHaveTextContent('Is it off where you sail most?Yes, at 2–3 kt (0.40 kt slow)')
+    expect(checklist).toHaveTextContent('Where it’s off, do the Races agree?Yes at 2–3 kt')
+    expect(checklist).toHaveTextContent(
+      'Would recalibrating fix it?Yes — the gap is a straight line in speed'
+    )
+    // The marks carry their meaning in words too, for the night-vision theme.
+    expect(screen.getAllByRole('img', { name: 'needs attention' }).length).toBeGreaterThan(0)
+  })
+
+  it('says it cannot judge heading from rows with no course, rather than calling them north', async () => {
+    renderChart({ byMethod: fourRaces(0.4) })
+    await show('Checklist')
+
+    expect(screen.getByTestId('speed-checklist')).toHaveTextContent(
+      'Is it the same on every heading?Not enough headings sailed to say.'
+    )
+  })
+})
+
+describe('the fit-method toggle', () => {
+  it('starts orthogonal, treating both instruments as noisy', async () => {
+    renderChart()
+    await show('Scatter')
 
     expect(screen.getByRole('radio', { name: 'both noisy' })).toHaveAttribute(
       'aria-checked',
       'true'
     )
     expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
-      'Fitted treating both instruments as noisy'
+      'The fit treats GPS and paddlewheel as equally imperfect.'
     )
   })
 
   it('moves the line, which is the dependence the toggle exists to show', async () => {
     renderChart()
+    await show('Scatter')
 
     // The two fits read the same rows and disagree about the line through them: orthogonal sits
     // +0.24 kt from 1:1 at 4 kt, SOG-on-STW +0.30 kt — and by 6 kt the second has closed to a third
@@ -153,15 +328,14 @@ describe('the fit-method toggle', () => {
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.30 ktline vs 1:1 at 4 kt')
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.10 ktat 6 kt')
-    expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(
-      'noise in STW flattens this line'
-    )
+    expect(screen.getByTestId('speed-check-chart')).toHaveTextContent('tilts the line flatter')
   })
 })
 
-describe('what a tapped band says', () => {
-  it('gives the rows’ own gap there, the line’s, and flags a disagreement over 0.1 kt', () => {
+describe('what a tapped band says on the scatter', () => {
+  it('gives the rows’ own gap there, the line’s, and flags a disagreement over 0.1 kt', async () => {
     renderChart()
+    await show('Scatter')
     const scatter = screen.getByTestId('speed-scatter')
 
     // Three rights: bands 0, 1, 2. The 2–3 kt band is where the U is highest.
@@ -176,8 +350,9 @@ describe('what a tapped band says', () => {
     )
   })
 
-  it('says the boat never sailed a band, rather than drawing it at zero', () => {
+  it('says the boat never sailed a band, rather than drawing it at zero', async () => {
     renderChart()
+    await show('Scatter')
 
     fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
 
@@ -190,6 +365,7 @@ describe('what a tapped band says', () => {
   it('says a picked Race never sailed a band, without a double negative', async () => {
     renderChart()
 
+    await show('Scatter')
     await pickRace('3 Jun · Beer-can')
     fireEvent.keyDown(screen.getByTestId('speed-scatter'), { key: 'ArrowRight' })
 
@@ -197,15 +373,6 @@ describe('what a tapped band says', () => {
     // "No Race in this Era never sailed this speed" says the opposite of both halves of itself.
     expect(readout).toHaveTextContent('This Race never sailed this speed.')
     expect(readout).not.toHaveTextContent('No Race in this Era never')
-  })
-
-  it('hatches a band with no rows in the gap view', async () => {
-    renderChart()
-
-    await userEvent.click(screen.getByRole('radio', { name: 'Gap by speed' }))
-
-    // Three of ten bands were measured; the other seven are hatched rather than silently missing.
-    expect(screen.getAllByTestId('speed-absent-band')).toHaveLength(7)
   })
 })
 
@@ -219,6 +386,7 @@ describe('a Race with no line of its own', () => {
       }),
     ]
     renderChart({ byMethod: { orthogonal: speedEra(races), 'sog-on-stw': speedEra(races) } })
+    await show('Scatter')
 
     // The reason rides in the option's own label, where a chip had a dashed border.
     await pickRace(
@@ -284,9 +452,18 @@ describe('the blank-STW coverage stat', () => {
 })
 
 describe('the line’s coefficients', () => {
-  it('prints neither a slope nor an intercept, under either method', async () => {
-    renderChart()
+  it('prints neither a slope nor an intercept, under either method or on any view', async () => {
+    renderChart({ byMethod: fourRaces(0.4) })
 
+    for (const view of ['Chart', 'Checklist'] as const) {
+      await show(view)
+      const text = screen.getByTestId('speed-check-chart').textContent ?? ''
+      expect(text).not.toMatch(/slope|intercept|multiplier/i)
+      // A percentage is a multiplier with the arithmetic left to the reader (ADR 0041).
+      expect(text).not.toMatch(/\d% (slow|fast)/)
+    }
+
+    await show('Scatter')
     for (const method of ['both noisy', 'SOG on STW']) {
       await userEvent.click(screen.getByRole('radio', { name: method }))
 
@@ -298,8 +475,9 @@ describe('the line’s coefficients', () => {
     }
   })
 
-  it('gives the line’s gap from 1:1 at 4 kt and at 6 kt, which is a reading of the drawn line', () => {
+  it('gives the line’s gap from 1:1 at 4 kt and at 6 kt, which is a reading of the drawn line', async () => {
     renderChart()
+    await show('Scatter')
 
     const readout = screen.getByTestId('chart-readout')
     expect(readout).toHaveTextContent('+0.24 ktline vs 1:1 at 4 kt')
@@ -307,8 +485,9 @@ describe('the line’s coefficients', () => {
     expect(readout).toHaveTextContent('+0.19 ktat 6 kt')
   })
 
-  it('keeps R² and the knot gap, which depend on no fit at all', () => {
+  it('keeps R² and the knot gap, which depend on no fit at all', async () => {
     renderChart()
+    await show('Scatter')
 
     expect(screen.getByTestId('chart-readout')).toHaveTextContent('+0.21 kt · R² 0.90')
   })

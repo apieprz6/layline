@@ -86,39 +86,48 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await dial.press('ArrowRight')
     await expect(page.getByTestId('tack-dial').getByTestId('chart-readout')).toContainText('wider')
 
-    const scatter = page.getByTestId('speed-scatter')
-    await scatter.focus()
-    await scatter.press('ArrowLeft')
+    const speed = page.getByTestId('speed-bands')
+    await speed.focus()
+    await speed.press('ArrowLeft')
     await expect(
       page.getByTestId('speed-check-chart').getByTestId('chart-readout')
     ).toContainText('9–10 kt')
   })
 
-  test('toggles the STW chart between Scatter and Gap by speed, keeping the band', async ({
+  test('taps a speed on the STW chart, and keeps it when the view changes to the scatter', async ({
     page,
   }) => {
     await gotoHydrated(page, ROUTE)
 
     const chart = page.getByTestId('speed-check-chart')
-    const scatter = page.getByTestId('speed-scatter')
-    await expect(scatter).toBeVisible()
+    await expect(chart.getByTestId('speed-verdict')).toBeVisible()
+    const bands = page.getByTestId('speed-bands')
+    await expect(bands).toBeVisible()
 
-    // The 4–5 kt band: 30 units of gutter and a 264-unit square plot over a 10 kt axis, so 26.4
-    // units per knot, in the shared 340-unit viewBox.
-    const box = await scatter.boundingBox()
+    // The 4–5 kt band: 28 units of gutter and ten 30.4-unit columns, in the shared 340-unit viewBox.
+    const box = await bands.boundingBox()
     expect(box).not.toBeNull()
-    await scatter.click({
-      position: { x: box!.width * ((30 + 4.5 * 26.4) / 340), y: box!.height * 0.5 },
+    await bands.click({
+      position: { x: box!.width * ((28 + 4.5 * 30.4) / 340), y: box!.height * 0.3 },
     })
 
     const readout = chart.getByTestId('chart-readout')
     await expect(readout).toContainText('4–5 kt')
 
-    await chart.getByRole('radio', { name: 'Gap by speed' }).click()
+    await chart.getByRole('radio', { name: 'Scatter' }).click()
 
-    await expect(page.getByTestId('speed-gap')).toBeVisible()
-    await expect(page.getByTestId('speed-scatter')).toHaveCount(0)
+    await expect(page.getByTestId('speed-scatter')).toBeVisible()
+    await expect(page.getByTestId('speed-bands')).toHaveCount(0)
     await expect(readout).toContainText('4–5 kt')
+  })
+
+  test('opens the checklist, the five questions behind the verdict', async ({ page }) => {
+    await gotoHydrated(page, ROUTE)
+
+    const chart = page.getByTestId('speed-check-chart')
+    await chart.getByRole('radio', { name: 'Checklist' }).click()
+
+    await expect(chart.getByTestId('speed-checklist')).toContainText('Would recalibrating fix it?')
   })
 
   test('moves the fitted line when the fit method changes, and prints no coefficient', async ({
@@ -127,11 +136,12 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     await gotoHydrated(page, ROUTE)
 
     const chart = page.getByTestId('speed-check-chart')
-    await expect(chart).toContainText('Fitted treating both instruments as noisy')
+    await chart.getByRole('radio', { name: 'Scatter' }).click()
+    await expect(chart).toContainText('The fit treats GPS and paddlewheel as equally imperfect.')
 
     await chart.getByRole('radio', { name: 'SOG on STW' }).click()
 
-    await expect(chart).toContainText('noise in STW flattens this line')
+    await expect(chart).toContainText('tilts the line flatter')
     // A slope or an intercept is a drafted correction however it is labelled (ADR 0027).
     await expect(chart).not.toContainText(/slope|intercept/i)
     await expect(page.getByTestId('fitted-line').first()).toBeVisible()
@@ -185,7 +195,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     // The bug this is here for: with nothing capping the column, `width: 100%` drew each chart
     // 1,216px across on a 1280px desktop — a 3.6x magnification of a box designed at 390px, with
     // 32-pixel axis labels. An ultrawide window made it worse, and ran the page three screens long.
-    for (const id of ['compass-strip', 'tack-dial-svg', 'speed-scatter']) {
+    for (const id of ['compass-strip', 'tack-dial-svg', 'speed-bands']) {
       const chart = page.getByTestId(id)
       await chart.scrollIntoViewIfNeeded()
       const box = await chart.boundingBox()
@@ -236,7 +246,7 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
     const viewport = page.viewportSize()
     expect(viewport).not.toBeNull()
 
-    for (const id of ['compass-strip', 'tack-dial-svg', 'speed-scatter']) {
+    for (const id of ['compass-strip', 'tack-dial-svg', 'speed-bands']) {
       const chart = page.getByTestId(id)
 
       // Three charts stacked are taller than one screen, which is fine and expected; the question

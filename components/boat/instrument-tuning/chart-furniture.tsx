@@ -65,7 +65,7 @@ export const CHART_FONT = {
   tick: 8,
   /** A count that has to fit inside a 9-unit column, in the evidence row under a chart. */
   micro: 7,
-  /** A note written on the plot itself: "reaching · not used", "1:1 · as configured". */
+  /** A note written on the plot itself: "reaching · not used", "1:1 · reads true". */
   note: 8,
 } as const
 
