@@ -20,7 +20,7 @@
  * **No coefficient is ever printed** — not the slope, not the intercept, however labelled, because
  * either is a drafted correction (ADR 0027, LAY-138 decision 7). This component could not print one
  * if it wanted to: the service hands it two end points of a segment and `R²`, and nothing else. The
- * readout gives the line's gap from 1:1 at 4 kt and at 8 kt, which is a reading *of the drawn line*
+ * readout gives the line's gap from 1:1 at 4 kt and at 6 kt, which is a reading *of the drawn line*
  * in the Measured Offset's own unit.
  */
 
@@ -29,6 +29,7 @@ import { spacing } from '@/lib/utils/design'
 import { speedCoverage } from '@/services/analysis/coverage-verdict'
 import type { OfferedFitMethod } from '@/services/analysis/instrument-tuning'
 import {
+  HEADLINE_SPEEDS_KNOTS,
   lineGapAt,
   type EraDivergence,
   type FittedLine,
@@ -364,8 +365,6 @@ function Summary({
     )
   }
 
-  const atFour = lineGapAt(line, 4)
-  const atEight = lineGapAt(line, 8)
 
   return (
     <>
@@ -385,11 +384,17 @@ function Summary({
         than a clause naming both, so the speeds they belong to cannot drift from them.
       */}
       <Figures>
-        <Figure
-          label="line vs 1:1 at 4 kt"
-          value={atFour === null ? 'off the chart' : signedKnots(atFour)}
-        />
-        <Figure label="at 8 kt" value={atEight === null ? 'off the chart' : signedKnots(atEight)} />
+        {HEADLINE_SPEEDS_KNOTS.map((knots, index) => {
+          const at = lineGapAt(line, knots)
+          return (
+            <Figure
+              key={knots}
+              // The first names what the pair is; the second is read as the same thing again.
+              label={index === 0 ? `line vs 1:1 at ${knots} kt` : `at ${knots} kt`}
+              value={at === null ? 'off the chart' : signedKnots(at)}
+            />
+          )
+        })}
       </Figures>
     </>
   )

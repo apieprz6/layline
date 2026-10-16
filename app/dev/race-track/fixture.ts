@@ -14,7 +14,16 @@
  */
 
 import type { TrackAnnotationInput, TrackHeatmapRow } from '@/services/analysis/track-heatmap'
-import type { CrossoverChartPayload, PolarPayload, RaceDetail, RaceTrack } from '@/types'
+import type { TuningRow } from '@/services/analysis/instrument-tuning'
+import type { RaceWindow } from '@/services/recordings/row-quality'
+import type {
+  CrossoverChartPayload,
+  PolarPayload,
+  RaceAnnotations,
+  RaceDetail,
+  RaceInstrumentCheck,
+  RaceTrack,
+} from '@/types'
 
 /**
  * A grid whose lightest two angles are a manufactured ramp, so a row sailed at 45° is
@@ -200,6 +209,53 @@ export function harnessRows(): TrackHeatmapRow[] {
   return rows
 }
 
+/** The race's window, as its page and every check read it. */
+export const HARNESS_WINDOW: RaceWindow = { window_start: stamp(0), window_finish: stamp(74) }
+
+/** The Testimony the synthetic race was given. */
+export const HARNESS_ANNOTATIONS: RaceAnnotations = {
+  sails: [
+    { at: stamp(2), definition_number: 1, label: 'Main + Jib 1', note: null },
+    { at: stamp(26), definition_number: 4, label: 'Main + A2', note: null },
+  ],
+  sea_state: [
+    { at: stamp(26), sea_state: 'moderate' },
+    { at: stamp(48), sea_state: 'rough' },
+  ],
+}
+
+/**
+ * The same rows as a Recording would carry them, with the three channels the calibration checks
+ * read and the track does not: a paddlewheel reading a little under the GPS, a compass a few
+ * degrees off it, and the apparent wind qtVlm would have recomputed.
+ *
+ * Synthetic like the rest: what those checks *find* is pinned against the real archive in
+ * `services/analysis/__tests__/archive-instrument-tuning.test.ts`. This is so a browser has a
+ * calibration tile with figures in it to look at.
+ */
+export function harnessRecording(): (TuningRow & { tws: string | null })[] {
+  return harnessRows().map((row) => {
+    const sog = row.sog === null ? null : Number(row.sog)
+    const cog = row.cog === null ? null : Number(row.cog)
+    const twa = row.twa === null ? null : Number(row.twa)
+
+    return {
+      row_index: row.row_index,
+      row_time: row.row_time,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      cog: row.cog,
+      sog: row.sog,
+      stw: sog === null ? null : (sog * 0.94).toFixed(2),
+      ctw:
+        cog === null ? null : ((cog + 4 * Math.cos((cog * Math.PI) / 180) + 360) % 360).toFixed(1),
+      tws: row.tws,
+      twa: row.twa,
+      awa_calc: twa === null ? null : (twa * 0.72).toFixed(1),
+    }
+  })
+}
+
 /**
  * The synthetic race as its own page states it: Testimony, coverage, findings and the track.
  *
@@ -207,12 +263,11 @@ export function harnessRows(): TrackHeatmapRow[] {
  * set, a dropout in the Row Quality notes — because what the harness is for is the *layout* at a
  * width jsdom cannot have an opinion about, and a page of empty sections would not show it.
  */
-export function harnessRace(track: RaceTrack): RaceDetail {
+export function harnessRace(track: RaceTrack, instruments: RaceInstrumentCheck): RaceDetail {
   return {
     id: 'harness-race',
     title: 'Harness race — synthetic',
-    window_start: stamp(0),
-    window_finish: stamp(74),
+    ...HARNESS_WINDOW,
     recording: {
       id: 'harness-recording',
       filename: '07-11-26-harness.csv',
@@ -238,19 +293,11 @@ export function harnessRace(track: RaceTrack): RaceDetail {
       rows: [],
     },
     track,
+    instruments,
     findings: [
       { severity: 'note', message: 'The feed was dead for 8 minutes in the middle of this window.' },
     ],
-    annotations: {
-      sails: [
-        { at: stamp(2), definition_number: 1, label: 'Main + Jib 1', note: null },
-        { at: stamp(26), definition_number: 4, label: 'Main + A2', note: null },
-      ],
-      sea_state: [
-        { at: stamp(26), sea_state: 'moderate' },
-        { at: stamp(48), sea_state: 'rough' },
-      ],
-    },
+    annotations: HARNESS_ANNOTATIONS,
     boat_setup: {
       polar: { version_id: 'harness-polar', version_number: 3, effective_from: '2026-02-10' },
       crossover_chart: {

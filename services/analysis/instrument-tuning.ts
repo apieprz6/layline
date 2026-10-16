@@ -27,7 +27,14 @@ import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { awaAsymmetryByEra, eraAwaAsymmetry, raceAwaAsymmetry } from '@/services/analysis/awa-asymmetry'
 import { headingOffsetByEra, raceHeadingOffset } from '@/services/analysis/compass-deviation'
 import { detectManeuvers, type ManeuverAssessableRow } from '@/services/analysis/maneuvers'
-import { paddlewheelDivergence, type EraDivergence, type FitMethod } from '@/services/analysis/paddlewheel'
+import {
+  HEADLINE_SPEEDS_KNOTS,
+  lineGapAt,
+  paddlewheelDivergence,
+  raceDivergence,
+  type EraDivergence,
+  type FitMethod,
+} from '@/services/analysis/paddlewheel'
 import { readableRows } from '@/services/analysis/readable-rows'
 import type { QualityAssessableRow, RaceWindow } from '@/services/recordings/row-quality'
 import { assessRowQuality } from '@/services/recordings/row-quality'
@@ -36,6 +43,9 @@ import type {
   CalibrationLogEntry,
   EraAwaAsymmetry,
   EraHeadingOffset,
+  RaceHeadingOffsetResult,
+  RaceInstrumentCheck,
+  RaceSpeedCheck,
 } from '@/types'
 
 /**
@@ -207,4 +217,54 @@ function speedRaces<Row extends TuningRow>(
     sailed_at: races[index].window.window_start,
     rows: race.rows,
   }))
+}
+
+/**
+ * One Race's contribution to each of the three channels, for the per-Race page's calibration tile.
+ *
+ * The season's own per-Race functions over the same `tuningRaceRows`, so what a Race page says a
+ * Race produced is what the Instrument Tuning screen pooled from it. The `STW` line is fitted
+ * orthogonally, which is the screen's default; a Race page has no toggle to offer the other.
+ *
+ * No Calibration Log is read: a Race sits in one Era by construction, so there is nothing to cut.
+ */
+export function raceInstrumentCheck<Row extends TuningRow>(race: TuningRace<Row>): RaceInstrumentCheck {
+  const read = tuningRaceRows(race)
+  const heading = raceHeadingOffset(read)
+
+  return {
+    heading,
+    heading_swing_deg: headingSwing(heading),
+    asymmetry: raceAwaAsymmetry(read),
+    speed: speedCheck(
+      raceDivergence({ race_id: race.race_id, sailed_at: race.window.window_start, rows: read.rows })
+    ),
+  }
+}
+
+/** Highest heading less lowest, over the bins carrying a figure; null under two of them. */
+function headingSwing(result: RaceHeadingOffsetResult): number | null {
+  if (!result.ok) return null
+
+  const figures = result.offset.bins.flatMap((bin) =>
+    bin.mean_error_deg === null ? [] : [bin.mean_error_deg]
+  )
+  if (figures.length < 2) return null
+
+  return Math.max(...figures) - Math.min(...figures)
+}
+
+/** The line, read the one way it may be printed, or the reason there is none. */
+function speedCheck(divergence: ReturnType<typeof raceDivergence>): RaceSpeedCheck {
+  const { fit } = divergence
+  if (!fit.fitted) return { fitted: false, reason: fit.reason }
+
+  return {
+    fitted: true,
+    r_squared: fit.line.r_squared,
+    gaps: HEADLINE_SPEEDS_KNOTS.map((knots) => ({
+      stw_knots: knots,
+      gap_knots: lineGapAt(fit.line, knots),
+    })),
+  }
 }
