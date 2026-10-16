@@ -104,10 +104,8 @@ test.describe('the Analysis Filter, to an admin', () => {
     expect(await page.getByTestId('coverage-ledger-headline').textContent()).toBe(ledger)
   })
 
-  test('taps through from the Overall tab’s hero card', async ({ page }) => {
+  test('taps through from the season rail’s hero card', async ({ page }) => {
     await gotoHydrated(page, '/boat-performance')
-
-    await page.getByRole('tab', { name: 'Overall' }).click()
 
     const teaser = page.getByTestId('polar-performance-teaser')
     test.skip((await teaser.count()) === 0, 'The local archive has no races.')

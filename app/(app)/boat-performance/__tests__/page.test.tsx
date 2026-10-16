@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { CREW } from '@/__tests__/fixtures/accounts'
 import { resolveServerTree } from '@/__tests__/helpers/resolveServerTree'
 import { TEASER_RACES } from '@/components/analysis/PolarPerformanceTeaser'
@@ -19,8 +18,8 @@ jest.mock('@/lib/account/resolveAccount', () => ({
   resolveAccount: jest.fn(async () => null),
 }))
 
-// The Overall tab reads the five most recent races, scored (LAY-155). Mocked here because what
-// this suite asks is whether the tab gets its own boundary and its own content —
+// The season rail reads the five most recent races, scored (LAY-155). Mocked here because what
+// this suite asks is whether the rail gets its own boundary and its own content —
 // `readRecentRaceRows`'s own behaviour is its module's business.
 jest.mock('@/services/analysis/readArchive', () => ({
   readRecentRaceRows: jest.fn(async () => null),
@@ -34,7 +33,7 @@ jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
 }))
 
 // And the whole-archive instrument read the third row's coverage word comes off (LAY-160). Mocked
-// for the same reason as the other two, and because this is the expensive read on the tab: it is
+// for the same reason as the other two, and because this is the expensive read on the rail: it is
 // every Race's whole Transcription, which is `readInstrumentTuning`'s own suite to drive.
 jest.mock('@/services/analysis/readInstrumentTuning', () => ({
   readInstrumentTuning: jest.fn(async () => ({ ok: false, reason: 'no-races' })),
@@ -72,23 +71,24 @@ describe('/boat-performance', () => {
     await expect(BoatPerformancePage()).rejects.toThrow('NEXT_REDIRECT')
 
     expect(redirect).toHaveBeenCalledWith('/?signin=%2Fboat-performance')
-    // Not even the tab strip: a Guest is shown no part of the screen, rather than
+    // Not even the section header: a Guest is shown no part of the screen, rather than
     // its shape with the readings taken out.
     expect(document.body.textContent).toBe('')
   })
 
-  it('opens both tabs once the sailor is signed in', async () => {
+  it('opens the season and the races together once the sailor is signed in', async () => {
     resolveAccount.mockResolvedValue(CREW)
 
     await renderPage()
 
-    expect(screen.getByRole('tab', { name: 'Races' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Overall' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'This season' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /^Races/ })).toBeInTheDocument()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
     expect(redirect).not.toHaveBeenCalled()
   })
 })
 
-describe('the Overall tab', () => {
+describe('the This season rail', () => {
   const { resolveAccount } = jest.requireMock('@/lib/account/resolveAccount')
   const { readRecentRaceRows } = jest.requireMock('@/services/analysis/readArchive')
   const { readCrossoverChartScreen } = jest.requireMock(
@@ -108,9 +108,9 @@ describe('the Overall tab', () => {
     })
   })
 
+  // No click: the rail is on the screen from the first paint, beside the races.
   async function renderOverall(): Promise<void> {
     render(await resolveServerTree(await BoatPerformancePage()))
-    await userEvent.setup({ delay: null }).click(screen.getByRole('tab', { name: 'Overall' }))
   }
 
   it('heroes the Polar performance teaser, which taps through to the detail screen', async () => {
@@ -130,7 +130,7 @@ describe('the Overall tab', () => {
     await renderOverall()
 
     // The limit is the whole saving: the remaining races' Transcriptions would be read, assessed
-    // and scored to make rows this tab never shows. One read for both cards, at the wider window,
+    // and scored to make rows this rail never shows. One read for both cards, at the wider window,
     // rather than two overlapping on the five the Polar card wants.
     expect(readRecentRaceRows).toHaveBeenCalledTimes(1)
     expect(readRecentRaceRows).toHaveBeenCalledWith(SAIL_SELECTION_TEASER_RACES)
@@ -256,7 +256,7 @@ describe('the Overall tab', () => {
     expect(row).toHaveTextContent('4 of 36 headings rest on two or more Races')
     expect(row).toHaveTextContent('9 of 10 Races carry a line of their own')
 
-    // Third of three, which is the order the tab's rows are a list of doors in: the Polar hero, the
+    // Third of three, which is the order the rail's rows are a list of doors in: the Polar hero, the
     // Sail selection chart, then this.
     const above = screen.getByTestId('sail-selection-teaser')
     expect(above.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -267,7 +267,7 @@ describe('the Overall tab', () => {
 
     await renderOverall()
 
-    // The expensive read on the tab — every Race's whole Transcription, uncached by ADR 0009. One
+    // The expensive read on the rail — every Race's whole Transcription, uncached by ADR 0009. One
     // call for one word, and nothing above it waits on the answer: the row has a boundary of its
     // own, so the rows that are already measured paint while this one is still reading.
     expect(readInstrumentTuning).toHaveBeenCalledTimes(1)

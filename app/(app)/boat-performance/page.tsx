@@ -49,10 +49,10 @@ async function RaceArchiveScreen({
     <BoatPerformanceContent
       races={races}
       canWrite={writable}
-      // The Overall tab is `OverallCards` itself, with no boundary wrapped around it here: each
-      // of its three cards carries its own `<Suspense>` internally, so the Races tab above never
+      // `OverallCards` is the "This season" rail, with no boundary wrapped around it here: each
+      // of its three cards carries its own `<Suspense>` internally, so the race table above never
       // waits on any of them and no card waits on another. See that piece's doc comment for how.
-      overall={<OverallCards />}
+      season={<OverallCards />}
     />
   )
 }
