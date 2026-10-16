@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactElement } from 'react'
 import {
+  GRID_BLEED_CLASS,
   GRID_CORNER_STYLE,
   GRID_HEAD_STYLE,
   GRID_ROW_HEAD_STYLE,
@@ -42,8 +43,8 @@ interface SailSelectionGridProps {
  * number. The thumbnails above are the switcher, so comparing coverage against performance is a
  * glance up rather than a decoding exercise (ADR 0030).
  *
- * **The grid takes the full width of the screen**, out through the page's own padding, with
- * `table-layout: fixed` — so thirteen wind-speed columns divide a 390px phone between them at
+ * **The grid takes the full width of its pane**, out through the page's own padding on a phone,
+ * with `table-layout: fixed` — so thirteen wind-speed columns divide a 390px phone between them at
  * ~27px each with no sideways scroll, and the angle column stays pinned for anything narrower.
  *
  * **On the Chart layer a sail is named once per region**, not numbered per cell: a name does not
@@ -66,7 +67,12 @@ export default function SailSelectionGrid({
   onSelect,
 }: SailSelectionGridProps): ReactElement {
   return (
-    <div data-testid="sail-selection-grid" data-layer={layer.id} style={BLEED_STYLE}>
+    <div
+      data-testid="sail-selection-grid"
+      data-layer={layer.id}
+      className={GRID_BLEED_CLASS}
+      style={SCROLL_STYLE}
+    >
       <table style={GRID_TABLE_STYLE}>
         <thead>
           <tr>
@@ -245,15 +251,12 @@ export function SailSelectionThumbnails({
 }
 
 /**
- * The grid is the screen's subject, so it takes the whole width: out through the page's own
- * padding. `overflowX` keeps a sideways scroll as the fallback below 390px rather than crushing
- * the cells, with the angle column pinned so a cell always has a row to belong to.
+ * The grid is the screen's subject, so on a phone it takes the whole width: out through the page's
+ * own padding (`GRID_BLEED_CLASS`). `overflowX` keeps a sideways scroll as the fallback below 390px
+ * rather than crushing the cells, with the angle column pinned so a cell always has a row to belong
+ * to.
  */
-const BLEED_STYLE: CSSProperties = {
-  marginLeft: `calc(-1 * ${spacing(4)})`,
-  marginRight: `calc(-1 * ${spacing(4)})`,
-  overflowX: 'auto',
-}
+const SCROLL_STYLE: CSSProperties = { overflowX: 'auto' }
 
 const CELL_WRAP_STYLE: CSSProperties = { padding: 0 }
 
