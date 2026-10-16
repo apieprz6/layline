@@ -4,14 +4,17 @@ import {
   BODY_CLASS,
   ColumnHeaderRow,
   HEADER_STYLE,
+  RACES_CLASS,
+  RAIL_CLASS,
+  ROOT_CLASS,
   ROW_CLASS,
   ROW_STYLE,
   SECTION_HEADING_STYLE,
   SECTION_STYLE,
+  TABLE_CLASS,
   TABLE_STYLE,
   TITLE_STYLE,
   TOOLBAR_STYLE,
-  WIDE_CELL_CLASS,
   rowRule,
 } from './boatPerformanceLayout'
 
@@ -20,7 +23,7 @@ import {
  *
  * `BoatPerformanceContent`'s own shape, from the same `boatPerformanceLayout` geometry: the section
  * header, the "This season" rail, and the races' toolbar over a table. What is already known is
- * drawn as itself — the section's name, both section headings, the four column names — and what
+ * drawn as itself — the section's name, both section headings, the three column names — and what
  * the read returns is a bar.
  *
  * The rail holds one row's height, which is what its own `<Suspense>` boundary on the page shows
@@ -46,7 +49,7 @@ export default function BoatPerformanceSkeleton(): ReactElement {
   return (
     <SkeletonScreen
       label="Loading the race archive"
-      className="min-h-screen"
+      className={ROOT_CLASS}
       style={{ background: 'var(--page-bg)' }}
     >
       <div style={HEADER_STYLE}>
@@ -54,7 +57,7 @@ export default function BoatPerformanceSkeleton(): ReactElement {
       </div>
 
       <div className={BODY_CLASS}>
-        <div style={SECTION_STYLE}>
+        <div className={RAIL_CLASS} style={SECTION_STYLE}>
           <div style={TOOLBAR_STYLE}>
             <h2 style={SECTION_HEADING_STYLE}>This season</h2>
           </div>
@@ -62,12 +65,12 @@ export default function BoatPerformanceSkeleton(): ReactElement {
           <Skeleton height="92px" radius="var(--radius-md)" />
         </div>
 
-        <div style={SECTION_STYLE}>
+        <div className={RACES_CLASS} style={SECTION_STYLE}>
           <div style={TOOLBAR_STYLE}>
             <h2 style={SECTION_HEADING_STYLE}>Races</h2>
           </div>
 
-          <div style={TABLE_STYLE}>
+          <div className={TABLE_CLASS} style={TABLE_STYLE}>
             <ColumnHeaderRow />
 
             {[0, 1, 2].map((row) => (
@@ -76,14 +79,9 @@ export default function BoatPerformanceSkeleton(): ReactElement {
                 className={ROW_CLASS}
                 style={{ ...ROW_STYLE, ...rowRule(row) }}
               >
-                <span className={WIDE_CELL_CLASS}>
-                  <SkeletonText fontSize="var(--text-base)" width="70%" />
-                </span>
-                <span className={WIDE_CELL_CLASS}>
-                  <SkeletonText fontSize="var(--text-sm)" width="160px" />
-                </span>
+                <SkeletonText fontSize="var(--text-base)" width="70%" />
+                <SkeletonText fontSize="var(--text-sm)" width="160px" />
                 <SkeletonText fontSize="var(--text-xs)" width="48px" />
-                <SkeletonText fontSize="var(--text-xs)" width="80%" />
               </div>
             ))}
           </div>

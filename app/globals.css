@@ -246,6 +246,10 @@
 
   /* Layout dimensions */
   --drawer-width: 268px;
+  /* The app's top bar, which holds itself to this height (RaceHeader) so a screen that fills
+     the rest of the viewport — Boat performance on desktop — can subtract it exactly. Its
+     natural height is 61.5px. */
+  --app-header-height: 62px;
 }
 
 /* ============================================================

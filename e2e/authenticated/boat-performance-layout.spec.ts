@@ -11,7 +11,9 @@ import { gotoHydrated } from '../hydrated'
  *   - **from 1024px the rail stands beside the table**, rather than behind a tab or above it;
  *   - **on a 390px phone it stacks above the table**, both the full width of the screen — the
  *     LAY-174 prototype's `flexWrap` left the stacked rail narrower than the table under it;
- *   - **a race row fits a phone**, its four figures falling back to a card rather than four
+ *   - **on a desktop the page never scrolls**: the race list scrolls inside its own box, under
+ *     column headers that stay put;
+ *   - **a race row fits a phone**, its three figures falling back to a card rather than three
  *     columns running off the side.
  *
  * The archive project's synthetic race is what guarantees the table has a row to measure.
@@ -40,6 +42,49 @@ test.describe('Boat performance, to an admin', () => {
       // Stacked: the rail first, and the two one column the same width.
       expect(seasonBox.y + seasonBox.height).toBeLessThanOrEqual(racesBox.y)
       expect(Math.abs(seasonBox.width - racesBox.width)).toBeLessThanOrEqual(1)
+    }
+  })
+
+  test('holds the page still on a desktop, and scrolls the race list under its headers instead', async ({
+    page,
+  }) => {
+    test.skip(page.viewportSize()!.width < 1024, 'A phone keeps the ordinary page scroll.')
+
+    // Short enough that a handful of races outruns the screen. The local archive's real races do;
+    // a stack with only the synthetic fixture cannot, so the scroll itself is only asked of the list
+    // when it has something to scroll — but the page holding still is asked of every stack.
+    await page.setViewportSize({ width: 1280, height: 360 })
+    await gotoHydrated(page, '/boat-performance')
+
+    const races = page.getByRole('region', { name: /^Races/ })
+    const list = races.getByRole('list')
+    await expect(list).toBeVisible()
+    await expect(page.getByTestId('instrument-tuning-teaser')).toBeVisible()
+
+    const pageOverflow = await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight
+    )
+    expect(pageOverflow, 'the page scrolls, where only its columns should').toBeLessThanOrEqual(0)
+
+    // The list stops at the bottom of the screen rather than running past it.
+    const listBox = (await list.boundingBox())!
+    expect(listBox.y + listBox.height).toBeLessThanOrEqual(360)
+
+    const { scrollable, headerBefore, headerAfter, scrolled } = await list.evaluate((node) => {
+      const header = node.previousElementSibling as HTMLElement
+      const headerBefore = header.getBoundingClientRect().y
+      node.scrollTop = node.scrollHeight
+      return {
+        scrollable: node.scrollHeight > node.clientHeight,
+        headerBefore,
+        headerAfter: header.getBoundingClientRect().y,
+        scrolled: node.scrollTop,
+      }
+    })
+    if (scrollable) {
+      expect(scrolled).toBeGreaterThan(0)
+      // The column headers stay where they were while the rows move under them.
+      expect(headerAfter).toBe(headerBefore)
     }
   })
 

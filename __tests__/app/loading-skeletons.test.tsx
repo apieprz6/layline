@@ -208,7 +208,7 @@ describe('/boat-performance while it loads', () => {
     expect(screen.getByText('This season')).toBeInTheDocument()
     // The heading without its count, which is exactly what the read has not returned yet.
     expect(screen.getByText('Races')).toBeInTheDocument()
-    for (const column of ['Race', 'Window', 'Duration', 'File']) {
+    for (const column of ['Race', 'Window', 'Duration']) {
       expect(screen.getByText(column)).toBeInTheDocument()
     }
     expect(screen.queryByText(/Upload a race/)).not.toBeInTheDocument()

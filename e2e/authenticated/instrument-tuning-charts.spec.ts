@@ -267,11 +267,13 @@ test.describe('the Instrument Tuning charts, to an admin', () => {
 
     // Three channels across a 390px screen, which is the question this shape actually raises: a
     // tile designed as a third of a phone has to hold a mono figure without spilling out of its
-    // column. Jest can see the words; only a browser can see the width.
+    // column. Jest can see the words; only a browser can see the width. The row ends inside the
+    // screen it is on — the viewport's own width rather than 390, since on a desktop it sits in
+    // Boat performance's rail (LAY-178) and that rail's width is its own business.
     await expect(row.getByTestId('tuning-channel')).toHaveCount(3)
     const rowBox = await row.boundingBox()
     expect(rowBox).not.toBeNull()
-    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(390)
+    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
 
     for (const channel of ['HDG', 'AWA', 'STW']) {
       const figures = row.locator(`[data-testid="tuning-figures"][data-channel="${channel}"]`)

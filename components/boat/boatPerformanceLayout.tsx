@@ -25,20 +25,49 @@ export const TITLE_STYLE: CSSProperties = {
 }
 
 /**
+ * The screen's root: at least a screen tall on a phone, and **exactly** what the app's top bar
+ * leaves of one from `lg`.
+ *
+ * On a desktop the page itself never scrolls. The rail and the race list each scroll inside their
+ * own box instead, so an archive of fifty races is a list that scrolls under its own column
+ * headers rather than a page that carries the season, the toolbar and the headers away with it.
+ * That needs the root to know its height, which is why `RaceHeader` holds itself to
+ * `--app-header-height` rather than to its content. A phone keeps the ordinary page scroll: there
+ * the rail is above the races, and a box that scrolls inside a page that scrolls is a trap.
+ */
+export const ROOT_CLASS =
+  'min-h-screen lg:min-h-0 lg:h-[calc(100dvh-var(--app-header-height))] ' +
+  'lg:flex lg:flex-col lg:overflow-hidden'
+
+/**
  * The rail beside the races, stacked above them below `lg`.
  *
  * A grid with a breakpoint rather than the LAY-174 prototype's `flexWrap`. A wrapped flex row
  * stacks wherever its two bases stop fitting, and kept the rail's `max-width` once it had — so on a
  * 390px phone the season sat 340px wide over a table 358px wide. Here a phone gets one column the
- * full width of the screen, and the rail only stands beside the races from 1024px, which is the
- * first width that leaves the races' four columns room beside it.
+ * full width of the screen, and the rail only stands beside the races from 1024px.
  *
- * 360px, and no narrower: the teasers in the rail were designed for a 390px phone's 358px column,
- * and the Instrument tuning row's three channel tiles each hold a mono figure that spills out of a
- * third of anything less (LAY-178 measured 3px at 320).
+ * 440px from `lg` and 560px from `2xl`, by the owner's call on LAY-178 that 360px read too small on
+ * a desktop and on an ultrawide. Never under 360px whatever happens to these: the teasers were
+ * designed for a 390px phone's 358px column, and the Instrument tuning row's three channel tiles
+ * each hold a mono figure that spills out of a third of anything less (3px at 320).
+ *
+ * From `lg` the one row is the full height left under the section header (`minmax(0,1fr)`), so
+ * each column can scroll inside it — see `ROOT_CLASS`.
  */
 export const BODY_CLASS =
-  'grid gap-4 p-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:items-start'
+  'grid gap-4 p-4 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)] ' +
+  'lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]'
+
+/**
+ * The rail, which scrolls in its own column from `lg` when the season is taller than the screen.
+ * `relative` for the reason `LIST_CLASS` gives: the teasers' own absolute pieces must be clipped by
+ * this scroller rather than spill past it into the page.
+ */
+export const RAIL_CLASS = 'relative lg:min-h-0 lg:overflow-y-auto'
+
+/** The races' section, which hands its height on to the table rather than growing past it. */
+export const RACES_CLASS = 'lg:min-h-0'
 
 export const SECTION_STYLE: CSSProperties = {
   display: 'flex',
@@ -87,6 +116,21 @@ export const UPLOAD_BUTTON_STYLE: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
+/**
+ * The table's box: as tall as its rows, until there are more than the screen holds. From `lg` it
+ * then stops at the bottom of the screen, its header row stays put and the rows scroll beneath it
+ * (`LIST_CLASS`).
+ */
+export const TABLE_CLASS = 'lg:flex lg:flex-col lg:min-h-0'
+
+/**
+ * `relative` is not decoration. Each row's screen-reader labels are `sr-only`, which is
+ * `position: absolute`, and an absolute box is clipped by a scroller only if the scroller is its
+ * containing block — without this, the labels of the rows scrolled out of sight stayed where they
+ * were and made the page itself scroll by their height (126px on a 360px-tall screen).
+ */
+export const LIST_CLASS = 'relative lg:min-h-0 lg:overflow-y-auto'
+
 export const TABLE_STYLE: CSSProperties = {
   background: 'var(--surface-raised)',
   border: '1px solid var(--surface-border)',
@@ -95,15 +139,16 @@ export const TABLE_STYLE: CSSProperties = {
 }
 
 /**
- * One row's columns: Race · Window · Duration · File from `sm` up, which the header row shares.
+ * One row's columns: Race · Window · Duration from `sm` up, which the header row shares.
  *
- * Below `sm` four columns do not fit — the window alone is ~180px of mono — so a row falls back to
- * the card it used to be: the title, then the window, then the duration and the file side by side.
- * The title and the window span both columns there; the duration and the file take one each.
+ * Below `sm` three columns do not fit — the window alone is ~180px of mono — so a row falls back to
+ * the card it used to be: the title, then the window, then the duration.
+ *
+ * No File column, by the owner's call on LAY-178: a filename is not what a sailor picks a race by,
+ * and it is on the race's own page.
  */
 const ROW_COLUMNS =
-  'grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 ' +
-  'sm:grid-cols-[minmax(0,2fr)_176px_88px_minmax(0,1fr)]'
+  'grid-cols-1 items-baseline gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_176px_88px]'
 
 export const ROW_CLASS = `grid ${ROW_COLUMNS}`
 
@@ -128,7 +173,7 @@ const HEADER_CELL_STYLE: CSSProperties = {
  *
  * Hidden from a screen reader on both screens, the real one and the skeleton. Each row carries its
  * own labels instead (see `RaceRow`), because a row is one link and a header row a list of
- * links cannot point at would be four words read once and never again.
+ * links cannot point at would be three words read once and never again.
  */
 export function ColumnHeaderRow(): ReactElement {
   return (
@@ -137,7 +182,7 @@ export function ColumnHeaderRow(): ReactElement {
       className={`hidden sm:grid ${ROW_COLUMNS}`}
       style={{ ...ROW_STYLE, borderBottom: ROW_RULE }}
     >
-      {['Race', 'Window', 'Duration', 'File'].map((column) => (
+      {['Race', 'Window', 'Duration'].map((column) => (
         <span key={column} style={HEADER_CELL_STYLE}>
           {column}
         </span>
@@ -150,6 +195,3 @@ export function ColumnHeaderRow(): ReactElement {
 export function rowRule(index: number): CSSProperties {
   return { borderTop: index === 0 ? 'none' : ROW_RULE }
 }
-
-/** The cells that span the whole row on a phone and take a column of their own from `sm`. */
-export const WIDE_CELL_CLASS = 'col-span-2 sm:col-span-1'

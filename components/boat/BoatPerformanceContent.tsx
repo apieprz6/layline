@@ -8,15 +8,19 @@ import {
   BODY_CLASS,
   ColumnHeaderRow,
   HEADER_STYLE,
+  LIST_CLASS,
+  RACES_CLASS,
+  RAIL_CLASS,
+  ROOT_CLASS,
   ROW_CLASS,
   ROW_STYLE,
   SECTION_HEADING_STYLE,
   SECTION_STYLE,
+  TABLE_CLASS,
   TABLE_STYLE,
   TITLE_STYLE,
   TOOLBAR_STYLE,
   UPLOAD_BUTTON_STYLE,
-  WIDE_CELL_CLASS,
   rowRule,
 } from './boatPerformanceLayout'
 
@@ -41,7 +45,8 @@ interface BoatPerformanceContentProps {
  * Both at once, where they used to be two tabs (LAY-174's variant B, built on LAY-178): the rail
  * is a row of doors into the season's screens and the table is the way into one race, and neither
  * is the one a sailor should have to click past to reach the other. On a phone the rail stacks
- * above the table — see `BODY_CLASS`.
+ * above the table — see `BODY_CLASS`. On a desktop the page holds still and the race list scrolls
+ * under its own column headers — see `ROOT_CLASS`.
  *
  * The table states a **duration** and never a row count. A duration can be held against a sailor's
  * memory of the afternoon; "6,337 rows" cannot be held against anything, and counts a dead feed's
@@ -54,11 +59,11 @@ interface BoatPerformanceContentProps {
  * ## A list of rows, not a `<table>`
  *
  * Each row is one door, so each row is one link, and a `<tr>` cannot be one: a table would mean a
- * link in the title cell stretched over its siblings, and a phone — where four columns do not fit
+ * link in the title cell stretched over its siblings, and a phone — where three columns do not fit
  * and the row falls back to a card — would mean changing the `display` of table elements, which
  * costs some browsers the table's semantics anyway. So it is a list of links, as it was before, and
  * the header row is drawn for the eye and hidden from a screen reader, which hears each race as one
- * link carrying all four figures, each named (see `RaceRow`).
+ * link carrying all three figures, each named (see `RaceRow`).
  */
 export default function BoatPerformanceContent({
   races,
@@ -66,13 +71,13 @@ export default function BoatPerformanceContent({
   season,
 }: BoatPerformanceContentProps): ReactElement {
   return (
-    <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
+    <div className={ROOT_CLASS} style={{ background: 'var(--page-bg)' }}>
       <div style={HEADER_STYLE}>
         <h1 style={TITLE_STYLE}>Boat performance</h1>
       </div>
 
       <div className={BODY_CLASS}>
-        <section aria-labelledby="this-season-heading" style={SECTION_STYLE}>
+        <section aria-labelledby="this-season-heading" className={RAIL_CLASS} style={SECTION_STYLE}>
           {/* In a toolbar row of its own, with nothing else in it, so it lines up with "Races"
               beside it rather than sitting half a button higher. */}
           <div style={TOOLBAR_STYLE}>
@@ -83,7 +88,7 @@ export default function BoatPerformanceContent({
           {season}
         </section>
 
-        <section aria-labelledby="races-heading" style={SECTION_STYLE}>
+        <section aria-labelledby="races-heading" className={RACES_CLASS} style={SECTION_STYLE}>
           <div style={TOOLBAR_STYLE}>
             <h2 id="races-heading" style={SECTION_HEADING_STYLE}>
               Races
@@ -109,10 +114,10 @@ export default function BoatPerformanceContent({
               detail="Races appear here once one has been logged, newest first."
             />
           ) : (
-            <div style={TABLE_STYLE}>
+            <div className={TABLE_CLASS} style={TABLE_STYLE}>
               <ColumnHeaderRow />
 
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul className={LIST_CLASS} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {races.map((race, index) => (
                   <li key={race.id} style={rowRule(index)}>
                     <RaceRow race={race} />
@@ -128,11 +133,11 @@ export default function BoatPerformanceContent({
 }
 
 /**
- * One race: its title, its window in the recording's own clock, its duration, and its file.
+ * One race: its title, its window in the recording's own clock, and its duration.
  *
  * Each figure after the title carries its column's name for a screen reader only, since the header
  * row is hidden from one: the link then reads "Verve Cup, window Aug 22 · 11:05 – 13:20, duration
- * 2h 15m, file …" rather than four figures run together with nothing to say which is which.
+ * 2h 15m" rather than three figures run together with nothing to say which is which.
  */
 function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
   return (
@@ -142,7 +147,6 @@ function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
       style={{ ...ROW_STYLE, textDecoration: 'none' }}
     >
       <span
-        className={WIDE_CELL_CLASS}
         style={{
           minWidth: 0,
           fontFamily: 'var(--font-display)',
@@ -153,7 +157,6 @@ function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
         {race.title ?? 'Untitled race'}
       </span>
       <span
-        className={WIDE_CELL_CLASS}
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--text-sm)',
@@ -169,21 +172,6 @@ function RaceRow({ race }: { race: RaceListEntry }): ReactElement {
       >
         <span className="sr-only">, duration </span>
         {describeDuration(race.window_seconds)}
-      </span>
-      <span
-        // The one column that gives way: a long filename is truncated before a title is, and the
-        // whole of it is a tap away on the race's own page.
-        style={{
-          minWidth: 0,
-          fontSize: 'var(--text-xs)',
-          color: 'var(--text-muted)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span className="sr-only">, file </span>
-        {race.filename}
       </span>
     </Link>
   )

@@ -91,31 +91,38 @@ describe('the race table', () => {
     expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument()
   })
 
-  it('heads its four columns, and fills each row with all four', () => {
+  it('heads its three columns, and fills each row with all three', () => {
     render(<BoatPerformanceContent races={[race()]} canWrite={false} season={SEASON} />)
 
-    for (const column of ['Race', 'Window', 'Duration', 'File']) {
+    for (const column of ['Race', 'Window', 'Duration']) {
       expect(screen.getByText(column)).toBeInTheDocument()
     }
 
-    // The whole row is the door, so all four figures are in the link a screen reader announces —
+    // The whole row is the door, so all three figures are in the link a screen reader announces —
     // the column headers being for the eye only.
     const link = screen.getByRole('link', { name: /Verve Cup/ })
     expect(link).toHaveTextContent('Verve Cup')
     expect(link).toHaveTextContent('Aug 22 · 11:05 – 13:20')
     expect(link).toHaveTextContent('2h 15m')
-    expect(link).toHaveTextContent('08-22-26-glr.csv')
+  })
+
+  it('leaves the filename to the race’s own page', () => {
+    // The owner's call on LAY-178: a filename is not what a sailor picks a race by.
+    render(<BoatPerformanceContent races={[race()]} canWrite={false} season={SEASON} />)
+
+    expect(screen.queryByText('File')).not.toBeInTheDocument()
+    expect(screen.queryByText(/08-22-26-glr\.csv/)).not.toBeInTheDocument()
   })
 
   it('labels each figure for a screen reader, which never hears the column headers', () => {
     render(<BoatPerformanceContent races={[race()]} canWrite={false} season={SEASON} />)
 
-    // Four figures run together would be "Verve Cup Aug 22 · 11:05 – 13:20 2h 15m 08-22…", with
-    // nothing to say which number is the duration. Each cell is a grid item, so the name has a space
-    // before every comma — which a screen reader pauses on all the same.
+    // Three figures run together would be "Verve Cup Aug 22 · 11:05 – 13:20 2h 15m", with nothing
+    // to say which number is the duration. Each cell is a grid item, so the name has a space before
+    // every comma — which a screen reader pauses on all the same.
     expect(
       screen.getByRole('link', {
-        name: /^Verve Cup ?, window Aug 22 · 11:05 – 13:20 ?, duration 2h 15m ?, file 08-22-26-glr\.csv$/,
+        name: /^Verve Cup ?, window Aug 22 · 11:05 – 13:20 ?, duration 2h 15m$/,
       })
     ).toBeInTheDocument()
   })
