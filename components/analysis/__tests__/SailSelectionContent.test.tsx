@@ -134,19 +134,39 @@ describe('four layers over one grid', () => {
     expect(screen.getByTestId('sail-selection-grid')).toHaveAttribute('data-layer', 'agreement')
   })
 
-  it('prints the chart’s own sail number in every cell, reached or not', () => {
+  it('prints each sail’s name in every cell of its region, reached or not', () => {
     renderScreen()
 
     // Row-major, straight off the payload: no Race reached the 90° row and it is drawn in full.
+    // The lone 2 is one cell, too small for "Main + Jib 2", so it keeps its number.
     expect([...cells().keys()]).toEqual(['40/4', '40/10', '40/16', '90/4', '90/10', '90/16'])
     expect([...cells().values()].map((cell) => cell.dataset.print)).toEqual([
-      '1',
-      '1',
+      'Main + Jib 1',
+      'Main + Jib 1',
       '2',
-      '1',
-      '4',
-      '4',
+      'Main + Jib 1',
+      'Reef + Jib 2',
+      'Reef + Jib 2',
     ])
+  })
+
+  it('draws each name once per region, and names the number it could not fit', () => {
+    renderScreen()
+
+    expect(
+      screen.getAllByTestId('sail-selection-region-name').map((name) => name.textContent)
+    ).toEqual(['Main + Jib 1', 'Reef + Jib 2'])
+    expect(cells().get('40/16')).toHaveTextContent(/^2$/)
+    expect(
+      screen.getAllByTestId('sail-selection-legend-sail').map((each) => each.textContent)
+    ).toEqual([expect.stringMatching(/^2 is Main \+ Jib 2/)])
+  })
+
+  it('prints numbers, not names, on the other layers', async () => {
+    const { user } = renderScreen()
+
+    await showLayer(user, 'coverage')
+    expect(screen.queryAllByTestId('sail-selection-region-name')).toEqual([])
   })
 
   it('prints a race count on Coverage and a glyph on Agreement', async () => {
@@ -225,7 +245,7 @@ describe('a narrowing, and what it costs', () => {
     await user.click(bucket('heavy') as HTMLButtonElement)
 
     expect([...cells().values()].every((cell) => cell.dataset.ghost === undefined)).toBe(true)
-    expect(printOf('40/10')).toBe('1')
+    expect(printOf('40/10')).toBe('Main + Jib 1')
   })
 
   it('writes the narrowing into the URL with replaceState, and never navigates', async () => {
@@ -349,8 +369,10 @@ describe('what the screen says about itself', () => {
   it('keeps colour out of the legend’s only carrier, on every layer that has one', async () => {
     const { user } = renderScreen()
 
-    // The Chart layer's legend is the Boat Setup screen's, not this one's.
-    expect(screen.queryByTestId('sail-selection-legend')).not.toBeInTheDocument()
+    // The Chart layer's legend is the outline and the names behind its remaining numbers, in words.
+    expect(screen.getByTestId('sail-selection-legend')).toHaveTextContent(
+      'Each outlined block is one sail'
+    )
 
     await showLayer(user, 'agreement')
     const legend = screen.getByTestId('sail-selection-legend')

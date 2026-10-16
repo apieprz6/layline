@@ -165,6 +165,13 @@ export interface SailSelectionLayerSpec {
   narrows: boolean
   /** Whether this layer's figure can rest on the Polar's own filler, and so be flagged. */
   flags_filler: boolean
+  /**
+   * Whether the grid draws the chart's sail **regions** on this layer: each region outlined and
+   * named once inside it, in place of a number per cell (`crossoverSailRegions`). True on Chart
+   * alone, because the sail is that layer's whole answer. A region too small for its name falls
+   * back to `print`.
+   */
+  draws_regions: boolean
   /** What the cell prints. The empty string is blank, and blank means blank. */
   print(view: CellView): string
   /** The cell's fill. `transparent` where nothing was reached: empty reads as empty. */
@@ -181,6 +188,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'The sail the chart calls for. Never narrowed, never ghosted.',
     narrows: false,
     flags_filler: false,
+    draws_regions: true,
     print: (view) => (view.cell.sail_number === null ? '' : String(view.cell.sail_number)),
     tint: (view, bands) => {
       const band = view.cell.sail_number === null ? undefined : bands.get(view.cell.sail_number)
@@ -196,6 +204,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Races that reached the cell.',
     narrows: true,
     flags_filler: false,
+    draws_regions: false,
     print: (view) => (view.totals.rows === 0 ? '' : String(view.totals.races)),
     tint: (view) => (view.totals.rows === 0 ? 'transparent' : coverageTint(view.totals.races)),
     detail: () => '',
@@ -206,6 +215,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Percent of Target Speed over the cell’s Countable rows.',
     narrows: true,
     flags_filler: true,
+    draws_regions: false,
     print: (view) => {
       // A figure first, always: a computed figure is never suppressed on the strength of a claim
       // about the Polar's domain (ADR 0036). Then the structural dash — which prints whether or
@@ -238,6 +248,7 @@ export const SAIL_SELECTION_LAYERS: readonly SailSelectionLayerSpec[] = [
     blurb: 'Whether the sail carried was the one the cell prints.',
     narrows: true,
     flags_filler: false,
+    draws_regions: false,
     print: (view) => (view.totals.rows === 0 ? '' : AGREEMENT_GLYPHS[view.totals.agreement]),
     tint: (view) =>
       view.totals.rows === 0 ? 'transparent' : agreementTint(view.totals.agreement),
@@ -354,7 +365,9 @@ export const GRID_ROW_HEAD_STYLE: CSSProperties = {
 export const GRID_STICKY_STYLE: CSSProperties = {
   position: 'sticky',
   left: 0,
-  zIndex: 1,
+  // Above a Chart-layer region name, which is lifted over the cells it spans and would otherwise
+  // slide over the angles when the grid scrolls sideways.
+  zIndex: 2,
   borderRight: '1px solid var(--surface-border)',
 }
 
