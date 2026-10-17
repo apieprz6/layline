@@ -55,9 +55,11 @@ above happen in your browser.
 - **Every reading has an age.** Claude is told each station's status (online, recent, stale,
   offline) and how old the reading is. If it isn't fresh, expect Claude to say so.
 
-- **Polar performance has no wind-speed filter**, because the screen has none: there, the Polar
-  Plot owns the wind axis. Ask about upwind with the #1 and Claude answers across every wind
-  speed, and should say so.
+- **Wind speed works the way the Polar Plot's wind window does.** The season figures blend every
+  wind, so 110% of target at 4 knots and 50% at 12 can read as one middling number. Ask about a
+  wind range ("upwind in 10–14 knots with the #1") and Claude asks Layline for that window, the
+  same 2, 4 or 6 knot window the screen's slider sets. It answers with that window's own figures
+  and its patches (5° by half a knot), each scored against its own wind.
 - **Every season figure says how much sailing is behind it**, what was left out (frozen,
   low-speed or mid-maneuver sailing) and how much of it nobody annotated, as the screen's Coverage
   Ledger does. A figure partly compared against Polar cells the Polar manufactured is still given,

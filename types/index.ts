@@ -3646,10 +3646,50 @@ export interface McpAnalysisDimension {
   buckets: { id: string; label: string; footnote?: string }[]
 }
 
+// The Polar Plot's focus window as a tool argument: a centre in whole knots and a width of 2, 4
+// or 6, exactly the screen's slider (ADR 0040). It narrows what the window states, never the match.
+export interface McpWindWindowArgument {
+  centre: number
+  width: number
+}
+
+// One Polar Plot patch: 5° of |TWA| by half a knot of SOG, inside one wind window, so every
+// moment in it was sailed in comparable wind. `percent` is the patch card's whole percent.
+export interface McpPolarPlotPatch {
+  twaDegrees: { from: number; to: number }
+  sogKnots: { from: number; to: number }
+  ratio: number | null
+  percent: string | null
+  targetKnots: number | null
+  scoredSeconds: number
+  races: number
+  fillerAnchoredShare: number | null
+  fillerAnchored: boolean
+}
+
+// What one position of the wind window holds. `highKnots` is exclusive. The figures are over the
+// window's own sailing; `notDrawn` is what the window could hold and draws nowhere, and why.
+export interface McpWindWindow {
+  centreKnots: number
+  widthKnots: number
+  lowKnots: number
+  highKnots: number
+  polarColumnsInPlay: number[]
+  polarEfficiency: McpEfficiencyFigure
+  vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+  notDrawn: { seconds: number; parts: { reason: string; seconds: number }[] }
+  patches: McpPolarPlotPatch[]
+  note?: string
+}
+
 export interface PolarPerformanceAnswer {
   filter: McpAnalysisFilterArgument
   polarEfficiency: McpEfficiencyFigure
   vmgEfficiency: McpEfficiencyFigure & { caveat: string }
   coverageLedger: McpCoverageLedger
   dimensions: McpAnalysisDimension[]
+  // The windows a call may ask for, or null where no race records a Polar.
+  windWindowOptions: { centreFromKnots: number; centreToKnots: number; widthsKnots: number[] } | null
+  // The window asked for, or null where none was.
+  windWindow: McpWindWindow | null
 }

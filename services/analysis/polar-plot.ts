@@ -110,6 +110,21 @@ export function plotMoments(rows: readonly PlottableRow[]): PolarPlotMoment[] {
 export const PATCH_TWA_DEG = 5
 export const PATCH_SOG_KNOTS = 0.5
 
+/** A patch's four edges: `|TWA|` and `SOG`, each from its lower edge to the next patch's. */
+export function patchBounds(patch: Pick<PolarPlotPatch, 'twa' | 'sog'>): {
+  twa_from: number
+  twa_to: number
+  sog_from: number
+  sog_to: number
+} {
+  return {
+    twa_from: patch.twa,
+    twa_to: patch.twa + PATCH_TWA_DEG,
+    sog_from: patch.sog,
+    sog_to: patch.sog + PATCH_SOG_KNOTS,
+  }
+}
+
 /** The lower edge of a `|TWA|` bin. 180° belongs to the last bin rather than opening one past it. */
 function angleBin(twa: number, width: number): number {
   return Math.min(180 - width, Math.floor(Math.abs(twa) / width) * width)
@@ -270,6 +285,66 @@ export function clampCentre(centre: number, range: { from: number; to: number })
   return Math.min(range.to, Math.max(range.from, Math.round(centre)))
 }
 
+/** Said where no Polar has a wind axis, so there is no window to put anything in. */
+export const NO_POLAR_TO_DRAW_AGAINST =
+  'No race in this archive records a Polar, so there is nothing to draw the sailing against.'
+
+/** Said where the window holds no sailing the Polar could score. */
+export const NOTHING_IN_WINDOW = 'Nothing in this window could be scored against the Polar.'
+
+/** What one position of the focus window holds: everything the season screen draws in it. */
+export interface SeasonWindow<Row extends PlottableRow = PlottableRow> {
+  focus: FocusWindow
+  /** The rail's matched rows with a wind reading inside the window. */
+  shown: Row[]
+  patches: PolarPlotPatch[]
+  moments: PolarPlotMoment[]
+  families: CertificateFamily[]
+  /** `sumEfficiency` over the window's rows: the time the window draws, and its sums. */
+  efficiency: EfficiencyAggregate
+  /**
+   * The certificate columns the drawn sailing was scored against, ascending — the ticks lit under
+   * the slider, so they name exactly the curves on the picture (a 9–11 kt window reads the 8, 10
+   * and 12).
+   */
+  columns_in_play: number[]
+  /**
+   * What is drawn nowhere, over everything the rail matched that this window could hold —
+   * including sailing with no wind reading, which no window position ever draws.
+   */
+  undrawn: PolarPlotUndrawn
+}
+
+/**
+ * One position of the focus window, worked out once for the screen and the MCP tool alike.
+ *
+ * The window narrows what is drawn, never what is matched: `rows` is everything the rail matched,
+ * and nothing here feeds back into the headline figures (ADR 0040).
+ */
+export function seasonWindow<Row extends PlottableRow>(
+  rows: readonly Row[],
+  polars: Readonly<Record<string, PolarPayload>>,
+  centre: number,
+  width: number
+): SeasonWindow<Row> {
+  const focus = focusWindow(centre, width)
+  const shown = inFocus(rows, focus)
+  const families = familiesFor(shown, polars)
+
+  return {
+    focus,
+    shown,
+    patches: plotPatches(shown),
+    moments: plotMoments(shown),
+    families,
+    efficiency: sumEfficiency(shown),
+    columns_in_play: [
+      ...new Set(families.flatMap((family) => family.curves.map((curve) => curve.tws))),
+    ].sort((left, right) => left - right),
+    undrawn: timeNotDrawn([...shown, ...rows.filter((row) => row.tws === null)]),
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The certificate family
 // ---------------------------------------------------------------------------------------------
@@ -410,6 +485,15 @@ export function seasonTrace(rows: readonly PlottableRow[]): PolarPlotTraceBin[] 
             },
           ]
     })
+}
+
+/** Each reason a stretch is drawn nowhere, as a sailor would say it. Never "row" (ADR 0037). */
+export const UNDRAWN_REASONS: Record<PolarPlotUndrawnReason, string> = {
+  not_countable: 'frozen, low-speed or mid-manoeuvre',
+  no_polar: 'in a race that records no Polar',
+  no_reading: 'with no speed or wind reading',
+  off_the_certificate: 'at an angle or wind speed the certificate does not reach',
+  zero_target: 'against a target of zero knots',
 }
 
 /**

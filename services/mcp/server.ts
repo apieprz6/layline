@@ -1,12 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { fetchCHII2, fetchPurdueBuoy, isPurdueSeason } from '@/services/buoys/ndbc'
 import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
-import { polarPerformanceAnswer } from './polar-performance'
+import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 
 /**
  * What the dashboard's own copy tells a sailor about these numbers, told to Claude instead.
@@ -22,7 +23,9 @@ const CURRENT_CONDITIONS_DESCRIPTION = `What the wind is doing right now at Layl
 const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficiency over the boat's race archive, narrowed by the Analysis Filter, exactly as Layline's Polar performance screen states them.
 
 - Polar Efficiency is total distance sailed over the distance the Polar's Target Speed implies, across all the scored sailing the filter matches; VMG Efficiency is the same for VMG against Target VMG. Each race's sailing is scored against the Polar that race was sailed under. Report them as the percentages given.
-- The filter offers the screen's five dimensions: point of sail, sail used, sea state, time of day and when. There is no wind-speed dimension: on the screen the Polar Plot owns the wind axis, and the figures are over every wind speed the filter matches. If asked about a wind band, say these figures span all wind speeds; never present them as a band's.
+- The two headline figures blend every wind speed the filter matches. Each moment is scored against its own wind's target, but one percentage over all winds can hide that the boat is 110% of target at 4 knots and 50% at 12. Never present the headline figures as any wind band's.
+- To answer about a wind range, pass windWindow: the Polar performance screen's own wind window, a centre in whole knots and a width of 2, 4 or 6 (windWindowOptions in every answer says which centres the Polar allows). 10-14 knots is { centre: 12, width: 4 }. The window has its own Polar Efficiency and VMG Efficiency over the sailing inside it, the Polar columns that sailing was scored against, and its patches: 5 degrees of |TWA| by half a knot of SOG, each with its own percent of target, time, races and Filler-Anchored share. Compare patches only within one window, and call again for another band rather than merging windows. Port and starboard are not told apart.
+- The filter offers the screen's five dimensions: point of sail, sail used, sea state, time of day and when. Wind speed is not one of them; on the screen the wind window owns that axis.
 - A dimension left out includes everything, Not recorded included. Naming buckets narrows to exactly those. Sails are named by their Sail Definition label, never a number; every answer lists each dimension's valid buckets.
 - Every answer carries its Coverage Ledger: how much sailing time matched, how much of it was scored, what was excluded and why, and how much has no Sea State or Sail Configuration recorded. Each figure also states its own scored time; VMG Efficiency can rest on less than Polar Efficiency. State how much sailing is behind a figure, especially when it is little.
 - A figure may be Filler-Anchored: part of it is compared against Polar cells the Polar manufactured rather than measured. Give the figure and say what share is Filler-Anchored; do not withhold it.
@@ -73,10 +76,21 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
     {
       title: 'Polar performance',
       description: POLAR_PERFORMANCE_DESCRIPTION,
-      inputSchema: { filter: analysisFilterSchema(POLAR_PERFORMANCE_DIMENSIONS) },
+      inputSchema: {
+        filter: analysisFilterSchema(POLAR_PERFORMANCE_DIMENSIONS),
+        windWindow: z
+          .object({
+            centre: z.number().describe('Centre of the wind window, in whole knots of TWS.'),
+            width: z.number().describe('Width of the window in knots: 2, 4 or 6.'),
+          })
+          .optional()
+          .describe(
+            "The screen's wind window. TWS from centre - width/2 inclusive to centre + width/2 exclusive."
+          ),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ filter }) => {
+    async ({ filter, windWindow }) => {
       // All or nothing (ADR 0026): a short archive would make the Coverage Ledger the wrong part.
       const archive = await readAnalysisArchive(supabase)
       if (archive === null) return toolError(ARCHIVE_UNREADABLE)
@@ -85,7 +99,16 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       const reading = filterFromArgument(filter, dimensions)
       if (!reading.ok) return toolError(reading.message)
 
-      const answer = polarPerformanceAnswer(archive.rows, reading.filter, dimensions)
+      const window = windWindow === undefined ? null : windWindowFromArgument(windWindow, archive.polars)
+      if (window !== null && !window.ok) return toolError(window.message)
+
+      const answer = polarPerformanceAnswer(
+        archive.rows,
+        reading.filter,
+        dimensions,
+        archive.polars,
+        window?.window ?? null
+      )
       return {
         content: [{ type: 'text', text: JSON.stringify(answer) }],
         structuredContent: { ...answer },

@@ -7,7 +7,7 @@ import { GET as protectedResource } from '@/app/.well-known/oauth-protected-reso
 import { authenticateMcpRequest } from '@/lib/mcp/auth'
 import { clearHistoryCache, fetchCHII2 } from '@/services/buoys/ndbc'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
-import { RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
+import { POLAR, POLAR_VERSION, RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
 
 jest.mock('@/lib/mcp/auth', () => ({ authenticateMcpRequest: jest.fn() }))
 jest.mock('@/services/analysis/readArchive', () => ({ readAnalysisArchive: jest.fn() }))
@@ -119,7 +119,7 @@ describe('/api/mcp with a crew token', () => {
     for (const tool of body.result.tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true })
   })
 
-  it('offers polar_performance the screen’s five dimensions, and no wind speed', async () => {
+  it('offers polar_performance the screen’s five dimensions, and wind as the screen’s window', async () => {
     const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
     const tool = (await response.json()).result.tools.find(
       (t: { name: string }) => t.name === 'polar_performance'
@@ -133,6 +133,7 @@ describe('/api/mcp with a crew token', () => {
       'when',
       'dayRange',
     ])
+    expect(Object.keys(tool.inputSchema.properties)).toEqual(['filter', 'windWindow'])
   })
 
   it('answers current_conditions with the figure the dashboard prints for CHII2', async () => {
@@ -180,6 +181,22 @@ describe('/api/mcp with a crew token', () => {
     expect(body.result.isError).toBe(true)
     expect(body.result.content[0].text).toContain('pos, sail, sea, time, when, dayRange')
     expect(body.result.structuredContent).toBeUndefined()
+  })
+
+  it('answers a wind window, and refuses one the screen’s slider could not hold', async () => {
+    readArchive.mockResolvedValue({
+      rows: ROWS,
+      races: RACES,
+      vocabulary: VOCABULARY,
+      polars: { [POLAR_VERSION]: POLAR },
+    })
+
+    const answered = await (await POST(call('polar_performance', { windWindow: { centre: 12, width: 4 } }))).json()
+    expect(answered.result.structuredContent.windWindow).toMatchObject({ lowKnots: 10, highKnots: 14 })
+
+    const refused = await (await POST(call('polar_performance', { windWindow: { centre: 12, width: 5 } }))).json()
+    expect(refused.result.isError).toBe(true)
+    expect(refused.result.content[0].text).toContain('2, 4, 6')
   })
 
   it('makes a failed archive read an error, never a figure over a short archive', async () => {

@@ -19,6 +19,14 @@ export function efficiencyPercent(ratio: number | null): string | null {
   return ratio === null ? null : `${(ratio * 100).toFixed(1)}%`
 }
 
+/**
+ * A ratio as a whole percentage, or null: a **Polar Plot** patch's own reading, where a tenth of a
+ * percent over a few minutes of sailing would claim a precision the patch does not have.
+ */
+export function patchPercent(ratio: number | null): string | null {
+  return ratio === null ? null : `${Math.round(ratio * 100)}%`
+}
+
 /** A share as a whole percentage, for a caveat rather than for a measurement. */
 export function sharePercent(share: number): string {
   return `${Math.round(share * 100)}%`
