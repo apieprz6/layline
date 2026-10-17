@@ -381,9 +381,9 @@ export async function readAnalysisArchive(
  * The caller's client where it gave one, else the cookie client, or null where there is none — a
  * checkout with no `.env.local`, or missing keys.
  */
-async function analysisClient(given: Supabase | undefined): Promise<Supabase | null> {
+async function analysisClient(client: Supabase | undefined): Promise<Supabase | null> {
   try {
-    return given ?? (await createClient())
+    return client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Analysis: Supabase client unavailable:',

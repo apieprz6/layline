@@ -122,7 +122,7 @@ function withSailAgreement(
 async function sailChart(
   chartVersionId: string | null,
   annotations: RaceAnnotations,
-  client: SupabaseClient | undefined
+  client: SupabaseClient
 ): Promise<SailChartContext | null> {
   if (chartVersionId === null) return null
 
@@ -157,8 +157,11 @@ export async function readRaceTrack(
   annotations: RaceAnnotations,
   /** The **Crossover Chart Version** the Race holds, which owns the one sail vocabulary. */
   crossoverChartVersionId: string | null,
-  /** The client the race page read as, so the Polar and the chart are read as the same user. */
-  client?: SupabaseClient
+  /**
+   * The client the race page read as, so the Polar and the chart are read as the same user.
+   * Required, so no caller can fall back to the cookie client part-way through one race.
+   */
+  client: SupabaseClient
 ): Promise<RaceTrack> {
   const chart = await sailChart(crossoverChartVersionId, annotations, client)
   const drawable = withSailAgreement(trackRows(rows, quality, window), chart)
