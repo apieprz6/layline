@@ -8,7 +8,7 @@ import type {
   McpStationReading,
 } from '@/types'
 
-const OUT_OF_SEASON_NOTE =
+export const OUT_OF_SEASON_NOTE =
   'The Purdue Buoy is deployed May through October and is out of the water now. It is not late; there is no reading to report until it returns.'
 
 interface CurrentConditionsInput {
@@ -22,7 +22,7 @@ interface CurrentConditionsInput {
 }
 
 /** The Station Row's own name for it, so Claude calls a station what the screen does. */
-function stationName(station: 'CHII2' | '45198'): string {
+export function stationName(station: 'CHII2' | '45198'): string {
   return getStationInfo(station)?.name ?? station
 }
 
