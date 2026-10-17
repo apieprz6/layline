@@ -18,16 +18,29 @@ interface StatProps {
 }
 
 /**
- * Individual stat card component
- * Displays a labeled statistic with large numeral and smaller sub-text
+ * Individual stat tile, inset in the panel
+ * Displays a labeled statistic with large numeral and smaller sub-text: label at the top, figure
+ * at the bottom, so a tile stretched to a tall grid row reads as one block rather than a gap
  */
 function Stat({ label, big, sub }: StatProps) {
   return (
-    <div>
+    <div
+      style={{
+        background: 'var(--surface-elevated)',
+        border: '1px solid var(--surface-divider)',
+        borderRadius: 'var(--radius-md)',
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: '4px',
+        minWidth: 0,
+      }}
+    >
       <div
         style={{
           fontFamily: 'var(--font-body)',
-          fontSize: '9.5px',
+          fontSize: 'var(--window-stat-label-size, 9.5px)',
           fontWeight: 600,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
@@ -41,7 +54,7 @@ function Stat({ label, big, sub }: StatProps) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '19px',
+            fontSize: 'var(--window-stat-big-size, 19px)',
             fontWeight: 600,
             color: 'var(--text-primary)',
           }}
@@ -50,7 +63,7 @@ function Stat({ label, big, sub }: StatProps) {
         </span>
         <span
           style={{
-            fontSize: '11px',
+            fontSize: 'var(--window-stat-sub-size, 11px)',
             color: 'var(--text-muted)',
           }}
         >
@@ -105,13 +118,16 @@ export default function WindowStats({
     )
   }
 
-  // Render 2x2 grid of stat cards
+  // Render 2x2 grid of stat tiles, filling whatever height the panel is given
+  // (the desktop layout stretches it to its grid row, and scales the type to suit)
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
-        gap: '14px',
+        gridTemplateRows: '1fr 1fr',
+        gap: '8px',
+        flex: 1,
       }}
     >
       <Stat

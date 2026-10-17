@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { StationCapability, WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from '@/lib/utils/time'
 import { exceedsGapThreshold } from '@/lib/utils/windowing'
@@ -34,15 +34,30 @@ export default function SpeedLineChart({
       minsAgo: getMinutesAgo(point.timestamp, now),
     }))
   }, [data, referenceTime])
-  // Constants for chart dimensions
+  // Chart dimensions, in viewBox units. The width is fixed, so type and strokes scale with the
+  // card's width as before; the height follows the box the chart is given, so a tall card (the
+  // desktop layout stretches it to its grid row) is filled rather than letterboxed. Where nothing
+  // sets the box's height (mobile), it comes from the viewBox itself and stays at its default.
   const WIDTH = 360
-  const HEIGHT = 130
+  const [HEIGHT, setHeight] = useState(130)
   const PAD_L = 26
   const PAD_R = 10
-  const PAD_T = 14
+  // Room above the top tick for the KTS unit label, so the two never overlap
+  const PAD_T = 20
   const PAD_B = 20
 
   const svgRef = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setHeight(Math.max(100, Math.round((WIDTH * height) / width)))
+    })
+    observer.observe(svg)
+    return () => observer.disconnect()
+  }, [])
 
   // Filter data to time window
   const visibleData = useMemo(() => {
@@ -329,7 +344,7 @@ export default function SpeedLineChart({
       {/* Y-axis unit label */}
       <text
         x={2}
-        y={PAD_T - 3}
+        y={PAD_T - 9}
         fontFamily="Inter"
         fontSize={8.5}
         fontWeight={600}
