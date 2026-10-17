@@ -8,6 +8,11 @@ it is built, so that the tickets running in parallel build one surface rather th
 Amends nothing. **Deliberately departs from the Guest tier** (see *Every tool requires an Account*,
 below): the app shows weather to a **Guest**, and the MCP server does not.
 
+**Amended after LAY-182 shipped**, with *A tool inherits every rule and owns none*, below. "The same
+function the screen uses" was the intent from the start, but nothing said what to do when the rule a
+tool needs lives in a component, or what a parity test compares against. The amendment settles both
+before LAY-183 to LAY-187 are built.
+
 ## Context
 
 Crew access is coming, and the crew will ask Claude about the boat. They will ask it what the wind is
@@ -64,9 +69,33 @@ returns **Recording Rows**. The archive is roughly 4,000 in-window rows, which i
 model, and a model that aggregates rows itself is a second implementation of ADR 0025, 0026 and 0036
 that nobody tests.
 
-Every figure is computed by the **same function the screen uses**, and each tool's tests pin at least
-one of its figures equal to the screen's for the same Race, filter or cell. That equality is the
-contract.
+Every figure is computed by the **same function the screen uses**, and each tool's tests hold its
+figures equal to the screen's for the same Race, filter or cell. That equality is the contract, and
+the next section says how it is kept.
+
+### A tool inherits every rule and owns none
+
+When a rule changes, a tool should change with it without anyone touching the MCP server. So
+`services/mcp` only shapes output. It calls the code the screen calls, renames fields for a model,
+and attaches provenance the screen's own code supplies. It holds no aggregation, no classification,
+no cut-point, no threshold and no arithmetic on a figure. That includes small derivations such as
+minutes since an observation.
+
+- **A rule that lives in a component moves out first.** If the answer a tool needs is worked out in a
+  `.tsx` file, such as the Instrument Tuning teaser's worst-verdict pick or a card's headline, the
+  tool's ticket extracts it into `services/` and has the component call the extracted function. Only
+  then does the tool call it too. A tool never re-derives what a component computes.
+- **Arguments are built from the screen's own definitions.** The Analysis Filter argument's
+  dimensions and buckets come from `analysisDimensions()` and the screen's registry, not from a list
+  in the tool. A new bucket or a moved boundary then reaches the tool unaided.
+- **Parity tests compare against the screen's own code, not a literal.** A test runs the screen's own
+  data path and the tool over one fixture and asserts they agree. A literal-pinned figure fails on
+  every intended change to a rule, and still passes when the tool holds its own copy of one, which is
+  the opposite of what it is for. Literals stay where they already are, in the suites that pin the
+  archive's counts.
+- **What a tool states is a deliberate choice, not an inherited one.** A new figure on a screen does
+  not appear in a tool by itself, because a tool's output is a contract (see *Consequences*). A tool's
+  description is prose and is updated by hand when a screen's caveats change.
 
 ### Provenance travels with every figure
 
@@ -87,10 +116,11 @@ recalibrate, never by how much (ADR 0041).
 ### The Analysis Filter is one argument, declared per tool
 
 Tools that narrow the archive take the **Analysis Filter** as one shared argument, defined once
-(LAY-185). Each tool offers the dimensions its screen offers: five on Polar performance, five on the
-**Sail Selection Screen**, and two on the **Instrument Tuning Screen**. Buckets are named by the
-screen's own bucket ids, and **Not recorded** is on by default, as it is in the UI (ADR 0029). An
-unknown dimension or bucket is refused with the valid values, never silently ignored.
+(LAY-185) and built from the screen's own dimension definitions. Each tool offers the dimensions its
+screen offers: five on Polar performance, five on the **Sail Selection Screen**, and two on the
+**Instrument Tuning Screen**. Buckets are named by the screen's own bucket ids, and **Not recorded**
+is on by default, as it is in the UI (ADR 0029). An unknown dimension or bucket is refused with the
+valid values, never silently ignored.
 
 ## Consequences
 

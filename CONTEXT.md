@@ -370,7 +370,7 @@ Layline's read-only face to an AI assistant such as Claude: an endpoint an **Acc
 _Avoid_: API, integration, plugin (it is not a general-purpose interface to the data)
 
 **MCP Tool**:
-One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and that equality is what makes it a tool rather than a second analysis. See ADR 0042.
+One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and it holds no rule of its own to make them with, so a changed rule reaches it unaided. That is what makes it a tool rather than a second analysis. See ADR 0042.
 _Avoid_: Endpoint, query (a tool does not search the archive, it states what a screen states)
 
 ### UI Components
