@@ -31,9 +31,10 @@
  * (`readRecentRaceRows`).
  */
 
-import { coverageLedger } from '@/services/analysis/coverage-ledger'
+import { coverageLedger, notCountableSeconds } from '@/services/analysis/coverage-ledger'
 import { matchedRows } from '@/services/analysis/filter'
 import { sumEfficiency } from '@/services/analysis/efficiency'
+import { describeDuration } from '@/services/recordings/coverage'
 import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
@@ -95,3 +96,57 @@ export function vmgFillerAnchoredShare(aggregate: EfficiencyAggregate): number |
     : aggregate.vmg_filler_anchored_rows / aggregate.vmg_rows
 }
 
+
+/**
+ * Whether a figure carries the **Filler-Anchored** flag at all: some of it, however little.
+ *
+ * One rule for every place the flag is drawn or stated — the figure, the teaser, the MCP tool —
+ * so a figure is never flagged in one and clean in another.
+ */
+export function isFillerFlagged(share: number | null): boolean {
+  return share !== null && share > 0
+}
+
+/**
+ * `Both figures are total distance over total target distance across 3h 1m of scored sailing.`
+ *
+ * A ratio of sums, said out loud: a sailor comparing this against an averaged percentage somewhere
+ * else has to be able to see why they differ (ADR 0036). Stating the evidence as *time* is what
+ * makes that nearly self-evident — the weighting is the denominator.
+ */
+export function scoredSailingSentence(overall: EfficiencyAggregate): string {
+  return (
+    'Both figures are total distance over total target distance across ' +
+    `${describeDuration(overall.elapsed_seconds)} of scored sailing.`
+  )
+}
+
+/** Matched sailing left out of a figure, and why. */
+export interface FigureExclusion {
+  reason: string
+  seconds: number
+}
+
+/**
+ * Everything the filter matched that a figure is not over, in time, with the reason.
+ *
+ * The three tallies `sumEfficiency` keeps, turned into the seconds they stand for. A **Countable**
+ * row with no measured interval adds no time to the ledger, so what is Countable and not summed
+ * lacked a SOG or a Target Speed; and VMG sums its own subset of the summed rows, so it can rest on
+ * less. A reason with no time behind it is left out — "0s is frozen" is a sentence about nothing.
+ */
+export function excludedFromFigures({ ledger, overall }: PolarPerformance): FigureExclusion[] {
+  return [
+    { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: notCountableSeconds(ledger) },
+    {
+      reason:
+        'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no Polar ' +
+        'for the race)',
+      seconds: ledger.countable_seconds - overall.elapsed_seconds,
+    },
+    {
+      reason: 'Scored for Polar Efficiency, but no Target VMG: left out of VMG Efficiency only',
+      seconds: overall.elapsed_seconds - overall.vmg_elapsed_seconds,
+    },
+  ].filter((each) => each.seconds > 0)
+}

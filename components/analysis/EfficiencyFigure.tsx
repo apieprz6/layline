@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { isFillerFlagged } from '@/services/analysis/polar-performance'
 
 interface EfficiencyFigureProps {
   label: string
@@ -67,7 +68,7 @@ export default function EfficiencyFigure({
         </div>
       )}
 
-      {filler !== null && filler > 0 && (
+      {filler !== null && isFillerFlagged(filler) && (
         <div
           data-testid={`${testId}-filler-anchored`}
           style={{

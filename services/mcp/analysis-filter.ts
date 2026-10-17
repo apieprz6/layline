@@ -22,7 +22,13 @@
  */
 
 import { z } from 'zod'
-import { NOTE_ONLY, NOT_RECORDED, RANGE_DIMENSION, analysisDimensions } from '@/services/analysis/filter'
+import {
+  NOTE_ONLY,
+  NOT_RECORDED,
+  RANGE_DIMENSION,
+  analysisDimensions,
+  ownsDayRange,
+} from '@/services/analysis/filter'
 import { DAY } from '@/services/analysis/filter-url'
 import type {
   AnalysisDimension,
@@ -67,7 +73,7 @@ export function analysisFilterSchema(offered: readonly AnalysisDimension[]) {
     ])
   )
 
-  if (offered.includes(RANGE_DIMENSION)) {
+  if (offered.some(ownsDayRange)) {
     shape[DAY_RANGE] = z
       .object({ from: z.string(), to: z.string() })
       .optional()
@@ -106,7 +112,7 @@ export function filterFromArgument(
   dimensions: readonly AnalysisDimensionSpec[]
 ): AnalysisFilterReading {
   const offered = dimensions.map((dimension) => dimension.id)
-  const rangeOffered = dimensions.some((dimension) => dimension.id === RANGE_DIMENSION)
+  const rangeOffered = dimensions.some((dimension) => ownsDayRange(dimension.id))
   const validKeys = [...offered, ...(rangeOffered ? [DAY_RANGE] : [])].join(', ')
 
   const buckets: AnalysisFilter['buckets'] = {}

@@ -19,10 +19,10 @@ import {
   NOTHING_SCORED,
   fillerAnchoredShare,
   getPolarPerformanceData,
+  scoredSailingSentence,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
-import { describeDuration } from '@/services/recordings/coverage'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -126,14 +126,9 @@ export default function PolarPerformanceContent({
       </div>
 
       <p style={NOTE_STYLE}>
-        {/* A ratio of sums, said out loud: a sailor comparing this against an averaged percentage
-            somewhere else has to be able to see why they differ (ADR 0036). Stating the evidence as
-            *time* is what makes that explanation nearly self-evident — the weighting is the
-            denominator — where "across 2,316 rows, each weighted by the seconds it lasted" had to
-            spell out the weighting because the unit hid it. */}
-        Both figures are total distance over total target distance across{' '}
-        {describeDuration(data.overall.elapsed_seconds)} of scored sailing.{' '}
-        {TARGET_VMG_CAVEAT}
+        {/* A ratio of sums, said out loud (ADR 0036). In `services/` so the MCP tool states the
+            same sentence (ADR 0042). */}
+        {scoredSailingSentence(data.overall)} {TARGET_VMG_CAVEAT}
       </p>
 
       {/* The picture under the figures (ADR 0040), over the same matched rows. Its focus window

@@ -2,8 +2,11 @@ import { countableSentence, gapSentence, ledgerHeadline } from '@/services/analy
 import { efficiencyPercent } from '@/services/analysis/figures'
 import {
   NOTHING_SCORED,
+  excludedFromFigures,
   fillerAnchoredShare,
   getPolarPerformanceData,
+  isFillerFlagged,
+  scoredSailingSentence,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
@@ -23,7 +26,7 @@ function figure(ratio: number | null, seconds: number, filler: number | null): M
     scoredSeconds: seconds,
     percent: efficiencyPercent(ratio),
     fillerAnchoredShare: filler,
-    fillerAnchored: filler !== null && filler > 0,
+    fillerAnchored: isFillerFlagged(filler),
     ...(ratio === null ? { note: NOTHING_SCORED } : {}),
   }
 }
@@ -32,9 +35,11 @@ function figure(ratio: number | null, seconds: number, filler: number | null): M
  * **Polar performance** as the screen states it, for the MCP `polar_performance` tool.
  *
  * Pure, and built on nothing but the screen's own functions: `getPolarPerformanceData` for the
- * figures and the ledger, the ledger's own sentence builders for its words. The caller hands in
- * the rows `readAnalysisArchive` read and the dimensions the screen would build from them, so the
- * tool and the screen cannot disagree about a filter (ADR 0042).
+ * figures and the ledger, the ledger's own sentence builders for its words. It holds no rule of
+ * its own: every exclusion, threshold and sentence is the screen's, from `services/analysis`, and
+ * this only renames for a model (ADR 0042, *A tool inherits every rule and owns none*). The caller
+ * hands in the rows `readAnalysisArchive` read and the dimensions the screen would build from
+ * them, so the tool and the screen cannot disagree about a filter.
  */
 export function polarPerformanceAnswer(
   rows: readonly MatchableRow[],
@@ -43,39 +48,25 @@ export function polarPerformanceAnswer(
 ): PolarPerformanceAnswer {
   const { ledger, overall } = getPolarPerformanceData(rows, filter, dimensions)
 
-  // The ledger's countable seconds are partitioned by the figure's own tallies: a row with no
-  // measured interval adds no time, so what is countable and not in the figure lacked a SOG or
-  // a target.
-  const notCountable = ledger.matched_seconds - ledger.countable_seconds
-  const withoutTarget = ledger.countable_seconds - overall.elapsed_seconds
-
   const coverageLedger: McpCoverageLedger = {
     matchedSeconds: ledger.matched_seconds,
     totalSeconds: ledger.total_seconds,
     matchedRaces: ledger.matched_races,
     totalRaces: ledger.total_races,
     countableSeconds: ledger.countable_seconds,
-    excluded: [
-      { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: notCountable },
-      {
-        reason:
-          'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no ' +
-          'Polar for the race)',
-        seconds: withoutTarget,
-      },
-      {
-        // VMG sums its own subset of the scored rows (`sumEfficiency`), so it can rest on less.
-        reason: 'Scored for Polar Efficiency, but no Target VMG: left out of VMG Efficiency only',
-        seconds: overall.elapsed_seconds - overall.vmg_elapsed_seconds,
-      },
-    ].filter((each) => each.seconds > 0),
+    excluded: excludedFromFigures({ ledger, overall }),
     notRecorded: ledger.gaps.map((gap) => ({
       dimension: gap.dimension,
       missing: gap.label,
       seconds: gap.seconds,
       share: gap.share,
     })),
-    statement: [ledgerHeadline(ledger), countableSentence(ledger), ...ledger.gaps.map(gapSentence)],
+    statement: [
+      ledgerHeadline(ledger),
+      countableSentence(ledger),
+      ...ledger.gaps.map(gapSentence),
+      scoredSailingSentence(overall),
+    ],
   }
 
   return {

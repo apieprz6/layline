@@ -15,8 +15,11 @@ import {
   analysisDimensions,
 } from '@/services/analysis/filter'
 import {
+  excludedFromFigures,
   fillerAnchoredShare,
   getPolarPerformanceData,
+  isFillerFlagged,
+  scoredSailingSentence,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import type { MatchableRow } from '@/types'
@@ -180,6 +183,54 @@ describe('a Filler-Anchored figure is shown and flagged, never withheld', () => 
     expect(overall.vmg_rows).toBe(1)
     expect(fillerAnchoredShare(overall)).toBeCloseTo(0.5)
     expect(vmgFillerAnchoredShare(overall)).toBe(1)
+  })
+})
+
+describe('what matched and is not in a figure, in time and with its reason', () => {
+  it('states sailing that is not Countable, and sailing the Polar could not score', () => {
+    const rows = [scored({}), scored({ countable: false }), scored({ target: null, seconds: 30 })]
+
+    expect(excludedFromFigures(getPolarPerformanceData(rows, EMPTY_FILTER, DIMENSIONS))).toEqual([
+      { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: 60 },
+      {
+        reason:
+          'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no Polar for the race)',
+        seconds: 30,
+      },
+    ])
+  })
+
+  it('states the sailing VMG Efficiency left out that Polar Efficiency kept', () => {
+    const noTargetVmg = scored({ seconds: 45 })
+    noTargetVmg.efficiency = { ...noTargetVmg.efficiency, target_vmg: null }
+
+    const data = getPolarPerformanceData([scored({}), noTargetVmg], EMPTY_FILTER, DIMENSIONS)
+
+    expect(data.overall.elapsed_seconds).toBe(105)
+    expect(data.overall.vmg_elapsed_seconds).toBe(60)
+    expect(excludedFromFigures(data)).toEqual([
+      { reason: 'Scored for Polar Efficiency, but no Target VMG: left out of VMG Efficiency only', seconds: 45 },
+    ])
+  })
+
+  it('says nothing where nothing was left out', () => {
+    expect(excludedFromFigures(getPolarPerformanceData([scored({})], EMPTY_FILTER, DIMENSIONS))).toEqual([])
+  })
+
+  it('says the figures are a ratio of sums over the scored sailing, in time', () => {
+    const { overall } = getPolarPerformanceData([scored({ seconds: 180 })], EMPTY_FILTER, DIMENSIONS)
+
+    expect(scoredSailingSentence(overall)).toBe(
+      'Both figures are total distance over total target distance across 3m of scored sailing.'
+    )
+  })
+})
+
+describe('isFillerFlagged', () => {
+  it('flags any share of filler at all, and no share is no flag', () => {
+    expect(isFillerFlagged(0.01)).toBe(true)
+    expect(isFillerFlagged(0)).toBe(false)
+    expect(isFillerFlagged(null)).toBe(false)
   })
 })
 
