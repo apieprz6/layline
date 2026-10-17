@@ -1,4 +1,4 @@
-import { carries, readingAt } from '../stationReadings'
+import { carries, readingAt, shows } from '../stationReadings'
 import type { WindDataPointWithOffset } from '@/types'
 
 const point = (
@@ -56,5 +56,19 @@ describe('carries', () => {
 
   it('is false when no point has the field at all', () => {
     expect(carries([point(0), point(10)], 'waveHeight')).toBe(false)
+  })
+})
+
+describe('shows', () => {
+  const data = [point(0, { gust: null }), point(10, { gust: 18 })]
+
+  it('is true only for a quantity the station measures and its history carries', () => {
+    expect(shows({ gust: true, waves: true }, data, 'gust')).toBe(true)
+    expect(shows({ gust: false, waves: true }, data, 'gust')).toBe(false)
+    expect(shows({ gust: true, waves: true }, data, 'waveHeight')).toBe(false)
+  })
+
+  it('shows nothing when no capability is known', () => {
+    expect(shows(undefined, data, 'gust')).toBe(false)
   })
 })

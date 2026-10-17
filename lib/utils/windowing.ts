@@ -1,4 +1,4 @@
-import type { WindDataPoint } from '@/types'
+import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from './time'
 
 export type TimeScale = '30m' | '1h' | '6h' | '24h' | '72h'
@@ -83,4 +83,31 @@ export function windowData(
     const minsAgo = getMinutesAgo(point.timestamp, referenceTime)
     return minsAgo <= maxMinutes
   })
+}
+
+/**
+ * Each observation with its age in minutes at `referenceTime`, every recorded field kept as it was.
+ * The station page ages its history this way once, against the server's clock, and every panel
+ * reads the ages from here.
+ */
+export function withMinutesAgo(data: WindDataPoint[], referenceTime: Date): WindDataPointWithOffset[] {
+  return data.map((point) => ({
+    ...point,
+    minsAgo: getMinutesAgo(point.timestamp, referenceTime),
+  }))
+}
+
+/**
+ * The observations inside the station page's window: from `nowOffsetMinutes` ago back through
+ * `timeWindowMinutes` more, both ends included. The Stats panel figures and the MCP `buoy_history`
+ * tool read the same window from here.
+ */
+export function inWindow(
+  points: WindDataPointWithOffset[],
+  timeWindowMinutes: number,
+  nowOffsetMinutes: number
+): WindDataPointWithOffset[] {
+  const windowStart = nowOffsetMinutes
+  const windowEnd = nowOffsetMinutes + timeWindowMinutes
+  return points.filter((p) => p.minsAgo >= windowStart && p.minsAgo <= windowEnd)
 }

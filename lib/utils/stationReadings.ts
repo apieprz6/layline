@@ -1,4 +1,4 @@
-import type { SecondaryReading, WindDataPoint, WindDataPointWithOffset } from '@/types'
+import type { SecondaryReading, StationCapability, WindDataPoint, WindDataPointWithOffset } from '@/types'
 
 /** The secondary readings a station may or may not have at a given moment. */
 export type SecondaryField = 'gust' | 'waveHeight'
@@ -10,6 +10,19 @@ export type SecondaryField = 'gust' | 'waveHeight'
  */
 export function carries(data: WindDataPoint[], field: SecondaryField): boolean {
   return data.some((p) => p[field] !== undefined)
+}
+
+/**
+ * Whether the station page shows `field` at all: the station measures it and this history carries
+ * it. Where it shows, a missing reading is "—"; where it doesn't, nothing is drawn for it.
+ */
+export function shows(
+  capability: StationCapability | undefined,
+  data: WindDataPoint[],
+  field: SecondaryField
+): boolean {
+  const measured = field === 'gust' ? capability?.gust : capability?.waves
+  return (measured ?? false) && carries(data, field)
 }
 
 /** The reading at `at`, or when the last one before it was. See {@link SecondaryReading}. */
