@@ -27,6 +27,7 @@
  * read and a cache would survive a gate moving (ADR 0009).
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 import { createClient } from '@/lib/supabase/server'
 import { instrumentTuningSeason, type InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
@@ -70,11 +71,15 @@ const VERSION_COLUMNS =
 const EVENT_COLUMNS =
   'id, artifact_id, kind, occurred_on, type, channels, note, created_by, created_at, updated_at'
 
-export async function readInstrumentTuning(): Promise<InstrumentTuningRead> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+/**
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token.
+ */
+export async function readInstrumentTuning(client?: SupabaseClient): Promise<InstrumentTuningRead> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Instrument Tuning: Supabase client unavailable:',
@@ -166,7 +171,7 @@ interface RaceWindowOf {
  * channel over the whole archive (ADR 0032's correct failure).
  */
 async function readCalibrationLog(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: SupabaseClient
 ): Promise<CalibrationLogEntry[] | null> {
   const { data: artifact, error: artifactError } = await supabase
     .from('boat_setup_artifacts')

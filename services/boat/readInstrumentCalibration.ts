@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import type {
   CalibrationEvent,
@@ -32,12 +33,18 @@ const EVENT_COLUMNS =
  * `null` is all-or-nothing on purpose, as it is for `readBoatSetup`: a Log missing
  * the half of itself that failed to load would read as a complete history with
  * entries silently absent, which is worse than saying the read failed.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie
+ *   client, as every screen wants; the MCP server passes the one it built from
+ *   its bearer token.
  */
-export async function readInstrumentCalibration(): Promise<InstrumentCalibrationRecord | null> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+export async function readInstrumentCalibration(
+  client?: SupabaseClient
+): Promise<InstrumentCalibrationRecord | null> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Instrument Calibration: Supabase client unavailable:',

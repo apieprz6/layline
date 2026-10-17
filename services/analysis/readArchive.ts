@@ -34,6 +34,7 @@
  * confidently wrong part of the screen.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import type { AnalysisVocabulary } from '@/services/analysis/filter'
 import { buildMatchableRows } from '@/services/analysis/matchable-rows'
@@ -86,7 +87,7 @@ interface RaceRow {
   recordings: { id: string; row_count: number }
 }
 
-type Supabase = Awaited<ReturnType<typeof createClient>>
+type Supabase = SupabaseClient
 
 /**
  * One Race's in-window rows, or null where the Race could not be read whole.
@@ -144,10 +145,11 @@ async function raceRows(
  * but a serial loop over it was still one more place a hosted database's latency multiplied.
  */
 async function resolvePolars(
+  supabase: Supabase,
   versionIds: readonly string[]
 ): Promise<Map<string, ResolvedPolar> | null> {
   const wanted = [...new Set(versionIds)]
-  const versions = await Promise.all(wanted.map((id) => readPolarVersion(id)))
+  const versions = await Promise.all(wanted.map((id) => readPolarVersion(id, supabase)))
   const resolved = new Map<string, ResolvedPolar>()
 
   for (const [index, version] of versions.entries()) {
@@ -262,6 +264,7 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
 
   const [polars, definitions] = await Promise.all([
     resolvePolars(
+      supabase,
       races.flatMap((race) => (race.polar_version_id === null ? [] : [race.polar_version_id]))
     ),
     readSailDefinitions(
@@ -316,9 +319,14 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
  * It returns a `RaceSet` and **not** an `AnalysisArchive`, which is the point of the separate type:
  * a partial read has no business reaching a screen whose **Coverage Ledger** states what share of
  * the archive is on display, and a different type is a stronger guarantee of that than a comment.
+ *
+ * @param client The client to read as; see `readAnalysisArchive`.
  */
-export async function readRecentRaceRows(count: number): Promise<RaceSet | null> {
-  const supabase = await analysisClient()
+export async function readRecentRaceRows(
+  count: number,
+  client?: SupabaseClient
+): Promise<RaceSet | null> {
+  const supabase = await analysisClient(client)
   if (supabase === null) return null
 
   try {
@@ -334,9 +342,15 @@ export async function readRecentRaceRows(count: number): Promise<RaceSet | null>
  * No Account is taken and no Role consulted, for the reason `readRaces` states: every table read
  * here has a SELECT policy for `authenticated` with no Role test, because Role governs writes only
  * (ADR 0019). The page turns a Guest away before calling this rather than relying on it to.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token. Every read below,
+ *   the Polars and the Crossover Chart included, goes out on this one client.
  */
-export async function readAnalysisArchive(): Promise<AnalysisArchive | null> {
-  const supabase = await analysisClient()
+export async function readAnalysisArchive(
+  client?: SupabaseClient
+): Promise<AnalysisArchive | null> {
+  const supabase = await analysisClient(client)
   if (supabase === null) return null
 
   try {
@@ -344,7 +358,7 @@ export async function readAnalysisArchive(): Promise<AnalysisArchive | null> {
     // goes out with the Races rather than after them.
     const [raceSet, chart] = await Promise.all([
       readRaceSet(supabase, null),
-      readCrossoverChartScreen(),
+      readCrossoverChartScreen(supabase),
     ])
 
     if (raceSet === null) return null
@@ -363,10 +377,13 @@ export async function readAnalysisArchive(): Promise<AnalysisArchive | null> {
   }
 }
 
-/** The client, or null where there is none — a checkout with no `.env.local`, or missing keys. */
-async function analysisClient(): Promise<Supabase | null> {
+/**
+ * The caller's client where it gave one, else the cookie client, or null where there is none — a
+ * checkout with no `.env.local`, or missing keys.
+ */
+async function analysisClient(client: Supabase | undefined): Promise<Supabase | null> {
   try {
-    return await createClient()
+    return client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Analysis: Supabase client unavailable:',

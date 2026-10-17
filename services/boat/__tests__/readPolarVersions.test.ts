@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { readPolarScreen, readPolarVersion, readPolarVersions } from '../readPolarVersions'
 
 const artifactMaybeSingle = jest.fn()
@@ -32,6 +34,9 @@ const from = jest.fn((table: string) => {
 const createClient = jest.fn(async () => ({ from }))
 
 jest.mock('@/lib/supabase/server', () => ({ createClient: () => createClient() }))
+
+/** A client a caller built for itself, over the same stubbed tables. */
+const given = { from } as unknown as SupabaseClient
 
 /** Real uuids, because the read asks whether an id is one before it asks the database. */
 const ID1 = 'aa000000-0000-4000-8000-000000000001'
@@ -140,6 +145,21 @@ describe('readPolarVersions', () => {
     createClient.mockRejectedValueOnce(new Error('NEXT_PUBLIC_SUPABASE_URL is missing'))
 
     await expect(readPolarVersions()).resolves.toBeNull()
+  })
+
+  it('reads as the client the caller gives, and never builds the cookie one', async () => {
+    // The MCP server's request has a bearer token and no cookie, so it hands its own client in.
+    const list = await readPolarVersions(given)
+
+    expect(list?.versions).toHaveLength(2)
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed read through the given client as a failed read', async () => {
+    versionsOrder.mockResolvedValue({ data: null, error: { message: 'JWT expired' } })
+
+    await expect(readPolarVersions(given)).resolves.toBeNull()
+    expect(createClient).not.toHaveBeenCalled()
   })
 })
 
@@ -291,5 +311,12 @@ describe('readPolarScreen', () => {
     createClient.mockRejectedValueOnce(new Error('NEXT_PUBLIC_SUPABASE_URL is missing'))
 
     await expect(readPolarScreen()).resolves.toBeNull()
+  })
+
+  it('reads as the client the caller gives, and never builds the cookie one', async () => {
+    const screen = await readPolarScreen(given)
+
+    expect(screen?.current?.payload).toEqual(GRID)
+    expect(createClient).not.toHaveBeenCalled()
   })
 })

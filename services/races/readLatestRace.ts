@@ -15,6 +15,7 @@
  * Dashboard keeps a Guest from calling this at all (ADR 0015, ADR 0019).
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { readRecordingQualityRows } from '@/services/races/recording-rows'
 import { trackThumbnail } from '@/services/recordings/track-thumbnail'
@@ -31,11 +32,15 @@ interface RaceRow {
   recordings: { id: string; row_count: number }
 }
 
-export async function readLatestRace(): Promise<LatestRaceRead> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+/**
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token.
+ */
+export async function readLatestRace(client?: SupabaseClient): Promise<LatestRaceRead> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Latest race: Supabase client unavailable:',

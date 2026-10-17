@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type { RaceListEntry } from '@/types'
@@ -38,12 +39,15 @@ interface RaceRow {
  * true either way, and the reason for a failure belongs in the log rather than on a screen a sailor
  * can do nothing about. A partial list is never returned — a race missing from a list of races is a
  * worse answer than a list that is honestly empty.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token.
  */
-export async function readRaces(): Promise<RaceListEntry[]> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+export async function readRaces(client?: SupabaseClient): Promise<RaceListEntry[]> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Races: Supabase client unavailable:',

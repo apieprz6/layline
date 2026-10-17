@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { readBoatSetup } from '../readBoatSetup'
 import { BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
 
@@ -149,5 +150,13 @@ describe('readBoatSetup', () => {
 
     await expect(readBoatSetup()).resolves.toBeNull()
     expect(consoleError).toHaveBeenCalled()
+  })
+
+  it('reads as the client the caller gives, and never builds the cookie one', async () => {
+    // The MCP server's request has a bearer token and no cookie, so it hands its own client in.
+    const given = { from } as unknown as SupabaseClient
+
+    await expect(readBoatSetup(given)).resolves.not.toBeNull()
+    expect(createClient).not.toHaveBeenCalled()
   })
 })
