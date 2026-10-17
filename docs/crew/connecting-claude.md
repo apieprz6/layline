@@ -1,8 +1,8 @@
 # Connecting Claude to Layline
 
-Add Layline to Claude once, and you can ask it about the conditions in plain words: "what's the
-wind doing right now?", "is the Purdue buoy out?". Claude answers from what Layline's own screens
-show, with the same caveats beside each number.
+Add Layline to Claude once, and you can ask it about the conditions and the boat's Races in plain
+words: "what's the wind doing right now?", "how did we sail on Saturday?". Claude answers from
+what Layline's own screens show, with the same caveats beside each number.
 
 You need a Layline crew account, which is the Google address the owner added for you. Without one,
 Google sign-in is refused here just as it is in the app.
@@ -39,8 +39,12 @@ above happen in your browser.
 - **Read only.** The connector cannot upload, amend or delete anything. Uploading a Race and
   editing Boat Setup stay in the app.
 - **As you.** Claude reads what your own account can read in Layline, and nothing more.
-- **Today: Current Conditions.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the dashboard
-  shows them. More tools (forecasts, Races, Polar performance) are on the way.
+- **Current Conditions.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the dashboard
+  shows them.
+- **Races.** The archive's list of Races, and one Race's summary as its page states it: the Boat
+  Setup it was sailed under, how much of it was recorded, its tacks and gybes, and its Polar and VMG
+  efficiency. Claude is given figures, never the recording's rows.
+- More tools (forecasts, Polar performance, sail selection) are on the way.
 
 ## Reading the answers
 
@@ -51,6 +55,12 @@ above happen in your browser.
   the water, not that its reading is missing.
 - **Every reading has an age.** Claude is told each station's status (online, recent, stale,
   offline) and how old the reading is. If it isn't fresh, expect Claude to say so.
+- **A Race's coverage is time.** Claude is told how much of the race was recorded and how much
+  of it any figure reads, and should say when a Race is thinly recorded.
+- **Some efficiency is filler-anchored.** Where a figure partly compares the boat against a cell
+  the Polar made up rather than measured, Claude is given that share and should state it beside
+  the figure, as the race page does.
+- **A Race with no title has none.** Claude should call it by its day, not invent a name.
 
 ## Disconnecting
 

@@ -3454,6 +3454,12 @@ export interface RaceDetail {
    * stored nowhere. A channel the race produced nothing for carries its reason, never a zero.
    */
   instruments: RaceInstrumentCheck
+  /**
+   * The `TWA` sign flips inside the Race Window, in row order: detected over the whole
+   * Transcription and clipped afterwards (ADR 0009), by the same `detectManeuvers` whose Windows
+   * the track excludes. Derived at read and stored nowhere. Empty on a recording with no `TWA`.
+   */
+  maneuvers: ManeuverFlip[]
 }
 
 /**
@@ -3601,4 +3607,90 @@ export interface ProtectedResourceMetadata {
 
 export interface CurrentConditionsAnswer {
   stations: [McpStationReading, McpStationReading | McpStationOutOfSeason]
+}
+
+// A Boat Setup Version a Race was sailed under, as the Race froze it (ADR 0012). Null where the
+// Race records none: "not recorded", never the boat's current Version filled in.
+export interface McpVersionRef {
+  versionNumber: number
+  effectiveFrom: string
+}
+
+// What identifies a Race. Stamps are the recording's own naive clock, with no zone and no
+// conversion; `day` and `weekday` are read from `windowStart`. A null title is a Race the sailor
+// did not name, left null (ADR 0010). The archive records no separate occasion.
+export interface McpRaceIdentity {
+  id: string
+  title: string | null
+  day: string
+  weekday: string
+  windowStart: string
+  windowFinish: string
+}
+
+// One Race as `list_races` states it. Durations are seconds with the screens' own wording beside
+// them, and never a row count (ADR 0037). `loggedSeconds` is the time the window's rows span, live
+// or frozen, which the analysis screens' Race list prints; `countableSeconds` is the part of it
+// every performance figure reads: not Frozen, not Low-Speed, not in a Maneuver Window (ADR 0025).
+export interface McpRaceListEntry extends McpRaceIdentity {
+  windowSeconds: number
+  loggedSeconds: number
+  countableSeconds: number
+  window: string
+  logged: string
+  countable: string
+}
+
+// Either the whole archive or a refusal: a list with a Race missing is never an answer (ADR 0026).
+export type McpRaceListAnswer = { ok: true; races: McpRaceListEntry[] } | { ok: false }
+
+// One efficiency figure as the race page prints it: the ratio, the page's own percent, and the
+// share of the rows behind it compared against a cell the Polar manufactured (ADR 0036). Null
+// ratio and percent where nothing could be scored; null share where nothing was summed.
+export interface McpEfficiencyFigure {
+  ratio: number | null
+  percent: string | null
+  fillerAnchoredShare: number | null
+}
+
+export type McpRacePerformance =
+  | {
+      scoring: 'polar'
+      polarEfficiency: McpEfficiencyFigure
+      vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+      // Measured seconds behind Polar Efficiency: Countable rows only (ADR 0025).
+      scoredSeconds: number
+      scored: string
+    }
+  | { scoring: 'no-polar-version' | 'polar-unreadable'; note: string }
+
+// `race_summary`'s answer: one Race's page, as aggregates. Never a Recording Row (ADR 0042).
+export interface McpRaceSummary {
+  race: McpRaceIdentity & { recordingFilename: string }
+  boatSetup: {
+    polar: McpVersionRef | null
+    crossoverChart: McpVersionRef | null
+    rigTune: McpVersionRef | null
+    instrumentCalibration: McpVersionRef | null
+    windBand: { lowKnots: number; highKnots: number | null; label: string | null } | null
+    loggedTwsMeanKnots: number | null
+  }
+  coverage: {
+    windowSeconds: number
+    recordedSeconds: number
+    frozenSeconds: number
+    leadGapSeconds: number
+    tailGapSeconds: number
+    window: string
+    recorded: string
+    frozen: string
+  }
+  // The page's own notes about this window and its recording, in its words.
+  findings: string[]
+  maneuvers: {
+    detectorVersion: string
+    counts: Record<Maneuver, number>
+    flips: { at: string; maneuver: Maneuver; twaBefore: string; twaAfter: string }[]
+  }
+  performance: McpRacePerformance
 }
