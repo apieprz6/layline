@@ -4,6 +4,7 @@ import { getStationInfo } from '@/lib/config/stations'
 import type {
   BuoyDataResult,
   CurrentConditionsAnswer,
+  DataSourceStatus,
   McpStationOutOfSeason,
   McpStationReading,
 } from '@/types'
@@ -22,8 +23,16 @@ interface CurrentConditionsInput {
 }
 
 /** The Station Row's own name for it, so Claude calls a station what the screen does. */
-function stationName(station: 'CHII2' | '45198'): string {
+export function stationName(station: 'CHII2' | '45198'): string {
   return getStationInfo(station)?.name ?? station
+}
+
+/**
+ * Purdue out of its season with nothing to show: reported as seasonal, not as a station with a
+ * missing number. Both station tools answer it in these words.
+ */
+export function purdueOutOfSeason(dataStatus: DataSourceStatus): McpStationOutOfSeason {
+  return { station: '45198', name: stationName('45198'), seasonal: true, dataStatus, note: OUT_OF_SEASON_NOTE }
 }
 
 function stationReading(station: 'CHII2' | '45198', result: BuoyDataResult, now: Date): McpStationReading {
@@ -69,15 +78,7 @@ export function currentConditions({
   purdueInSeason,
 }: CurrentConditionsInput): CurrentConditionsAnswer {
   const purdueAnswer: McpStationReading | McpStationOutOfSeason =
-    !purdueInSeason && !purdue.data
-      ? {
-          station: '45198',
-          name: stationName('45198'),
-          seasonal: true,
-          dataStatus: purdue.status,
-          note: OUT_OF_SEASON_NOTE,
-        }
-      : stationReading('45198', purdue, now)
+    !purdueInSeason && !purdue.data ? purdueOutOfSeason(purdue.status) : stationReading('45198', purdue, now)
 
   return { stations: [stationReading('CHII2', chii2, now), purdueAnswer] }
 }

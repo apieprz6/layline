@@ -39,8 +39,9 @@ above happen in your browser.
 - **Read only.** The connector cannot upload, amend or delete anything. Uploading a Race and
   editing Boat Setup stay in the app.
 - **As you.** Claude reads what your own account can read in Layline, and nothing more.
-- **Current Conditions.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the dashboard
-  shows them.
+- **Current Conditions and Buoy History.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the
+  dashboard shows them now, and as a station's page shows them over its last 30 minutes to 72
+  hours: every reading, and the page's Stats panel.
 - **Races.** The archive's list of Races, and one Race's summary as its page states it: the Boat
   Setup it was sailed under, how much of it was recorded, its tacks and gybes, and its Polar and VMG
   efficiency. Claude is given figures, never the recording's rows.
@@ -55,6 +56,9 @@ above happen in your browser.
   the water, not that its reading is missing.
 - **Every reading has an age.** Claude is told each station's status (online, recent, stale,
   offline) and how old the reading is. If it isn't fresh, expect Claude to say so.
+- **The Stats are Layline's, not the station's.** Mean direction, mean speed, range and veer/back
+  spread are worked out from the readings exactly as the station page's Stats panel does, and
+  Claude is told they are derived.
 - **A Race's coverage is time.** Claude is told how much of the race was recorded and how much
   of it any figure reads, and should say when a Race is thinly recorded.
 - **Some efficiency is filler-anchored.** Where a figure partly compares the boat against a cell

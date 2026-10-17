@@ -274,6 +274,9 @@ export interface BuoyHistoryData {
   extendedHistory?: MinuteDataPoint[] | null
 }
 
+// The station page's time scales, configured in `lib/utils/windowing.ts`
+export type TimeScale = '30m' | '1h' | '6h' | '24h' | '72h'
+
 // Window statistics for aggregate wind analysis
 export interface WindowStats {
   meanDir: number // Vector-averaged direction (0-360°)
@@ -3607,6 +3610,47 @@ export interface ProtectedResourceMetadata {
 
 export interface CurrentConditionsAnswer {
   stations: [McpStationReading, McpStationReading | McpStationOutOfSeason]
+}
+
+// One observation in a station's history, as the station page plots it. `gustKnots` and
+// `waveHeightFeet` are present only where the page shows that quantity at all, and null where it
+// shows "—" for this moment (ADR 0008).
+export interface McpHistoryReading {
+  observedAt: string
+  speedKnots: number
+  directionDegreesTrue: number
+  gustKnots?: number | null
+  waveHeightFeet?: number | null
+}
+
+// The station page's Stats panel for the window, worked out by its own `calculateWindowStats`.
+export interface McpWindowStats {
+  derived: true
+  meanDirectionDegreesTrue: number
+  meanSpeedKnots: number
+  speedMinKnots: number
+  speedMaxKnots: number
+  veerBackSpreadDegrees: number
+  readingCount: number
+}
+
+// The MCP `buoy_history` answer: the station page for one station and one of its time scales.
+// `readings` is null when the history could not be read, and [] when it was read and the window
+// holds nothing. `windowStats` is null wherever the Stats panel says "No data in window."
+export interface McpStationHistory {
+  station: 'CHII2' | '45198'
+  name: string
+  seasonal: boolean
+  dataStatus: DataSourceStatus
+  fetchedAt: string
+  latestObservedAt: string | null
+  staleness: { label: string } | null
+  window: { id: TimeScale; label: string }
+  readings: McpHistoryReading[] | null
+  windowStats: McpWindowStats | null
+  fetchError?: string
+  anemometerHeightFeet: number
+  note?: string
 }
 
 // A Boat Setup Version a Race was sailed under, as the Race froze it (ADR 0012). Null where the
