@@ -3560,3 +3560,37 @@ export interface PurdueBuoyReading {
   wave_period: number | null
   wave_direction: number | null
 }
+
+// MCP Server answers (ADR 0042). Each is a published contract: once the crew have connected
+// Claude, renaming a field breaks their conversations rather than a build.
+
+// A station's reading as the dashboard's Station Row states it, with its provenance beside it.
+// `wind` is null when the station is expected to report and did not; the Data Status and
+// `fetchError` say why. Figures are the buoy services' own (knots to 0.1, degrees true),
+// never adjusted for height (ADR 0008).
+export interface McpStationReading {
+  station: 'CHII2' | '45198'
+  name: string
+  seasonal: boolean
+  dataStatus: DataSourceStatus
+  observedAt: string | null
+  fetchedAt: string
+  staleness: { minutes: number; label: string } | null
+  wind: { speedKnots: number; directionDegreesTrue: number } | null
+  fetchError?: string
+  anemometerHeightFeet: number
+  note: string
+}
+
+// A seasonal station out of its season: not a missing reading, an absent one. No `wind` key.
+export interface McpStationOutOfSeason {
+  station: '45198'
+  name: string
+  seasonal: true
+  dataStatus: DataSourceStatus
+  note: string
+}
+
+export interface CurrentConditionsAnswer {
+  stations: [McpStationReading, McpStationReading | McpStationOutOfSeason]
+}

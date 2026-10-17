@@ -23,3 +23,26 @@ export function formatOffset(minutes: number): string {
   const days = hours / 24
   return `${days.toFixed(1)}d ago`
 }
+
+/**
+ * How long ago a reading was taken, as a **Station Row** prints it
+ * (e.g. "just now", "12m ago", "1h ago", "2d ago").
+ *
+ * Whole units, floored: a reading 92 minutes old is "1h ago". Shared with the
+ * **MCP Server**'s `current_conditions`, so Claude states the same age the
+ * dashboard does (ADR 0042).
+ */
+export function formatRelativeTime(timestamp: string, currentTime: number): string {
+  const then = new Date(timestamp)
+  const diffMs = currentTime - then.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+
+  const diffDays = Math.floor(diffHr / 24)
+  return `${diffDays}d ago`
+}

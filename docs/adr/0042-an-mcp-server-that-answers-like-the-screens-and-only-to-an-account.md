@@ -102,9 +102,15 @@ unknown dimension or bucket is refused with the valid values, never silently ign
 - **It fits the free tiers.** Supabase's OAuth server has no separate charge, and its users count
   toward the Free plan's 50,000 MAU. Vercel Hobby is for personal, non-commercial use, which a crew
   is; offering this to other boats for money would not be.
-- **Open: whether the OAuth server is in beta, and whether the Free plan includes it.** Supabase's
-  documentation says neither. LAY-182 confirms it before building on it, and if the answer is no,
-  this ADR is revisited rather than worked around.
+- **Answered (LAY-182): the OAuth server is in beta, and the Free plan includes it.** Supabase's
+  getting-started guide for it says "OAuth 2.1 server is in beta and available on all Supabase
+  plans. It has no separate charge." Beta means its API can still move under us; the consent
+  screen (`app/oauth/consent`) and the token check (`lib/mcp/auth.ts`) are the two places that
+  would feel it.
+- **Only a connector's token opens the endpoint.** Supabase stamps a `client_id` claim on every
+  token its OAuth server issues, and a browser session has none, so `lib/mcp/auth.ts` refuses a
+  token without one. A Profile is required too, checked at the consent screen, where an account
+  with none is denied before a code exists, and again at the endpoint.
 
 ## Rejected alternatives
 
