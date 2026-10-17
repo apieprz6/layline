@@ -8,6 +8,7 @@
  * payload is still a grid.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validatePolarPayload } from '@/services/boat/polarPayload'
 import { fileBackedVersionReader } from '@/services/boat/readFileBackedVersions'
 import type { PolarScreen, PolarVersionDetail, PolarVersionList } from '@/types'
@@ -25,16 +26,19 @@ const polar = fileBackedVersionReader({
  * `null` is not an empty archive. An empty archive is `versions: []`, which is the state the app
  * ships in and which the screen says *not recorded* to; a failed read is reported as one.
  */
-export function readPolarVersions(): Promise<PolarVersionList | null> {
-  return polar.readVersions()
+export function readPolarVersions(client?: SupabaseClient): Promise<PolarVersionList | null> {
+  return polar.readVersions(client)
 }
 
 /** One Polar Version with its grid, or `null` when there is no such Version to read. */
-export function readPolarVersion(versionId: string): Promise<PolarVersionDetail | null> {
-  return polar.readVersion(versionId)
+export function readPolarVersion(
+  versionId: string,
+  client?: SupabaseClient
+): Promise<PolarVersionDetail | null> {
+  return polar.readVersion(versionId, client)
 }
 
 /** The list and the grid in force together, for the screen that shows both. */
-export function readPolarScreen(): Promise<PolarScreen | null> {
-  return polar.readScreen()
+export function readPolarScreen(client?: SupabaseClient): Promise<PolarScreen | null> {
+  return polar.readScreen(client)
 }

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { raceInstrumentCheck } from '@/services/analysis/instrument-tuning'
 import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
@@ -112,7 +113,7 @@ export type SailDefinitionLabels = Map<number, string>
  * null: a race that *was* annotated must never render as one the sailor said nothing about.
  */
 export async function readSailDefinitions(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   versionIds: readonly (string | null)[]
 ): Promise<Map<string, SailDefinitionLabels> | null> {
   const wanted = [...new Set(versionIds.filter((id): id is string => id !== null))]
@@ -165,7 +166,7 @@ interface SeaStateEntryRow {
  * render a Definition number bare, which the refusal at the bottom of this function prevents.
  */
 export async function readRaceAnnotations(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   raceId: string,
   labels: SailDefinitionLabels | null
 ): Promise<RaceAnnotations | null> {
@@ -242,7 +243,7 @@ export async function readRaceAnnotations(
  * recorded" because a read failed would be Layline making a claim about the boat.
  */
 async function readBoatSetup(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   race: RaceRow,
   loggedTws: number | null
 ): Promise<RaceBoatSetup | null> {
@@ -336,12 +337,19 @@ async function readBoatSetup(
  * coverage figure over rows it does not have, and a coverage figure is the one thing the page exists
  * to say. A missing race and an unreadable one both come back null — RLS makes them
  * indistinguishable anyway — and the page renders a not-found rather than an empty race.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token. Every read below,
+ *   the Polar and the Crossover Chart included, goes out on this one client.
  */
-export async function readRace(raceId: string): Promise<RaceDetail | null> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+export async function readRace(
+  raceId: string,
+  client?: SupabaseClient
+): Promise<RaceDetail | null> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Race: Supabase client unavailable:',
@@ -422,7 +430,8 @@ export async function readRace(raceId: string): Promise<RaceDetail | null> {
       race,
       race.polar_version_id,
       annotations,
-      race.crossover_chart_version_id
+      race.crossover_chart_version_id,
+      supabase
     )
 
     return {

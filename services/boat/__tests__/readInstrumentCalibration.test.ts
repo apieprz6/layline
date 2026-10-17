@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { readInstrumentCalibration } from '../readInstrumentCalibration'
 import type { CalibrationEvent, InstrumentCalibrationVersion } from '@/types'
 
@@ -162,5 +163,13 @@ describe('readInstrumentCalibration', () => {
 
     await expect(readInstrumentCalibration()).resolves.toBeNull()
     expect(consoleError).toHaveBeenCalled()
+  })
+
+  it('reads as the client the caller gives, and never builds the cookie one', async () => {
+    // The MCP server's request has a bearer token and no cookie, so it hands its own client in.
+    const given = { from } as unknown as SupabaseClient
+
+    await expect(readInstrumentCalibration(given)).resolves.not.toBeNull()
+    expect(createClient).not.toHaveBeenCalled()
   })
 })

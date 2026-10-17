@@ -17,6 +17,7 @@
  * is not the same as retiring it.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/utils/uuid'
 import type {
@@ -40,7 +41,7 @@ interface ArtifactRow {
   current_version_id: string | null
 }
 
-type Supabase = Awaited<ReturnType<typeof createClient>>
+type Supabase = SupabaseClient
 
 /** Whatever validates this kind's payload — `validatePolarPayload` and its siblings all fit. */
 type PayloadValidator<Payload> = (
@@ -63,6 +64,10 @@ export interface FileBackedVersionReaderOptions<Payload> {
   validate: PayloadValidator<Payload>
 }
 
+/**
+ * Each read takes the client to read as. Omit it and the read builds the cookie client, as every
+ * screen wants; the MCP server passes the one it built from its bearer token.
+ */
 export interface FileBackedVersionReader<Payload> {
   /**
    * Every Version, newest first, or `null` when the read failed.
@@ -70,11 +75,14 @@ export interface FileBackedVersionReader<Payload> {
    * `null` is not an empty archive. An empty archive is `versions: []`, which is the state the app
    * ships in and which the screen says *not recorded* to; a failed read is reported as one.
    */
-  readVersions(): Promise<FileBackedVersionList | null>
+  readVersions(client?: SupabaseClient): Promise<FileBackedVersionList | null>
   /** One Version with its payload, or `null` when there is no such Version to read. */
-  readVersion(versionId: string): Promise<FileBackedVersionDetail<Payload> | null>
+  readVersion(
+    versionId: string,
+    client?: SupabaseClient
+  ): Promise<FileBackedVersionDetail<Payload> | null>
   /** The list and the payload in force together, for the screen that shows both. */
-  readScreen(): Promise<FileBackedScreen<Payload> | null>
+  readScreen(client?: SupabaseClient): Promise<FileBackedScreen<Payload> | null>
 }
 
 export function fileBackedVersionReader<Payload>(
@@ -82,9 +90,10 @@ export function fileBackedVersionReader<Payload>(
 ): FileBackedVersionReader<Payload> {
   const { kind, label, payloadIs, validate } = options
 
-  async function client(): Promise<Supabase | null> {
+  /** The caller's client where it gave one — the MCP server's, say — and the cookie one if not. */
+  async function client(given: Supabase | undefined): Promise<Supabase | null> {
     try {
-      return await createClient()
+      return given ?? (await createClient())
     } catch (thrown: unknown) {
       // A checkout with no `.env.local`, or a preview deployment never given the keys.
       console.error(
@@ -190,8 +199,8 @@ export function fileBackedVersionReader<Payload>(
   }
 
   return {
-    async readVersions(): Promise<FileBackedVersionList | null> {
-      const supabase = await client()
+    async readVersions(given?: Supabase): Promise<FileBackedVersionList | null> {
+      const supabase = await client(given)
       if (!supabase) return null
 
       const artifact = await readArtifact(supabase)
@@ -200,12 +209,15 @@ export function fileBackedVersionReader<Payload>(
       return summaries(supabase, artifact)
     },
 
-    async readVersion(versionId: string): Promise<FileBackedVersionDetail<Payload> | null> {
+    async readVersion(
+      versionId: string,
+      given?: Supabase
+    ): Promise<FileBackedVersionDetail<Payload> | null> {
       // Asked before the database is: `id=eq.not-a-uuid` is a 22P02 *error*, which would be
       // reported and logged as a read that failed rather than as the Version that does not exist.
       if (!isUuid(versionId)) return null
 
-      const supabase = await client()
+      const supabase = await client(given)
       if (!supabase) return null
 
       const artifact = await readArtifact(supabase)
@@ -224,8 +236,8 @@ export function fileBackedVersionReader<Payload>(
      * list whose `current` is `null` is different and ordinary: an empty archive, or a pointer at a
      * Version whose stored payload the schema refuses.
      */
-    async readScreen(): Promise<FileBackedScreen<Payload> | null> {
-      const supabase = await client()
+    async readScreen(given?: Supabase): Promise<FileBackedScreen<Payload> | null> {
+      const supabase = await client(given)
       if (!supabase) return null
 
       const artifact = await readArtifact(supabase)

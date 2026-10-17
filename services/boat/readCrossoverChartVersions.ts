@@ -16,6 +16,7 @@
  * schema has just validated.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCrossoverChartStructure } from '@/services/boat/crossoverPayload'
 import { fileBackedVersionReader } from '@/services/boat/readFileBackedVersions'
 import type {
@@ -37,18 +38,23 @@ const crossoverChart = fileBackedVersionReader({
  * `null` is not an empty archive. An empty archive is `versions: []`, which is the state the app
  * ships in and which the screen says *not recorded* to; a failed read is reported as one.
  */
-export function readCrossoverChartVersions(): Promise<FileBackedVersionList | null> {
-  return crossoverChart.readVersions()
+export function readCrossoverChartVersions(
+  client?: SupabaseClient
+): Promise<FileBackedVersionList | null> {
+  return crossoverChart.readVersions(client)
 }
 
 /** One Version with its grid and definitions, or `null` when there is no such Version to read. */
 export function readCrossoverChartVersion(
-  versionId: string
+  versionId: string,
+  client?: SupabaseClient
 ): Promise<CrossoverChartVersionDetail | null> {
-  return crossoverChart.readVersion(versionId)
+  return crossoverChart.readVersion(versionId, client)
 }
 
 /** The list and the chart in force together, for the screen that shows both. */
-export function readCrossoverChartScreen(): Promise<CrossoverChartScreen | null> {
-  return crossoverChart.readScreen()
+export function readCrossoverChartScreen(
+  client?: SupabaseClient
+): Promise<CrossoverChartScreen | null> {
+  return crossoverChart.readScreen(client)
 }
