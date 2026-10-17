@@ -363,6 +363,16 @@ _Avoid_: Error page, auth error, access denied (the generic OAuth code, which ca
 How a hand-created **Account** gets its first session: the owner creates a row against the crew member's Google address, and the Google identity attaches to that row on first sign-in because the addresses match. Unconditional on hosted Supabase — there is no setting that enables or disables it, and `enable_manual_linking` is not it, that only gates the manual `linkIdentity()` routes. A closed front door does not block it: a matching row makes this a link rather than a signup, which is the only reason ADR 0019 and ADR 0020 can coexist. See LAY-115 and ADR 0020.
 _Avoid_: Account Merging (ADR 0004's term, and now a misnomer — nothing merges, because the row the owner creates has no credential of its own to merge with)
 
+### MCP
+
+**MCP Server**:
+Layline's read-only face to an AI assistant such as Claude: an endpoint an **Account** connects once, signs in to with Google, and then asks questions through. It answers only to an Account. Unlike the app, it has no **Guest** tier, not even for weather. See ADR 0042.
+_Avoid_: API, integration, plugin (it is not a general-purpose interface to the data)
+
+**MCP Tool**:
+One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and that equality is what makes it a tool rather than a second analysis. See ADR 0042.
+_Avoid_: Endpoint, query (a tool does not search the archive, it states what a screen states)
+
 ### UI Components
 
 **Station Card**:
@@ -442,6 +452,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
 - A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
 - A **Race** carries **Sail Configurations** and **Sea State** as **Annotations**, resolved onto **Recording Rows** by time on read
+- An **MCP Tool** reads as the **Account** that called it, under the same row-level security as a screen, and computes its figures with that screen's own functions
 - An **Annotation** lives on the **Race**, never on a **Recording Row**; correcting one edits one entry, not hundreds of rows
 - A **Recording Row** that is not **Water-Referenced** has no honest true wind; it is shown as different, not as a caveat
 - **Row Quality** is computed over the whole **Transcription** and then filtered to the **Race** window, so a **Dropout** that begins before the start is still seen
