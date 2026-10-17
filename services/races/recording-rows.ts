@@ -131,6 +131,42 @@ async function readRecordingPages(
   return rows
 }
 
+/** Row Quality's eight fields of one returned row, each as the cast promises it. */
+function qualityRow(row: Record<string, unknown>, rowIndex: number): QualityAssessableRow {
+  return {
+    row_index: rowIndex,
+    row_time: String(row.row_time),
+    latitude: recordedText(row.latitude, 'latitude', rowIndex),
+    longitude: recordedText(row.longitude, 'longitude', rowIndex),
+    cog: recordedText(row.cog, 'cog', rowIndex),
+    sog: recordedText(row.sog, 'sog', rowIndex),
+    stw: recordedText(row.stw, 'stw', rowIndex),
+    ctw: recordedText(row.ctw, 'ctw', rowIndex),
+  }
+}
+
+/**
+ * Every returned row shaped by `shape`, or null where a value broke the cast.
+ *
+ * The cast stopped being honoured, which is a deployment fault and not a bad race. Caught here so
+ * it is one line in the log and a not-found page, rather than an exception thrown through a Server
+ * Component.
+ */
+function shapeRows<Row>(
+  data: Record<string, unknown>[],
+  shape: (row: Record<string, unknown>, rowIndex: number) => Row
+): Row[] | null {
+  try {
+    return data.map((row) => shape(row, Number(row.row_index)))
+  } catch (thrown: unknown) {
+    console.error(
+      'Race: a recorded value did not arrive as text:',
+      thrown instanceof Error ? thrown.message : thrown
+    )
+    return null
+  }
+}
+
 /**
  * The whole Transcription in the eleven columns anything downstream reads, or null.
  *
@@ -146,33 +182,41 @@ export async function readRecordingRows(
 
   if (data === null) return null
 
-  try {
-    return data.map((row) => {
-      const rowIndex = Number(row.row_index)
-      return {
-        row_index: rowIndex,
-        row_time: String(row.row_time),
-        latitude: recordedText(row.latitude, 'latitude', rowIndex),
-        longitude: recordedText(row.longitude, 'longitude', rowIndex),
-        cog: recordedText(row.cog, 'cog', rowIndex),
-        sog: recordedText(row.sog, 'sog', rowIndex),
-        stw: recordedText(row.stw, 'stw', rowIndex),
-        ctw: recordedText(row.ctw, 'ctw', rowIndex),
-        tws: recordedText(row.tws, 'tws', rowIndex),
-        twa: recordedText(row.twa, 'twa', rowIndex),
-        awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
-      }
-    })
-  } catch (thrown: unknown) {
-    // The cast stopped being honoured, which is a deployment fault and not a bad race. Caught here so
-    // it is one line in the log and a not-found page, rather than an exception thrown through a Server
-    // Component.
-    console.error(
-      'Race: a recorded value did not arrive as text:',
-      thrown instanceof Error ? thrown.message : thrown
-    )
-    return null
-  }
+  return shapeRows(data, (row, rowIndex) => ({
+    ...qualityRow(row, rowIndex),
+    tws: recordedText(row.tws, 'tws', rowIndex),
+    twa: recordedText(row.twa, 'twa', rowIndex),
+    awa_calc: recordedText(row.awa_calc, 'awa_calc', rowIndex),
+  }))
+}
+
+/**
+ * Row Quality's eight fields and nothing else: what a map needs to break a track at a Dropout.
+ *
+ * Not position alone. A Dropout is found by comparing `COG` and `SOG` beside the fix verbatim, so a
+ * latitude-and-longitude read could only draw a clean track of a dead feed — which is what ADR
+ * 0014 forbids every map in Layline from doing. Eight of the eleven columns, cast to text for the
+ * reason `RECORDED_ROW_SELECT` gives.
+ */
+export const QUALITY_ROW_SELECT =
+  'row_index, row_time, latitude::text, longitude::text, cog::text, sog::text, stw::text, ctw::text'
+
+/**
+ * The whole Transcription in Row Quality's columns, or null when it could not be read in full.
+ *
+ * For the Dashboard's race thumbnail, which draws a track and scores nothing, so it pages none of
+ * the wind channels the race's own page needs.
+ */
+export async function readRecordingQualityRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  recordingId: string,
+  rowCount: number
+): Promise<QualityAssessableRow[] | null> {
+  const data = await readRecordingPages(supabase, recordingId, rowCount, QUALITY_ROW_SELECT)
+
+  if (data === null) return null
+
+  return shapeRows(data, qualityRow)
 }
 
 /**
