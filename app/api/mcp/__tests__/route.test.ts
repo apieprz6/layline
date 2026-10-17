@@ -9,6 +9,7 @@ import { clearHistoryCache, fetchCHII2, fetchCHII2History } from '@/services/buo
 import { readRace } from '@/services/races/readRace'
 import { raceSummary } from '@/services/mcp/races'
 import {
+  FIXTURE_CHART,
   FIXTURE_POLAR,
   FIXTURE_RACE_ID,
   OLDER_RACE_ID,
@@ -24,7 +25,8 @@ jest.mock('@/services/boat/readPolarVersions', () => ({
 }))
 
 jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
-  readCrossoverChartVersion: async () => null,
+  readCrossoverChartVersion: async (versionId: string) =>
+    versionId === 'chart-v1' ? { payload: FIXTURE_CHART } : null,
   readCrossoverChartScreen: async () => null,
 }))
 

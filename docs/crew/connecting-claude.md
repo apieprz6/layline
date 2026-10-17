@@ -43,8 +43,9 @@ above happen in your browser.
   dashboard shows them now, and as a station's page shows them over its last 30 minutes to 72
   hours: every reading, and the page's Stats panel.
 - **Races.** The archive's list of Races, and one Race's summary as its page states it: the Boat
-  Setup it was sailed under, how much of it was recorded, its tacks and gybes, and its Polar and VMG
-  efficiency. Claude is given figures, never the recording's rows.
+  Setup it was sailed under, the sail changes and sea state you recorded, how much of it was
+  recorded, its tacks and gybes, and its Polar and VMG efficiency. Claude is given figures, never
+  the recording's rows.
 - More tools (forecasts, Polar performance, sail selection) are on the way.
 
 ## Reading the answers
@@ -65,6 +66,8 @@ above happen in your browser.
   the Polar made up rather than measured, Claude is given that share and should state it beside
   the figure, as the race page does.
 - **A Race with no title has none.** Claude should call it by its day, not invent a name.
+- **Sails and sea state are what you wrote down.** Where nobody recorded them for a Race, Claude is
+  told they were not recorded, which is not the same as nothing changing.
 
 ## Disconnecting
 

@@ -28,6 +28,7 @@
 import { nearestRowIndex } from '@/services/recordings/race-window'
 import { wallClockSeconds, wallClockStamp } from '@/services/recordings/wall-clock'
 import type {
+  RaceSailAnnotation,
   SailEntryDraft,
   SeaState,
   SeaStateEntryDraft,
@@ -94,6 +95,36 @@ export function noteText(note: string | null | undefined): string {
  */
 export function sailWithNote(label: string, note: string): string {
   return note === '' ? label : `${label} · ${note}`
+}
+
+/**
+ * One stored Sail Configuration, as the race page states it: in the words of the Crossover Chart
+ * Version the Race points at, with the note beside them.
+ *
+ * The label arrives already resolved against *that* Version (ADR 0012, ADR 0023), so nothing here
+ * looks up a sail name and a 2024 race cannot be renamed in the current chart's words.
+ *
+ * A note-only entry reads as exactly what was written, with nothing beside it. The chart does not name
+ * everything the boat has ever flown, and putting the nearest Definition's words on an entry that named
+ * none would be Layline deciding what was up.
+ *
+ * Shared by the race page and the MCP Server's `race_summary`, so the two say one thing (ADR 0042).
+ */
+export function sailEntryText(entry: RaceSailAnnotation): string {
+  const note = noteText(entry.note)
+
+  if (entry.label === null) return note
+  return sailWithNote(entry.label, note)
+}
+
+/**
+ * A Sea State with the height that tells it apart, because "moderate" alone is a word the reader has
+ * to take on trust. The wizard's chips carry the same pair, so the race page reads back what was
+ * tapped, and `race_summary` says what the page says.
+ */
+export function seaStateWithHeight(value: SeaState | string): string {
+  const sea = SEA_STATES.find((each) => each.value === value)
+  return sea ? `${sea.label} · ${sea.height}` : seaStateLabel(value)
 }
 
 /**

@@ -12,7 +12,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { PolarPayload } from '@/types'
+import type { CrossoverChartPayload, PolarPayload } from '@/types'
 
 type Row = Record<string, unknown>
 
@@ -99,6 +99,24 @@ export const FIXTURE_POLAR: PolarPayload = {
   ],
 }
 
+/**
+ * The Crossover Chart Version the fixture Race names: Jib 1 below 12 knots, Jib 3 above. The
+ * fixture's rows log 10 knots, so Jib 1 is the chart's sail for them.
+ */
+export const FIXTURE_CHART: CrossoverChartPayload = {
+  twa_axis: [40, 90, 135],
+  tws_axis: [6, 12],
+  cells: [
+    [1, 3],
+    [1, 3],
+    [1, 3],
+  ],
+  sail_definitions: [
+    { number: 1, label: 'Main + Jib 1' },
+    { number: 3, label: 'Main + Jib 3' },
+  ],
+}
+
 const CADENCE_SECONDS = 30
 
 /** A stamp `index` rows after 14:20 on a Saturday, in the recording's own naive frame. */
@@ -155,7 +173,7 @@ export function fixtureArchive(): ArchiveTables {
         window_start: fixtureStamp(2),
         window_finish: fixtureStamp(17),
         polar_version_id: 'polar-v1',
-        crossover_chart_version_id: null,
+        crossover_chart_version_id: 'chart-v1',
         rig_tune_version_id: null,
         instrument_calibration_version_id: null,
         rig_tune_band_id: null,
@@ -205,11 +223,24 @@ export function fixtureArchive(): ArchiveTables {
         awa_calc: null,
       })),
     ],
-    race_sail_entries: [],
-    race_sea_state_entries: [],
-    crossover_sail_definitions: [],
+    // The sailor's Testimony: a sail named in the chart's words, one with a note, and one the
+    // chart does not name at all. The older Race has none, which is "not recorded".
+    race_sail_entries: [
+      { race_id: FIXTURE_RACE_ID, at: fixtureStamp(1), definition_number: 1, note: null },
+      { race_id: FIXTURE_RACE_ID, at: fixtureStamp(12), definition_number: 3, note: ' eased early ' },
+      { race_id: FIXTURE_RACE_ID, at: fixtureStamp(16), definition_number: null, note: 'Borrowed code zero' },
+    ],
+    race_sea_state_entries: [
+      { race_id: FIXTURE_RACE_ID, at: fixtureStamp(2), sea_state: 'slight' },
+      { race_id: FIXTURE_RACE_ID, at: fixtureStamp(14), sea_state: 'moderate' },
+    ],
+    crossover_sail_definitions: FIXTURE_CHART.sail_definitions.map((definition) => ({
+      version_id: 'chart-v1',
+      ...definition,
+    })),
     boat_setup_versions: [
       { id: 'polar-v1', kind: 'polar', version_number: 1, effective_from: '2026-03-01' },
+      { id: 'chart-v1', kind: 'crossover_chart', version_number: 1, effective_from: '2026-03-01' },
       // A newer Polar the Race does not name, so a summary that resolved "the current one" fails.
       { id: 'polar-v2', kind: 'polar', version_number: 2, effective_from: '2026-09-01' },
     ],

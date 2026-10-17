@@ -3732,6 +3732,15 @@ export interface McpRaceSummary {
   }
   // The page's own notes about this window and its recording, in its words.
   findings: string[]
+  // What the sailor said, earliest first, as the race page's Sails and Sea state sections list it
+  // (ADR 0010). `text` is the page's own wording. An empty list is not recorded: nobody wrote it
+  // down, which is a different fact from nothing changing.
+  testimony: {
+    // `sail` is the Crossover Chart Version's own label for the Sail Definition named, null on an
+    // entry that named none and is only its note. `note` is as stored, null where none was written.
+    sails: { at: string; text: string; sail: string | null; note: string | null }[]
+    seaState: { at: string; text: string; seaState: SeaState }[]
+  }
   maneuvers: {
     detectorVersion: string
     counts: Record<Maneuver, number>

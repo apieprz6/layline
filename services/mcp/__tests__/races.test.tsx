@@ -13,6 +13,7 @@
 import { render, screen, within } from '@testing-library/react'
 import CoverageReadout from '@/components/race/CoverageReadout'
 import RaceBreakdown from '@/components/race/RaceBreakdown'
+import RaceDetailView from '@/components/race/RaceDetailView'
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
 import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
@@ -22,6 +23,7 @@ import type { RaceDetail } from '@/types'
 
 import { raceList, raceSummary } from '../races'
 import {
+  FIXTURE_CHART,
   FIXTURE_POLAR,
   FIXTURE_RACE_ID,
   OLDER_RACE_ID,
@@ -35,7 +37,8 @@ jest.mock('@/services/boat/readPolarVersions', () => ({
 }))
 
 jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
-  readCrossoverChartVersion: async () => null,
+  readCrossoverChartVersion: async (versionId: string) =>
+    versionId === 'chart-v1' ? { payload: FIXTURE_CHART } : null,
   readCrossoverChartScreen: async () => null,
 }))
 
@@ -131,8 +134,11 @@ describe('raceSummary', () => {
       versionNumber: race.boat_setup.polar!.version_number,
       effectiveFrom: race.boat_setup.polar!.effective_from,
     })
+    expect(boatSetup.crossoverChart).toEqual({
+      versionNumber: race.boat_setup.crossover_chart!.version_number,
+      effectiveFrom: race.boat_setup.crossover_chart!.effective_from,
+    })
     // Not recorded stays not recorded, never the boat's current Version.
-    expect(boatSetup.crossoverChart).toBeNull()
     expect(boatSetup.rigTune).toBeNull()
     expect(boatSetup.instrumentCalibration).toBeNull()
     expect(boatSetup.windBand).toBeNull()
@@ -170,6 +176,58 @@ describe('raceSummary', () => {
       recordingFilename: race.recording.filename,
       day: archive!.races.find((entry) => entry.id === race.id)!.day,
     })
+  })
+
+  it.each([
+    ['a Race with sails and sea state recorded', FIXTURE_RACE_ID],
+    ['a Race with neither recorded', OLDER_RACE_ID],
+  ])('states the sailor’s Testimony as the race page’s own sections do, on %s', async (_, raceId) => {
+    const race = await pageRead(raceId)
+    const { testimony } = raceSummary(race)
+
+    render(
+      <RaceDetailView
+        race={race}
+        canDelete={false}
+        canAmend={false}
+        deleteRace={jest.fn()}
+        season={null}
+        sailChart={{ ok: false, reason: 'no-chart-version' }}
+      />
+    )
+
+    // Every entry the page lists, in its words and at its time, and nothing it does not.
+    const section = (heading: string): HTMLElement =>
+      screen.getByRole('heading', { name: heading }).closest('section')!
+    for (const [heading, entries] of [
+      ['Sails', testimony.sails],
+      ['Sea state', testimony.seaState],
+    ] as const) {
+      const shown = section(heading)
+      expect(entries.map((entry) => within(shown).getByText(entry.text))).toHaveLength(
+        entries.length
+      )
+    }
+    expect(testimony.sails.map((entry) => entry.at)).toEqual(race.annotations.sails.map((entry) => entry.at))
+    expect(testimony.seaState.map((entry) => entry.at)).toEqual(
+      race.annotations.sea_state.map((entry) => entry.at)
+    )
+
+    // An empty list is "not recorded", which the page says in words and the description tells Claude.
+    if (testimony.sails.length === 0) {
+      expect(within(section('Sails')).getByText(/Not recorded/)).toBeTruthy()
+    }
+  })
+
+  it('exercises a named sail, a note beside one, and a note-only entry', async () => {
+    const { testimony } = raceSummary(await pageRead(FIXTURE_RACE_ID))
+
+    expect(testimony.sails.map((entry) => [entry.sail, entry.note])).toEqual([
+      ['Main + Jib 1', null],
+      // The note as stored; the page's trimmed words are in `text`.
+      ['Main + Jib 3', ' eased early '],
+      [null, 'Borrowed code zero'],
+    ])
   })
 
   it('hands over aggregates and never a Recording Row', async () => {

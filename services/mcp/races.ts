@@ -8,6 +8,7 @@ import {
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
+import { sailEntryText, seaStateWithHeight } from '@/services/races/annotations'
 import type { AnalysisArchive } from '@/services/analysis/readArchive'
 import { describeDuration } from '@/services/recordings/coverage'
 import { wallClockDate } from '@/services/recordings/wall-clock'
@@ -160,6 +161,19 @@ export function raceSummary(race: RaceDetail): McpRaceSummary {
       afterLastRow: duration(coverage.tail_gap_seconds),
     },
     findings: race.findings.map((finding) => finding.message),
+    testimony: {
+      sails: race.annotations.sails.map((entry) => ({
+        at: entry.at,
+        text: sailEntryText(entry),
+        sail: entry.label,
+        note: entry.note,
+      })),
+      seaState: race.annotations.sea_state.map((entry) => ({
+        at: entry.at,
+        text: seaStateWithHeight(entry.sea_state),
+        seaState: entry.sea_state,
+      })),
+    },
     maneuvers: {
       detectorVersion: MANEUVER_DETECTOR_VERSION,
       counts: maneuverCounts(race.maneuvers),
