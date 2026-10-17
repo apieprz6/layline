@@ -1,4 +1,4 @@
-import { fetchCHII2History, fetchPurdueBuoyHistory, clearHistoryCache } from '../ndbc'
+import { fetchCHII2History, fetchPurdueBuoyHistory, clearHistoryCache, isPurdueOutOfWater } from '../ndbc'
 
 describe('NDBC Buoy History - Extended 72-hour Support', () => {
   beforeEach(() => {
@@ -129,6 +129,15 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
       // Station Capability is a fact about the station, known even when the fetch fails.
       expect(result.metadata.capability).toEqual({ gust: true, waves: false })
     })
+  })
+})
+
+describe('isPurdueOutOfWater', () => {
+  it('is out of the water only out of season and with nothing to show', () => {
+    expect(isPurdueOutOfWater(false, false)).toBe(true)
+    expect(isPurdueOutOfWater(true, false)).toBe(false)
+    expect(isPurdueOutOfWater(false, true)).toBe(false)
+    expect(isPurdueOutOfWater(true, true)).toBe(false)
   })
 })
 

@@ -1,6 +1,11 @@
+import { render, screen } from '@testing-library/react'
 import { currentConditions } from '../current-conditions'
 import { buoyMetadata } from '@/services/buoys/ndbc'
-import type { BuoyDataResult } from '@/types'
+import { observationAgeMinutes } from '@/lib/utils/timeFormatting'
+import StationRow from '@/components/dashboard/StationRow'
+import type { BuoyDataResult, McpStationReading } from '@/types'
+
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }))
 
 const NOW = new Date('2026-07-15T23:12:00Z')
 
@@ -132,6 +137,36 @@ describe('currentConditions', () => {
       staleness: { minutes: 92, label: '1h ago' },
       wind: { speedKnots: 11.8, directionDegreesTrue: 230 },
       anemometerHeightFeet: 3,
+    })
+  })
+
+  describe('Staleness parity with the Station Row', () => {
+    afterEach(() => jest.useRealTimers())
+
+    // A partial minute, an hour boundary and a multi-day gap: the cases a rounding rule moves.
+    it.each([
+      '2026-07-15T23:11:30.000Z',
+      '2026-07-15T23:00:00.000Z',
+      '2026-07-15T21:40:00.000Z',
+      '2026-07-12T09:00:00.000Z',
+    ])('states the age the Station Row prints for a reading taken at %s', (timestamp) => {
+      jest.useFakeTimers({ now: NOW })
+      const chii2 = reading('CHII2', { timestamp })
+      const answer = currentConditions({ chii2, purdue: reading('45198'), now: NOW, purdueInSeason: true })
+      const staleness = (answer.stations[0] as McpStationReading).staleness
+
+      render(
+        <StationRow
+          buoyId="CHII2"
+          windSpeed={chii2.data!.windSpeed}
+          windDirection={chii2.data!.windDirection}
+          status={chii2.status}
+          timestamp={timestamp}
+        />
+      )
+
+      expect(screen.getByText(staleness!.label)).toBeInTheDocument()
+      expect(staleness!.minutes).toBe(observationAgeMinutes(timestamp, NOW.getTime()))
     })
   })
 })
