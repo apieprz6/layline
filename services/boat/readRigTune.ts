@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import type { Boat, RigTuneBand, RigTunePage, RigTuneVersionRecord } from '@/types'
 
@@ -40,12 +41,15 @@ type ArtifactRow = {
  *
  * All-or-nothing like `readBoatSetup`: the screen's header is the boat's identity, and a Rig
  * Tune with some of its bands missing is not a rig anybody should set a boat to.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie client, as every
+ *   screen wants; the MCP server passes the one it built from its bearer token.
  */
-export async function readRigTune(): Promise<RigTunePage | null> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+export async function readRigTune(client?: SupabaseClient): Promise<RigTunePage | null> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     console.error(
       'Rig Tune: Supabase client unavailable:',

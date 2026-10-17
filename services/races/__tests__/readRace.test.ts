@@ -9,6 +9,7 @@
  * that looks fine and describes a third of the race.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { overlayPaint } from '@/services/analysis/track-overlays'
 
 import { readRace } from '../readRace'
@@ -170,16 +171,22 @@ let chartPayload: {
 } | null = null
 let chartIdAsked: string | null = null
 
+/** The client each nested reader was handed, so a caller's client is seen to reach them too. */
+let chartClientGiven: unknown = undefined
+let polarClientGiven: unknown = undefined
+
 jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
-  readCrossoverChartVersion: async (versionId: string) => {
+  readCrossoverChartVersion: async (versionId: string, client?: unknown) => {
     chartIdAsked = versionId
+    chartClientGiven = client
     return chartPayload === null ? null : { payload: chartPayload }
   },
 }))
 
 jest.mock('@/services/boat/readPolarVersions', () => ({
-  readPolarVersion: async (versionId: string) => {
+  readPolarVersion: async (versionId: string, client?: unknown) => {
     polarIdAsked = versionId
+    polarClientGiven = client
     return polarPayload === null ? null : { payload: polarPayload }
   },
 }))
@@ -331,6 +338,8 @@ describe('readRace', () => {
       ],
     }
     chartIdAsked = null
+    chartClientGiven = undefined
+    polarClientGiven = undefined
     consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     raceMaybeSingle.mockResolvedValue({ data: raceRow(), error: null })
   })
@@ -496,6 +505,29 @@ describe('readRace', () => {
 
     await expect(readRace('race-1')).resolves.toBeNull()
     expect(consoleError).toHaveBeenCalled()
+  })
+
+  describe('a client the caller gives', () => {
+    // The MCP server's request carries a bearer token and no cookie, so it builds its own client
+    // and hands it in. Every query, the nested Polar and Crossover Chart reads included, has to go
+    // out on that one — a read that quietly fell back to the cookie client would be another user's.
+    const given = { from } as unknown as SupabaseClient
+
+    it('reads the race through the given client and never builds the cookie one', async () => {
+      const race = await readRace('race-1', given)
+
+      expect(race?.id).toBe('race-1')
+      expect(createClient).not.toHaveBeenCalled()
+      expect(polarClientGiven).toBe(given)
+      expect(chartClientGiven).toBe(given)
+    })
+
+    it('still reads nothing when a read through the given client fails', async () => {
+      pageError = { message: 'permission denied' }
+
+      await expect(readRace('race-1', given)).resolves.toBeNull()
+      expect(createClient).not.toHaveBeenCalled()
+    })
   })
 
   describe('the sailor’s Testimony', () => {

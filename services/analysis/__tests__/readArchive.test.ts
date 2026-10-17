@@ -14,6 +14,7 @@
  * else in the repo can tell the two apart.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { readAnalysisArchive, readRecentRaceRows } from '@/services/analysis/readArchive'
 
 /** A promise somebody else decides when to settle, so a request can be caught mid-flight. */
@@ -256,7 +257,8 @@ describe('how many round trips, and in what order', () => {
 
     // Two races name `polar-v1` and the third names none.
     expect(readPolarVersion).toHaveBeenCalledTimes(1)
-    expect(readPolarVersion).toHaveBeenCalledWith('polar-v1')
+    // On the archive's own client, which is the one a caller gave or else the cookie one.
+    expect(readPolarVersion).toHaveBeenCalledWith('polar-v1', expect.anything())
   })
 })
 
@@ -349,5 +351,44 @@ describe('the teaser’s own read', () => {
     await readAnalysisArchive()
 
     expect(limitAsked).toBeNull()
+  })
+})
+
+describe('a client the caller gives', () => {
+  // The MCP server's request carries a bearer token and no cookie, so it builds its own client and
+  // hands it in. The Polars and the Crossover Chart are reads of their own, and a caller's client
+  // that stopped at the Races would leave them reading as nobody.
+  const given = { from: (table: string) => from(table) } as unknown as SupabaseClient
+
+  it('reads the whole archive through it, the Polars and the chart included', async () => {
+    const { createClient } = jest.requireMock('@/lib/supabase/server')
+    const { readPolarVersion } = jest.requireMock('@/services/boat/readPolarVersions')
+    const { readCrossoverChartScreen } = jest.requireMock(
+      '@/services/boat/readCrossoverChartVersions'
+    )
+    pages.open()
+
+    expect(await readAnalysisArchive(given)).not.toBeNull()
+    expect(createClient).not.toHaveBeenCalled()
+    expect(readPolarVersion).toHaveBeenCalledWith('polar-v1', given)
+    expect(readCrossoverChartScreen).toHaveBeenCalledWith(given)
+  })
+
+  it('reads the teaser through it', async () => {
+    const { createClient } = jest.requireMock('@/lib/supabase/server')
+    pages.open()
+
+    expect(await readRecentRaceRows(2, given)).not.toBeNull()
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it('is still all or nothing: a Polar it could not read fails the archive, not one race', async () => {
+    const { readPolarVersion } = jest.requireMock('@/services/boat/readPolarVersions')
+    readPolarVersion.mockResolvedValueOnce(null)
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
+    pages.open()
+
+    await expect(readAnalysisArchive(given)).resolves.toBeNull()
+    consoleError.mockRestore()
   })
 })

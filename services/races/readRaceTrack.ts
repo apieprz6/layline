@@ -20,6 +20,7 @@
  * v2 forever, including after v5 lands.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { analysisRows, analysisRowsWithin } from '@/services/analysis/countable'
 import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { racePolarPlot } from '@/services/analysis/polar-plot'
@@ -120,11 +121,12 @@ function withSailAgreement(
  */
 async function sailChart(
   chartVersionId: string | null,
-  annotations: RaceAnnotations
+  annotations: RaceAnnotations,
+  client: SupabaseClient
 ): Promise<SailChartContext | null> {
   if (chartVersionId === null) return null
 
-  const chart = await readCrossoverChartVersion(chartVersionId)
+  const chart = await readCrossoverChartVersion(chartVersionId, client)
 
   if (chart === null) {
     console.error(
@@ -154,9 +156,14 @@ export async function readRaceTrack(
   /** What the sailor said, to be drawn where they said it happened and compared with the chart. */
   annotations: RaceAnnotations,
   /** The **Crossover Chart Version** the Race holds, which owns the one sail vocabulary. */
-  crossoverChartVersionId: string | null
+  crossoverChartVersionId: string | null,
+  /**
+   * The client the race page read as, so the Polar and the chart are read as the same user.
+   * Required, so no caller can fall back to the cookie client part-way through one race.
+   */
+  client: SupabaseClient
 ): Promise<RaceTrack> {
-  const chart = await sailChart(crossoverChartVersionId, annotations)
+  const chart = await sailChart(crossoverChartVersionId, annotations, client)
   const drawable = withSailAgreement(trackRows(rows, quality, window), chart)
   const placed = { annotations: testimony(annotations) }
 
@@ -170,7 +177,7 @@ export async function readRaceTrack(
     }
   }
 
-  const polar = await readPolarVersion(polarVersionId)
+  const polar = await readPolarVersion(polarVersionId, client)
 
   if (polar === null) {
     // Logged by the reader. Not a 404 for the whole page: the track, the coverage and the Row

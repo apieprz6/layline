@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
 import type { Boat, BoatSetup, BoatSetupRow, CurrentBoatSetupVersion } from '@/types'
@@ -37,12 +38,16 @@ type ArtifactRow = Pick<BoatSetupRow, 'kind'> & { current: CurrentBoatSetupVersi
  * or invent a name for it, and the screen's whole header is the boat's identity —
  * so a failed read is reported to the sailor as a failed read, not as a boat with
  * a blank name.
+ *
+ * @param client The client to read as. Omit it and the read builds the cookie
+ *   client, as every screen wants; the MCP server passes the one it built from
+ *   its bearer token.
  */
-export async function readBoatSetup(): Promise<BoatSetup | null> {
-  let supabase: Awaited<ReturnType<typeof createClient>>
+export async function readBoatSetup(client?: SupabaseClient): Promise<BoatSetup | null> {
+  let supabase: SupabaseClient
 
   try {
-    supabase = await createClient()
+    supabase = client ?? (await createClient())
   } catch (thrown: unknown) {
     // A checkout with no `.env.local`, or a preview deployment never given the
     // keys. Nobody is signed in on such a deployment either, so this path is

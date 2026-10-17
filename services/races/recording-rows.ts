@@ -12,7 +12,7 @@
  * sailor said about it (ADR 0010, and its Amendment 1).
  */
 
-import type { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QualityAssessableRow } from '@/services/recordings/row-quality'
 
 /**
@@ -80,7 +80,7 @@ function recordedText(value: unknown, column: string, rowIndex: number): string 
  * `select` is the only thing that varies, and each caller shapes its own rows from what comes back.
  */
 async function readRecordingPages(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   recordingId: string,
   rowCount: number,
   select: string
@@ -174,7 +174,7 @@ function shapeRows<Row>(
  * amend flow draws the same rows as charts so a sailor can move the window against them.
  */
 export async function readRecordingRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   recordingId: string,
   rowCount: number
 ): Promise<RecordedRow[] | null> {
@@ -208,7 +208,7 @@ export const QUALITY_ROW_SELECT =
  * the wind channels the race's own page needs.
  */
 export async function readRecordingQualityRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   recordingId: string,
   rowCount: number
 ): Promise<QualityAssessableRow[] | null> {
@@ -231,7 +231,7 @@ export async function readRecordingQualityRows(
  * thousand rows of them out of the database to look at a timestamp is a cost with nothing bought.
  */
 export async function readRecordingRowTimes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   recordingId: string,
   rowCount: number
 ): Promise<string[] | null> {
