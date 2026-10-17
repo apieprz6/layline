@@ -208,7 +208,7 @@ export const QUALITY_ROW_SELECT =
  * the wind channels the race's own page needs.
  */
 export async function readRecordingQualityRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   recordingId: string,
   rowCount: number
 ): Promise<QualityAssessableRow[] | null> {
