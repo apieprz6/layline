@@ -45,8 +45,8 @@ import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import { ASYMMETRY_SOLID_PAIRS } from '@/services/analysis/coverage-verdict'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import {
-  NO_FIGURE_NOTES,
   fillerAnchoredShare,
+  noFigureNote,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
@@ -93,7 +93,7 @@ function PerformanceTile({ track }: { track: RaceTrack }): ReactElement {
     return (
       <Tile title="Polar & VMG efficiency" testId="race-performance">
         <Absent>
-          {NO_FIGURE_NOTES[track.scoring === 'polar-unreadable' ? 'polar-unreadable' : 'no-polar-version']}
+          {noFigureNote(track.scoring)}
         </Absent>
       </Tile>
     )

@@ -1,14 +1,20 @@
 /**
- * The race tools' answers, pinned to what the race page prints for the same Race.
+ * The race tools' answers, held equal to what the race screens state for the same Race.
  *
- * The Race is read the way its page reads it — `readRace` over a caller's client, stubbed at the
- * table (`archive-client.ts`) — and the page's own tiles are rendered from that same read. The
- * contract ADR 0042 sets is that equality: a figure Claude is handed is the figure on the screen.
+ * Parity, not literals (ADR 0042, *A tool inherits every rule and owns none*). Each test runs the
+ * screen's own data path over one fixture — `readRace` or the analysis archive over a caller's
+ * client, stubbed at the table (`archive-client.ts`) — renders or reads what the screen states
+ * from it, and asserts the tool says the same. A changed rule then moves both sides together,
+ * and a tool that grew its own copy of one would come apart from the screen here. The figures
+ * themselves are pinned where they already are: in the suites for each rule, and against the
+ * owner's archive.
  */
 
 import { render, screen, within } from '@testing-library/react'
 import CoverageReadout from '@/components/race/CoverageReadout'
 import RaceBreakdown from '@/components/race/RaceBreakdown'
+import { coverageLedger } from '@/services/analysis/coverage-ledger'
+import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { readRace } from '@/services/races/readRace'
 import { readRaces } from '@/services/races/readRaces'
@@ -21,7 +27,6 @@ import {
   OLDER_RACE_ID,
   archiveClient,
   fixtureArchive,
-  fixtureStamp,
 } from './archive-client'
 
 jest.mock('@/services/boat/readPolarVersions', () => ({
@@ -34,15 +39,21 @@ jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
   readCrossoverChartScreen: async () => null,
 }))
 
-async function fixtureRace(): Promise<RaceDetail> {
-  const race = await readRace(FIXTURE_RACE_ID, archiveClient(fixtureArchive()).client)
-  if (race === null) throw new Error('the fixture Race did not read')
+/** A Race as its page reads it. */
+async function pageRead(raceId: string): Promise<RaceDetail> {
+  const race = await readRace(raceId, archiveClient(fixtureArchive()).client)
+  if (race === null) throw new Error(`the fixture Race ${raceId} did not read`)
   return race
 }
 
+/** The value the coverage readout prints beside `label`, or null where it prints no such row. */
+function printed(label: string): string | null {
+  return screen.queryByText(label)?.nextElementSibling?.textContent ?? null
+}
+
 describe('raceSummary', () => {
-  it('prints the race page’s own Polar and VMG efficiency, each with its Filler-Anchored share', async () => {
-    const race = await fixtureRace()
+  it('states the race page’s own Polar and VMG efficiency, each with its Filler-Anchored share', async () => {
+    const race = await pageRead(FIXTURE_RACE_ID)
     const summary = raceSummary(race)
 
     render(
@@ -56,136 +67,165 @@ describe('raceSummary', () => {
     if (summary.performance.scoring !== 'polar') throw new Error('the fixture Race was not scored')
     const { polarEfficiency, vmgEfficiency } = summary.performance
 
-    const polarTile = screen.getByTestId('race-polar-efficiency')
-    expect(polarEfficiency.percent).not.toBeNull()
-    expect(within(polarTile).getByText(polarEfficiency.percent!)).toBeTruthy()
-    // Half the scored rows sail at 45°, which the ramp answers out of its own filler.
+    expect(
+      within(screen.getByTestId('race-polar-efficiency')).getByText(polarEfficiency.percent!)
+    ).toBeTruthy()
+    expect(
+      within(screen.getByTestId('race-vmg-efficiency')).getByText(vmgEfficiency.percent!)
+    ).toBeTruthy()
+
+    // The page flags a figure exactly where its share is above zero, with the share the tool carries.
+    for (const [testId, share] of [
+      ['race-polar-efficiency', polarEfficiency.fillerAnchoredShare],
+      ['race-vmg-efficiency', vmgEfficiency.fillerAnchoredShare],
+    ] as const) {
+      const flag = screen.queryByTestId(`${testId}-filler-anchored`)
+      if (share !== null && share > 0) {
+        expect(flag?.textContent).toContain(`${Math.round(share * 100)}%`)
+      } else {
+        expect(flag).toBeNull()
+      }
+    }
+    // The fixture sails half its scored rows at an angle the Polar answers from its own filler, so
+    // the flagged branch is the one exercised for Polar Efficiency.
     expect(polarEfficiency.fillerAnchoredShare).toBeGreaterThan(0)
-    expect(polarEfficiency.fillerAnchoredShare).toBeLessThan(1)
-    expect(screen.getByTestId('race-polar-efficiency-filler-anchored').textContent).toContain(
-      `${Math.round(polarEfficiency.fillerAnchoredShare! * 100)}%`
+  })
+
+  it.each([
+    ['a Race with a Dropout', FIXTURE_RACE_ID],
+    ['a Race whose recording stops before the finish', OLDER_RACE_ID],
+  ])('states coverage in time as the coverage readout prints it, on %s', async (_, raceId) => {
+    const race = await pageRead(raceId)
+    const { coverage } = raceSummary(race)
+
+    render(<CoverageReadout coverage={race.coverage} />)
+
+    expect(printed('Window')).toBe(coverage.window.label)
+    expect(printed('Recorded')).toBe(coverage.recorded.label)
+    // The readout prints the last three only where they are not zero.
+    expect(printed('Feed dropped')).toBe(coverage.frozen.seconds > 0 ? coverage.frozen.label : null)
+    expect(printed('Before the first row')).toBe(
+      coverage.beforeFirstRow.seconds > 0 ? coverage.beforeFirstRow.label : null
     )
-
-    const vmgTile = screen.getByTestId('race-vmg-efficiency')
-    expect(within(vmgTile).getByText(vmgEfficiency.percent!)).toBeTruthy()
-    expect(vmgEfficiency.fillerAnchoredShare).not.toBeNull()
+    expect(printed('After the last row')).toBe(
+      coverage.afterLastRow.seconds > 0 ? coverage.afterLastRow.label : null
+    )
   })
 
-  it('states coverage in time, in the coverage readout’s own words', async () => {
-    // The older Race: a two-minute window whose recording stops a minute in, so each figure
-    // the readout prints is a different one.
-    const race = await readRace(OLDER_RACE_ID, archiveClient(fixtureArchive()).client)
-    const summary = raceSummary(race!)
+  it('exercises the readout’s conditional rows between the two Races', async () => {
+    // So the parity above is not vacuous: between them the fixtures print a Dropout and a gap.
+    const [withDropout, cutShort] = await Promise.all([
+      pageRead(FIXTURE_RACE_ID),
+      pageRead(OLDER_RACE_ID),
+    ])
 
-    render(<CoverageReadout coverage={race!.coverage} />)
-    const printed = (label: string): string | null =>
-      screen.getByText(label).nextElementSibling?.textContent ?? null
+    expect(raceSummary(withDropout).coverage.frozen.seconds).toBeGreaterThan(0)
+    expect(raceSummary(cutShort).coverage.afterLastRow.seconds).toBeGreaterThan(0)
+  })
 
-    expect(summary.coverage).toEqual({
-      window: { seconds: 120, label: '2m' },
-      recorded: { seconds: 60, label: '1m' },
-      frozen: { seconds: 0, label: '0s' },
-      beforeFirstRow: { seconds: 0, label: '0s' },
-      afterLastRow: { seconds: 60, label: '1m' },
+  it('states the Boat Setup the Race froze, as the page reads it', async () => {
+    const race = await pageRead(FIXTURE_RACE_ID)
+    const { boatSetup } = raceSummary(race)
+
+    expect(boatSetup.polar).toEqual({
+      versionNumber: race.boat_setup.polar!.version_number,
+      effectiveFrom: race.boat_setup.polar!.effective_from,
     })
-    expect(printed('Window')).toBe(summary.coverage.window.label)
-    expect(printed('Recorded')).toBe(summary.coverage.recorded.label)
-    expect(printed('After the last row')).toBe(summary.coverage.afterLastRow.label)
+    // Not recorded stays not recorded, never the boat's current Version.
+    expect(boatSetup.crossoverChart).toBeNull()
+    expect(boatSetup.rigTune).toBeNull()
+    expect(boatSetup.instrumentCalibration).toBeNull()
+    expect(boatSetup.windBand).toBeNull()
+    expect(boatSetup.loggedTwsMeanKnots).toBe(race.boat_setup.logged_tws_mean)
   })
 
-  it('states the Boat Setup the Race froze, by the Versions it names and never the newest', async () => {
-    const summary = raceSummary(await fixtureRace())
+  it('states the Maneuvers the page’s read detected inside the window', async () => {
+    const race = await pageRead(FIXTURE_RACE_ID)
+    const { maneuvers } = raceSummary(race)
 
-    expect(summary.boatSetup).toEqual({
-      polar: { versionNumber: 1, effectiveFrom: '2026-03-01' },
-      crossoverChart: null,
-      rigTune: null,
-      instrumentCalibration: null,
-      windBand: null,
-      loggedTwsMeanKnots: 10,
-    })
+    expect(maneuvers.flips).toEqual(
+      race.maneuvers.map((flip) => ({
+        at: flip.row_time,
+        maneuver: flip.maneuver,
+        twaBefore: flip.twa_before,
+        twaAfter: flip.twa_after,
+      }))
+    )
+    expect(maneuvers.counts.tack).toBe(
+      race.maneuvers.filter((flip) => flip.maneuver === 'tack').length
+    )
+    expect(maneuvers.flips.length).toBeGreaterThan(0)
   })
 
-  it('states the Maneuvers inside the window', async () => {
-    const summary = raceSummary(await fixtureRace())
+  it('names the Race by what the sailor wrote, and its day as the archive files it', async () => {
+    const race = await pageRead(FIXTURE_RACE_ID)
+    const archive = await readAnalysisArchive(archiveClient(fixtureArchive()).client)
+    const summary = raceSummary(race)
 
-    expect(summary.maneuvers).toMatchObject({
-      counts: { tack: 1, gybe: 0, rounding: 0 },
-      flips: [{ at: fixtureStamp(10), maneuver: 'tack', twaBefore: '45', twaAfter: '-55' }],
-    })
-  })
-
-  it('names the Race by what the sailor wrote and the day it was sailed', async () => {
-    const summary = raceSummary(await fixtureRace())
-
-    expect(summary.race).toEqual({
-      id: FIXTURE_RACE_ID,
-      title: 'Saturday Lake Series 4',
-      day: '2026-08-22',
-      weekday: 'Saturday',
-      windowStart: fixtureStamp(2),
-      windowFinish: fixtureStamp(17),
-      recordingFilename: '08-22-26-lake-series.csv',
+    expect(summary.race).toMatchObject({
+      id: race.id,
+      title: race.title,
+      windowStart: race.window_start,
+      windowFinish: race.window_finish,
+      recordingFilename: race.recording.filename,
+      day: archive!.races.find((entry) => entry.id === race.id)!.day,
     })
   })
 
   it('hands over aggregates and never a Recording Row', async () => {
-    const text = JSON.stringify(raceSummary(await fixtureRace()))
+    const text = JSON.stringify(raceSummary(await pageRead(FIXTURE_RACE_ID)))
 
     expect(text).not.toContain('row_index')
     expect(text).not.toContain('latitude')
     expect(text).not.toMatch(/rowCount|row_count/)
   })
 
-  it('says why there is no efficiency figure on a Race that records no Polar', async () => {
-    const race = await readRace(OLDER_RACE_ID, archiveClient(fixtureArchive()).client)
-    const summary = raceSummary(race!)
+  it('says why there is no efficiency figure in the page’s own words', async () => {
+    const race = await pageRead(OLDER_RACE_ID)
+    const summary = raceSummary(race)
 
-    expect(summary.performance).toEqual({
-      scoring: 'no-polar-version',
-      note: 'This race records no Polar Version, so neither figure can be computed.',
-    })
+    render(
+      <RaceBreakdown
+        track={race.track}
+        sailChart={{ ok: false, reason: 'no-chart-version' }}
+        instruments={race.instruments}
+      />
+    )
+
+    if (summary.performance.scoring === 'polar') throw new Error('the older Race names no Polar')
+    expect(summary.performance.scoring).toBe('no-polar-version')
+    expect(screen.getByTestId('race-performance').textContent).toContain(summary.performance.note)
   })
 })
 
 describe('raceList', () => {
-  it('lists every Race newest first, with its window and how much of it was recorded', async () => {
+  it('lists every Race the archive lists, newest first, with the time the screens state for it', async () => {
     const { client } = archiveClient(fixtureArchive())
     const [races, archive] = await Promise.all([readRaces(client), readAnalysisArchive(client)])
 
     const list = raceList(races, archive)
+    if (!list.ok) throw new Error('the fixture archive did not list')
 
-    expect(list).toEqual({
-      ok: true,
-      races: [
-        {
-          id: FIXTURE_RACE_ID,
-          title: 'Saturday Lake Series 4',
-          day: '2026-08-22',
-          weekday: 'Saturday',
-          windowStart: fixtureStamp(2),
-          windowFinish: fixtureStamp(17),
-          window: { seconds: 450, label: '7m 30s' },
-          logged: { seconds: 450, label: '7m 30s' },
-          countable: { seconds: expect.any(Number), label: expect.any(String) },
-        },
-        {
-          id: OLDER_RACE_ID,
-          title: null,
-          day: '2025-07-09',
-          weekday: 'Wednesday',
-          windowStart: '2025-07-09T19:00:00',
-          windowFinish: '2025-07-09T19:02:00',
-          // The recording stops a minute in: half the window is all there is.
-          window: { seconds: 120, label: '2m' },
-          logged: { seconds: 60, label: '1m' },
-          countable: { seconds: 60, label: '1m' },
-        },
-      ],
-    })
-    // A tack's Window is not Countable, so the scored share is less than what was logged.
-    if (!list.ok) throw new Error('unreachable')
-    expect(list.races[0].countable.seconds).toBeLessThan(450)
+    expect(list.races.map((race) => race.id)).toEqual(races.map((race) => race.id))
+    for (const [index, entry] of list.races.entries()) {
+      expect(entry).toMatchObject({
+        title: races[index].title,
+        windowStart: races[index].window_start,
+      })
+      expect(entry.window.seconds).toBe(races[index].window_seconds)
+      // The analysis screens' own Race list figure for the same Race.
+      expect(entry.logged.seconds).toBe(
+        archive!.races.find((race) => race.id === entry.id)!.seconds
+      )
+    }
+
+    // Each Race's countable time is its share of the archive's own ledger, and they add up to it.
+    const whole = coverageLedger(archive!.rows, EMPTY_FILTER, [])
+    expect(list.races.reduce((sum, race) => sum + race.countable.seconds, 0)).toBe(
+      whole.countable_seconds
+    )
+    // A tack's Window and a Dropout are not Countable, so the fixture Race's figures read less.
+    expect(list.races[0].countable.seconds).toBeLessThan(list.races[0].logged.seconds)
   })
 
   it('refuses rather than answer over an archive that could not be read', async () => {

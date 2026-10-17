@@ -67,11 +67,17 @@ export function getPolarPerformanceData(
   }
 }
 
-/** Why a Race has no Polar or VMG Efficiency, in the words its page and the MCP Server both use. */
-export const NO_FIGURE_NOTES = {
-  'no-polar-version': 'This race records no Polar Version, so neither figure can be computed.',
-  'polar-unreadable': 'The Polar this race names could not be read, so neither figure can be computed.',
-} as const
+/**
+ * Why a Race has no Polar or VMG Efficiency, in the words its page and the MCP Server both use.
+ *
+ * Takes the track's `scoring` whole, so the one place that decides which sentence a Race gets is
+ * here rather than a ternary in each caller.
+ */
+export function noFigureNote(scoring: 'no-polar-version' | 'polar-unreadable' | 'polar'): string {
+  return scoring === 'polar-unreadable'
+    ? 'The Polar this race names could not be read, so neither figure can be computed.'
+    : 'This race records no Polar Version, so neither figure can be computed.'
+}
 
 /**
  * How much of **Polar Efficiency** rests on the Polar's own filler, or null where no row was summed.

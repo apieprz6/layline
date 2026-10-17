@@ -109,13 +109,13 @@ export function fixtureStamp(index: number): string {
 }
 
 /**
- * Twenty rows of one Race: starboard at 55° and 45°, a tack at row 10, then port the same way.
- * The window is rows 2 to 17, so 7m 30s long, with a row at each end.
+ * Twenty rows of one Race: starboard at 55° and 45°, a tack at row 10, then port the same way,
+ * with a Dropout at rows 13 to 15, which repeat row 12's fix verbatim. The window is rows 2 to 17.
  *
  * Every measurement a string, as the `::text` cast delivers it.
  */
 function recordingRows(): Row[] {
-  return Array.from({ length: 20 }, (_, index) => {
+  const rows = Array.from({ length: 20 }, (_, index) => {
     const side = index < 10 ? 1 : -1
     const angle = index % 2 === 0 ? 55 : 45
     return {
@@ -133,6 +133,13 @@ function recordingRows(): Row[] {
       awa_calc: String(side * (angle - 15)),
     }
   })
+
+  for (const index of [13, 14, 15]) {
+    const { latitude, longitude, cog, sog } = rows[12]
+    rows[index] = { ...rows[index], latitude, longitude, cog, sog }
+  }
+
+  return rows
 }
 
 export const FIXTURE_RACE_ID = '7b0e7d3c-3a6f-4d64-9a51-8f2f0a7f1c01'

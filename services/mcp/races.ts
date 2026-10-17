@@ -1,20 +1,18 @@
 import { weekdayOf } from '@/lib/utils/calendarDate'
-import { coverageLedger } from '@/services/analysis/coverage-ledger'
+import { raceCoverageLedgers } from '@/services/analysis/coverage-ledger'
 import { efficiencyPercent } from '@/services/analysis/figures'
-import { EMPTY_FILTER } from '@/services/analysis/filter'
-import { MANEUVER_DETECTOR_VERSION } from '@/services/analysis/maneuvers'
+import { MANEUVER_DETECTOR_VERSION, maneuverCounts } from '@/services/analysis/maneuvers'
 import {
-  NO_FIGURE_NOTES,
   fillerAnchoredShare,
+  noFigureNote,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import type { AnalysisArchive } from '@/services/analysis/readArchive'
 import { describeDuration } from '@/services/recordings/coverage'
+import { wallClockDate } from '@/services/recordings/wall-clock'
 import type {
   BoatSetupVersionRef,
-  Maneuver,
-  MatchableRow,
   McpDuration,
   McpRaceIdentity,
   McpRaceListAnswer,
@@ -27,13 +25,13 @@ import type {
 } from '@/types'
 
 /**
- * What identifies a Race, from its own window. The day is sliced from the stamp and the weekday is
- * the calendar's for that date: no `Date` is built, since the stamp carries no zone (ADR 0008).
+ * What identifies a Race, from its own window: the day the archive files it under, and the
+ * calendar's weekday for that day. No `Date` is built, since the stamp carries no zone (ADR 0008).
  */
 function identity(
   race: Pick<RaceListEntry, 'id' | 'title' | 'window_start' | 'window_finish'>
 ): McpRaceIdentity {
-  const day = race.window_start.slice(0, 10)
+  const day = wallClockDate(race.window_start)
 
   return {
     id: race.id,
@@ -58,8 +56,8 @@ function duration(seconds: number): McpDuration {
  * so the archive is the witness: if the two disagree about which Races exist, one of them read
  * less than the whole, and a list missing a Race is never an answer (ADR 0026).
  *
- * The time is the **Coverage Ledger**'s, over one Race's rows with no filter, so it is the figure
- * the analysis screens state for the same rows.
+ * The time is each Race's own **Coverage Ledger**, so it is the figure the analysis screens state
+ * for the same rows. Nothing here sums or classifies a row (ADR 0042).
  */
 export function raceList(
   races: readonly RaceListEntry[],
@@ -75,23 +73,19 @@ export function raceList(
     return { ok: false }
   }
 
-  const byRace = new Map<string, MatchableRow[]>()
-  for (const row of archive.rows) {
-    const rows = byRace.get(row.race_id) ?? []
-    rows.push(row)
-    byRace.set(row.race_id, rows)
-  }
+  const ledgers = raceCoverageLedgers(archive.rows)
 
   return {
     ok: true,
     races: races.map((race) => {
-      const ledger = coverageLedger(byRace.get(race.id) ?? [], EMPTY_FILTER, [])
+      // No ledger is a Race with no in-window row: nothing logged, which is what it states.
+      const ledger = ledgers.get(race.id)
 
       return {
         ...identity(race),
         window: duration(race.window_seconds),
-        logged: duration(ledger.total_seconds),
-        countable: duration(ledger.countable_seconds),
+        logged: duration(ledger?.total_seconds ?? 0),
+        countable: duration(ledger?.countable_seconds ?? 0),
       }
     }),
   }
@@ -108,8 +102,10 @@ function versionRef(ref: BoatSetupVersionRef | null): McpVersionRef | null {
  */
 function performance(track: RaceTrack): McpRacePerformance {
   if (track.plot === null) {
-    const scoring = track.scoring === 'polar-unreadable' ? 'polar-unreadable' : 'no-polar-version'
-    return { scoring, note: NO_FIGURE_NOTES[scoring] }
+    return {
+      scoring: track.scoring === 'polar-unreadable' ? 'polar-unreadable' : 'no-polar-version',
+      note: noFigureNote(track.scoring),
+    }
   }
 
   const aggregate = track.plot.performance
@@ -136,13 +132,12 @@ function performance(track: RaceTrack): McpRacePerformance {
  * One Race's page as aggregates, for `race_summary`.
  *
  * Pure, and over `readRace`'s own answer, so every figure is one the page derives from the same
- * read: nothing is re-scored, and no Recording Row is passed on (ADR 0042). The row count the
+ * read: nothing is re-scored, counted or classified here, and no Recording Row is passed on (ADR
+ * 0042). The row count the
  * coverage carries for its own seams is left behind (ADR 0037).
  */
 export function raceSummary(race: RaceDetail): McpRaceSummary {
   const { coverage, boat_setup: setup } = race
-  const counts: Record<Maneuver, number> = { tack: 0, gybe: 0, rounding: 0 }
-  for (const flip of race.maneuvers) counts[flip.maneuver] += 1
 
   return {
     race: { ...identity(race), recordingFilename: race.recording.filename },
@@ -167,7 +162,7 @@ export function raceSummary(race: RaceDetail): McpRaceSummary {
     findings: race.findings.map((finding) => finding.message),
     maneuvers: {
       detectorVersion: MANEUVER_DETECTOR_VERSION,
-      counts,
+      counts: maneuverCounts(race.maneuvers),
       flips: race.maneuvers.map((flip) => ({
         at: flip.row_time,
         maneuver: flip.maneuver,
