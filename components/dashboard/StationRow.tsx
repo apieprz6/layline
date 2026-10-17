@@ -8,6 +8,7 @@ import { getStationInfo, getStatusColor } from '@/lib/config/stations'
 import { getWindCondition, getWindColorHex } from '@/lib/utils/wind'
 import { spacing } from '@/lib/utils/design'
 import { markInternalNavigation } from '@/lib/utils/navigation'
+import { formatRelativeTime } from '@/lib/utils/timeFormatting'
 
 interface StationRowProps {
   buoyId: string
@@ -17,24 +18,6 @@ interface StationRowProps {
   status: DataSourceStatus
   timestamp?: string
   onClick?: () => void
-}
-
-/**
- * Format timestamp to relative time string (e.g., "2m ago", "1h ago")
- */
-function formatRelativeTime(timestamp: string, currentTime: number): string {
-  const then = new Date(timestamp)
-  const diffMs = currentTime - then.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-
-  const diffDays = Math.floor(diffHr / 24)
-  return `${diffDays}d ago`
 }
 
 /**
