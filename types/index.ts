@@ -3602,3 +3602,52 @@ export interface ProtectedResourceMetadata {
 export interface CurrentConditionsAnswer {
   stations: [McpStationReading, McpStationReading | McpStationOutOfSeason]
 }
+
+// The Analysis Filter as an MCP tool's argument, shared by every tool that narrows the archive
+// (ADR 0042, LAY-185). Keys are the dimensions the tool offers, values the screen's own bucket ids;
+// a dimension absent or empty is untouched, Not recorded included. `dayRange` is the `when`
+// dimension's span of days, offered only where `when` is.
+export type McpAnalysisFilterArgument = Partial<Record<AnalysisDimension, string[]>> & {
+  dayRange?: AnalysisDayRange
+}
+
+// One season figure as the Polar performance screen prints it: the ratio, the screen's own
+// rounding of it, and its Filler-Anchored share flagged beside it, never in its place (ADR 0036).
+// `ratio` null means nothing in the match could be scored; `note` then says so in words.
+export interface McpEfficiencyFigure {
+  ratio: number | null
+  percent: string | null
+  fillerAnchoredShare: number | null
+  fillerAnchored: boolean
+  note?: string
+}
+
+// The Coverage Ledger in time, never in rows (ADR 0037). `scoredSeconds` is what both figures
+// are over; `excluded` says what matched and was left out of them, and why. `statement` is the
+// screen's own wording, line by line.
+export interface McpCoverageLedger {
+  matchedSeconds: number
+  totalSeconds: number
+  matchedRaces: number
+  totalRaces: number
+  countableSeconds: number
+  scoredSeconds: number
+  excluded: { reason: string; seconds: number }[]
+  notRecorded: { dimension: AnalysisDimension; missing: string; seconds: number; share: number | null }[]
+  statement: string[]
+}
+
+// One dimension a tool offers, with every bucket it can be narrowed to, empty ones included.
+export interface McpAnalysisDimension {
+  dimension: AnalysisDimension
+  label: string
+  buckets: { id: string; label: string; footnote?: string }[]
+}
+
+export interface PolarPerformanceAnswer {
+  filter: McpAnalysisFilterArgument
+  polarEfficiency: McpEfficiencyFigure
+  vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+  coverageLedger: McpCoverageLedger
+  dimensions: McpAnalysisDimension[]
+}

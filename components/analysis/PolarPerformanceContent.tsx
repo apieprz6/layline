@@ -16,6 +16,7 @@ import {
   setRecordedRows,
 } from '@/services/analysis/filter'
 import {
+  NOTHING_SCORED,
   fillerAnchoredShare,
   getPolarPerformanceData,
   vmgFillerAnchoredShare,
@@ -152,6 +153,3 @@ export default function PolarPerformanceContent({
     </div>
   )
 }
-
-/** Where a figure has no number: nothing in the match could be scored. */
-const NOTHING_SCORED = 'Nothing in this match could be scored against the Polar.'

@@ -39,8 +39,11 @@ above happen in your browser.
 - **Read only.** The connector cannot upload, amend or delete anything. Uploading a Race and
   editing Boat Setup stay in the app.
 - **As you.** Claude reads what your own account can read in Layline, and nothing more.
-- **Today: Current Conditions.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the dashboard
-  shows them. More tools (forecasts, Races, Polar performance) are on the way.
+- **Current Conditions.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the dashboard
+  shows them.
+- **Polar performance.** The season's Polar Efficiency and VMG Efficiency, narrowed the way the
+  Polar performance screen's filter narrows them: point of sail, sail used, sea state, time of
+  day and when. More tools (forecasts, Races, Sail Selection) are on the way.
 
 ## Reading the answers
 
@@ -51,6 +54,14 @@ above happen in your browser.
   the water, not that its reading is missing.
 - **Every reading has an age.** Claude is told each station's status (online, recent, stale,
   offline) and how old the reading is. If it isn't fresh, expect Claude to say so.
+
+- **Polar performance has no wind-speed filter**, because the screen has none: there, the Polar
+  Plot owns the wind axis. Ask about upwind with the #1 and Claude answers across every wind
+  speed, and should say so.
+- **Every season figure says how much sailing is behind it**, what was left out (frozen,
+  low-speed or mid-maneuver sailing) and how much of it nobody annotated, as the screen's Coverage
+  Ledger does. A figure partly compared against Polar cells the Polar manufactured is still given,
+  with that share flagged.
 
 ## Disconnecting
 

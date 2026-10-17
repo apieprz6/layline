@@ -50,6 +50,9 @@ export interface PolarPerformance {
   overall: EfficiencyAggregate
 }
 
+/** Where a figure has no number: nothing in the match could be scored. */
+export const NOTHING_SCORED = 'Nothing in this match could be scored against the Polar.'
+
 /**
  * The screen's figures over one filter.
  *

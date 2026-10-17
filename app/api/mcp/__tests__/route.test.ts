@@ -6,8 +6,13 @@ import { POST } from '../route'
 import { GET as protectedResource } from '@/app/.well-known/oauth-protected-resource/api/mcp/route'
 import { authenticateMcpRequest } from '@/lib/mcp/auth'
 import { clearHistoryCache, fetchCHII2 } from '@/services/buoys/ndbc'
+import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
 
 jest.mock('@/lib/mcp/auth', () => ({ authenticateMcpRequest: jest.fn() }))
+jest.mock('@/services/analysis/readArchive', () => ({ readAnalysisArchive: jest.fn() }))
+
+const readArchive = readAnalysisArchive as jest.MockedFunction<typeof readAnalysisArchive>
 
 const authenticate = authenticateMcpRequest as jest.MockedFunction<typeof authenticateMcpRequest>
 
@@ -87,21 +92,47 @@ describe('/api/mcp without a token', () => {
   })
 })
 
+/** The caller's own client, which every archive read must go out on (ADR 0042). */
+const CALLERS_CLIENT = { caller: 'crew' } as never
+
+function call(name: string, args: object): Request {
+  return rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: args } }, 'Bearer t')
+}
+
 describe('/api/mcp with a crew token', () => {
   beforeEach(() => {
     authenticate.mockResolvedValue({
-      supabase: {} as never,
+      supabase: CALLERS_CLIENT,
       authInfo: { token: 't', clientId: 'claude', scopes: [] },
     })
   })
 
-  it('lists current_conditions as a read-only tool', async () => {
+  it('lists its tools as read-only', async () => {
     const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual(['current_conditions'])
-    expect(body.result.tools[0].annotations).toMatchObject({ readOnlyHint: true })
+    expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
+      'current_conditions',
+      'polar_performance',
+    ])
+    for (const tool of body.result.tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true })
+  })
+
+  it('offers polar_performance the screen’s five dimensions, and no wind speed', async () => {
+    const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
+    const tool = (await response.json()).result.tools.find(
+      (t: { name: string }) => t.name === 'polar_performance'
+    )
+
+    expect(Object.keys(tool.inputSchema.properties.filter.properties)).toEqual([
+      'pos',
+      'sail',
+      'sea',
+      'time',
+      'when',
+      'dayRange',
+    ])
   })
 
   it('answers current_conditions with the figure the dashboard prints for CHII2', async () => {
@@ -124,5 +155,41 @@ describe('/api/mcp with a crew token', () => {
     expect(chii2.wind.speedKnots).toBe(15)
     expect(chii2).toMatchObject({ dataStatus: 'online', anemometerHeightFeet: 85, staleness: { label: '10m ago' } })
     expect(JSON.parse(body.result.content[0].text)).toEqual(body.result.structuredContent)
+  })
+
+  it('answers polar_performance through the caller’s own client, narrowed by the filter', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+
+    const response = await POST(call('polar_performance', { filter: { sail: ['Main + Jib 1'] } }))
+    const body = await response.json()
+
+    expect(readArchive).toHaveBeenCalledWith(CALLERS_CLIENT)
+    expect(body.result.isError).toBeFalsy()
+    // The two June rows: 6 and 3 knots against 6 kt targets.
+    expect(body.result.structuredContent.polarEfficiency.percent).toBe('75.0%')
+    expect(body.result.structuredContent.coverageLedger.statement[0]).toBe('1 of 2 races · 2m recorded')
+    expect(JSON.parse(body.result.content[0].text)).toEqual(body.result.structuredContent)
+  })
+
+  it('refuses an unknown bucket with the valid ones, rather than answering a wider match', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+
+    const response = await POST(call('polar_performance', { filter: { wind: ['medium'] } }))
+    const body = await response.json()
+
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toContain('pos, sail, sea, time, when, dayRange')
+    expect(body.result.structuredContent).toBeUndefined()
+  })
+
+  it('makes a failed archive read an error, never a figure over a short archive', async () => {
+    readArchive.mockResolvedValue(null)
+
+    const response = await POST(call('polar_performance', {}))
+    const body = await response.json()
+
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toMatch(/could not be read/)
+    expect(body.result.structuredContent).toBeUndefined()
   })
 })
