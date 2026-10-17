@@ -30,6 +30,7 @@ import {
   racePolarPlot,
   seasonTrace,
   timeNotDrawn,
+  windowReading,
   type PlottableRow,
 } from '@/services/analysis/polar-plot'
 import { polarTargets } from '@/services/analysis/polar-targets'
@@ -366,5 +367,32 @@ describe('one Race', () => {
     expect(plot.performance).toEqual(
       sumEfficiency(racePlottableRows(transcription, { id: 'race-a', polar_version_id: 'polar-1' }, targets))
     )
+  })
+})
+
+describe('windowReading', () => {
+  it('states the window’s time and its own Polar Efficiency, to a tenth', () => {
+    // 5.5 kt against 5 for two minutes, and 4.5 against 5 for two more: 20 of 20 nm-equivalents.
+    const sums = sumEfficiency([
+      row({ sog: 5.5, target: 5, interval_seconds: 120 }),
+      row({ sog: 4.5, target: 5, interval_seconds: 120 }),
+    ])
+
+    expect(windowReading(sums)).toBe('4m of sailing · 100.0% of target')
+  })
+
+  it('states the Filler-Anchored share beside the figure, never instead of it', () => {
+    const sums = sumEfficiency([
+      row({ sog: 6, target: 6, interval_seconds: 60, filler: true }),
+      row({ sog: 6, target: 6, interval_seconds: 60 }),
+      row({ sog: 6, target: 6, interval_seconds: 60 }),
+      row({ sog: 6, target: 6, interval_seconds: 60 }),
+    ])
+
+    expect(windowReading(sums)).toBe('4m of sailing · 100.0% of target · 25% filler-anchored')
+  })
+
+  it('says nothing was sailed where the window holds no scored sailing', () => {
+    expect(windowReading(sumEfficiency([]))).toBe('nothing sailed in this window')
   })
 })

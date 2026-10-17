@@ -3667,8 +3667,10 @@ export interface McpPolarPlotPatch {
   fillerAnchored: boolean
 }
 
-// What one position of the wind window holds. `highKnots` is exclusive. The figures are over the
-// window's own sailing; `notDrawn` is what the window could hold and draws nowhere, and why.
+// What one position of the wind window holds. `highKnots` is exclusive. `polarEfficiency` is over
+// the window's own sailing and `reading` is the line the screen prints under the window's knots;
+// no VMG figure, because the screen states none for a window. `notDrawn` is what the window could
+// hold and draws nowhere, and why.
 export interface McpWindWindow {
   centreKnots: number
   widthKnots: number
@@ -3676,7 +3678,7 @@ export interface McpWindWindow {
   highKnots: number
   polarColumnsInPlay: number[]
   polarEfficiency: McpEfficiencyFigure
-  vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+  reading: string
   notDrawn: { seconds: number; parts: { reason: string; seconds: number }[] }
   patches: McpPolarPlotPatch[]
   note?: string

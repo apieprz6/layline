@@ -21,8 +21,7 @@ import {
 import { countableSentence, gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
 import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions, matchedRows } from '@/services/analysis/filter'
 import { excludedFromFigures, getPolarPerformanceData } from '@/services/analysis/polar-performance'
-import { DEFAULT_FOCUS, focusRange, seasonWindow } from '@/services/analysis/polar-plot'
-import { describeDuration } from '@/services/recordings/coverage'
+import { DEFAULT_FOCUS, focusRange, seasonWindow, windowReading } from '@/services/analysis/polar-plot'
 import type { AnalysisFilter, MatchableRow } from '@/types'
 
 const DIMENSIONS = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, VOCABULARY)
@@ -156,10 +155,10 @@ describe.each(FILTERS)('the wind window over %s', (_name, filter) => {
     expect(screen.getByTestId('polar-plot-window')).toHaveTextContent(
       `${window.lowKnots}–${window.highKnots} kt`
     )
-    if (window.polarEfficiency.scoredSeconds > 0) {
-      expect(screen.getByText(`${describeDuration(window.polarEfficiency.scoredSeconds)} of sailing`)).toBeInTheDocument()
-    } else {
-      expect(screen.getByText(window.note!)).toBeInTheDocument()
+    // The line under the knots: the window's time, its own percent of target and its flag.
+    expect(screen.getByTestId('polar-plot-window-reading')).toHaveTextContent(window.reading)
+    if (window.polarEfficiency.percent !== null) {
+      expect(window.reading).toContain(window.polarEfficiency.percent)
     }
   })
 
@@ -192,7 +191,9 @@ describe.each(FILTERS)('the wind window over %s', (_name, filter) => {
       notDrawn: { seconds: view.undrawn.seconds },
     })
     expect(window.polarEfficiency.ratio).toBe(view.efficiency.polar_efficiency)
-    expect(window.vmgEfficiency.ratio).toBe(view.efficiency.vmg_efficiency)
+    expect(window.reading).toBe(windowReading(view.efficiency))
+    // The screen states no VMG figure for a window, so neither does the tool.
+    expect(window).not.toHaveProperty('vmgEfficiency')
     expect(window.patches.map((patch) => patch.scoredSeconds)).toEqual(
       view.patches.map((patch) => patch.efficiency.elapsed_seconds)
     )

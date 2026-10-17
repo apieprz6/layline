@@ -43,6 +43,7 @@ import {
   plotMoments,
   rimKnots,
   seasonWindow,
+  windowReading,
   type FocusWidth,
 } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
@@ -111,7 +112,7 @@ export default function SeasonPolarPlot({
           onCentre={setCentre}
           width={width}
           onWidth={setWidth}
-          drawnSeconds={drawn}
+          reading={windowReading(view.efficiency)}
         />
 
         {/* The picture and the patch it was asked about, side by side once there is room: the
@@ -176,7 +177,7 @@ function WindFocus({
   onCentre,
   width,
   onWidth,
-  drawnSeconds,
+  reading,
 }: {
   range: { from: number; to: number }
   columns: readonly number[]
@@ -186,7 +187,8 @@ function WindFocus({
   onCentre: (next: number) => void
   width: FocusWidth
   onWidth: (next: FocusWidth) => void
-  drawnSeconds: number
+  /** `windowReading`: the window's time, its own percent of target, and its filler share. */
+  reading: string
 }): ReactElement {
   const { low, high } = focusWindow(centre, width)
   const span = Math.max(1, range.to - range.from)
@@ -200,10 +202,11 @@ function WindFocus({
         >
           {low}–{high} kt
         </strong>
-        <span style={{ ...NOTE_STYLE, fontFamily: 'var(--font-mono)' }}>
-          {drawnSeconds === 0
-            ? 'nothing sailed in this window'
-            : `${describeDuration(drawnSeconds)} of sailing`}
+        <span
+          data-testid="polar-plot-window-reading"
+          style={{ ...NOTE_STYLE, fontFamily: 'var(--font-mono)' }}
+        >
+          {reading}
         </span>
       </div>
 

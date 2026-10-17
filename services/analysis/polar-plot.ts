@@ -24,6 +24,9 @@
  */
 
 import { sumEfficiency } from '@/services/analysis/efficiency'
+import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
+import { describeDuration } from '@/services/recordings/coverage'
 import type { ScorableRow, SummableRow } from '@/services/analysis/efficiency'
 import { measureAndScore } from '@/services/analysis/matchable-rows'
 import type { PolarTargets } from '@/services/analysis/polar-targets'
@@ -291,6 +294,29 @@ export const NO_POLAR_TO_DRAW_AGAINST =
 
 /** Said where the window holds no sailing the Polar could score. */
 export const NOTHING_IN_WINDOW = 'Nothing in this window could be scored against the Polar.'
+
+/**
+ * `1h 12m of sailing · 87.3% of target · 12% filler-anchored` — the line under the window's knots.
+ *
+ * The window's own **Polar Efficiency**: `sumEfficiency` over the sailing inside it, a ratio of
+ * sums like the headline and so printed like it, to a tenth. Over one window's wind, so it answers
+ * "how close to target in this wind" without blending 110% at 4 knots with 50% at 12, which the
+ * headline over every wind cannot. Its Filler-Anchored share is stated beside it, never instead
+ * (ADR 0036). No VMG figure: across a window's whole circle of angles it collapses at the beam by
+ * definition, which is the shape of the metric and not of the sailing (LAY-165's fifth round).
+ */
+export function windowReading(efficiency: EfficiencyAggregate): string {
+  if (efficiency.elapsed_seconds === 0) return 'nothing sailed in this window'
+
+  const percent = efficiencyPercent(efficiency.polar_efficiency)
+  const filler = fillerAnchoredShare(efficiency)
+
+  return [
+    `${describeDuration(efficiency.elapsed_seconds)} of sailing`,
+    ...(percent === null ? [] : [`${percent} of target`]),
+    ...(filler !== null && isFillerFlagged(filler) ? [`${sharePercent(filler)} filler-anchored`] : []),
+  ].join(' · ')
+}
 
 /** What one position of the focus window holds: everything the season screen draws in it. */
 export interface SeasonWindow<Row extends PlottableRow = PlottableRow> {

@@ -20,6 +20,7 @@ import {
   focusRange,
   patchBounds,
   seasonWindow,
+  windowReading,
 } from '@/services/analysis/polar-plot'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import { filterAsArgument, offeredDimensions } from './analysis-filter'
@@ -125,7 +126,8 @@ function windWindowAnswer(
     lowKnots: view.focus.low,
     highKnots: view.focus.high,
     polarColumnsInPlay: view.columns_in_play,
-    ...figures(view.efficiency, NOTHING_IN_WINDOW),
+    polarEfficiency: figures(view.efficiency, NOTHING_IN_WINDOW).polarEfficiency,
+    reading: windowReading(view.efficiency),
     notDrawn: {
       seconds: view.undrawn.seconds,
       parts: view.undrawn.parts.map((part) => ({
