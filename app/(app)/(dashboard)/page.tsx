@@ -4,6 +4,7 @@ import TacticalBriefing from '@/components/dashboard/TacticalBriefing'
 import RigRecommendation from '@/components/dashboard/RigRecommendation'
 import ModelComparison from '@/components/dashboard/ModelComparison'
 import LiveWindCard from '@/components/dashboard/LiveWindCard'
+import LatestRaceCard from '@/components/dashboard/LatestRaceCard'
 import OverallCards from '@/components/boat/OverallCards'
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { fetchCHII2, fetchPurdueBuoy } from '@/services/buoys/ndbc'
@@ -72,12 +73,16 @@ Rig for medium air initially. Keep reef lines ready if gusts exceed 18 kts.`
 
       <LiveWindCard buoys={buoyData} />
 
+      {/* The newest race, the second cell — beside Live Wind on a desktop — and a door to its
+          page. Its own read of that race's Transcription, behind its own boundary, so nothing
+          else on the Dashboard waits on it paging. */}
+      {account && <LatestRaceCard />}
+
       {/* The Boat performance Overall tab's three cards, for a signed-in sailor only, as cells
           of this same grid: `OverallCards` hands back its three boundaries as siblings, so each
-          card takes one column — beside Live Wind on a desktop, the next two along on an
-          ultrawide. A Guest never reaches it, so a signed-out request makes no archive read at
-          all. Each card streams behind its own `<Suspense>`, so the wind paints the moment the
-          buoys answer. */}
+          card takes one column and flows on after the race card. A Guest never reaches it, so a
+          signed-out request makes no archive read at all. Each card streams behind its own
+          `<Suspense>`, so the wind paints the moment the buoys answer. */}
       {account && <OverallCards />}
 
       {SHOW_RACE_BRIEFING && (

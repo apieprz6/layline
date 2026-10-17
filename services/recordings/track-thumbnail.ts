@@ -1,0 +1,77 @@
+/**
+ * A race's track at thumbnail size: the Dashboard's **Most recent race** card (LAY-179).
+ *
+ * One ink, with no percent-of-target colour, legend, zoom or pan — and still every Dropout marked,
+ * because ADR 0014's obligation is on every map and a small one is where a clean-looking track of
+ * a dead feed is easiest to miss. The projection is `projectTrack` and the breaks are
+ * `breakTrack`, the same two every other map reads, so this picture and the race's own page cannot
+ * draw the same race as two shapes.
+ *
+ * **Assess whole, then clip** (ADR 0009): a dropout beginning before the gun still froze the
+ * race's first rows, and clipping first would hand those rows nothing above them to repeat.
+ */
+
+import { channelValue } from '@/services/analysis/readable-rows'
+import { breakTrack } from '@/services/recordings/track-breaks'
+import {
+  assessRowQuality,
+  withinRaceWindow,
+  type QualityAssessableRow,
+  type RaceWindow,
+} from '@/services/recordings/row-quality'
+import { projectTrack, type TrackBox } from '@/services/recordings/track-projection'
+import type { TrackThumbnail } from '@/types'
+
+/**
+ * The thumbnail's frame: a small detail beside the race's title, drawn at one unit to the pixel.
+ *
+ * Stable whatever the race's own shape, like the heatmap's (ADR 0033), so the card is one height
+ * for every race and its skeleton can be that height too.
+ */
+export const THUMBNAIL_BOX: TrackBox = { width: 96, height: 64, pad: 6 }
+
+/** `x,y` to the tenth of a unit, as the heatmap writes it. */
+function pathPoint({ x, y }: { x: number; y: number }): string {
+  return `${x.toFixed(1)},${y.toFixed(1)}`
+}
+
+/**
+ * The window's track, or null where the window holds no position fix to draw.
+ *
+ * Hand this the **whole** Transcription; the window clip is done here, after Row Quality.
+ */
+export function trackThumbnail(
+  rows: readonly QualityAssessableRow[],
+  raceWindow: RaceWindow
+): TrackThumbnail | null {
+  const quality = assessRowQuality(rows)
+  // Row Quality hands back one verdict per row, in order, and the clip keeps those same verdicts,
+  // so each verdict is paired with its row by position and the pairs are clipped — no lookup that
+  // could miss.
+  const kept = new Set(withinRaceWindow(quality, raceWindow).rows)
+
+  const drawn = quality.rows.flatMap((verdict, index) => {
+    if (!kept.has(verdict)) return []
+    const row = rows[index]
+    return {
+      latitude: channelValue(row.latitude),
+      longitude: channelValue(row.longitude),
+      frozen: verdict.frozen,
+      row_time: verdict.row_time,
+    }
+  })
+
+  const projection = projectTrack(drawn, THUMBNAIL_BOX)
+  if (projection === null) return null
+
+  const { runs, bridges, rings } = breakTrack(drawn, projection)
+
+  return {
+    width: THUMBNAIL_BOX.width,
+    height: THUMBNAIL_BOX.height,
+    runs: runs.filter((run) => run.length > 1).map((run) => run.map(pathPoint).join(' ')),
+    points: runs.filter((run) => run.length === 1).map(([fix]) => ({ x: fix.x, y: fix.y })),
+    bridges,
+    rings,
+  }
+}
