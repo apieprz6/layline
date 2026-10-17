@@ -166,6 +166,7 @@ describe('currentConditions', () => {
       )
 
       expect(screen.getByText(staleness!.label)).toBeInTheDocument()
+      // The row prints no minutes, so pin them to the rule its label is built on.
       expect(staleness!.minutes).toBe(observationAgeMinutes(timestamp, NOW.getTime()))
     })
   })

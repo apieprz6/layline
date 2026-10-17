@@ -77,8 +77,12 @@ export function currentConditions({
   now,
   purdueInSeason,
 }: CurrentConditionsInput): CurrentConditionsAnswer {
-  const purdueAnswer: McpStationReading | McpStationOutOfSeason =
-    isPurdueOutOfWater(purdue.data !== null, purdueInSeason) ? purdueOutOfSeason(purdue.status) : stationReading('45198', purdue, now)
+  const purdueAnswer: McpStationReading | McpStationOutOfSeason = isPurdueOutOfWater({
+    hasReadings: purdue.data !== null,
+    inSeason: purdueInSeason,
+  })
+    ? purdueOutOfSeason(purdue.status)
+    : stationReading('45198', purdue, now)
 
   return { stations: [stationReading('CHII2', chii2, now), purdueAnswer] }
 }

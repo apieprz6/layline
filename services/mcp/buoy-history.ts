@@ -41,7 +41,9 @@ export function buoyHistory({
 }: BuoyHistoryInput): McpStationHistory | McpStationOutOfSeason {
   const data = history.history
 
-  if (station === '45198' && isPurdueOutOfWater(data !== null, purdueInSeason)) return purdueOutOfSeason(history.status)
+  if (station === '45198' && isPurdueOutOfWater({ hasReadings: data !== null, inSeason: purdueInSeason })) {
+    return purdueOutOfSeason(history.status)
+  }
 
   const scale = TIME_SCALES[window]
   const aged = data ? withMinutesAgo(data, now) : null

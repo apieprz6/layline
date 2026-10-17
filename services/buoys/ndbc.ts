@@ -174,7 +174,7 @@ export function isPurdueSeason(): boolean {
  * Purdue out of its season with nothing to show: out of the water, not late. One rule
  * for `fetchPurdueBuoy` and the MCP station tools, so neither decides it alone (ADR 0042).
  */
-export function isPurdueOutOfWater(hasReadings: boolean, inSeason: boolean): boolean {
+export function isPurdueOutOfWater({ hasReadings, inSeason }: { hasReadings: boolean; inSeason: boolean }): boolean {
   return !inSeason && !hasReadings
 }
 
@@ -190,8 +190,7 @@ export function isPurdueOutOfWater(hasReadings: boolean, inSeason: boolean): boo
 export async function fetchPurdueBuoy(options?: { bypassCache?: boolean }): Promise<BuoyDataResult> {
   const historyData = await fetchPurdueBuoyHistory(options)
 
-  // If history fetch failed and we're out of season, provide context
-  if (isPurdueOutOfWater(historyData.history !== null, isPurdueSeason())) {
+  if (isPurdueOutOfWater({ hasReadings: historyData.history !== null, inSeason: isPurdueSeason() })) {
     return {
       data: null,
       status: 'offline',

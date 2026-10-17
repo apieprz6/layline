@@ -134,10 +134,10 @@ describe('NDBC Buoy History - Extended 72-hour Support', () => {
 
 describe('isPurdueOutOfWater', () => {
   it('is out of the water only out of season and with nothing to show', () => {
-    expect(isPurdueOutOfWater(false, false)).toBe(true)
-    expect(isPurdueOutOfWater(true, false)).toBe(false)
-    expect(isPurdueOutOfWater(false, true)).toBe(false)
-    expect(isPurdueOutOfWater(true, true)).toBe(false)
+    expect(isPurdueOutOfWater({ hasReadings: false, inSeason: false })).toBe(true)
+    expect(isPurdueOutOfWater({ hasReadings: true, inSeason: false })).toBe(false)
+    expect(isPurdueOutOfWater({ hasReadings: false, inSeason: true })).toBe(false)
+    expect(isPurdueOutOfWater({ hasReadings: true, inSeason: true })).toBe(false)
   })
 })
 
