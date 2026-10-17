@@ -72,22 +72,25 @@ describe('raceSummary', () => {
   })
 
   it('states coverage in time, in the coverage readout’s own words', async () => {
-    const race = await fixtureRace()
-    const summary = raceSummary(race)
+    // The older Race: a two-minute window whose recording stops a minute in, so each figure
+    // the readout prints is a different one.
+    const race = await readRace(OLDER_RACE_ID, archiveClient(fixtureArchive()).client)
+    const summary = raceSummary(race!)
 
-    render(<CoverageReadout coverage={race.coverage} />)
+    render(<CoverageReadout coverage={race!.coverage} />)
+    const printed = (label: string): string | null =>
+      screen.getByText(label).nextElementSibling?.textContent ?? null
 
-    // Rows 2 to 17 at 30 seconds: seven and a half minutes, every one of them measured.
-    expect(summary.coverage).toMatchObject({
-      windowSeconds: 450,
-      recordedSeconds: 450,
-      frozenSeconds: 0,
-      leadGapSeconds: 0,
-      tailGapSeconds: 0,
-      window: '7m 30s',
-      recorded: '7m 30s',
+    expect(summary.coverage).toEqual({
+      window: { seconds: 120, label: '2m' },
+      recorded: { seconds: 60, label: '1m' },
+      frozen: { seconds: 0, label: '0s' },
+      beforeFirstRow: { seconds: 0, label: '0s' },
+      afterLastRow: { seconds: 60, label: '1m' },
     })
-    expect(screen.getAllByText(summary.coverage.recorded).length).toBeGreaterThan(0)
+    expect(printed('Window')).toBe(summary.coverage.window.label)
+    expect(printed('Recorded')).toBe(summary.coverage.recorded.label)
+    expect(printed('After the last row')).toBe(summary.coverage.afterLastRow.label)
   })
 
   it('states the Boat Setup the Race froze, by the Versions it names and never the newest', async () => {
@@ -140,7 +143,7 @@ describe('raceSummary', () => {
 
     expect(summary.performance).toEqual({
       scoring: 'no-polar-version',
-      note: expect.stringContaining('no Polar Version'),
+      note: 'This race records no Polar Version, so neither figure can be computed.',
     })
   })
 })
@@ -162,12 +165,9 @@ describe('raceList', () => {
           weekday: 'Saturday',
           windowStart: fixtureStamp(2),
           windowFinish: fixtureStamp(17),
-          windowSeconds: 450,
-          loggedSeconds: 450,
-          countableSeconds: expect.any(Number),
-          window: '7m 30s',
-          logged: '7m 30s',
-          countable: expect.any(String),
+          window: { seconds: 450, label: '7m 30s' },
+          logged: { seconds: 450, label: '7m 30s' },
+          countable: { seconds: expect.any(Number), label: expect.any(String) },
         },
         {
           id: OLDER_RACE_ID,
@@ -176,19 +176,16 @@ describe('raceList', () => {
           weekday: 'Wednesday',
           windowStart: '2025-07-09T19:00:00',
           windowFinish: '2025-07-09T19:02:00',
-          windowSeconds: 120,
           // The recording stops a minute in: half the window is all there is.
-          loggedSeconds: 60,
-          countableSeconds: 60,
-          window: '2m',
-          logged: '1m',
-          countable: '1m',
+          window: { seconds: 120, label: '2m' },
+          logged: { seconds: 60, label: '1m' },
+          countable: { seconds: 60, label: '1m' },
         },
       ],
     })
     // A tack's Window is not Countable, so the scored share is less than what was logged.
     if (!list.ok) throw new Error('unreachable')
-    expect(list.races[0].countableSeconds).toBeLessThan(450)
+    expect(list.races[0].countable.seconds).toBeLessThan(450)
   })
 
   it('refuses rather than answer over an archive that could not be read', async () => {

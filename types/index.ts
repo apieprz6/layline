@@ -3628,17 +3628,20 @@ export interface McpRaceIdentity {
   windowFinish: string
 }
 
-// One Race as `list_races` states it. Durations are seconds with the screens' own wording beside
-// them, and never a row count (ADR 0037). `loggedSeconds` is the time the window's rows span, live
-// or frozen, which the analysis screens' Race list prints; `countableSeconds` is the part of it
-// every performance figure reads: not Frozen, not Low-Speed, not in a Maneuver Window (ADR 0025).
+// A duration as the screens state one: the seconds, and `describeDuration`'s words for them.
+export interface McpDuration {
+  seconds: number
+  label: string
+}
+
+// One Race as `list_races` states it, in time and never in rows (ADR 0037). `logged` is the time
+// the window's rows span, live or frozen, which the analysis screens' Race list prints;
+// `countable` is the part of it every performance figure reads: not Frozen, not Low-Speed, not in
+// a Maneuver Window (ADR 0025).
 export interface McpRaceListEntry extends McpRaceIdentity {
-  windowSeconds: number
-  loggedSeconds: number
-  countableSeconds: number
-  window: string
-  logged: string
-  countable: string
+  window: McpDuration
+  logged: McpDuration
+  countable: McpDuration
 }
 
 // Either the whole archive or a refusal: a list with a Race missing is never an answer (ADR 0026).
@@ -3658,9 +3661,8 @@ export type McpRacePerformance =
       scoring: 'polar'
       polarEfficiency: McpEfficiencyFigure
       vmgEfficiency: McpEfficiencyFigure & { caveat: string }
-      // Measured seconds behind Polar Efficiency: Countable rows only (ADR 0025).
-      scoredSeconds: number
-      scored: string
+      // Measured time behind Polar Efficiency: Countable rows only (ADR 0025).
+      scored: McpDuration
     }
   | { scoring: 'no-polar-version' | 'polar-unreadable'; note: string }
 
@@ -3675,15 +3677,14 @@ export interface McpRaceSummary {
     windBand: { lowKnots: number; highKnots: number | null; label: string | null } | null
     loggedTwsMeanKnots: number | null
   }
+  // The race page's coverage readout: the window, its live time, its Dropouts and the two edges
+  // the recording does not reach.
   coverage: {
-    windowSeconds: number
-    recordedSeconds: number
-    frozenSeconds: number
-    leadGapSeconds: number
-    tailGapSeconds: number
-    window: string
-    recorded: string
-    frozen: string
+    window: McpDuration
+    recorded: McpDuration
+    frozen: McpDuration
+    beforeFirstRow: McpDuration
+    afterLastRow: McpDuration
   }
   // The page's own notes about this window and its recording, in its words.
   findings: string[]

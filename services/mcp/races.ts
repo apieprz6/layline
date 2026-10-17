@@ -1,14 +1,21 @@
+import { weekdayOf } from '@/lib/utils/calendarDate'
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
 import { efficiencyPercent } from '@/services/analysis/figures'
 import { EMPTY_FILTER } from '@/services/analysis/filter'
 import { MANEUVER_DETECTOR_VERSION } from '@/services/analysis/maneuvers'
-import { fillerAnchoredShare, vmgFillerAnchoredShare } from '@/services/analysis/polar-performance'
+import {
+  NO_FIGURE_NOTES,
+  fillerAnchoredShare,
+  vmgFillerAnchoredShare,
+} from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import type { AnalysisArchive } from '@/services/analysis/readArchive'
 import { describeDuration } from '@/services/recordings/coverage'
 import type {
   BoatSetupVersionRef,
   Maneuver,
+  MatchableRow,
+  McpDuration,
   McpRaceIdentity,
   McpRaceListAnswer,
   McpRacePerformance,
@@ -19,29 +26,27 @@ import type {
   RaceTrack,
 } from '@/types'
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
 /**
  * What identifies a Race, from its own window. The day is sliced from the stamp and the weekday is
- * the calendar's for that date: no `Date` is built from the stamp, which carries no zone (ADR 0008).
+ * the calendar's for that date: no `Date` is built, since the stamp carries no zone (ADR 0008).
  */
-function identity(race: {
-  id: string
-  title: string | null
-  window_start: string
-  window_finish: string
-}): McpRaceIdentity {
+function identity(
+  race: Pick<RaceListEntry, 'id' | 'title' | 'window_start' | 'window_finish'>
+): McpRaceIdentity {
   const day = race.window_start.slice(0, 10)
-  const [year, month, date] = day.split('-').map(Number)
 
   return {
     id: race.id,
     title: race.title,
     day,
-    weekday: WEEKDAYS[new Date(Date.UTC(year, month - 1, date)).getUTCDay()],
+    weekday: weekdayOf(day),
     windowStart: race.window_start,
     windowFinish: race.window_finish,
   }
+}
+
+function duration(seconds: number): McpDuration {
+  return { seconds, label: describeDuration(seconds) }
 }
 
 /**
@@ -70,23 +75,23 @@ export function raceList(
     return { ok: false }
   }
 
+  const byRace = new Map<string, MatchableRow[]>()
+  for (const row of archive.rows) {
+    const rows = byRace.get(row.race_id) ?? []
+    rows.push(row)
+    byRace.set(row.race_id, rows)
+  }
+
   return {
     ok: true,
     races: races.map((race) => {
-      const ledger = coverageLedger(
-        archive.rows.filter((row) => row.race_id === race.id),
-        EMPTY_FILTER,
-        []
-      )
+      const ledger = coverageLedger(byRace.get(race.id) ?? [], EMPTY_FILTER, [])
 
       return {
         ...identity(race),
-        windowSeconds: race.window_seconds,
-        loggedSeconds: ledger.total_seconds,
-        countableSeconds: ledger.countable_seconds,
-        window: describeDuration(race.window_seconds),
-        logged: describeDuration(ledger.total_seconds),
-        countable: describeDuration(ledger.countable_seconds),
+        window: duration(race.window_seconds),
+        logged: duration(ledger.total_seconds),
+        countable: duration(ledger.countable_seconds),
       }
     }),
   }
@@ -103,15 +108,8 @@ function versionRef(ref: BoatSetupVersionRef | null): McpVersionRef | null {
  */
 function performance(track: RaceTrack): McpRacePerformance {
   if (track.plot === null) {
-    return track.scoring === 'polar-unreadable'
-      ? {
-          scoring: 'polar-unreadable',
-          note: 'The Polar this race names could not be read, so neither figure can be computed.',
-        }
-      : {
-          scoring: 'no-polar-version',
-          note: 'This race records no Polar Version, so neither figure can be computed.',
-        }
+    const scoring = track.scoring === 'polar-unreadable' ? 'polar-unreadable' : 'no-polar-version'
+    return { scoring, note: NO_FIGURE_NOTES[scoring] }
   }
 
   const aggregate = track.plot.performance
@@ -130,8 +128,7 @@ function performance(track: RaceTrack): McpRacePerformance {
       fillerAnchoredShare: vmgFillerAnchoredShare(aggregate),
       caveat: TARGET_VMG_CAVEAT,
     },
-    scoredSeconds: aggregate.elapsed_seconds,
-    scored: describeDuration(aggregate.elapsed_seconds),
+    scored: duration(aggregate.elapsed_seconds),
   }
 }
 
@@ -161,14 +158,11 @@ export function raceSummary(race: RaceDetail): McpRaceSummary {
       loggedTwsMeanKnots: setup.logged_tws_mean,
     },
     coverage: {
-      windowSeconds: coverage.window_seconds,
-      recordedSeconds: coverage.live_seconds,
-      frozenSeconds: coverage.frozen_seconds,
-      leadGapSeconds: coverage.lead_gap_seconds,
-      tailGapSeconds: coverage.tail_gap_seconds,
-      window: describeDuration(coverage.window_seconds),
-      recorded: describeDuration(coverage.live_seconds),
-      frozen: describeDuration(coverage.frozen_seconds),
+      window: duration(coverage.window_seconds),
+      recorded: duration(coverage.live_seconds),
+      frozen: duration(coverage.frozen_seconds),
+      beforeFirstRow: duration(coverage.lead_gap_seconds),
+      afterLastRow: duration(coverage.tail_gap_seconds),
     },
     findings: race.findings.map((finding) => finding.message),
     maneuvers: {

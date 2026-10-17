@@ -67,6 +67,12 @@ export function getPolarPerformanceData(
   }
 }
 
+/** Why a Race has no Polar or VMG Efficiency, in the words its page and the MCP Server both use. */
+export const NO_FIGURE_NOTES = {
+  'no-polar-version': 'This race records no Polar Version, so neither figure can be computed.',
+  'polar-unreadable': 'The Polar this race names could not be read, so neither figure can be computed.',
+} as const
+
 /**
  * How much of **Polar Efficiency** rests on the Polar's own filler, or null where no row was summed.
  *
