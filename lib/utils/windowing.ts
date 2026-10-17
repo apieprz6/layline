@@ -1,7 +1,7 @@
-import type { WindDataPoint, WindDataPointWithOffset } from '@/types'
+import type { TimeScale, WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from './time'
 
-export type TimeScale = '30m' | '1h' | '6h' | '24h' | '72h'
+export type { TimeScale }
 
 export interface TimeScaleConfig {
   minutes: number

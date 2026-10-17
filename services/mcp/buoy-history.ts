@@ -1,8 +1,8 @@
 import { formatRelativeTime } from '@/lib/utils/timeFormatting'
 import { TIME_SCALES, inWindow, withMinutesAgo, type TimeScale } from '@/lib/utils/windowing'
-import { shows } from '@/lib/utils/stationReadings'
+import { latestPoint, shows } from '@/lib/utils/stationReadings'
 import { calculateWindowStats } from '@/lib/utils/windowStats'
-import { OUT_OF_SEASON_NOTE, stationName } from './current-conditions'
+import { purdueOutOfSeason, stationName } from './current-conditions'
 import type {
   BuoyHistoryData,
   McpHistoryReading,
@@ -40,21 +40,13 @@ export function buoyHistory({
 }: BuoyHistoryInput): McpStationHistory | McpStationOutOfSeason {
   const data = history.history
 
-  if (station === '45198' && !purdueInSeason && !data) {
-    return {
-      station: '45198',
-      name: stationName('45198'),
-      seasonal: true,
-      dataStatus: history.status,
-      note: OUT_OF_SEASON_NOTE,
-    }
-  }
+  if (station === '45198' && !purdueInSeason && !data) return purdueOutOfSeason(history.status)
 
   const scale = TIME_SCALES[window]
-  const points = data ? inWindow(withMinutesAgo(data, now), scale.minutes, 0) : null
+  const aged = data ? withMinutesAgo(data, now) : null
+  const points = aged ? inWindow(aged, scale.minutes, 0) : null
   const stats = points ? calculateWindowStats(points) : null
-  // Newest first, as the feeds report and the services keep it.
-  const latest = data?.[0] ?? null
+  const latest = aged ? latestPoint(aged) : undefined
   const showGust = data ? shows(history.metadata.capability, data, 'gust') : false
   const showWaves = data ? shows(history.metadata.capability, data, 'waveHeight') : false
 

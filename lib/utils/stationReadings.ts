@@ -13,6 +13,14 @@ export function carries(data: WindDataPoint[], field: SecondaryField): boolean {
 }
 
 /**
+ * The observation the station page's header calls "Latest": the one at the reference time if
+ * there is one, otherwise the first the feed reports, which is its newest.
+ */
+export function latestPoint(data: WindDataPointWithOffset[]): WindDataPointWithOffset | undefined {
+  return data.find((p) => p.minsAgo === 0) ?? data[0]
+}
+
+/**
  * Whether the station page shows `field` at all: the station measures it and this history carries
  * it. Where it shows, a missing reading is "—"; where it doesn't, nothing is drawn for it.
  */

@@ -274,6 +274,9 @@ export interface BuoyHistoryData {
   extendedHistory?: MinuteDataPoint[] | null
 }
 
+// The station page's time scales, configured in `lib/utils/windowing.ts`
+export type TimeScale = '30m' | '1h' | '6h' | '24h' | '72h'
+
 // Window statistics for aggregate wind analysis
 export interface WindowStats {
   meanDir: number // Vector-averaged direction (0-360°)
@@ -3636,7 +3639,7 @@ export interface McpStationHistory {
   fetchedAt: string
   latestObservedAt: string | null
   staleness: { label: string } | null
-  window: { id: '30m' | '1h' | '6h' | '24h' | '72h'; label: string }
+  window: { id: TimeScale; label: string }
   readings: McpHistoryReading[] | null
   windowStats: McpWindowStats | null
   fetchError?: string

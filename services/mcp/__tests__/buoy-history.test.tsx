@@ -3,6 +3,7 @@ import { buoyHistory as answerFor } from '../buoy-history'
 import { buoyMetadata } from '@/services/buoys/ndbc'
 import { formatRelativeTime } from '@/lib/utils/timeFormatting'
 import { TIME_SCALES, withMinutesAgo } from '@/lib/utils/windowing'
+import { getCompassDirection } from '@/lib/utils/wind'
 import StationStatsPanel from '@/components/dashboard/StationStatsPanel'
 import type { BuoyHistoryData, McpStationHistory, WindDataPoint } from '@/types'
 
@@ -97,7 +98,9 @@ describe('buoyHistory', () => {
 
       const stats = answer.windowStats!
       expect(stats.derived).toBe(true)
-      expect(tile('Mean dir')).toMatch(new RegExp(`^${stats.meanDirectionDegreesTrue}°`))
+      expect(tile('Mean dir')).toBe(
+        `${stats.meanDirectionDegreesTrue}°${getCompassDirection(stats.meanDirectionDegreesTrue)}`
+      )
       expect(tile('Mean spd')).toBe(`${stats.meanSpeedKnots.toFixed(1)}kts`)
       expect(tile('Range')).toBe(`${stats.speedMinKnots.toFixed(0)}–${stats.speedMaxKnots.toFixed(0)}kts`)
       expect(tile('Veer/back')).toBe(`${stats.veerBackSpreadDegrees.toFixed(0)}°spread`)
