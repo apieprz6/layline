@@ -77,8 +77,9 @@ describe('polarPerformanceAnswer', () => {
       matchedRaces: 2,
       totalRaces: 2,
       countableSeconds: 180,
-      scoredSeconds: 180,
     })
+    expect(answer.polarEfficiency.scoredSeconds).toBe(180)
+    expect(answer.vmgEfficiency.scoredSeconds).toBe(180)
     expect(answer.coverageLedger.excluded).toEqual([
       { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: 60 },
     ])
@@ -108,6 +109,22 @@ describe('polarPerformanceAnswer', () => {
     expect(answer.coverageLedger.excluded).toContainEqual({
       reason:
         'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no Polar for the race)',
+      seconds: 60,
+    })
+  })
+
+  it('gives VMG Efficiency its own time, and says what it left out that Polar Efficiency kept', () => {
+    const rows = [
+      ...ROWS,
+      matchableRow({ efficiency: { ...matchableRow().efficiency, target_vmg: null } }),
+    ]
+
+    const answer = polarPerformanceAnswer(rows, { buckets: {}, range: null }, DIMENSIONS)
+
+    expect(answer.polarEfficiency.scoredSeconds).toBe(240)
+    expect(answer.vmgEfficiency.scoredSeconds).toBe(180)
+    expect(answer.coverageLedger.excluded).toContainEqual({
+      reason: 'Scored for Polar Efficiency, but no Target VMG: left out of VMG Efficiency only',
       seconds: 60,
     })
   })

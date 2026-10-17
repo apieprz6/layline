@@ -18,11 +18,12 @@
  *
  * The schema is static and tells Claude the shape and every fixed bucket. Sails and months are
  * derived from the archive (ADR 0023, ADR 0029), so they can only be checked after the read: that
- * is `readAnalysisFilterArgument`, which takes the dimensions the screen itself would build.
+ * is `filterFromArgument`, which takes the dimensions the screen itself would build.
  */
 
 import { z } from 'zod'
-import { RANGE_DIMENSION, analysisDimensions } from '@/services/analysis/filter'
+import { NOTE_ONLY, NOT_RECORDED, RANGE_DIMENSION, analysisDimensions } from '@/services/analysis/filter'
+import { DAY } from '@/services/analysis/filter-url'
 import type {
   AnalysisDimension,
   AnalysisDimensionSpec,
@@ -31,9 +32,6 @@ import type {
   McpAnalysisFilterArgument,
 } from '@/types'
 
-/** `YYYY-MM-DD`, which is the only shape a day bound may take. */
-const DAY = /^\d{4}-\d{2}-\d{2}$/
-
 /** The argument's one key that is not a dimension. */
 const DAY_RANGE = 'dayRange'
 
@@ -41,8 +39,8 @@ const DAY_RANGE = 'dayRange'
 const DERIVED: Partial<Record<AnalysisDimension, string>> = {
   sail:
     "Sail Definition labels in the Crossover Chart's own words (never its number), plus " +
-    "'note-only' for a Sail Configuration naming no Sail Definition and 'not-recorded'.",
-  when: "Months as 'YYYY-MM', from the months the archive holds, plus 'not-recorded'.",
+    `'${NOTE_ONLY}' for a Sail Configuration naming no Sail Definition and '${NOT_RECORDED}'.`,
+  when: `Months as 'YYYY-MM', from the months the archive holds, plus '${NOT_RECORDED}'.`,
 }
 
 function bucketDescription(dimension: AnalysisDimensionSpec): string {
@@ -56,7 +54,7 @@ function bucketDescription(dimension: AnalysisDimensionSpec): string {
 /**
  * The `filter` argument's schema, for a tool offering these dimensions.
  *
- * Loose rather than strict, on purpose: an unknown key has to reach `readAnalysisFilterArgument`
+ * Loose rather than strict, on purpose: an unknown key has to reach `filterFromArgument`
  * so the refusal can list the dimensions this tool does offer, which a schema error would not.
  */
 export function analysisFilterSchema(offered: readonly AnalysisDimension[]) {
@@ -85,7 +83,7 @@ export function analysisFilterSchema(offered: readonly AnalysisDimension[]) {
     .describe(
       'The Analysis Filter, as the screen\'s filter rail sets it. Leave a dimension out to include ' +
         'all of it, Not recorded included. Naming buckets narrows to exactly those, so add ' +
-        "'not-recorded' to keep the sailing nobody annotated. Several buckets of one dimension " +
+        `'${NOT_RECORDED}' to keep the sailing nobody annotated. Several buckets of one dimension ` +
         'match any of them; several dimensions must all match.'
     )
 }
@@ -103,7 +101,7 @@ const isStringList = (value: unknown): value is string[] =>
  * No argument, and an empty list on a dimension, both mean untouched — the screen's default,
  * **Not recorded** included (ADR 0029).
  */
-export function readAnalysisFilterArgument(
+export function filterFromArgument(
   argument: McpAnalysisFilterArgument | Readonly<Record<string, unknown>> | undefined,
   dimensions: readonly AnalysisDimensionSpec[]
 ): AnalysisFilterReading {
@@ -161,7 +159,7 @@ export function readAnalysisFilterArgument(
  * The canonical form and not an echo of the input: an empty list is gone and a repeat is folded,
  * which is what the figures are actually over.
  */
-export function analysisFilterArgument(filter: AnalysisFilter): McpAnalysisFilterArgument {
+export function filterAsArgument(filter: AnalysisFilter): McpAnalysisFilterArgument {
   return {
     ...Object.fromEntries(Object.entries(filter.buckets).map(([id, ids]) => [id, [...(ids ?? [])]])),
     ...(filter.range ? { [DAY_RANGE]: { ...filter.range } } : {}),

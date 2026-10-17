@@ -7,7 +7,7 @@ import {
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
-import { analysisFilterArgument, offeredDimensions } from './analysis-filter'
+import { filterAsArgument, offeredDimensions } from './analysis-filter'
 import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
@@ -17,9 +17,10 @@ import type {
   PolarPerformanceAnswer,
 } from '@/types'
 
-function figure(ratio: number | null, filler: number | null): McpEfficiencyFigure {
+function figure(ratio: number | null, seconds: number, filler: number | null): McpEfficiencyFigure {
   return {
     ratio,
+    scoredSeconds: seconds,
     percent: efficiencyPercent(ratio),
     fillerAnchoredShare: filler,
     fillerAnchored: filler !== null && filler > 0,
@@ -54,7 +55,6 @@ export function polarPerformanceAnswer(
     matchedRaces: ledger.matched_races,
     totalRaces: ledger.total_races,
     countableSeconds: ledger.countable_seconds,
-    scoredSeconds: overall.elapsed_seconds,
     excluded: [
       { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: notCountable },
       {
@@ -62,6 +62,11 @@ export function polarPerformanceAnswer(
           'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no ' +
           'Polar for the race)',
         seconds: withoutTarget,
+      },
+      {
+        // VMG sums its own subset of the scored rows (`sumEfficiency`), so it can rest on less.
+        reason: 'Scored for Polar Efficiency, but no Target VMG: left out of VMG Efficiency only',
+        seconds: overall.elapsed_seconds - overall.vmg_elapsed_seconds,
       },
     ].filter((each) => each.seconds > 0),
     notRecorded: ledger.gaps.map((gap) => ({
@@ -74,11 +79,11 @@ export function polarPerformanceAnswer(
   }
 
   return {
-    filter: analysisFilterArgument(filter),
-    polarEfficiency: figure(overall.polar_efficiency, fillerAnchoredShare(overall)),
+    filter: filterAsArgument(filter),
+    polarEfficiency: figure(overall.polar_efficiency, overall.elapsed_seconds, fillerAnchoredShare(overall)),
     // Its own share, over its own rows, exactly as the screen pairs them.
     vmgEfficiency: {
-      ...figure(overall.vmg_efficiency, vmgFillerAnchoredShare(overall)),
+      ...figure(overall.vmg_efficiency, overall.vmg_elapsed_seconds, vmgFillerAnchoredShare(overall)),
       caveat: TARGET_VMG_CAVEAT,
     },
     coverageLedger,

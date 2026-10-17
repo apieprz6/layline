@@ -1742,6 +1742,8 @@ export interface EfficiencyAggregate {
   vmg_rows: number
   /** How many of *those* rested on filler. Target VMG has its own trust (`TargetVmg`). */
   vmg_filler_anchored_rows: number
+  /** Measured seconds behind the **VMG** sums: `elapsed_seconds` over the `vmg_rows` alone. */
+  vmg_elapsed_seconds: number
   /**
    * **Countable** rows left out for want of a measured interval: the last row of the window, and
    * any row the naive wall clock stepped backwards across.
@@ -3616,14 +3618,15 @@ export type McpAnalysisFilterArgument = Partial<Record<AnalysisDimension, string
 // `ratio` null means nothing in the match could be scored; `note` then says so in words.
 export interface McpEfficiencyFigure {
   ratio: number | null
+  scoredSeconds: number
   percent: string | null
   fillerAnchoredShare: number | null
   fillerAnchored: boolean
   note?: string
 }
 
-// The Coverage Ledger in time, never in rows (ADR 0037). `scoredSeconds` is what both figures
-// are over; `excluded` says what matched and was left out of them, and why. `statement` is the
+// The Coverage Ledger in time, never in rows (ADR 0037). Each figure states its own scored
+// seconds; `excluded` says what matched and was left out of them, and why. `statement` is the
 // screen's own wording, line by line.
 export interface McpCoverageLedger {
   matchedSeconds: number
@@ -3631,7 +3634,6 @@ export interface McpCoverageLedger {
   matchedRaces: number
   totalRaces: number
   countableSeconds: number
-  scoredSeconds: number
   excluded: { reason: string; seconds: number }[]
   notRecorded: { dimension: AnalysisDimension; missing: string; seconds: number; share: number | null }[]
   statement: string[]

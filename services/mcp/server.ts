@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { fetchCHII2, fetchPurdueBuoy, isPurdueSeason } from '@/services/buoys/ndbc'
-import { analysisFilterSchema, readAnalysisFilterArgument } from './analysis-filter'
+import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
 import { polarPerformanceAnswer } from './polar-performance'
 
@@ -21,10 +21,10 @@ const CURRENT_CONDITIONS_DESCRIPTION = `What the wind is doing right now at Layl
 
 const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficiency over the boat's race archive, narrowed by the Analysis Filter, exactly as Layline's Polar performance screen states them.
 
-- Polar Efficiency is total distance sailed over the distance the Polar's Target Speed implies, across all the scored sailing the filter matches; VMG Efficiency is the same for VMG against Target VMG. Each row is scored against the Polar its own race was sailed under. Report them as the percentages given.
+- Polar Efficiency is total distance sailed over the distance the Polar's Target Speed implies, across all the scored sailing the filter matches; VMG Efficiency is the same for VMG against Target VMG. Each race's sailing is scored against the Polar that race was sailed under. Report them as the percentages given.
 - The filter offers the screen's five dimensions: point of sail, sail used, sea state, time of day and when. There is no wind-speed dimension: on the screen the Polar Plot owns the wind axis, and the figures are over every wind speed the filter matches. If asked about a wind band, say these figures span all wind speeds; never present them as a band's.
 - A dimension left out includes everything, Not recorded included. Naming buckets narrows to exactly those. Sails are named by their Sail Definition label, never a number; every answer lists each dimension's valid buckets.
-- Every answer carries its Coverage Ledger: how much sailing time matched, how much of it was scored, what was excluded and why, and how much has no Sea State or Sail Configuration recorded. State how much sailing is behind a figure, especially when it is little.
+- Every answer carries its Coverage Ledger: how much sailing time matched, how much of it was scored, what was excluded and why, and how much has no Sea State or Sail Configuration recorded. Each figure also states its own scored time; VMG Efficiency can rest on less than Polar Efficiency. State how much sailing is behind a figure, especially when it is little.
 - A figure may be Filler-Anchored: part of it is compared against Polar cells the Polar manufactured rather than measured. Give the figure and say what share is Filler-Anchored; do not withhold it.
 - Target VMG is estimated from the Polar's grid, not the certificate's own optimum.
 - A null figure means nothing in the match could be scored; never fill one in.`
@@ -82,7 +82,7 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       if (archive === null) return toolError(ARCHIVE_UNREADABLE)
 
       const dimensions = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, archive.vocabulary)
-      const reading = readAnalysisFilterArgument(filter, dimensions)
+      const reading = filterFromArgument(filter, dimensions)
       if (!reading.ok) return toolError(reading.message)
 
       const answer = polarPerformanceAnswer(archive.rows, reading.filter, dimensions)
