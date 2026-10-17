@@ -8,10 +8,10 @@ import { currentConditions } from './current-conditions'
  */
 const CURRENT_CONDITIONS_DESCRIPTION = `What the wind is doing right now at Layline's two stations off Chicago, exactly as the Layline dashboard shows it.
 
-- Harrison Dever Crib (CHII2) measures wind from an anemometer 85 ft above the water. Report its speed as the 85 ft reading it is; surface wind is typically 20-30% lower, so say so rather than presenting a surface figure as measured. It is best for direction and trend.
+- Harrison Dever Crib (CHII2) measures wind from an anemometer 85 ft above the water. Report its speed as the 85 ft reading it is, with its note that wind at this height typically reads 20-30% higher than at the surface; never present a surface figure of your own as measured. It is best for direction and trend.
 - The Purdue Buoy (45198) measures at the surface and is the best on-water speed when deployed. It is seasonal, May through October; out of season it reports no wind at all, which is not a fault.
 - Speeds are knots, directions are degrees true the wind blows FROM.
-- Every station carries its Data Status (online < 30 min old, recent < 60, stale < 150, offline beyond, error if the read failed) and Staleness, the age of the observation. Say how old a reading is when it is not online. A null wind means no reading; never fill one in.`
+- Every station carries its Data Status (online, recent, stale, offline, or error if the read failed), the dashboard's own judgement of how fresh it is, and its Staleness: the age of the observation, as the dashboard prints it. Say how old a reading is when it is not online. A null wind means no reading; never fill one in.`
 
 /**
  * A fresh server per request: the endpoint is stateless (ADR 0042), so nothing a server holds

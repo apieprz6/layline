@@ -1,3 +1,5 @@
+import type { ProtectedResourceMetadata } from '@/types'
+
 /**
  * Where the **MCP Server** lives and who signs its callers in, for the 401 challenge and the
  * protected-resource metadata (RFC 9728) an MCP client reads to find Supabase Auth.
@@ -22,13 +24,6 @@ export function requestOrigin(request: Request): string {
 /** RFC 9728 §3.1: the resource's path goes after the well-known segment. */
 export function protectedResourceMetadataUrl(origin: string): string {
   return `${origin}${METADATA_PATH}${MCP_PATH}`
-}
-
-export interface ProtectedResourceMetadata {
-  resource: string
-  authorization_servers: string[]
-  bearer_methods_supported: string[]
-  resource_name: string
 }
 
 /**

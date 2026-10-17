@@ -44,9 +44,9 @@ above happen in your browser.
 
 ## Reading the answers
 
-- **CHII2's wind is measured 85 ft up.** Claude is given the reading as reported, plus the note
-  that surface wind is typically 20–30% lower. It should say so rather than pass the 85 ft figure
-  off as surface wind.
+- **CHII2's wind is measured 85 ft up.** Claude is given the reading as reported, with the
+  dashboard's note that wind at that height typically reads 20–30% higher than at the surface. It
+  should say so rather than pass the 85 ft figure off as surface wind.
 - **The Purdue Buoy is seasonal, May through October.** Out of season Claude will say it is out of
   the water, not that its reading is missing.
 - **Every reading has an age.** Claude is told each station's status (online, recent, stale,

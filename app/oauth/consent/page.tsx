@@ -94,8 +94,8 @@ export default async function ConsentPage({
         </form>
       }
     >
-      It will read what Layline shows {account.email}: the wind, the Races and the Boat Setup. It
-      cannot change anything.
+      It will read Layline as {account.email}, seeing what you see in the app. It cannot change
+      anything.
     </CallbackScreen>
   )
 }

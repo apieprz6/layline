@@ -1,13 +1,12 @@
 import { buoyMetadata } from '@/services/buoys/ndbc'
 import { formatRelativeTime } from '@/lib/utils/timeFormatting'
+import { getStationInfo } from '@/lib/config/stations'
 import type {
   BuoyDataResult,
   CurrentConditionsAnswer,
   McpStationOutOfSeason,
   McpStationReading,
 } from '@/types'
-
-const NAMES = { CHII2: 'Harrison Dever Crib', '45198': 'Purdue Buoy' } as const
 
 const OUT_OF_SEASON_NOTE =
   'The Purdue Buoy is deployed May through October and is out of the water now. It is not late; there is no reading to report until it returns.'
@@ -22,13 +21,18 @@ interface CurrentConditionsInput {
   purdueInSeason: boolean
 }
 
+/** The Station Row's own name for it, so Claude calls a station what the screen does. */
+function stationName(station: 'CHII2' | '45198'): string {
+  return getStationInfo(station)?.name ?? station
+}
+
 function stationReading(station: 'CHII2' | '45198', result: BuoyDataResult, now: Date): McpStationReading {
   const metadata = buoyMetadata(station)
   const data = result.data
 
   return {
     station,
-    name: NAMES[station],
+    name: stationName(station),
     seasonal: station === '45198',
     dataStatus: result.status,
     observedAt: data?.timestamp ?? null,
@@ -44,7 +48,7 @@ function stationReading(station: 'CHII2' | '45198', result: BuoyDataResult, now:
     wind: data ? { speedKnots: data.windSpeed, directionDegreesTrue: data.windDirection } : null,
     ...(result.error && !data ? { fetchError: result.error } : {}),
     anemometerHeightFeet: metadata.windMeasurementHeight,
-    note: metadata.adjustmentNote ?? '',
+    ...(metadata.adjustmentNote ? { note: metadata.adjustmentNote } : {}),
   }
 }
 
@@ -68,7 +72,7 @@ export function currentConditions({
     !purdueInSeason && !purdue.data
       ? {
           station: '45198',
-          name: NAMES['45198'],
+          name: stationName('45198'),
           seasonal: true,
           dataStatus: purdue.status,
           note: OUT_OF_SEASON_NOTE,

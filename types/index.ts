@@ -3579,7 +3579,7 @@ export interface McpStationReading {
   wind: { speedKnots: number; directionDegreesTrue: number } | null
   fetchError?: string
   anemometerHeightFeet: number
-  note: string
+  note?: string
 }
 
 // A seasonal station out of its season: not a missing reading, an absent one. No `wind` key.
@@ -3589,6 +3589,14 @@ export interface McpStationOutOfSeason {
   seasonal: true
   dataStatus: DataSourceStatus
   note: string
+}
+
+// RFC 9728 protected-resource metadata, served at /.well-known/oauth-protected-resource/api/mcp.
+export interface ProtectedResourceMetadata {
+  resource: string
+  authorization_servers: string[]
+  bearer_methods_supported: string[]
+  resource_name: string
 }
 
 export interface CurrentConditionsAnswer {
