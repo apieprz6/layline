@@ -55,8 +55,22 @@ const CARD_STYLE = {
   padding: spacing(3),
 } as const
 
-/** Text over the map, as agreed with the owner on LAY-179: what the race was, then where. */
+/** The text column beside the track: it takes the room, and the track keeps its own size. */
+const ROW_STYLE = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: spacing(3),
+} as const
+
+/**
+ * What the race was, with its track beside the title as a small detail rather than the card's
+ * subject — the owner's call on LAY-179, after a full-width map made this the tallest card on the
+ * Dashboard for the least information.
+ */
 function LatestRaceTeaser({ race }: { race: LatestRace }): ReactElement {
+  const bridges = race.track?.bridges ?? []
+
   return (
     <Link
       href={`/boat-performance/races/${race.id}`}
@@ -65,72 +79,80 @@ function LatestRaceTeaser({ race }: { race: LatestRace }): ReactElement {
     >
       <span style={{ ...EYEBROW_STYLE, marginBottom: 0 }}>Most recent race</span>
 
-      <span
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--text-lg)',
-          color: 'var(--text-primary)',
-        }}
-      >
-        {/* An untitled race is normal (ADR 0010); a generated name would be Testimony nobody gave. */}
-        {race.title ?? 'Untitled race'}
-      </span>
+      <span style={ROW_STYLE}>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: spacing(1), minWidth: 0 }}>
+          {/* The display face at the race list's size, and at the weight Live Wind's station
+              names use beside it, so the two cards' names read as one type. */}
+          <span
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 'var(--weight-semibold)',
+              fontSize: 'var(--text-base)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {/* An untitled race is normal (ADR 0010); a generated name would be Testimony nobody gave. */}
+            {race.title ?? 'Untitled race'}
+          </span>
 
-      <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: spacing(2) }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--text-accent)',
-          }}
-        >
-          {wallClockWindow(race.window_start, race.window_finish)}
-        </span>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          {describeDuration(race.window_seconds)}
-        </span>
-      </span>
+          <span
+            style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: spacing(2) }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-accent)',
+              }}
+            >
+              {wallClockWindow(race.window_start, race.window_finish)}
+            </span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              {describeDuration(race.window_seconds)}
+            </span>
+          </span>
 
-      {race.track === null ? (
-        // In a box the thumbnail's own shape, so this cell is the height its skeleton promised.
-        <span
-          style={{
-            display: 'grid',
-            placeItems: 'center',
-            aspectRatio: `${THUMBNAIL_BOX.width} / ${THUMBNAIL_BOX.height}`,
-            marginTop: spacing(1),
-            padding: spacing(3),
-            textAlign: 'center',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--text-muted)',
-            fontStyle: 'italic',
-          }}
-        >
-          No GPS fix was recorded in this race’s window, so there is no track to draw.
-        </span>
-      ) : (
-        <TrackPicture track={race.track} />
-      )}
+          {/* The bridges' durations, in words beside the picture: at this size a label on the
+              map is unreadable, and a bridge without its duration only half-discharges ADR 0014. */}
+          {bridges.length > 0 && (
+            <span style={{ fontSize: 'var(--text-xs)', color: DROPOUT.stroke }}>
+              Feed dead {bridges.map((bridge) => dropoutDuration(bridge.seconds)).join(', ')}
+            </span>
+          )}
 
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-        Tap for the race’s own page.
+          {race.track === null && (
+            <span
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}
+            >
+              No GPS fix was recorded in this race’s window, so there is no track to draw.
+            </span>
+          )}
+        </span>
+
+        {race.track !== null && <TrackPicture track={race.track} />}
       </span>
     </Link>
   )
 }
 
-/** The track's one ink: the accent, which nothing on this card means anything else by. */
-const TRACK_INK = { stroke: 'var(--text-accent)', width: 2 } as const
-
-/** Type in the frame's own units. The frame is drawn about 1:1 on a phone, so this reads as 9px. */
-const LABEL_SIZE = 9
+/**
+ * The track's one ink, and the Dropout marks scaled to a frame a quarter the heatmap's width.
+ *
+ * The heatmap's own ring and dash would swallow a 96-unit frame, so the sizes are this picture's;
+ * the colour is `DROPOUT`'s, so a dead feed is the same red on both maps.
+ */
+const INK = {
+  track: { stroke: 'var(--text-accent)', width: 1.5 },
+  ringRadius: 2.2,
+  ringWidth: 0.8,
+  bridgeDash: '2.5 2',
+  bridgeWidth: 0.9,
+} as const
 
 /**
- * The track itself, static: no legend, scale, zoom or pan, and no colour that means a score.
- *
- * Every Dropout is still broken, ringed and bridged, and every bridge carries its duration —
- * unlike the heatmap, which labels only the bridges with room, because there the sailor can zoom
- * in to reveal the rest and here nothing can.
+ * The track itself, static and small: no legend, scale, zoom, pan or labels, and no colour that
+ * means a score. Every Dropout is still broken, ringed and bridged; the durations are the text
+ * beside it.
  */
 function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
   const { width, height } = track
@@ -138,6 +160,8 @@ function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
       role="img"
       aria-label={
         track.bridges.length === 0
@@ -148,9 +172,7 @@ function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
       }
       style={{
         display: 'block',
-        width: '100%',
-        aspectRatio: `${width} / ${height}`,
-        marginTop: spacing(1),
+        flexShrink: 0,
         background: 'var(--surface-base)',
         borderRadius: radius('sm'),
       }}
@@ -160,8 +182,8 @@ function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
           key={`run-${index}`}
           points={points}
           fill="none"
-          stroke={TRACK_INK.stroke}
-          strokeWidth={TRACK_INK.width}
+          stroke={INK.track.stroke}
+          strokeWidth={INK.track.width}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
@@ -172,8 +194,8 @@ function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
           key={`point-${index}`}
           cx={point.x}
           cy={point.y}
-          r={TRACK_INK.width}
-          fill={TRACK_INK.stroke}
+          r={INK.track.width}
+          fill={INK.track.stroke}
         />
       ))}
 
@@ -182,72 +204,48 @@ function TrackPicture({ track }: { track: TrackThumbnail }): ReactElement {
           key={`frozen-${index}`}
           cx={ring.cx}
           cy={ring.cy}
-          r={DROPOUT.ringRadius}
+          r={INK.ringRadius}
           fill="none"
           stroke={DROPOUT.stroke}
-          strokeWidth={DROPOUT.ringWidth}
+          strokeWidth={INK.ringWidth}
           opacity={DROPOUT.ringOpacity}
         />
       ))}
 
-      {track.bridges.map((bridge, index) => {
-        const label = `feed dead ${dropoutDuration(bridge.seconds)}`
-        // About 0.56em per character in the mono face, near enough to keep the label in frame:
-        // a label clipped to `feed dead` with no duration is worse than none.
-        const half = (label.length * LABEL_SIZE * 0.56) / 2
-        const x = Math.min(Math.max((bridge.x1 + bridge.x2) / 2, half + 2), width - half - 2)
-        const y = Math.max((bridge.y1 + bridge.y2) / 2 - 3, LABEL_SIZE + 2)
-
-        return (
-          <g key={`bridge-${index}`} data-testid="track-bridge">
-            <line
-              x1={bridge.x1}
-              y1={bridge.y1}
-              x2={bridge.x2}
-              y2={bridge.y2}
-              stroke={DROPOUT.stroke}
-              strokeWidth={DROPOUT.bridgeWidth}
-              strokeDasharray={DROPOUT.bridgeDash}
-              opacity={DROPOUT.bridgeOpacity}
-            />
-            <text
-              x={x}
-              y={y}
-              textAnchor="middle"
-              fontSize={LABEL_SIZE}
-              fontFamily="var(--font-mono)"
-              fill={DROPOUT.stroke}
-              stroke="var(--surface-base)"
-              strokeWidth={2.4}
-              paintOrder="stroke"
-            >
-              {label}
-            </text>
-          </g>
-        )
-      })}
+      {track.bridges.map((bridge, index) => (
+        <line
+          key={`bridge-${index}`}
+          data-testid="track-bridge"
+          x1={bridge.x1}
+          y1={bridge.y1}
+          x2={bridge.x2}
+          y2={bridge.y2}
+          stroke={DROPOUT.stroke}
+          strokeWidth={INK.bridgeWidth}
+          strokeDasharray={INK.bridgeDash}
+        />
+      ))}
     </svg>
   )
 }
 
-/**
- * The card's own shape while the Transcription pages in: the same box, three lines of text and a
- * frame at the thumbnail's own aspect ratio, so the placeholder is the card's height at any width.
- */
+/** The card's own shape while the Transcription pages in: two lines of text beside the frame. */
 function LatestRaceSkeleton(): ReactElement {
   return (
     <div style={CARD_STYLE} aria-hidden="true">
       <SkeletonText fontSize="var(--text-xs)" width="40%" />
-      <SkeletonText fontSize="var(--text-lg)" width="60%" />
-      <SkeletonText fontSize="var(--text-sm)" width="70%" />
-      <Skeleton
-        radius="var(--radius-sm)"
-        style={{
-          aspectRatio: `${THUMBNAIL_BOX.width} / ${THUMBNAIL_BOX.height}`,
-          marginTop: spacing(1),
-        }}
-      />
-      <SkeletonText fontSize="var(--text-xs)" width="45%" />
+      <div style={ROW_STYLE}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing(1), flex: 1 }}>
+          <SkeletonText fontSize="var(--text-base)" width="60%" />
+          <SkeletonText fontSize="var(--text-sm)" width="80%" />
+        </div>
+        <Skeleton
+          width={`${THUMBNAIL_BOX.width}px`}
+          height={`${THUMBNAIL_BOX.height}px`}
+          radius="var(--radius-sm)"
+          style={{ flexShrink: 0 }}
+        />
+      </div>
     </div>
   )
 }

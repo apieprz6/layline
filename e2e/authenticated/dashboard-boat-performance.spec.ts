@@ -22,24 +22,28 @@ const CARD_HREFS = [
   '/boat-performance/instrument-tuning',
 ]
 
-/** Live Wind, the three Overall cards, then the newest race, in the order the grid lays them out. */
+/** Live Wind, the newest race, then the three Overall cards, in the order the grid lays them out. */
 async function measureCells(page: Page): Promise<Box[]> {
   const wind = page.locator('.layline-card', { hasText: 'Live Wind' })
+  // The route's `loading.tsx` draws a Live Wind card of its own, and under a loaded suite it can
+  // still be in the DOM beside the real one for a moment; one left is the page settled.
+  await expect(wind).toHaveCount(1)
   await expect(wind).toBeVisible()
   const cells: Box[] = [(await wind.boundingBox())!]
 
   // Scoped to the grid Live Wind sits in, so a link of the same name in the drawer can't answer.
   const grid = wind.locator('xpath=..')
+
+  // The skeleton is no link, so a visible one is the settled card at its finished height.
+  const race = grid.locator('a[href^="/boat-performance/races/"]')
+  await expect(race).toBeVisible()
+  cells.push((await race.boundingBox())!)
+
   for (const href of CARD_HREFS) {
     const card = grid.locator(`a[href="${href}"]`)
     await expect(card).toBeVisible()
     cells.push((await card.boundingBox())!)
   }
-
-  const race = grid.locator('a[href^="/boat-performance/races/"]')
-  // The skeleton is no link, so a visible one is the settled card at its finished height.
-  await expect(race).toBeVisible()
-  cells.push((await race.boundingBox())!)
 
   return cells
 }
@@ -67,7 +71,7 @@ function expectGrid(cells: Box[], columns: number): void {
 }
 
 test.describe('The Dashboard, to a signed-in sailor', () => {
-  test('flows the Overall cards and the newest race on after Live Wind, one column on a phone and two on a desktop', async ({
+  test('puts the newest race beside Live Wind and flows the Overall cards on after it, one column on a phone and two on a desktop', async ({
     page,
   }) => {
     await gotoHydrated(page, '/')

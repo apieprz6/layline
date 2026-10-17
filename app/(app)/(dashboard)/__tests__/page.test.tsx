@@ -49,12 +49,12 @@ const LATEST: LatestRace = {
   window_finish: '2026-08-22T13:20:00',
   window_seconds: 8100,
   track: {
-    width: 360,
-    height: 180,
-    runs: ['20.0,100.0 80.0,40.0', '200.0,60.0 340.0,160.0'],
+    width: 96,
+    height: 64,
+    runs: ['6.0,40.0 30.0,10.0', '60.0,20.0 90.0,58.0'],
     points: [],
-    bridges: [{ x1: 80, y1: 40, x2: 200, y2: 60, seconds: 420, rows: 6 }],
-    rings: [{ cx: 80, cy: 40 }],
+    bridges: [{ x1: 30, y1: 10, x2: 60, y2: 20, seconds: 420, rows: 6 }],
+    rings: [{ cx: 30, cy: 10 }],
   },
 }
 
@@ -149,7 +149,7 @@ describe('Dashboard', () => {
   })
 
   describe('the most recent race', () => {
-    it('is a card after the Overall cards, tapping through to that race', async () => {
+    it('is the second card, beside the live wind and before the Overall cards, tapping through to that race', async () => {
       resolveAccount.mockResolvedValue(CREW)
 
       render(await resolveServerTree(await DashboardPage()))
@@ -160,9 +160,11 @@ describe('Dashboard', () => {
       expect(card).toHaveTextContent('Aug 22 · 11:05 – 13:20')
       expect(card).toHaveTextContent('2h 15m')
 
-      const overall = Array.from(document.querySelectorAll(OVERALL_CARDS))
-      const last = overall[overall.length - 1]
-      expect(last.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // Document order is what puts it beside Live Wind on a desktop and next under it on a phone.
+      const wind = screen.getByText('Live Wind')
+      const [firstOverall] = Array.from(document.querySelectorAll(OVERALL_CARDS))
+      expect(wind.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(card.compareDocumentPosition(firstOverall) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 
     it('draws the track broken at the Dropout and bridged with its duration', async () => {
@@ -173,7 +175,7 @@ describe('Dashboard', () => {
       const card = document.querySelector(RACE_CARD) as HTMLAnchorElement
       expect(card.querySelectorAll('polyline')).toHaveLength(2)
       expect(card.querySelectorAll('[data-testid="track-bridge"]')).toHaveLength(1)
-      expect(card).toHaveTextContent('feed dead 7m')
+      expect(card).toHaveTextContent('Feed dead 7m')
     })
 
     it('calls an untitled race untitled, and writes it no name', async () => {

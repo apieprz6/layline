@@ -23,14 +23,14 @@ import { projectTrack, type TrackBox } from '@/services/recordings/track-project
 import type { TrackThumbnail } from '@/types'
 
 /**
- * The thumbnail's frame: landscape, a card's width at about half its height.
+ * The thumbnail's frame: a small detail beside the race's title, drawn at one unit to the pixel.
  *
  * Stable whatever the race's own shape, like the heatmap's (ADR 0033), so the card is one height
  * for every race and its skeleton can be that height too.
  */
-export const THUMBNAIL_BOX: TrackBox = { width: 360, height: 180, pad: 14 }
+export const THUMBNAIL_BOX: TrackBox = { width: 96, height: 64, pad: 6 }
 
-/** `x,y` at the tenth of a unit a 360-unit frame can show, as the heatmap writes it. */
+/** `x,y` to the tenth of a unit, as the heatmap writes it. */
 function pathPoint({ x, y }: { x: number; y: number }): string {
   return `${x.toFixed(1)},${y.toFixed(1)}`
 }
