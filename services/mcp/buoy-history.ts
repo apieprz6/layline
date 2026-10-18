@@ -2,6 +2,7 @@ import { formatRelativeTime } from '@/lib/utils/timeFormatting'
 import { TIME_SCALES, inWindow, withMinutesAgo, type TimeScale } from '@/lib/utils/windowing'
 import { latestPoint, shows } from '@/lib/utils/stationReadings'
 import { calculateWindowStats } from '@/lib/utils/windowStats'
+import { isPurdueOutOfWater } from '@/services/buoys/ndbc'
 import { purdueOutOfSeason, stationName } from './current-conditions'
 import type {
   BuoyHistoryData,
@@ -40,7 +41,9 @@ export function buoyHistory({
 }: BuoyHistoryInput): McpStationHistory | McpStationOutOfSeason {
   const data = history.history
 
-  if (station === '45198' && !purdueInSeason && !data) return purdueOutOfSeason(history.status)
+  if (station === '45198' && isPurdueOutOfWater({ hasReadings: data !== null, inSeason: purdueInSeason })) {
+    return purdueOutOfSeason(history.status)
+  }
 
   const scale = TIME_SCALES[window]
   const aged = data ? withMinutesAgo(data, now) : null

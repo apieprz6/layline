@@ -25,6 +25,15 @@ export function formatOffset(minutes: number): string {
 }
 
 /**
+ * A reading's age in whole minutes, floored: the one rule behind the **Station Row**'s
+ * "12m ago" and the **MCP Server**'s `current_conditions` Staleness, so the two can
+ * never state different ages for the same reading (ADR 0042).
+ */
+export function observationAgeMinutes(timestamp: string, currentTime: number): number {
+  return Math.floor((currentTime - new Date(timestamp).getTime()) / 60000)
+}
+
+/**
  * How long ago a reading was taken, as a **Station Row** prints it
  * (e.g. "just now", "12m ago", "1h ago", "2d ago").
  *
@@ -33,9 +42,7 @@ export function formatOffset(minutes: number): string {
  * dashboard does (ADR 0042).
  */
 export function formatRelativeTime(timestamp: string, currentTime: number): string {
-  const then = new Date(timestamp)
-  const diffMs = currentTime - then.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
+  const diffMin = observationAgeMinutes(timestamp, currentTime)
 
   if (diffMin < 1) return 'just now'
   if (diffMin < 60) return `${diffMin}m ago`

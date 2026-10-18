@@ -1,4 +1,4 @@
-import { formatTimeHHMM, formatOffset } from '../timeFormatting'
+import { formatTimeHHMM, formatOffset, observationAgeMinutes } from '../timeFormatting'
 
 describe('formatTimeHHMM', () => {
   it('formats afternoon time correctly', () => {
@@ -38,5 +38,15 @@ describe('formatOffset', () => {
 
   it('formats large offsets as days', () => {
     expect(formatOffset(1440)).toBe('1.0d ago') // 24 hours
+  })
+})
+
+describe('observationAgeMinutes', () => {
+  const NOW = new Date('2026-07-15T23:12:00Z').getTime()
+
+  it('counts whole minutes, floored, as the Station Row does', () => {
+    expect(observationAgeMinutes('2026-07-15T23:00:00.000Z', NOW)).toBe(12)
+    expect(observationAgeMinutes('2026-07-15T23:11:01.000Z', NOW)).toBe(0)
+    expect(observationAgeMinutes('2026-07-15T21:40:00.000Z', NOW)).toBe(92)
   })
 })
