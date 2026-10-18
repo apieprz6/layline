@@ -7,6 +7,7 @@
 
 import {
   daysInMonth,
+  wallClockDate,
   wallClockDay,
   wallClockInputValue,
   wallClockSeconds,
@@ -135,5 +136,16 @@ describe('the same digits, on a screen', () => {
     expect(wallClockSecondsFromInput('2026-08-22T11:05:37')).toBe(
       wallClockSeconds('2026-08-22T11:05:37')
     )
+  })
+})
+
+describe('wallClockDate', () => {
+  it('is the stamp’s own calendar date, with no conversion either way', () => {
+    // Late enough that a stray UTC conversion in Chicago would land on the next day.
+    expect(wallClockDate('2026-09-04T23:30:00')).toBe('2026-09-04')
+  })
+
+  it('refuses a stamp the wall clock refuses', () => {
+    expect(() => wallClockDate('2026-09-04T23:30:00Z')).toThrow()
   })
 })

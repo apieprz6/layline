@@ -55,3 +55,23 @@ export function isCalendarDate(value: string): boolean {
 
   return day <= MONTH_LENGTHS[month - 1]
 }
+
+const WEEKDAYS = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+] as const
+
+/**
+ * `'2026-08-22'` → `'Saturday'`: the calendar's day of the week for a date, with no zone.
+ *
+ * Sakamoto's method, by hand rather than through `Date`, for the reason this file exists.
+ *
+ * @param date A calendar date: `YYYY-MM-DD`.
+ */
+export function weekdayOf(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  const offsets = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+  const y = month < 3 ? year - 1 : year
+  const index =
+    (y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) + offsets[month - 1] + day) % 7
+  return WEEKDAYS[index]
+}

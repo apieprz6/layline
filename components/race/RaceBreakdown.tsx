@@ -44,7 +44,11 @@ import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
 import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import { ASYMMETRY_SOLID_PAIRS } from '@/services/analysis/coverage-verdict'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
-import { fillerAnchoredShare, vmgFillerAnchoredShare } from '@/services/analysis/polar-performance'
+import {
+  fillerAnchoredShare,
+  noFigureNote,
+  vmgFillerAnchoredShare,
+} from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import type {
   CellAgreement,
@@ -89,9 +93,7 @@ function PerformanceTile({ track }: { track: RaceTrack }): ReactElement {
     return (
       <Tile title="Polar & VMG efficiency" testId="race-performance">
         <Absent>
-          {track.scoring === 'polar-unreadable'
-            ? 'The Polar this race names could not be read, so neither figure can be computed.'
-            : 'This race records no Polar Version, so neither figure can be computed.'}
+          {noFigureNote(track.scoring)}
         </Absent>
       </Tile>
     )

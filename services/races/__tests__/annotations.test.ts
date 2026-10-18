@@ -24,6 +24,8 @@ import {
   newSeaStateEntry,
   noteText,
   placeAnnotationTime,
+  sailEntryText,
+  seaStateWithHeight,
   refuseAnnotations,
   refuseEntryTimes,
   refuseSailEntry,
@@ -378,5 +380,32 @@ describe('one answer about a note, for the three shapes it arrives in', () => {
       'Main + Jib 1 · jib was blown out'
     )
     expect(sailWithNote('Main + Jib 1', '')).toBe('Main + Jib 1')
+  })
+})
+
+describe('sailEntryText', () => {
+  it('names a sail in its Version’s words, with the note trimmed beside it', () => {
+    expect(
+      sailEntryText({ at: '2026-06-03T19:00:00', definition_number: 3, label: 'Main + Jib 3', note: ' eased ' })
+    ).toBe('Main + Jib 3 · eased')
+    expect(
+      sailEntryText({ at: '2026-06-03T19:00:00', definition_number: 1, label: 'Main + Jib 1', note: null })
+    ).toBe('Main + Jib 1')
+  })
+
+  it('reads a note-only entry as what was written, naming no sail', () => {
+    expect(
+      sailEntryText({ at: '2026-06-03T19:00:00', definition_number: null, label: null, note: 'Code zero' })
+    ).toBe('Code zero')
+  })
+})
+
+describe('seaStateWithHeight', () => {
+  it('puts the height beside the word', () => {
+    expect(seaStateWithHeight('moderate')).toBe('Moderate · 2–3 ft')
+  })
+
+  it('states a value it has no label for as stored', () => {
+    expect(seaStateWithHeight('glassy')).toBe('glassy')
   })
 })

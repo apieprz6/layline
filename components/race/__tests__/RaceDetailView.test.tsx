@@ -172,6 +172,7 @@ function raceOf(
       rows: [],
       window: { window_start: '2026-06-03T19:00:00', window_finish: '2026-06-03T20:30:00' },
     }),
+    maneuvers: [],
   }
 }
 
