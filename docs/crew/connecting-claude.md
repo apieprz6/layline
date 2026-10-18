@@ -43,6 +43,10 @@ above happen in your browser.
   as the dashboard shows them now, and as a station's page shows them over its last 30 minutes to
   72 hours: every reading, and the page's Stats panel. More tools (Races, Polar performance) are on
   the way.
+- **Boat Setup.** The Polar, Crossover Chart, Rig Tune and Instrument Calibration as the Boat
+  Management screens show them, every Version included: "what was the rig set to for the Fall
+  Closer?", "when did we last recalibrate the paddlewheel?". A Polar is named by its Version, never
+  handed over as a grid.
 
 ## Reading the answers
 
@@ -56,6 +60,11 @@ above happen in your browser.
 - **The Stats are Layline's, not the station's.** Mean direction, mean speed, range and veer/back
   spread are worked out from the readings exactly as the station page's Stats panel does, and
   Claude is told they are derived.
+- **A Race was sailed under its own Versions.** Ask about a past Race's rig and Claude should open
+  the Version that Race names, not the one the boat is set to today.
+- **Rig figures are as measured.** Turnbuckle Gaps and Turns From Base are both given, and neither
+  is converted into the other. A band marked *Gaps stale* has Gaps that no longer match the rig;
+  Claude is told so.
 
 ## Disconnecting
 

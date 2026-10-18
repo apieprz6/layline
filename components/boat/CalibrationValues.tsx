@@ -4,6 +4,7 @@ import {
   CHANNEL_LABEL,
   formatMultiplier,
   formatOffset,
+  NO_MULTIPLIER,
 } from '@/lib/boat/calibration'
 import type { InstrumentCalibrationPayload } from '@/types'
 
@@ -97,7 +98,7 @@ export default function CalibrationValues({ payload }: CalibrationValuesProps): 
                       color: 'var(--text-muted)',
                     }}
                   >
-                    no multiplier
+                    {NO_MULTIPLIER}
                   </span>
                 ) : (
                   formatMultiplier(multiplier)

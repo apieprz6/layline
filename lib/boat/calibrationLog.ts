@@ -1,6 +1,7 @@
-import { CALIBRATION_CHANNELS, formatFigure } from '@/lib/boat/calibration'
+import { CALIBRATION_CHANNELS, CALIBRATION_EVENT_LABEL, formatFigure } from '@/lib/boat/calibration'
 import type {
   CalibrationEvent,
+  CalibrationEventType,
   CalibrationFieldChange,
   CalibrationLogEntry,
   InstrumentCalibrationPayload,
@@ -136,4 +137,36 @@ export function buildCalibrationLog(
   }
 
   return entries.sort(byDateDescending)
+}
+
+/**
+ * An entry's headline, as the Log prints it: `'First recorded · v1'`, `'Autocompensation · HDG'`.
+ *
+ * Here rather than in the component so that everything reading the Log back — the screen and the
+ * MCP server's `boat_setup` — names an entry in the same words.
+ */
+export function logEntryHeadline(entry: CalibrationLogEntry): string {
+  if (entry.entry === 'event') {
+    return `${CALIBRATION_EVENT_LABEL[entry.event.type]} · ${entry.event.channels.join(', ')}`
+  }
+
+  return `${entry.isFirst ? 'First recorded' : 'Values changed'} · v${entry.version.version_number}`
+}
+
+/**
+ * What a Version entry changed, one line a figure — or the one line saying nothing moved.
+ *
+ * A Version that snapshots the same figures as the one before it is legitimate: a Version is
+ * minted per act, not per difference, and saying so beats an entry that looks like a rendering
+ * failure.
+ */
+export function versionChangeLines(changes: CalibrationFieldChange[]): string[] {
+  return changes.length === 0 ? ['No figure moved.'] : changes.map(describeChange)
+}
+
+/** What a Calibration Event did to the programmed figures, which is always nothing. */
+export function eventConsequence(type: CalibrationEventType): string {
+  return type === 'autocompensation'
+    ? 'No programmed figure changed — the instrument rebuilt its own deviation table.'
+    : 'No programmed figure changed.'
 }

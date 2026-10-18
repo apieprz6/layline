@@ -97,13 +97,13 @@ describe('/api/mcp with a crew token', () => {
     })
   })
 
-  it('lists current_conditions and buoy_history as read-only tools', async () => {
+  it('lists current_conditions, buoy_history and boat_setup as read-only tools', async () => {
     const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
     const body = await response.json()
     const tools: { name: string; annotations: object }[] = body.result.tools
 
     expect(response.status).toBe(200)
-    expect(tools.map((t) => t.name)).toEqual(['current_conditions', 'buoy_history'])
+    expect(tools.map((t) => t.name)).toEqual(['current_conditions', 'buoy_history', 'boat_setup'])
     tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
   })
 

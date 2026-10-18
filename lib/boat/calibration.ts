@@ -84,6 +84,13 @@ export function formatFigure(
   return field === 'multiplier' ? formatMultiplier(value) : formatOffset(channel, value)
 }
 
+/**
+ * What a channel with no multiplier states in the multiplier's place: `AWA` and `HDG` have no such
+ * field on the display, so this is neither `1.00`, a figure nobody programmed, nor a dash, which
+ * would read as one withheld (ADR 0005).
+ */
+export const NO_MULTIPLIER = 'no multiplier'
+
 /** What a **Calibration Event**'s type is called on screen. */
 export const CALIBRATION_EVENT_LABEL: Record<CalibrationEventType, string> = {
   autocompensation: 'Autocompensation',

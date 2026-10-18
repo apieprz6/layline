@@ -43,7 +43,7 @@ async function handle(request: Request): Promise<Response> {
     const caller = await authenticateMcpRequest(request)
     if (!caller) return withCors(unauthorized(request))
 
-    const server = createLaylineMcpServer()
+    const server = createLaylineMcpServer({ supabase: caller.supabase })
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
