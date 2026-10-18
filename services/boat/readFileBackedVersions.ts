@@ -26,6 +26,7 @@ import type {
   FileBackedVersionDetail,
   FileBackedVersionDetailList,
   FileBackedVersionList,
+  FileBackedVersionWithPayload,
   FileBackedVersionSummary,
 } from '@/types'
 
@@ -196,7 +197,7 @@ export function fileBackedVersionReader<Payload>(
   function withPayload(
     artifact: ArtifactRow,
     row: DetailRow
-  ): FileBackedVersionSummary & { payload: Payload | null } {
+  ): FileBackedVersionWithPayload<Payload> {
     const { payload: stored, ...summary } = row
     const validated = validate(stored)
 

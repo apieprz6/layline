@@ -31,6 +31,8 @@ import type {
   InstrumentCalibrationRecord,
   McpBoatSetupArtifactAnswer,
   McpBoatSetupOverview,
+  McpBoatSetupResult,
+  McpBoatSetupVersionIdentity,
   McpCalibrationChannel,
   McpCalibrationLogEntry,
   McpInstrumentCalibrationVersion,
@@ -49,9 +51,6 @@ import type {
  * through the same `lib/` function, and nothing here classifies, sums or recomputes (ADR 0042).
  */
 
-/** An answer, or the refusal Claude reads as a failed call. Never part of an answer. */
-export type BoatSetupResult<Answer> = { ok: true; answer: Answer } | { ok: false; refusal: string }
-
 function unreadable(what: string): { ok: false; refusal: string } {
   return {
     ok: false,
@@ -65,7 +64,7 @@ function unreadable(what: string): { ok: false; refusal: string } {
  * its place, as the screen falls back to, because a Race's frozen pointer must resolve to the
  * Version it holds or to nothing (ADR 0012).
  */
-function chosen<Version extends { version_number: number }>(
+function pickVersions<Version extends { version_number: number }>(
   kind: BoatSetupKind,
   versions: Version[],
   requested: number | undefined
@@ -88,22 +87,32 @@ function chosen<Version extends { version_number: number }>(
 }
 
 /** Which Version an artifact's pointer is at, by number, or null when nothing is recorded. */
-function currentNumber(
+function versionInForceNumber(
   versions: { id: string; version_number: number }[],
   currentVersionId: string | null
 ): number | null {
   return versions.find((version) => version.id === currentVersionId)?.version_number ?? null
 }
 
-/** What identifies a file-backed Version, as its list row states it. */
-function fileBackedVersion(version: FileBackedVersionSummary): McpPolarVersion {
+/** What identifies any Version to a sailor: its number, date, note, and whether it is in force. */
+function versionIdentity(
+  version: { id: string; version_number: number; effective_from: string; note: string | null },
+  currentVersionId: string | null
+): McpBoatSetupVersionIdentity {
   return {
     versionNumber: version.version_number,
     effectiveFrom: version.effective_from,
     note: version.note,
-    inForce: version.is_current,
-    filename: version.filename,
+    inForce: version.id === currentVersionId,
   }
+}
+
+/** What identifies a file-backed Version, as its list row states it. */
+function fileBackedVersion(
+  version: FileBackedVersionSummary,
+  currentVersionId: string | null
+): McpPolarVersion {
+  return { ...versionIdentity(version, currentVersionId), filename: version.filename }
 }
 
 /**
@@ -114,10 +123,10 @@ function fileBackedVersion(version: FileBackedVersionSummary): McpPolarVersion {
 export function polarVersions(
   list: PolarVersionList | null,
   versionNumber?: number
-): BoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'polar' }> {
+): McpBoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'polar' }> {
   if (list === null) return unreadable(BOAT_SETUP_LABEL.polar)
 
-  const picked = chosen('polar', list.versions, versionNumber)
+  const picked = pickVersions('polar', list.versions, versionNumber)
   if (!picked.ok) return picked
 
   return {
@@ -125,8 +134,8 @@ export function polarVersions(
     answer: {
       artifact: 'polar',
       name: BOAT_SETUP_LABEL.polar,
-      currentVersionNumber: currentNumber(list.versions, list.current_version_id),
-      versions: picked.versions.map(fileBackedVersion),
+      currentVersionNumber: versionInForceNumber(list.versions, list.current_version_id),
+      versions: picked.versions.map((version) => fileBackedVersion(version, list.current_version_id)),
     },
   }
 }
@@ -135,10 +144,10 @@ export function polarVersions(
 export function crossoverChartVersions(
   list: FileBackedVersionDetailList<CrossoverChartPayload> | null,
   versionNumber?: number
-): BoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'crossover_chart' }> {
+): McpBoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'crossover_chart' }> {
   if (list === null) return unreadable(BOAT_SETUP_LABEL.crossover_chart)
 
-  const picked = chosen('crossover_chart', list.versions, versionNumber)
+  const picked = pickVersions('crossover_chart', list.versions, versionNumber)
   if (!picked.ok) return picked
 
   return {
@@ -146,10 +155,10 @@ export function crossoverChartVersions(
     answer: {
       artifact: 'crossover_chart',
       name: BOAT_SETUP_LABEL.crossover_chart,
-      currentVersionNumber: currentNumber(list.versions, list.current_version_id),
+      currentVersionNumber: versionInForceNumber(list.versions, list.current_version_id),
       versions: picked.versions.map(
         (version): McpCrossoverChartVersion => ({
-          ...fileBackedVersion(version),
+          ...fileBackedVersion(version, list.current_version_id),
           sailDefinitions:
             version.payload === null
               ? null
@@ -166,7 +175,7 @@ export function crossoverChartVersions(
 }
 
 /** The Boat Management list: the boat, and each artifact's Version in force or *not recorded*. */
-export function boatSetupOverview(setup: BoatSetup | null): BoatSetupResult<McpBoatSetupOverview> {
+export function boatSetupOverview(setup: BoatSetup | null): McpBoatSetupResult<McpBoatSetupOverview> {
   if (setup === null) return unreadable('Boat Setup')
 
   return {
@@ -215,10 +224,10 @@ function windBand(band: RigTuneBand): McpWindBand {
 export function rigTuneVersions(
   page: RigTunePage | null,
   versionNumber?: number
-): BoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'rig_tune' }> {
+): McpBoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'rig_tune' }> {
   if (page === null) return unreadable(BOAT_SETUP_LABEL.rig_tune)
 
-  const picked = chosen('rig_tune', page.versions, versionNumber)
+  const picked = pickVersions('rig_tune', page.versions, versionNumber)
   if (!picked.ok) return picked
 
   return {
@@ -226,13 +235,12 @@ export function rigTuneVersions(
     answer: {
       artifact: 'rig_tune',
       name: BOAT_SETUP_LABEL.rig_tune,
-      currentVersionNumber: currentNumber(page.versions, page.current_version_id),
+      currentVersionNumber: versionInForceNumber(page.versions, page.current_version_id),
       versions: picked.versions.map(
         (version): McpRigTuneVersion => ({
-          versionNumber: version.version_number,
-          effectiveFrom: version.effective_from,
+          ...versionIdentity(version, page.current_version_id),
+          // Required on a Rig Tune, so never null here.
           note: version.note,
-          inForce: version.id === page.current_version_id,
           windBands: version.bands.map(windBand),
         })
       ),
@@ -287,7 +295,7 @@ function logEntry(entry: CalibrationLogEntry): McpCalibrationLogEntry {
 export function instrumentCalibrationVersions(
   record: InstrumentCalibrationRecord | null,
   versionNumber?: number
-): BoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'instrument_calibration' }> {
+): McpBoatSetupResult<McpBoatSetupArtifactAnswer & { artifact: 'instrument_calibration' }> {
   if (record === null) return unreadable(BOAT_SETUP_LABEL.instrument_calibration)
 
   const log = buildCalibrationLog(record.versions, record.events)
@@ -298,7 +306,7 @@ export function instrumentCalibrationVersions(
   )
 
   // The read is in mint order; the answer is newest first, as every other artifact's is.
-  const picked = chosen('instrument_calibration', [...record.versions].reverse(), versionNumber)
+  const picked = pickVersions('instrument_calibration', [...record.versions].reverse(), versionNumber)
   if (!picked.ok) return picked
 
   return {
@@ -306,13 +314,10 @@ export function instrumentCalibrationVersions(
     answer: {
       artifact: 'instrument_calibration',
       name: BOAT_SETUP_LABEL.instrument_calibration,
-      currentVersionNumber: currentNumber(record.versions, record.currentVersionId),
+      currentVersionNumber: versionInForceNumber(record.versions, record.currentVersionId),
       versions: picked.versions.map(
         (version): McpInstrumentCalibrationVersion => ({
-          versionNumber: version.version_number,
-          effectiveFrom: version.effective_from,
-          note: version.note,
-          inForce: version.id === record.currentVersionId,
+          ...versionIdentity(version, record.currentVersionId),
           channels: channelFigures(version.payload),
           changes: changesOf.get(version.id) ?? [],
         })

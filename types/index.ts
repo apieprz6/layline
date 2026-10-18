@@ -468,7 +468,12 @@ export type FileBackedVersionDetail<Payload> = FileBackedVersionSummary & { payl
  */
 export interface FileBackedVersionDetailList<Payload> {
   current_version_id: string | null
-  versions: (FileBackedVersionSummary & { payload: Payload | null })[]
+  versions: FileBackedVersionWithPayload<Payload>[]
+}
+
+/** A Version with its payload, or `payload: null` where the stored one is not readable as one. */
+export type FileBackedVersionWithPayload<Payload> = FileBackedVersionSummary & {
+  payload: Payload | null
 }
 
 /** What an artifact's screen shows: every Version, and the payload the pointer is at. */
@@ -3774,6 +3779,9 @@ export type McpCalibrationLogEntry =
       /** What the act did to the programmed figures, which is always nothing. */
       consequence: string
     }
+
+/** A `boat_setup` answer, or the refusal Claude reads as a failed call. Never part of an answer. */
+export type McpBoatSetupResult<Answer> = { ok: true; answer: Answer } | { ok: false; refusal: string }
 
 interface McpBoatSetupArtifactCommon {
   name: string

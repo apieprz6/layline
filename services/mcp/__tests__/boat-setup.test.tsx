@@ -13,9 +13,9 @@ import {
   instrumentCalibrationVersions,
   polarVersions,
   rigTuneVersions,
-  type BoatSetupResult,
 } from '../boat-setup'
 import type {
+  McpBoatSetupResult,
   BoatSetup,
   BoatSetupVersionRef,
   CrossoverChartPayload,
@@ -38,7 +38,7 @@ import type {
  */
 
 /** The answer of a result that should have one. */
-function answerOf<Answer>(result: BoatSetupResult<Answer>): Answer {
+function answerOf<Answer>(result: McpBoatSetupResult<Answer>): Answer {
   if (!result.ok) throw new Error(`expected an answer, got the refusal: ${result.refusal}`)
   return result.answer
 }
@@ -443,7 +443,7 @@ describe('polarVersions', () => {
       if (version.note !== null) expect(rows[index]).toHaveTextContent(version.note)
       expect(within(rows[index]).queryByTestId('polar-version-current') !== null).toBe(version.inForce)
       expect(version.effectiveFrom).toBe(POLARS.versions[index].effective_from)
-      // The targets come from polar_performance, which states them as its screen does (ADR 0042).
+      // A target is stated by the screen that states it, never handed over as a grid (ADR 0042).
       expect(Object.keys(version).sort()).toEqual(['effectiveFrom', 'filename', 'inForce', 'note', 'versionNumber'])
     })
   })

@@ -28,9 +28,9 @@ import {
   instrumentCalibrationVersions,
   polarVersions,
   rigTuneVersions,
-  type BoatSetupResult,
+
 } from './boat-setup'
-import type { BoatSetupKind } from '@/types'
+import type { BoatSetupKind, McpBoatSetupResult } from '@/types'
 
 /**
  * What the dashboard's own copy tells a sailor about these numbers, told to Claude instead.
@@ -76,7 +76,7 @@ const BOAT_SETUP_DESCRIPTION = `The boat's Boat Setup exactly as Layline's Boat 
 - rig_tune: each Version's change reason and its Wind Bands up the wind axis. A band's range, label and note are the tuning guide's words; label is never the dashboard's light/medium/heavy wind classification. Every shroud position is stated port and starboard, both as the Turnbuckle Gap in mm and as Turns From Base (signed half turns, counted from the Base Tune). Neither derives from the other, since no thread pitch is recorded, so never convert one to the other. gapsStale means the Base Tune was re-measured after that band was, so its Gaps describe a rig that no longer exists while its Turns still hold; say so, and never recompute a Gap.
 - instrument_calibration: each Version's figures per channel in the TL-25 display's own encoding, exactly as transcribed: a multiplier reads 1.02, not +2%, and each channel corrects a reading as multiplier × reading + offset. AWA and HDG take an offset alone ("no multiplier"), which is not a missing figure. changes is what that Version moved against the one before it. With every Version, calibrationLog is the dated history, newest first, of Version changes and Calibration Events (acts such as an autocompensation that changed no programmed figure). That log answers when a channel was last recalibrated.
 - crossover_chart: each Version's Sail Definitions by number and label, and how many chart cells call for each; a sail no cell calls for is "never recommended", which is legal. sailDefinitions null means that Version's stored chart can no longer be read.
-- polar: each Version's number, date, note and file, but never the grid. For a target or an efficiency, use polar_performance, which states them as the screens do.`
+- polar: each Version's number, date, note and file, but never the grid. Never work out a target or an efficiency from a Polar: a Race's efficiency is in race_summary, stated as its page states it.`
 
 /**
  * A tool's answer as both forms MCP carries: JSON text for a client that reads only text, and the
@@ -91,7 +91,7 @@ function refusal(message: string): CallToolResult {
   return { isError: true, content: [{ type: 'text', text: message }] }
 }
 
-function stated<Answer extends object>(result: BoatSetupResult<Answer>): CallToolResult {
+function toolResult<Answer extends object>(result: McpBoatSetupResult<Answer>): CallToolResult {
   return result.ok ? answer(result.answer) : refusal(result.refusal)
 }
 
@@ -103,13 +103,13 @@ async function artifactVersions(
 ): Promise<CallToolResult> {
   switch (artifact) {
     case 'polar':
-      return stated(polarVersions(await readPolarVersions(supabase), version))
+      return toolResult(polarVersions(await readPolarVersions(supabase), version))
     case 'crossover_chart':
-      return stated(crossoverChartVersions(await readCrossoverChartVersionsWithCharts(supabase), version))
+      return toolResult(crossoverChartVersions(await readCrossoverChartVersionsWithCharts(supabase), version))
     case 'rig_tune':
-      return stated(rigTuneVersions(await readRigTune(supabase), version))
+      return toolResult(rigTuneVersions(await readRigTune(supabase), version))
     case 'instrument_calibration':
-      return stated(instrumentCalibrationVersions(await readInstrumentCalibration(supabase), version))
+      return toolResult(instrumentCalibrationVersions(await readInstrumentCalibration(supabase), version))
   }
 }
 
@@ -235,7 +235,7 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
     async ({ artifact, version }) => {
       if (artifact === undefined) {
         return version === undefined
-          ? stated(boatSetupOverview(await readBoatSetup(supabase)))
+          ? toolResult(boatSetupOverview(await readBoatSetup(supabase)))
           : refusal(`A Version is a Version of one artifact. Name it as well: one of ${artifacts}.`)
       }
 
