@@ -3,6 +3,8 @@ import {
   TIME_SCALES,
   GAP_THRESHOLD_MINUTES,
   exceedsGapThreshold,
+  withMinutesAgo,
+  inWindow,
 } from '../windowing'
 import type { WindDataPoint } from '@/types'
 
@@ -212,5 +214,35 @@ describe('exceedsGapThreshold', () => {
 
   it('does not fire on the ten-minute cadence the feed actually reports at', () => {
     expect(exceedsGapThreshold(120, 130)).toBe(false)
+  })
+})
+
+describe('withMinutesAgo', () => {
+  it('ages each observation against the reference time, keeping every field as recorded', () => {
+    const data: WindDataPoint[] = [
+      { timestamp: '2026-07-15T23:00:00.000Z', spd: 17.3, dir: 245, gust: null },
+      { timestamp: '2026-07-15T22:30:00.000Z', spd: 14, dir: 232 },
+    ]
+
+    expect(withMinutesAgo(data, new Date('2026-07-15T23:12:00Z'))).toEqual([
+      { timestamp: '2026-07-15T23:00:00.000Z', spd: 17.3, dir: 245, gust: null, minsAgo: 12 },
+      { timestamp: '2026-07-15T22:30:00.000Z', spd: 14, dir: 232, minsAgo: 42 },
+    ])
+  })
+})
+
+describe('inWindow', () => {
+  const at = (minsAgo: number) => ({ timestamp: '', spd: 10, dir: 200, minsAgo })
+
+  it('keeps the observations from the scrub offset back through the window, both ends included', () => {
+    const points = [at(-1), at(0), at(30), at(60), at(61)]
+
+    expect(inWindow(points, 60, 0).map((p) => p.minsAgo)).toEqual([0, 30, 60])
+  })
+
+  it('slides with the scrub offset', () => {
+    const points = [at(0), at(30), at(60), at(90), at(120)]
+
+    expect(inWindow(points, 60, 30).map((p) => p.minsAgo)).toEqual([30, 60, 90])
   })
 })

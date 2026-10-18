@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { WindDataPointWithOffset } from '@/types'
 import { calculateWindowStats } from '@/lib/utils/windowStats'
+import { inWindow } from '@/lib/utils/windowing'
 import { getCompassDirection } from '@/lib/utils/wind'
 
 interface WindowStatsProps {
@@ -93,16 +94,10 @@ export default function WindowStats({
   nowOffsetMinutes,
 }: WindowStatsProps) {
   // Filter data to time window and calculate stats
-  const stats = useMemo(() => {
-    const windowStart = nowOffsetMinutes
-    const windowEnd = nowOffsetMinutes + timeWindowMinutes
-
-    const filteredData = data.filter(
-      (p) => p.minsAgo >= windowStart && p.minsAgo <= windowEnd
-    )
-
-    return calculateWindowStats(filteredData)
-  }, [data, timeWindowMinutes, nowOffsetMinutes])
+  const stats = useMemo(
+    () => calculateWindowStats(inWindow(data, timeWindowMinutes, nowOffsetMinutes)),
+    [data, timeWindowMinutes, nowOffsetMinutes]
+  )
 
   // Show message when insufficient data
   if (!stats) {

@@ -2,9 +2,8 @@
 
 import { useState, useMemo } from "react";
 import type { BuoyMetadata, WindDataPoint, WindDataPointWithOffset } from "@/types";
-import { TIME_SCALES, type TimeScale } from "@/lib/utils/windowing";
-import { getMinutesAgo } from "@/lib/utils/time";
-import { carries } from "@/lib/utils/stationReadings";
+import { TIME_SCALES, withMinutesAgo, type TimeScale } from "@/lib/utils/windowing";
+import { latestPoint, shows } from "@/lib/utils/stationReadings";
 import StationLayout from "@/components/dashboard/StationLayout";
 import StationHeader from "@/components/dashboard/StationHeader";
 import WindRose from "@/components/dashboard/WindRose";
@@ -39,11 +38,7 @@ export default function StationPageClient({
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
   const dataWithOffset: WindDataPointWithOffset[] = useMemo(
-    () =>
-      data.map((point) => ({
-        ...point,
-        minsAgo: getMinutesAgo(point.timestamp, now),
-      })),
+    () => withMinutesAgo(data, now),
     [data, now]
   );
 
@@ -101,9 +96,9 @@ export default function StationPageClient({
 
   // Calculate latest data time (most recent sample)
   const latestDataTime = useMemo(() => {
-    if (!dataWithOffset || dataWithOffset.length === 0) return new Date();
-    const latestPoint = dataWithOffset.find((p) => p.minsAgo === 0) || dataWithOffset[0];
-    return new Date(serverTime - latestPoint.minsAgo * 60 * 1000);
+    const latest = latestPoint(dataWithOffset);
+    if (!latest) return new Date();
+    return new Date(serverTime - latest.minsAgo * 60 * 1000);
   }, [dataWithOffset, serverTime]);
 
   const hasData = data && data.length > 0;
@@ -165,7 +160,7 @@ export default function StationPageClient({
                 }}
               >
                 Wind speed
-                {metadata.capability.gust && carries(data, "gust") && <span style={{ color: "var(--wind-heavy)" }}> · gust</span>}
+                {shows(metadata.capability, data, "gust") && <span style={{ color: "var(--wind-heavy)" }}> · gust</span>}
               </span>
               <span
                 style={{

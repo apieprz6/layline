@@ -5,7 +5,7 @@
 import { POST } from '../route'
 import { GET as protectedResource } from '@/app/.well-known/oauth-protected-resource/api/mcp/route'
 import { authenticateMcpRequest } from '@/lib/mcp/auth'
-import { clearHistoryCache, fetchCHII2 } from '@/services/buoys/ndbc'
+import { clearHistoryCache, fetchCHII2, fetchCHII2History } from '@/services/buoys/ndbc'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { POLAR, POLAR_VERSION, RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
 
@@ -61,7 +61,9 @@ describe('/api/mcp without a token', () => {
     expect(response.headers.get('www-authenticate')).toBe(
       `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/api/mcp"`
     )
-    expect(await response.text()).not.toContain('current_conditions')
+    const text = await response.text()
+    expect(text).not.toContain('current_conditions')
+    expect(text).not.toContain('buoy_history')
   })
 
   it('names the host the client called, not the one the server was started on', async () => {
@@ -110,13 +112,58 @@ describe('/api/mcp with a crew token', () => {
   it('lists its tools as read-only', async () => {
     const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
     const body = await response.json()
+    const tools: { name: string; annotations: object }[] = body.result.tools
 
     expect(response.status).toBe(200)
-    expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
-      'current_conditions',
-      'polar_performance',
+    expect(tools.map((t) => t.name)).toEqual(['current_conditions', 'buoy_history', 'polar_performance'])
+    tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
+  })
+
+  it("answers buoy_history with the readings the station page renders for CHII2", async () => {
+    const response = await POST(
+      rpc(
+        {
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'tools/call',
+          params: { name: 'buoy_history', arguments: { station: 'CHII2' } },
+        },
+        'Bearer t'
+      )
+    )
+    const body = await response.json()
+    const answer = body.result.structuredContent
+
+    // The station page's own call, served from the cache the tool just warmed: one source.
+    const page = await fetchCHII2History()
+    expect(answer).toMatchObject({ station: 'CHII2', window: { id: '1h' }, anemometerHeightFeet: 85 })
+    expect(answer.readings).toEqual([
+      {
+        observedAt: page.history![0].timestamp,
+        speedKnots: page.history![0].spd,
+        directionDegreesTrue: page.history![0].dir,
+        gustKnots: page.history![0].gust,
+      },
     ])
-    for (const tool of body.result.tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true })
+    expect(JSON.parse(body.result.content[0].text)).toEqual(answer)
+  })
+
+  it('refuses a buoy_history window the station page does not offer, naming the ones it does', async () => {
+    const response = await POST(
+      rpc(
+        {
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'tools/call',
+          params: { name: 'buoy_history', arguments: { station: 'CHII2', window: '3h' } },
+        },
+        'Bearer t'
+      )
+    )
+    const body = await response.json()
+
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toMatch(/30m.*1h.*6h.*24h.*72h/)
   })
 
   it('offers polar_performance the screen’s five dimensions, and wind as the screen’s window', async () => {

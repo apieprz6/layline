@@ -7,11 +7,11 @@ import {
   getWindCondition,
   getCompassDirection,
 } from "@/lib/utils/wind";
-import { TIME_SCALES, exceedsGapThreshold } from "@/lib/utils/windowing";
-import { formatTimeOffset, formatTime, getMinutesAgo } from "@/lib/utils/time";
+import { TIME_SCALES, exceedsGapThreshold, inWindow, withMinutesAgo } from "@/lib/utils/windowing";
+import { formatTimeOffset, formatTime } from "@/lib/utils/time";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
-import { carries, readingAt } from "@/lib/utils/stationReadings";
+import { readingAt, shows } from "@/lib/utils/stationReadings";
 import WaveCorner from "./WaveCorner";
 
 interface WindRoseProps {
@@ -64,13 +64,10 @@ export default function WindRose({
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
 
   // Transform WindDataPoint[] to WindDataPointWithOffset[] by calculating minsAgo
-  const dataWithOffset: WindDataPointWithOffset[] = useMemo(() => {
-    const now = referenceTime || new Date();
-    return data.map((point) => ({
-      ...point,
-      minsAgo: getMinutesAgo(point.timestamp, now),
-    }));
-  }, [data, referenceTime]);
+  const dataWithOffset: WindDataPointWithOffset[] = useMemo(
+    () => withMinutesAgo(data, referenceTime || new Date()),
+    [data, referenceTime],
+  );
 
   // Measure SVG dimensions for overlay positioning
   useEffect(() => {
@@ -137,17 +134,11 @@ export default function WindRose({
     // Define the time window based on nowOffsetMinutes
     // nowOffset = 0 (live): show minsAgo [0, timeWindowMinutes]
     // nowOffset = 60 (1h ago): show minsAgo [60, 60 + timeWindowMinutes]
-    const windowStart = nowOffsetMinutes;
-    const windowEnd = nowOffsetMinutes + timeWindowMinutes;
-
-    return dataWithOffset
-      .filter(
-        (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
-      )
+    return inWindow(dataWithOffset, timeWindowMinutes, nowOffsetMinutes)
       .map((point) => {
         // r01: 1 = reference time (outer ring), 0 = oldest time in window (center)
         // Relative position within the current window
-        const relativeAge = point.minsAgo - windowStart;
+        const relativeAge = point.minsAgo - nowOffsetMinutes;
         const r01 = 1 - relativeAge / timeWindowMinutes;
         const [x, y] = radialToXY(point.dir, r01, CENTER_X, CENTER_Y, R);
         const color = getWindColorHex(point.spd);
@@ -223,11 +214,7 @@ export default function WindRose({
 
     e.preventDefault(); // Prevent page scrolling on touch
 
-    const windowStart = nowOffsetMinutes;
-    const windowEnd = nowOffsetMinutes + timeWindowMinutes;
-    const rawDataPoints = dataWithOffset.filter(
-      (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
-    );
+    const rawDataPoints = inWindow(dataWithOffset, timeWindowMinutes, nowOffsetMinutes);
     const nearest = findPointByRadius(
       e.clientX,
       e.clientY,
@@ -247,11 +234,7 @@ export default function WindRose({
 
     e.preventDefault(); // Prevent page scrolling on touch drag
 
-    const windowStart = nowOffsetMinutes;
-    const windowEnd = nowOffsetMinutes + timeWindowMinutes;
-    const rawDataPoints = dataWithOffset.filter(
-      (point) => point.minsAgo >= windowStart && point.minsAgo <= windowEnd,
-    );
+    const rawDataPoints = inWindow(dataWithOffset, timeWindowMinutes, nowOffsetMinutes);
     const nearest = findPointByRadius(
       e.clientX,
       e.clientY,
@@ -283,8 +266,8 @@ export default function WindRose({
   // Both follow the displayed moment, as speed and direction do. A station that can't measure a
   // quantity, or whose history never carried it, gets nothing drawn for it; one that can but has
   // no reading then shows "—".
-  const showGust = (capability?.gust ?? false) && carries(data, "gust");
-  const showWaves = (capability?.waves ?? false) && carries(data, "waveHeight");
+  const showGust = shows(capability, data, "gust");
+  const showWaves = shows(capability, data, "waveHeight");
   const gust = showGust ? (displayPoint?.gust ?? null) : undefined;
   const waveReading = useMemo(
     () => (showWaves ? readingAt(dataWithOffset, displayPoint, "waveHeight") : null),

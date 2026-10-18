@@ -1,4 +1,4 @@
-import { carries, readingAt } from '../stationReadings'
+import { carries, latestPoint, readingAt, shows } from '../stationReadings'
 import type { WindDataPointWithOffset } from '@/types'
 
 const point = (
@@ -56,5 +56,37 @@ describe('carries', () => {
 
   it('is false when no point has the field at all', () => {
     expect(carries([point(0), point(10)], 'waveHeight')).toBe(false)
+  })
+})
+
+describe('latestPoint', () => {
+  it('is the observation at the reference time when there is one', () => {
+    const data = [point(10), point(0), point(20)]
+
+    expect(latestPoint(data)).toBe(data[1])
+  })
+
+  it('is otherwise the first the feed reports, which is its newest', () => {
+    const data = [point(12), point(22)]
+
+    expect(latestPoint(data)).toBe(data[0])
+  })
+
+  it('is undefined for an empty history', () => {
+    expect(latestPoint([])).toBeUndefined()
+  })
+})
+
+describe('shows', () => {
+  const data = [point(0, { gust: null }), point(10, { gust: 18 })]
+
+  it('is true only for a quantity the station measures and its history carries', () => {
+    expect(shows({ gust: true, waves: true }, data, 'gust')).toBe(true)
+    expect(shows({ gust: false, waves: true }, data, 'gust')).toBe(false)
+    expect(shows({ gust: true, waves: true }, data, 'waveHeight')).toBe(false)
+  })
+
+  it('shows nothing when no capability is known', () => {
+    expect(shows(undefined, data, 'gust')).toBe(false)
   })
 })
