@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { raceInstrumentCheck } from '@/services/analysis/instrument-tuning'
+import { detectManeuvers } from '@/services/analysis/maneuvers'
 import { loggedTwsMean, windBandFinding } from '@/services/races/boat-setup'
 import { readRaceTrack } from '@/services/races/readRaceTrack'
 import { readRecordingRows } from '@/services/races/recording-rows'
 import { coverageRowsFrom, raceCoverage, windowFindings } from '@/services/recordings/coverage'
-import { raceWindowSeconds } from '@/services/recordings/race-window'
+import { insideRaceWindow, raceWindowSeconds } from '@/services/recordings/race-window'
 import { assessRowQuality, withinRaceWindow } from '@/services/recordings/row-quality'
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
@@ -400,6 +401,11 @@ export async function readRace(
     const window = raceWindowSeconds(race)
     const coverage = raceCoverage(coverageRowsFrom(whole), window)
     const inWindow = withinRaceWindow(whole, race)
+    // Over the whole Transcription and then clipped, like Row Quality: a flip is read across the
+    // row before it, which may sit outside the window.
+    const maneuvers = detectManeuvers(rows, whole).flips.filter((flip) =>
+      insideRaceWindow(wallClockSeconds(flip.row_time), window)
+    )
 
     // The mean wind the recording logged over the window, derived here and stored nowhere. The wizard's
     // Review step derives the same figure the same way from the same rows, so the sentence a sailor read
@@ -458,6 +464,7 @@ export async function readRace(
       // This Race's share of each Calibration Channel, by the Instrument Tuning screen's own
       // per-Race functions over the rows already in hand — so no second read of the Transcription.
       instruments: raceInstrumentCheck({ race_id: race.id, rows, window: race }),
+      maneuvers,
     }
   } catch (thrown: unknown) {
     // A stamp the wall clock refuses: a fractional second, or an offset, in a column Layline only

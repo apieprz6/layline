@@ -777,6 +777,33 @@ describe('readRace', () => {
    * uncoloured track says which of the three reasons it has. The bands, the rings and the Dropout
    * Bridge belong to `services/analysis/__tests__/track-heatmap.test.ts`.
    */
+  describe('the Maneuvers', () => {
+    it('states the flips inside the window, detected over the whole Transcription', async () => {
+      // A gybe-free afternoon: one tack before the gun at row 1, which is outside the window, and
+      // one at row 6, inside it. Rows 2 to 4 are the latch, across which no flip is read.
+      stored = LATCHED_FEED.map((row, index) => ({
+        ...row,
+        twa: index === 0 ? '-45' : index < 6 ? '45' : '-45',
+      }))
+
+      const race = await readRace('race-1')
+
+      expect(race?.maneuvers).toEqual([
+        {
+          row_index: 6,
+          row_time: stamp(6 * CADENCE_SECONDS),
+          maneuver: 'tack',
+          twa_before: '45',
+          twa_after: '-45',
+        },
+      ])
+    })
+
+    it('states none on a race whose recording carries no TWA', async () => {
+      expect((await readRace('race-1'))?.maneuvers).toEqual([])
+    })
+  })
+
   describe('the race track', () => {
     /** The fixture's rows with an angle on them, so the Polar has something to answer. */
     beforeEach(() => {

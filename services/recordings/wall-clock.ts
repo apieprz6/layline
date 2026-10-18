@@ -125,6 +125,12 @@ export function wallClockTime(stamp: string): string {
   return stamp.slice(11, 16)
 }
 
+/** `2026-09-04`: the calendar date of a stamp, in the recording's own frame. */
+export function wallClockDate(stamp: string): string {
+  wallClockSeconds(stamp)
+  return stamp.slice(0, 10)
+}
+
 /** `Sep 4` — the day, in the recording's own frame. */
 export function wallClockDay(stamp: string): string {
   wallClockSeconds(stamp)

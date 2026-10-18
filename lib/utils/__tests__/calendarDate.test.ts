@@ -1,4 +1,4 @@
-import { formatCalendarDate, isCalendarDate } from '../calendarDate'
+import { formatCalendarDate, isCalendarDate, weekdayOf } from '../calendarDate'
 
 /**
  * A Boat Setup Version's `effective_from` is a Postgres `date` — a calendar day a
@@ -62,5 +62,17 @@ describe('isCalendarDate', () => {
     // The centuries, which the four-year rule alone gets wrong in both directions.
     expect(isCalendarDate('2000-02-29')).toBe(true)
     expect(isCalendarDate('1900-02-29')).toBe(false)
+  })
+})
+
+describe('weekdayOf', () => {
+  it('names the calendar’s day of the week, wherever the test runs', () => {
+    expect(weekdayOf('2026-08-22')).toBe('Saturday')
+    expect(weekdayOf('2026-10-17')).toBe('Saturday')
+    expect(weekdayOf('2025-07-09')).toBe('Wednesday')
+    // January and February count as the end of the year before, which is what the method is for.
+    expect(weekdayOf('2026-01-01')).toBe('Thursday')
+    expect(weekdayOf('2028-02-29')).toBe('Tuesday')
+    expect(weekdayOf('2000-03-01')).toBe('Wednesday')
   })
 })
