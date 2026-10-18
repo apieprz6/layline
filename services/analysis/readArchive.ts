@@ -45,7 +45,7 @@ import { readPolarVersion } from '@/services/boat/readPolarVersions'
 import type { SailDefinitionLabels } from '@/services/races/readRace'
 import { readRaceAnnotations, readSailDefinitions } from '@/services/races/readRace'
 import { readRecordingRows } from '@/services/races/recording-rows'
-import { wallClockSeconds } from '@/services/recordings/wall-clock'
+import { wallClockDate, wallClockSeconds } from '@/services/recordings/wall-clock'
 import type {
   AnalysisArchiveRace,
   CrossoverChartScreen,
@@ -302,7 +302,7 @@ async function readRaceSet(supabase: Supabase, limit: number | null): Promise<Ra
     races: races.map((race, index) => ({
       id: race.id,
       title: race.title,
-      day: race.window_start.slice(0, 10),
+      day: wallClockDate(race.window_start),
       seconds: resolved[index].reduce((total, row) => total + (row.interval_seconds ?? 0), 0),
     })),
   }

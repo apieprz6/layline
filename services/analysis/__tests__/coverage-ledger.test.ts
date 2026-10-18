@@ -14,6 +14,7 @@ import {
   coverageLedger,
   gapSentence,
   ledgerHeadline,
+  raceCoverageLedgers,
 } from '@/services/analysis/coverage-ledger'
 import { EMPTY_FILTER, NOT_RECORDED, analysisDimensions } from '@/services/analysis/filter'
 import type { AnalysisFilter, CoverageLedger, MatchableRow } from '@/types'
@@ -255,5 +256,28 @@ describe('the words the ledger prints', () => {
     ].join(' ')
 
     expect(printed).not.toMatch(/\brows?\b/i)
+  })
+})
+
+describe('raceCoverageLedgers', () => {
+  it('gives each Race its own unfiltered ledger, in time', () => {
+    const ledgers = raceCoverageLedgers([
+      row({ race_id: 'race-a', interval_seconds: 45 }),
+      row({ race_id: 'race-b', interval_seconds: 90, countable: false }),
+      row({ race_id: 'race-a', interval_seconds: 20, countable: false }),
+      row({ race_id: 'race-a', interval_seconds: null }),
+    ])
+
+    expect([...ledgers.keys()]).toEqual(['race-a', 'race-b'])
+    expect(ledgers.get('race-a')).toMatchObject({
+      total_seconds: 65,
+      countable_seconds: 45,
+      total_races: 1,
+    })
+    expect(ledgers.get('race-b')).toMatchObject({ total_seconds: 90, countable_seconds: 0 })
+  })
+
+  it('has no entry for a Race with no row', () => {
+    expect(raceCoverageLedgers([]).size).toBe(0)
   })
 })

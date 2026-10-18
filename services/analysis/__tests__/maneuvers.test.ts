@@ -14,6 +14,7 @@ import {
   ZONE_BOUNDARY_DEG,
   classifyFlip,
   detectManeuvers,
+  maneuverCounts,
 } from '@/services/analysis/maneuvers'
 import { parseQtvlmRecording } from '@/services/recordings/qtvlm'
 import { assessRowQuality } from '@/services/recordings/row-quality'
@@ -325,5 +326,24 @@ describe('the rows a performance metric reads', () => {
         rows: maneuvers.rows.slice(1),
       })
     ).toThrow()
+  })
+})
+
+describe('maneuverCounts', () => {
+  const flip = (maneuver: Maneuver, index: number) => ({
+    row_index: index,
+    row_time: `2026-06-03T19:0${index}:00`,
+    maneuver,
+    twa_before: '40',
+    twa_after: '-40',
+  })
+
+  it('counts each kind, and names a kind with none as zero', () => {
+    expect(maneuverCounts([flip('tack', 1), flip('gybe', 2), flip('tack', 3)])).toEqual({
+      tack: 2,
+      gybe: 1,
+      rounding: 0,
+    })
+    expect(maneuverCounts([])).toEqual({ tack: 0, gybe: 0, rounding: 0 })
   })
 })

@@ -3459,6 +3459,12 @@ export interface RaceDetail {
    * stored nowhere. A channel the race produced nothing for carries its reason, never a zero.
    */
   instruments: RaceInstrumentCheck
+  /**
+   * The `TWA` sign flips inside the Race Window, in row order: detected over the whole
+   * Transcription and clipped afterwards (ADR 0009), by the same `detectManeuvers` whose Windows
+   * the track excludes. Derived at read and stored nowhere. Empty on a recording with no `TWA`.
+   */
+  maneuvers: ManeuverFlip[]
 }
 
 /**
@@ -3616,14 +3622,12 @@ export type McpAnalysisFilterArgument = Partial<Record<AnalysisDimension, string
   dayRange?: AnalysisDayRange
 }
 
-// One season figure as the Polar performance screen prints it: the ratio, the screen's own
-// rounding of it, and its Filler-Anchored share flagged beside it, never in its place (ADR 0036).
-// `ratio` null means nothing in the match could be scored; `note` then says so in words.
-export interface McpEfficiencyFigure {
-  ratio: number | null
+// One figure as the Polar performance screen prints it: `McpEfficiencyFigure` (the race page's
+// ratio, percent and Filler-Anchored share), plus the time it is over and the flag raised beside it,
+// never in its place (ADR 0036). `ratio` null means nothing in the match could be scored; `note`
+// then says so in words.
+export interface McpPolarPerformanceFigure extends McpEfficiencyFigure {
   scoredSeconds: number
-  percent: string | null
-  fillerAnchoredShare: number | null
   fillerAnchored: boolean
   note?: string
 }
@@ -3680,7 +3684,7 @@ export interface McpWindWindow {
   lowKnots: number
   highKnots: number
   polarColumnsInPlay: number[]
-  polarEfficiency: McpEfficiencyFigure
+  polarEfficiency: McpPolarPerformanceFigure
   reading: string
   notDrawn: { seconds: number; parts: { reason: string; seconds: number }[] }
   patches: McpPolarPlotPatch[]
@@ -3689,8 +3693,8 @@ export interface McpWindWindow {
 
 export interface PolarPerformanceAnswer {
   filter: McpAnalysisFilterArgument
-  polarEfficiency: McpEfficiencyFigure
-  vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+  polarEfficiency: McpPolarPerformanceFigure
+  vmgEfficiency: McpPolarPerformanceFigure & { caveat: string }
   coverageLedger: McpCoverageLedger
   dimensions: McpAnalysisDimension[]
   // The windows a call may ask for, or null where no race records a Polar.
@@ -3738,4 +3742,100 @@ export interface McpStationHistory {
   fetchError?: string
   anemometerHeightFeet: number
   note?: string
+}
+
+// A Boat Setup Version a Race was sailed under, as the Race froze it (ADR 0012). Null where the
+// Race records none: "not recorded", never the boat's current Version filled in.
+export interface McpVersionRef {
+  versionNumber: number
+  effectiveFrom: string
+}
+
+// What identifies a Race. Stamps are the recording's own naive clock, with no zone and no
+// conversion; `day` and `weekday` are read from `windowStart`. A null title is a Race the sailor
+// did not name, left null (ADR 0010). The archive records no separate occasion.
+export interface McpRaceIdentity {
+  id: string
+  title: string | null
+  day: string
+  weekday: string
+  windowStart: string
+  windowFinish: string
+}
+
+// A duration as the screens state one: the seconds, and `describeDuration`'s words for them.
+export interface McpDuration {
+  seconds: number
+  label: string
+}
+
+// One Race as `list_races` states it, in time and never in rows (ADR 0037). `logged` is the time
+// the window's rows span, live or frozen, which the analysis screens' Race list prints;
+// `countable` is the part of it every performance figure reads: not Frozen, not Low-Speed, not in
+// a Maneuver Window (ADR 0025).
+export interface McpRaceListEntry extends McpRaceIdentity {
+  window: McpDuration
+  logged: McpDuration
+  countable: McpDuration
+}
+
+// Either the whole archive or a refusal: a list with a Race missing is never an answer (ADR 0026).
+export type McpRaceListAnswer = { ok: true; races: McpRaceListEntry[] } | { ok: false }
+
+// One efficiency figure as the race page prints it: the ratio, the page's own percent, and the
+// share of the rows behind it compared against a cell the Polar manufactured (ADR 0036). Null
+// ratio and percent where nothing could be scored; null share where nothing was summed.
+export interface McpEfficiencyFigure {
+  ratio: number | null
+  percent: string | null
+  fillerAnchoredShare: number | null
+}
+
+export type McpRacePerformance =
+  | {
+      scoring: 'polar'
+      polarEfficiency: McpEfficiencyFigure
+      vmgEfficiency: McpEfficiencyFigure & { caveat: string }
+      // Measured time behind Polar Efficiency: Countable rows only (ADR 0025).
+      scored: McpDuration
+    }
+  | { scoring: 'no-polar-version' | 'polar-unreadable'; note: string }
+
+// `race_summary`'s answer: one Race's page, as aggregates. Never a Recording Row (ADR 0042).
+export interface McpRaceSummary {
+  race: McpRaceIdentity & { recordingFilename: string }
+  boatSetup: {
+    polar: McpVersionRef | null
+    crossoverChart: McpVersionRef | null
+    rigTune: McpVersionRef | null
+    instrumentCalibration: McpVersionRef | null
+    windBand: { lowKnots: number; highKnots: number | null; label: string | null } | null
+    loggedTwsMeanKnots: number | null
+  }
+  // The race page's coverage readout: the window, its live time, its Dropouts and the two edges
+  // the recording does not reach.
+  coverage: {
+    window: McpDuration
+    recorded: McpDuration
+    frozen: McpDuration
+    beforeFirstRow: McpDuration
+    afterLastRow: McpDuration
+  }
+  // The page's own notes about this window and its recording, in its words.
+  findings: string[]
+  // What the sailor said, earliest first, as the race page's Sails and Sea state sections list it
+  // (ADR 0010). `text` is the page's own wording. An empty list is not recorded: nobody wrote it
+  // down, which is a different fact from nothing changing.
+  testimony: {
+    // `sail` is the Crossover Chart Version's own label for the Sail Definition named, null on an
+    // entry that named none and is only its note. `note` is as stored, null where none was written.
+    sails: { at: string; text: string; sail: string | null; note: string | null }[]
+    seaState: { at: string; text: string; seaState: SeaState }[]
+  }
+  maneuvers: {
+    detectorVersion: string
+    counts: Record<Maneuver, number>
+    flips: { at: string; maneuver: Maneuver; twaBefore: string; twaAfter: string }[]
+  }
+  performance: McpRacePerformance
 }

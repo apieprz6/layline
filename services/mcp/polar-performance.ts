@@ -30,7 +30,7 @@ import type {
   EfficiencyAggregate,
   MatchableRow,
   McpCoverageLedger,
-  McpEfficiencyFigure,
+  McpPolarPerformanceFigure,
   McpPolarPlotPatch,
   McpWindWindow,
   McpWindWindowArgument,
@@ -46,7 +46,7 @@ function figure(
   seconds: number,
   filler: number | null,
   nothing: string
-): McpEfficiencyFigure {
+): McpPolarPerformanceFigure {
   return {
     ratio,
     scoredSeconds: seconds,

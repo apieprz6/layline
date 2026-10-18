@@ -298,6 +298,8 @@ export function harnessRace(track: RaceTrack, instruments: RaceInstrumentCheck):
       { severity: 'note', message: 'The feed was dead for 8 minutes in the middle of this window.' },
     ],
     annotations: HARNESS_ANNOTATIONS,
+    // The page draws no list of these; the harness has nothing to show with one.
+    maneuvers: [],
     boat_setup: {
       polar: { version_id: 'harness-polar', version_number: 3, effective_from: '2026-02-10' },
       crossover_chart: {

@@ -1,5 +1,5 @@
-import { buoyMetadata } from '@/services/buoys/ndbc'
-import { formatRelativeTime } from '@/lib/utils/timeFormatting'
+import { buoyMetadata, isPurdueOutOfWater } from '@/services/buoys/ndbc'
+import { formatRelativeTime, observationAgeMinutes } from '@/lib/utils/timeFormatting'
 import { getStationInfo } from '@/lib/config/stations'
 import type {
   BuoyDataResult,
@@ -48,7 +48,7 @@ function stationReading(station: 'CHII2' | '45198', result: BuoyDataResult, now:
     fetchedAt: result.fetchedAt,
     staleness: data
       ? {
-          minutes: Math.floor((now.getTime() - new Date(data.timestamp).getTime()) / 60000),
+          minutes: observationAgeMinutes(data.timestamp, now.getTime()),
           label: formatRelativeTime(data.timestamp, now.getTime()),
         }
       : null,
@@ -77,8 +77,12 @@ export function currentConditions({
   now,
   purdueInSeason,
 }: CurrentConditionsInput): CurrentConditionsAnswer {
-  const purdueAnswer: McpStationReading | McpStationOutOfSeason =
-    !purdueInSeason && !purdue.data ? purdueOutOfSeason(purdue.status) : stationReading('45198', purdue, now)
+  const purdueAnswer: McpStationReading | McpStationOutOfSeason = isPurdueOutOfWater({
+    hasReadings: purdue.data !== null,
+    inSeason: purdueInSeason,
+  })
+    ? purdueOutOfSeason(purdue.status)
+    : stationReading('45198', purdue, now)
 
   return { stations: [stationReading('CHII2', chii2, now), purdueAnswer] }
 }

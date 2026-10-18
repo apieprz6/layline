@@ -20,7 +20,7 @@
  */
 
 import { sharePercent } from '@/services/analysis/figures'
-import { NOT_RECORDED, bucketOf, matchesFilter } from '@/services/analysis/filter'
+import { EMPTY_FILTER, NOT_RECORDED, bucketOf, matchesFilter } from '@/services/analysis/filter'
 import { describeDuration } from '@/services/recordings/coverage'
 import type {
   AnalysisDimension,
@@ -161,4 +161,23 @@ export function countableSentence(ledger: CoverageLedger): string {
 export function gapSentence(gap: CoverageLedgerGap): string {
   const share = gap.share === null ? describeDuration(gap.seconds) : sharePercent(gap.share)
   return `Of that, ${share} has no ${gap.label} recorded.`
+}
+
+/**
+ * One unfiltered ledger per Race, keyed by its id: what each Race contributes to the archive.
+ *
+ * `coverageLedger` over each Race's own rows, so a Race's time here is the same sum the analysis
+ * screens state for it. A Race with no in-window row has no entry.
+ */
+export function raceCoverageLedgers(rows: readonly MatchableRow[]): Map<string, CoverageLedger> {
+  const byRace = new Map<string, MatchableRow[]>()
+  for (const row of rows) {
+    const raceRows = byRace.get(row.race_id) ?? []
+    raceRows.push(row)
+    byRace.set(row.race_id, raceRows)
+  }
+
+  return new Map(
+    [...byRace].map(([raceId, raceRows]) => [raceId, coverageLedger(raceRows, EMPTY_FILTER, [])])
+  )
 }

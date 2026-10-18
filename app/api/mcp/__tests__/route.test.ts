@@ -8,11 +8,40 @@ import { authenticateMcpRequest } from '@/lib/mcp/auth'
 import { clearHistoryCache, fetchCHII2, fetchCHII2History } from '@/services/buoys/ndbc'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { POLAR, POLAR_VERSION, RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
+import { readRace } from '@/services/races/readRace'
+import { raceSummary } from '@/services/mcp/races'
+import {
+  FIXTURE_CHART,
+  FIXTURE_POLAR,
+  FIXTURE_RACE_ID,
+  OLDER_RACE_ID,
+  archiveClient,
+  fixtureArchive,
+} from '@/services/mcp/__tests__/archive-client'
 
 jest.mock('@/lib/mcp/auth', () => ({ authenticateMcpRequest: jest.fn() }))
-jest.mock('@/services/analysis/readArchive', () => ({ readAnalysisArchive: jest.fn() }))
+// The real read by default, which the race tools run over their fixture client; a polar test
+// stubs it for itself, and `beforeEach` puts the real one back so no stub outlives its test.
+jest.mock('@/services/analysis/readArchive', () => {
+  const actual = jest.requireActual('@/services/analysis/readArchive')
+  return { ...actual, readAnalysisArchive: jest.fn(actual.readAnalysisArchive) }
+})
 
 const readArchive = readAnalysisArchive as jest.MockedFunction<typeof readAnalysisArchive>
+const { readAnalysisArchive: realReadArchive } = jest.requireActual<
+  typeof import('@/services/analysis/readArchive')
+>('@/services/analysis/readArchive')
+
+jest.mock('@/services/boat/readPolarVersions', () => ({
+  readPolarVersion: async (versionId: string) =>
+    versionId === 'polar-v1' ? { payload: FIXTURE_POLAR } : null,
+}))
+
+jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
+  readCrossoverChartVersion: async (versionId: string) =>
+    versionId === 'chart-v1' ? { payload: FIXTURE_CHART } : null,
+  readCrossoverChartScreen: async () => null,
+}))
 
 const authenticate = authenticateMcpRequest as jest.MockedFunction<typeof authenticateMcpRequest>
 
@@ -44,6 +73,7 @@ function rpc(body: object, authorization?: string): Request {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  readArchive.mockImplementation(realReadArchive)
   clearHistoryCache()
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ref.supabase.co'
   // Purdue then falls back from Supabase to NDBC, so every upstream read is the fetch below.
@@ -109,13 +139,19 @@ describe('/api/mcp with a crew token', () => {
     })
   })
 
-  it('lists its tools as read-only', async () => {
+  it('lists its tools, every one read-only', async () => {
     const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
     const body = await response.json()
     const tools: { name: string; annotations: object }[] = body.result.tools
 
     expect(response.status).toBe(200)
-    expect(tools.map((t) => t.name)).toEqual(['current_conditions', 'buoy_history', 'polar_performance'])
+    expect(tools.map((t) => t.name)).toEqual([
+      'current_conditions',
+      'buoy_history',
+      'list_races',
+      'race_summary',
+      'polar_performance',
+    ])
     tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
   })
 
@@ -255,5 +291,78 @@ describe('/api/mcp with a crew token', () => {
     expect(body.result.isError).toBe(true)
     expect(body.result.content[0].text).toMatch(/could not be read/)
     expect(body.result.structuredContent).toBeUndefined()
+  })
+})
+
+describe('/api/mcp race tools', () => {
+  let consoleError: jest.SpyInstance
+
+  /** The archive the caller's own client reads, and the tables it was asked for. */
+  function signInWith(tables = fixtureArchive(), failing: string[] = []): string[] {
+    const caller = archiveClient(tables, failing)
+    authenticate.mockResolvedValue({
+      supabase: caller.client,
+      authInfo: { token: 't', clientId: 'claude', scopes: [] },
+    })
+    return caller.asked
+  }
+
+  async function call(name: string, args: object = {}) {
+    const response = await POST(
+      rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: args } }, 'Bearer t')
+    )
+    return (await response.json()).result
+  }
+
+  beforeEach(() => {
+    consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => consoleError.mockRestore())
+
+  it('lists the archive through the caller’s own client', async () => {
+    const asked = signInWith()
+
+    const result = await call('list_races')
+
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent.races.map((race: { id: string }) => race.id)).toEqual([
+      FIXTURE_RACE_ID,
+      OLDER_RACE_ID,
+    ])
+    expect(asked).toContain('races')
+    expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent)
+  })
+
+  it('summarises a Race with the figures its page derives from the same read', async () => {
+    signInWith()
+
+    const result = await call('race_summary', { race: FIXTURE_RACE_ID })
+    const page = await readRace(FIXTURE_RACE_ID, archiveClient(fixtureArchive()).client)
+
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(raceSummary(page!))
+  })
+
+  it('answers a Race that does not exist with an error, never an empty summary', async () => {
+    signInWith()
+
+    const result = await call('race_summary', { race: '00000000-0000-0000-0000-000000000000' })
+
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toBeUndefined()
+    expect(result.content[0].text).toMatch(/list_races/)
+  })
+
+  it('answers a failed read with an error, never a partial summary or a short list', async () => {
+    signInWith(fixtureArchive(), ['recording_rows'])
+
+    const summary = await call('race_summary', { race: FIXTURE_RACE_ID })
+    const list = await call('list_races')
+
+    expect(summary.isError).toBe(true)
+    expect(summary.structuredContent).toBeUndefined()
+    expect(list.isError).toBe(true)
+    expect(list.structuredContent).toBeUndefined()
   })
 })

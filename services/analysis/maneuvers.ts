@@ -174,3 +174,15 @@ export function detectManeuvers(
     ),
   }
 }
+
+/**
+ * How many of each Maneuver a list of flips holds, every kind named and a kind with none at zero.
+ *
+ * A count of events and never a cost: a recording at thirty-second resolution holds a tack in one
+ * or two rows, and nothing read off that would mean anything (LAY-162).
+ */
+export function maneuverCounts(flips: readonly ManeuverFlip[]): Record<Maneuver, number> {
+  const counts: Record<Maneuver, number> = { tack: 0, gybe: 0, rounding: 0 }
+  for (const flip of flips) counts[flip.maneuver] += 1
+  return counts
+}

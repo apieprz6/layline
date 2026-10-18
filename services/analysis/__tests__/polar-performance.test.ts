@@ -19,6 +19,7 @@ import {
   fillerAnchoredShare,
   getPolarPerformanceData,
   isFillerFlagged,
+  noFigureNote,
   scoredSailingSentence,
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
@@ -237,5 +238,12 @@ describe('isFillerFlagged', () => {
 describe('the screen’s registry', () => {
   it('offers no wind chip, because the Polar Plot’s focus window owns that axis (ADR 0040)', () => {
     expect(DIMENSIONS.map((dimension) => dimension.id)).toEqual(['pos', 'sail', 'sea', 'time', 'when'])
+  })
+})
+
+describe('noFigureNote', () => {
+  it('tells a Polar nobody recorded from one that could not be read', () => {
+    expect(noFigureNote('no-polar-version')).toMatch(/records no Polar Version/)
+    expect(noFigureNote('polar-unreadable')).toMatch(/could not be read/)
   })
 })

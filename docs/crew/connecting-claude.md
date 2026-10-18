@@ -1,8 +1,8 @@
 # Connecting Claude to Layline
 
-Add Layline to Claude once, and you can ask it about the conditions in plain words: "what's the
-wind doing right now?", "is the Purdue buoy out?". Claude answers from what Layline's own screens
-show, with the same caveats beside each number.
+Add Layline to Claude once, and you can ask it about the conditions and the boat's Races in plain
+words: "what's the wind doing right now?", "how did we sail on Saturday?". Claude answers from
+what Layline's own screens show, with the same caveats beside each number.
 
 You need a Layline crew account, which is the Google address the owner added for you. Without one,
 Google sign-in is refused here just as it is in the app.
@@ -39,12 +39,17 @@ above happen in your browser.
 - **Read only.** The connector cannot upload, amend or delete anything. Uploading a Race and
   editing Boat Setup stay in the app.
 - **As you.** Claude reads what your own account can read in Layline, and nothing more.
-- **Current Conditions and Buoy History.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as
-  the dashboard shows them now, and as a station's page shows them over its last 30 minutes to 72
+- **Current Conditions and Buoy History.** Harrison Dever Crib (CHII2) and the Purdue Buoy, as the
+  dashboard shows them now, and as a station's page shows them over its last 30 minutes to 72
   hours: every reading, and the page's Stats panel.
+- **Races.** The archive's list of Races, and one Race's summary as its page states it: the Boat
+  Setup it was sailed under, the sail changes and sea state you recorded, how much of it was
+  recorded, its tacks and gybes, and its Polar and VMG efficiency. Claude is given figures, never
+  the recording's rows.
 - **Polar performance.** The season's Polar Efficiency and VMG Efficiency, narrowed the way the
   Polar performance screen's filter narrows them: point of sail, sail used, sea state, time of
-  day and when. More tools (forecasts, Races, Sail Selection) are on the way.
+  day and when.
+- More tools (forecasts, sail selection) are on the way.
 
 ## Reading the answers
 
@@ -58,6 +63,14 @@ above happen in your browser.
 - **The Stats are Layline's, not the station's.** Mean direction, mean speed, range and veer/back
   spread are worked out from the readings exactly as the station page's Stats panel does, and
   Claude is told they are derived.
+- **A Race's coverage is time.** Claude is told how much of the race was recorded and how much
+  of it any figure reads, and should say when a Race is thinly recorded.
+- **Some efficiency is filler-anchored.** Where a figure partly compares the boat against a cell
+  the Polar made up rather than measured, Claude is given that share and should state it beside
+  the figure, as the race page does.
+- **A Race with no title has none.** Claude should call it by its day, not invent a name.
+- **Sails and sea state are what you wrote down.** Where nobody recorded them for a Race, Claude is
+  told they were not recorded, which is not the same as nothing changing.
 
 - **Wind speed works the way the Polar Plot's wind window does.** The season figures blend every
   wind, so 110% of target at 4 knots and 50% at 12 can read as one middling number. Ask about a
