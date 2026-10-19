@@ -1820,12 +1820,12 @@ export type TrackOverlay = 'target_speed' | 'target_vmg' | 'sail' | 'sog' | 'tws
 /**
  * A band, named as the design token that paints it.
  *
- * A token and never a hex, so the theme stays in charge: after dark `.theme-nightvision` collapses
- * every one of these to a red depth ramp, which is the theme's whole proposition and the reason
- * each scale's legend must change its own *words* rather than its swatches.
+ * A token and never a hex, so the theme stays in charge: after dark `.theme-nightvision` redraws
+ * every one of these in its own long-wavelength palette, keeping each scale's daylight meaning
+ * (ADR 0043), which is why one legend sentence serves both themes.
  *
  * Five families, one per scale shape. The ratio ramp is ADR 0033's — amber below, neutral gray at
- * the midpoint, blue above, and never the wind-speed tokens, which mean a different quantity. The
+ * the midpoint, green above, and never the wind-speed tokens, which mean a different quantity. The
  * `wind-*` family appears here for exactly one overlay, `TWS`, which *is* that quantity.
  */
 export type TrackBandToken =

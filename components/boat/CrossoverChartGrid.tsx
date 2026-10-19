@@ -21,8 +21,8 @@ interface CrossoverChartGridProps {
  * kite survives. So the cells are small coloured blocks, and the block carries its sail number.
  *
  * **The number is always printed.** The colour is how the shape is seen; the number is how the sail
- * is identified. Colour alone would fail the night-vision theme, which is one red on purpose, and
- * would fail anyone who cannot separate the hues.
+ * is identified. Colour alone would fail the night-vision theme, which draws the eight sail bands in
+ * two hues, red and amber, and would fail anyone who cannot separate the hues.
  *
  * At 390px this fits without scrolling and without shrinking below a readable size: thirteen 24px
  * cells and a 40px angle column come to 352px. A chart wider than the boat's scrolls sideways with

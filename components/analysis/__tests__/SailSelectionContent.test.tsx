@@ -24,8 +24,8 @@ import type { AnalysisFilter, MatchableRow } from '@/types'
  * that, and `archive-sail-selection.test.ts` holds it against the real archive):
  *
  *   - **every cell prints its number or glyph**, on every layer, independently of its colour —
- *     which is the whole of what makes the night-vision theme readable, since there the sail bands
- *     and the three state colours all collapse to reds;
+ *     which is the whole of what makes the night-vision theme readable, since there the eight sail
+ *     bands are only two hues, red and amber;
  *   - the **Chart** layer is never narrowed and never ghosted, and the other three are;
  *   - a tap opens *that cell's* breakdown, with each line's own percent of target.
  *
@@ -216,8 +216,8 @@ describe('four layers over one grid', () => {
 
   /**
    * The night-vision claim, in the form jsdom can hold: **no layer's print depends on its colour.**
-   * There the eight sail bands become red tints of each other and the three state colours become
-   * reds, so a cell whose fact lived only in its fill would be unreadable on the exact screen a
+   * There the eight sail bands are only two hues, red and amber (ADR 0043), and some sailors
+   * separate none, so a cell whose fact lived only in its fill would be unreadable on the exact screen a
    * sailor uses at night — and this archive holds a fourteen-hour overnight race (ADR 0030).
    */
   it('prints something in every cell that has anything to say, on every layer', async () => {

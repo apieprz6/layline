@@ -5,6 +5,9 @@
 Accepted. Resolves LAY-148 ("Prototype the GPS track + polar-%-of-target heatmap overlay"), the last
 of the per-screen prototypes under LAY-138.
 
+Amended by ADR 0043 (LAY-195): the ramp no longer collapses after dark, and the legend is no longer
+theme-aware.
+
 Numbered 0033 because 0031 was claimed three times from concurrent sessions, twice onto `main`. This
 ADR also renumbers ADR 0031 (Instrument Tuning, LAY-147) to **0032**, leaving 0031 with LAY-151's
 rig-tune ADR — not by claim order, which would have moved the rig-tune one, but because that is the
@@ -94,6 +97,14 @@ after dark is the actual defect here, not the collapsed hue.
 If polarity after dark turns out to matter on the water — this is a lake where distance races run
 through the night — the retreat is variant B's sequential ramp, which is theme-stable, and not a new
 hue. It is not a theme override: a chart escaping the theme is the one thing `globals.css` forbids.
+
+> **Amended by [ADR 0043](./0043-night-vision-is-long-wavelength-with-dim-green-and-blue-only-on-meaning.md)
+> (LAY-195).** The collapse this section accepted no longer happens. Night vision is no longer one
+> hue: after dark the ramp is daylight's own amber below target and green above, dim and balanced
+> in luminance, so 85% and 115% are different colours again and the ramp still diverges. The
+> obligation that came with the collapse goes with it. The legend is no longer theme-aware, and one
+> sentence, `slower than target · 100% · faster`, serves both themes. Neither the retreat to variant
+> B nor a theme override was needed: the theme itself changed.
 
 ### Colour is spent only on the measurement; every other row is drawn in shape and texture
 

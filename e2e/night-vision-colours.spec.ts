@@ -14,7 +14,7 @@ import { gotoHydrated } from './hydrated'
  */
 
 const DAY_BANDS = ['rgb(0, 122, 82)', 'rgb(0, 85, 187)', 'rgb(196, 112, 0)', 'rgb(204, 17, 0)']
-const NIGHT_BANDS = ['rgb(153, 51, 51)', 'rgb(204, 34, 34)', 'rgb(238, 51, 0)', 'rgb(255, 0, 0)']
+const NIGHT_BANDS = ['rgb(58, 154, 104)', 'rgb(90, 126, 216)', 'rgb(255, 154, 48)', 'rgb(255, 58, 42)']
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('layline-theme-preference', 'solar'))
@@ -53,5 +53,5 @@ test('the header logo comes out in the accent after dark', async ({ page }) => {
   expect(await computed(mark, 'fill')).toBe('rgb(0, 229, 255)')
 
   await nightVision(page, true)
-  expect(await computed(mark, 'fill')).toBe('rgb(204, 0, 0)')
+  expect(await computed(mark, 'fill')).toBe('rgb(255, 90, 64)')
 })

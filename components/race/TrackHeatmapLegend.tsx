@@ -1,19 +1,10 @@
-'use client'
-
 /**
  * The legend directly beneath the map: the scale the sailor is looking at, and the count of what it
  * could not colour.
  *
- * A Client Component for one reason: **the legend is theme-aware**, and the theme is only resolved
- * in the browser (`lib/theme/store.ts` — the server snapshot is always `solar`, because the server
- * has no way to know what time it is where the sailor is).
- *
- * That obligation is ADR 0033's, and it is the price of keeping colour as the encoding at all.
- * After dark `.theme-nightvision` collapses every hue to a red lightness ramp, so each scale loses
- * something different: a diverging ramp loses which side of target a stretch was on, a tack scale
- * loses which tack, a quadrant scale keeps its four steps. Every scale therefore carries its own
- * after-dark sentence, and the one thing none of them may do is keep the daylight words — that,
- * and not the collapsed hue, is the defect.
+ * One sentence serves both themes. `.theme-nightvision` redraws every scale with its daylight
+ * meaning intact — the ratio ramp still diverges, the tacks are still two colours (ADR 0043) — so
+ * the words under the swatches are as true after dark as by day, and name no hue for that reason.
  *
  * The count is stated in words rather than left to be inferred from how much grey is on screen: a
  * quarter of one of this archive's races carries no percent of target, and that proportion is not
@@ -22,7 +13,6 @@
  */
 
 import type { ReactElement, ReactNode } from 'react'
-import { useTheme } from '@/lib/hooks/useTheme'
 import { spacing } from '@/lib/utils/design'
 import { TRACK_SCALES, isRatioOverlay, overlayColour } from '@/services/analysis/track-overlays'
 import {
@@ -54,8 +44,6 @@ export default function TrackHeatmapLegend({
   annotations: number
   unplaced: number
 }): ReactElement {
-  const { theme } = useTheme()
-  const afterDark = theme === 'nightvision'
   const scale = TRACK_SCALES[overlay]
   const tallies = time.overlays[overlay]
   // A ratio overlay on a race that records no Polar has nothing to be a ratio of, so there is no
@@ -97,7 +85,7 @@ export default function TrackHeatmapLegend({
               lineHeight: 1.5,
             }}
           >
-            {afterDark ? scale.night : scale.day}
+            {scale.wording}
           </p>
 
           {scale.caveat && (

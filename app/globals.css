@@ -108,13 +108,15 @@
      TWS has no family here on purpose: it is wind speed, so it reads the --wind-* bands, which is
      the one place those tokens are the right ones. */
 
-  /* Boat speed over the ground, in knots: one hue, light to dark. Monotone OKLab lightness,
-     adjacent ΔL ≥ 0.069, light end 2.1:1 against the sand surface, measured. */
-  --track-speed-1: #7FA8E4;   /* under 3 kt */
-  --track-speed-2: #4A86DB;   /* 3–4.5 */
-  --track-speed-3: #0055BB;   /* 4.5–6 */
-  --track-speed-4: #003399;   /* 6–7.5 */
-  --track-speed-5: #002277;   /* over 7.5 */
+  /* Boat speed over the ground, in knots: a heat ramp, gold to dark brown, hotter for faster. Not
+     blue, which is the UI accent's and made the data read as interface. Monotone OKLab lightness,
+     adjacent ΔL ≥ 0.09, light end 2.26:1 against the sand surface, measured. The dark end stops at
+     brown because red is the Dropout ring's (--wind-storm), the one other colour on the map. */
+  --track-speed-1: #CC9628;   /* under 3 kt */
+  --track-speed-2: #C47A20;   /* 3–4.5 */
+  --track-speed-3: #A85418;   /* 4.5–6 */
+  --track-speed-4: #7E3410;   /* 6–7.5 */
+  --track-speed-5: #521C08;   /* over 7.5 */
 
   /* True wind angle: the tack by hue — the --tack-* pair's own crimson and green, so a port leg
      here is the colour port is everywhere else — and depth for how far off the wind. Each arm is
@@ -374,8 +376,15 @@
 }
 
 /* ============================================================
-   NIGHT VISION THEME — Monochromatic red-on-black
-   Preserves scotopic (rod) vision for on-water use after dark.
+   NIGHT VISION THEME — Red and amber, with dim green and blue on meaning
+   Preserves scotopic (rod) vision for on-water use after dark (ADR 0043).
+   Rods barely respond to long wavelengths, and what dark adaptation
+   pays for is brightness × area, not whether a hue appears at all. So:
+   - Red and amber are the theme: text, surfaces, accent and chrome.
+   - Green and blue appear only on marks that carry meaning, where that
+     hue already means the same thing by day (starboard, faster than
+     target, agreement, light and medium air, veering). Never on text or
+     surfaces, and never brighter than the red or amber beside them.
    Activate by adding class="theme-nightvision" to <html>.
    ============================================================ */
 .theme-nightvision {
@@ -383,117 +392,117 @@
   --surface-raised: #120000;
   --surface-elevated: #1A0000;
   --surface-overlay: rgba(10, 0, 0, 0.90);
-  --surface-border: rgba(180,0,0,0.25);
-  --surface-border-hover: rgba(200,0,0,0.40);
-  --surface-divider: rgba(180,0,0,0.12);
+  --surface-border: rgba(255, 80, 60, 0.30);
+  --surface-border-hover: rgba(255, 80, 60, 0.48);
+  --surface-divider: rgba(255, 80, 60, 0.16);
   --surface-dock-bg: rgba(10, 0, 0, 0.94);
 
   /* A divider that reads as a hairline on black is too faint to read as a bar,
      so the placeholder fill steps up to the border. */
   --skeleton-bg: var(--surface-border);
 
-  --text-primary: #FF4444;
-  --text-secondary: #AA2222;
-  --text-muted: #661111;
-  --text-accent: #CC0000;
+  /* Primary and secondary hold 4.5:1 against the card and muted 3:1. The old #AA2222 and #661111
+     were 2.9:1 and 1.6:1, and they are most of the labels, units and captions on every screen. */
+  --text-primary: #FF9478;
+  --text-secondary: #E0604A;
+  --text-muted: #B04838;
+  --text-accent: #FF5A40;
   --text-inverse: #0A0000;
 
-  --blue-500: #CC0000;
-  --blue-400: #DD1111;
-  --blue-300: #AA0000;
-  --blue-600: #990000;
-  --blue-700: #770000;
-  --blue-muted: rgba(204, 0, 0, 0.10);
-  --blue-muted-40: rgba(204, 0, 0, 0.40);
+  /* The UI accent stays red despite the --blue-* names: it is chrome, not meaning. */
+  --blue-500: #FF5A40;
+  --blue-400: #FF6A50;
+  --blue-300: #E04A34;
+  --blue-600: #C03A26;
+  --blue-700: #902A1A;
+  --blue-muted: rgba(255, 90, 64, 0.12);
+  --blue-muted-40: rgba(255, 90, 64, 0.40);
 
-  --accent: #CC0000;
-  --accent-primary: #CC0000;
+  --accent: #FF5A40;
+  --accent-primary: #FF5A40;
 
-  --wind-light: #993333;
-  --wind-medium: #CC2222;
-  --wind-heavy: #EE3300;
-  --wind-storm: #FF0000;
+  /* Wind bands carry daylight's meanings: light air green, medium blue, heavy amber, storm red.
+     Medium is a light periwinkle rather than daylight's #0055BB, which is 2.9:1 on black and blurs
+     (short wavelengths focus in front of the retina and scatter most in the eye). Storm is the
+     Dropout ring's red, which is why no track scale below uses it. */
+  --wind-light: #3A9A68;
+  --wind-medium: #5A7ED8;
+  --wind-heavy: #FF9A30;
+  --wind-storm: #FF3A2A;
 
-  /* Tack — night vision. Distinguished by lightness alone, same as the trend pairs below: a hue
-     split is the whole thing this theme gives up. */
-  --tack-starboard: #992222;
-  --tack-port:      #FF3333;
+  --tack-starboard: #3A9A68;
+  --tack-port:      #FF4A3A;
 
-  --trend-building: #BB3333;
-  --trend-building-bg: rgba(187, 51, 51, 0.08);
-  --trend-building-border: rgba(187, 51, 51, 0.25);
+  --trend-building: #3A9A68;
+  --trend-building-bg: rgba(58, 154, 104, 0.10);
+  --trend-building-border: rgba(58, 154, 104, 0.30);
 
-  --trend-easing: #882222;
-  --trend-easing-bg: rgba(136, 34, 34, 0.08);
-  --trend-easing-border: rgba(136, 34, 34, 0.25);
+  --trend-easing: #FF5040;
+  --trend-easing-bg: rgba(255, 80, 64, 0.10);
+  --trend-easing-border: rgba(255, 80, 64, 0.30);
 
-  --trend-steady: #551111;
+  --trend-steady: #A86050;
   --trend-steady-bg: transparent;
   --trend-steady-border: transparent;
 
-  --trend-veering: #DD4444;
-  --trend-veering-bg: rgba(221, 68, 68, 0.07);
-  --trend-veering-border: rgba(221, 68, 68, 0.20);
+  --trend-veering: #7B9CF0;
+  --trend-veering-bg: rgba(123, 156, 240, 0.08);
+  --trend-veering-border: rgba(123, 156, 240, 0.25);
 
-  --trend-backing: #FF2222;
-  --trend-backing-bg: rgba(255, 34, 34, 0.07);
-  --trend-backing-border: rgba(255, 34, 34, 0.20);
+  --trend-backing: #FF7A8A;
+  --trend-backing-bg: rgba(255, 122, 138, 0.08);
+  --trend-backing-border: rgba(255, 122, 138, 0.25);
 
-  /* Sail bands — night vision. A ramp of one red rather than eight hues: a hue that is not red
-     defeats the whole point of this theme, so after dark the bands separate by depth alone. Which
-     is enough, because the number in the cell is what names the sail either way. */
-  --sail-band-1: rgba(180, 0, 0, 0.10);
-  --sail-band-2: rgba(180, 0, 0, 0.18);
-  --sail-band-3: rgba(200, 0, 0, 0.26);
-  --sail-band-4: rgba(200, 0, 0, 0.34);
-  --sail-band-5: rgba(220, 0, 0, 0.42);
-  --sail-band-6: rgba(220, 0, 0, 0.50);
-  --sail-band-7: rgba(240, 0, 0, 0.58);
-  --sail-band-8: rgba(240, 0, 0, 0.66);
+  /* Sail bands — night vision. Red and amber alternate, deepening in pairs, so adjacent bands
+     differ in hue and the ramp still reads heavier as it goes. Not eight hues, which this theme
+     does not have; the number in the cell is what names the sail either way. */
+  --sail-band-1: rgba(255, 80, 60, 0.16);
+  --sail-band-2: rgba(255, 160, 48, 0.16);
+  --sail-band-3: rgba(255, 80, 60, 0.32);
+  --sail-band-4: rgba(255, 160, 48, 0.32);
+  --sail-band-5: rgba(255, 80, 60, 0.48);
+  --sail-band-6: rgba(255, 160, 48, 0.48);
+  --sail-band-7: rgba(255, 80, 60, 0.64);
+  --sail-band-8: rgba(255, 160, 48, 0.64);
 
-  /* Race Track Heatmap — night vision. The diverging ramp cannot survive this theme and is not
-     worked around: tokenised honestly, both arms land on the same red lightness ramp, so 85% and
-     115% become the same colour and the brightest step is the midpoint. That is accepted (ADR
-     0033) with one obligation attached — the legend is theme-aware, and after dark it must say
-     that depth is distance from target in either direction rather than keep claiming a side. A
-     legend holding its daylight words after dark is the actual defect; the collapsed hue is not.
-     Symmetric by construction, because there is only one hue to be symmetric in. */
-  --track-below-3: #8E0000;
-  --track-below-2: #C00000;
-  --track-below-1: #E82626;
-  --track-at:      #FFB3B3;
-  --track-above-1: #E82626;
-  --track-above-2: #C00000;
-  --track-above-3: #8E0000;
+  /* Race Track Heatmap — night vision. Daylight's own amber below target and green above, which
+     is also the colour-blind-safe pairing, around a dim warm neutral. The arms are balanced in
+     luminance, so neither side shouts and depth is distance from target (ADR 0033). */
+  --track-below-3: #7A4A16;
+  --track-below-2: #A86A28;
+  --track-below-1: #D08A40;
+  --track-at:      #7A5A50;
+  --track-above-1: #48A673;
+  --track-above-2: #2F8A5A;
+  --track-above-3: #1E6542;
 
-  /* The other three scales after dark. Each loses something different, and each legend says which
-     (ADR 0038): the speed ramp survives intact — one hue in, one hue out — the tack pair collapses
-     so that depth is the angle and the tack comes from the numbers, and the four quadrants keep
-     four steps because four is what one red ramp can hold apart. */
-  --track-speed-1: #FFB3B3;
-  --track-speed-2: #FF6B6B;
-  --track-speed-3: #E82626;
-  --track-speed-4: #C00000;
-  --track-speed-5: #8E0000;
+  /* The other three scales keep their daylight meanings after dark (ADR 0038). Speed is one
+     amber ramp, brighter for faster; it starts at a dim brown so the slow end is never the ring's
+     red, and stops short of pale yellow so the fastest stretch does not glare. The tacks are
+     port red and starboard green, as everywhere else. */
+  --track-speed-1: #7A4818;
+  --track-speed-2: #A0641F;
+  --track-speed-3: #C8842C;
+  --track-speed-4: #E0A048;
+  --track-speed-5: #F2B560;
 
-  --track-port-1: #E82626;
-  --track-port-2: #C00000;
-  --track-port-3: #8E0000;
-  --track-stbd-1: #E82626;
-  --track-stbd-2: #C00000;
-  --track-stbd-3: #8E0000;
+  --track-port-1: #FF8A7A;
+  --track-port-2: #E0402F;
+  --track-port-3: #8E1A10;
+  --track-stbd-1: #48A673;
+  --track-stbd-2: #2F8A5A;
+  --track-stbd-3: #1E6542;
 
-  /* Agreement after dark: the difference is the brighter of the two, because a difference is the
-     thing worth noticing. Not --text-primary's own #FF4444, which would make the track read as
-     type. */
-  --track-agree:  #8E1010;
-  --track-differ: #FF2222;
+  /* Agreement after dark: a dim green, and the difference in amber. Not a red: the Dropout ring
+     (--wind-storm) is red, and a disagreeing stretch must not look like a dead feed. */
+  --track-agree:  #2A6E4A;
+  --track-differ: #E8903A;
 
-  --state-success: #AA2222;
-  --state-warning: #CC3300;
-  --state-danger: #FF0000;
-  --state-info: #CC0000;
-  --state-neutral: #661111;
+  --state-success: #3A9A68;
+  --state-warning: #FFD060;
+  --state-danger: #FF4A3A;
+  --state-info: #FF9478;
+  --state-neutral: #A86050;
 
   --shadow-sm: 0 1px 3px rgba(100, 0, 0, 0.10);
   --shadow-md: 0 2px 8px rgba(100, 0, 0, 0.12);
@@ -509,16 +518,16 @@
   --chart-bg-center:     #120000;
   --chart-bg-mid:        #100000;
   --chart-bg-edge:       #0E0000;
-  --chart-grid-cardinal: rgba(180, 0, 0, 0.40);
-  --chart-grid-inter:    rgba(180, 0, 0, 0.25);
-  --chart-grid-coarse:   rgba(180, 0, 0, 0.15);
-  --chart-grid-fine:     rgba(180, 0, 0, 0.06);
+  --chart-grid-cardinal: rgba(255, 100, 70, 0.48);
+  --chart-grid-inter:    rgba(255, 100, 70, 0.30);
+  --chart-grid-coarse:   rgba(255, 100, 70, 0.18);
+  --chart-grid-fine:     rgba(255, 100, 70, 0.08);
   --chart-label-bg:      rgba(18, 0, 0, 0.95);
-  --chart-center-dot:    rgba(180, 0, 0, 0.5);
-  --chart-center-text:   rgba(180, 0, 0, 0.4);
+  --chart-center-dot:    rgba(255, 100, 70, 0.6);
+  --chart-center-text:   rgba(255, 140, 110, 0.6);
 
   /* The same reds the grid and the shadows above are mixed from. */
-  --chart-ink:  #B40000;
+  --chart-ink:  #FF6446;
   --shadow-ink: #640000;
 
   /* The mark comes out in the theme's accent, on the theme's own ground. */

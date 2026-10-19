@@ -13,10 +13,10 @@
  *
  * ## Colour is still not the carrier
  *
- * In night vision the eight sail bands collapse to red tints (ADR 0030), so a region's cells
- * outside its label rectangle are identified by the region's **edges**: every side a cell shares
- * with a different sail is reported here, and the grid draws it. A region reads as an outlined
- * shape with its name inside, whatever the tokens resolve to.
+ * In night vision the eight sail bands are only two hues, red and amber (ADR 0030, ADR 0043), so
+ * a region's cells outside its label rectangle are identified by the region's **edges**: every
+ * side a cell shares with a different sail is reported here, and the grid draws it. A region reads
+ * as an outlined shape with its name inside, whatever the tokens resolve to.
  *
  * Isomorphic and dependency-free, like `crossoverSailBands` next door.
  */

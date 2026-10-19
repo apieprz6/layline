@@ -11,8 +11,8 @@
  *
  * Colour is never the carrier. Every cell of the Boat Setup grid prints its sail number anyway, and
  * the Sail Selection one outlines each region and names it (`crossoverSailRegions`) — the
- * night-vision theme collapses all eight `--sail-band-*` tokens to red tints, so the colour is how
- * the shape is seen and the print is how the sail is identified (ADR 0030).
+ * night-vision theme draws all eight `--sail-band-*` tokens in two hues, red and amber, so the colour
+ * is how the shape is seen and the print is how the sail is identified (ADR 0030).
  *
  * Isomorphic and dependency-free, like `crossoverDefinitionUsage` next door: both grids are
  * `'use client'`, and the chart's write gate and its zod schema stay on the server.

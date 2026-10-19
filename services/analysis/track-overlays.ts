@@ -27,8 +27,8 @@
  *   arms are the tack pair and depth is the angle — never a single ramp over `|TWA|`, which would
  *   draw both tacks identically and lose the thing a sailor is looking for.
  * - **A course is cyclic, and Layline has no cyclic palette.** `COG` is therefore drawn as four
- *   compass quadrants and the legend says so. A hue wheel would look right and be a lie after
- *   dark, where every hue collapses to one.
+ *   compass quadrants and the legend says so. A hue wheel would look right by day and be a lie
+ *   after dark, where green and blue are kept for the few marks that mean something (ADR 0043).
  *
  * ## Which rows each overlay may colour
  *
@@ -67,7 +67,7 @@ export interface TrackBandStep {
   label: string
 }
 
-/** How a scale behaves, which decides what its legend has to say after dark. */
+/** How a scale behaves: the shape of its quantity, and so of its ramp. */
 export type TrackScaleKind = 'diverging' | 'sequential' | 'tack' | 'categorical'
 
 export interface TrackScale {
@@ -80,14 +80,11 @@ export interface TrackScale {
   unit: string | null
   kind: TrackScaleKind
   bands: readonly TrackBandStep[]
-  /** The sentence under the ramp by day. */
-  day: string
   /**
-   * The sentence after dark, when `.theme-nightvision` has collapsed every hue to one red depth
-   * ramp. Each scale loses something different, and each has to say which thing it lost — a legend
-   * keeping its daylight words is the defect ADR 0033 named, not the collapsed hue.
+   * The sentence under the ramp, in both themes. Every scale keeps its daylight meaning after dark
+   * (ADR 0043), so it names no hue: the swatches beside it are drawn differently in each theme.
    */
-  night: string
+  wording: string
   /** A caveat that travels with every figure on this overlay, wherever it is shown. */
   caveat?: string
 }
@@ -152,13 +149,8 @@ const RATIO_BANDS: readonly TrackBandStep[] = [
   { band: 'track-above-3', below: Infinity, tick: '115+', label: 'above 115% of target' },
 ]
 
-/** The sentence a diverging ramp owes after dark, where both arms land on the same red. */
-const RATIO_NIGHT =
-  'After dark: depth is distance from target, either way — which side comes from the figures, not ' +
-  'the colour.'
-
 /**
- * Boat speed, in knots, on a single-hue ramp.
+ * Boat speed, in knots, on a sequential ramp: gold to brown by day, one amber ramp after dark.
  *
  * The edges are this boat's own range rather than a generic one: a 4.5-knot beat in light air and
  * a 7.5-knot reach are the two ends of what Handsome Pete does, and a ramp stretched to 20 knots
@@ -218,8 +210,9 @@ const TWA_BANDS: readonly TrackBandStep[] = [
  * Sail chart agreement: did what was flying match what the chart called for?
  *
  * Two values, so two bands — this is the one categorical overlay, and its "scale" is a pair rather
- * than a ramp. Green for agreement and red for a difference, which is the one place on this screen
- * those two conventional hues mean what everyone expects them to.
+ * than a ramp. Green for agreement and red for a difference by day, which is the one place on this
+ * screen those two conventional hues mean what everyone expects them to; after dark the difference
+ * is amber, because the Dropout ring has the red. The legend names neither hue for that reason.
  *
  * A difference is **not a fault**, and the legend says so: a boat carrying the A2 through a lull
  * the chart would have reefed for is a decision somebody made on the water, often a good one. What
@@ -242,8 +235,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: null,
     kind: 'diverging',
     bands: RATIO_BANDS,
-    day: 'slower than target · 100% · faster',
-    night: RATIO_NIGHT,
+    wording: 'slower than target · 100% · faster',
   },
   target_vmg: {
     overlay: 'target_vmg',
@@ -252,8 +244,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: null,
     kind: 'diverging',
     bands: RATIO_BANDS,
-    day: 'worse VMG · 100% · better',
-    night: RATIO_NIGHT,
+    wording: 'worse VMG · 100% · better',
     // ADR 0036's standing caveat, not conditional on anything: a rectangular grid cannot hold an
     // optimum that moves with wind speed, so this is an estimate of the certificate's answer and
     // never a reproduction of it. Layline states no point beat or gybe angle, ever.
@@ -266,8 +257,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: 'kt',
     kind: 'sequential',
     bands: SOG_BANDS,
-    day: 'slower · faster, by the GPS’s own figure',
-    night: 'After dark: deeper is faster. One hue in, one out.',
+    wording: 'slower · faster, by the GPS’s own figure',
   },
   tws: {
     overlay: 'tws',
@@ -276,8 +266,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: 'kt',
     kind: 'sequential',
     bands: TWS_BANDS,
-    day: 'light · medium · heavy · storm',
-    night: 'After dark: depth is wind speed, in the same four bands.',
+    wording: 'light · medium · heavy · storm',
     // ADR 0008: every wind figure in a recording is Computed by qtVlm from a solved current and a
     // wind-instrument altitude, none of which appear in the export. Not a masthead reading.
     caveat: 'Wind figures are computed by qtVlm, not read off the masthead.',
@@ -289,10 +278,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: '°',
     kind: 'tack',
     bands: TWA_BANDS,
-    day: 'port · close-hauled · starboard; depth is how far off the wind',
-    night:
-      'After dark the two tacks are the same colour: depth is how far off the wind, and the tack ' +
-      'comes from the figures.',
+    wording: 'port · close-hauled · starboard; depth is how far off the wind',
     caveat: 'Wind figures are computed by qtVlm, not read off the masthead.',
   },
   sail: {
@@ -302,8 +288,7 @@ export const TRACK_SCALES: Record<TrackOverlay, TrackScale> = {
     unit: null,
     kind: 'categorical',
     bands: SAIL_BANDS,
-    day: 'green agrees with the chart · red differs — a difference, not a fault',
-    night: 'After dark: the brighter stretches are where the two records differ.',
+    wording: 'agreed with the chart · differed — a difference, not a fault',
   },
 }
 

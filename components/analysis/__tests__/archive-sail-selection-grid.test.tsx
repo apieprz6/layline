@@ -25,7 +25,7 @@ import { SAIL_SELECTION_LAYERS } from '@/components/analysis/sail-selection-chro
  *
  * The claim it exists for is the one ADR 0030 refuses to compromise on: **every cell prints its
  * number or glyph, and nothing on this screen is carried by colour alone.** In night vision the
- * eight sail bands become red tints of each other and the three state tokens become reds, so a
+ * eight sail bands are only two hues, red and amber (ADR 0043), and some sailors separate none, so a
  * cell whose fact lived only in its fill would be unreadable on the exact screen a sailor uses at
  * night — and this archive holds a fourteen-hour overnight race. jsdom computes no CSS variables,
  * so the theme itself cannot be rendered here; what *can* be checked, and is the real guarantee,
@@ -168,7 +168,7 @@ describeArchiveScreen('the real chart, with the real archive over it', () => {
    * `theme-nightvision` cannot be rendered. What can be rendered, and is the claim that matters,
    * is that **the print does not consult the theme at all**: every cell prints the same character
    * under the class as without it. That is what makes the grid readable when the eight sail bands
-   * and the four state tokens have all collapsed to reds (`app/globals.css`, ADR 0024).
+   * are only two hues, red and amber (`app/globals.css`, ADR 0043).
    */
   it('prints the same in night vision as in daylight, on every layer', async () => {
     const user = renderScreen()

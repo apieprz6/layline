@@ -9,8 +9,9 @@
  * channel overlay draws it. Making the six agree would either hide recorded values or let excluded
  * rows into a metric, and both are worse than the asymmetry.
  *
- * The other claim is that every band is a **token**: `.theme-nightvision` collapses all of them to
- * one red depth ramp, and a chart escaping the theme is the one thing `globals.css` forbids.
+ * The other claim is that every band is a **token**: `.theme-nightvision` redraws every one of them
+ * in its own long-wavelength palette, and a chart escaping the theme is the one thing `globals.css`
+ * forbids.
  */
 
 import {
@@ -73,13 +74,16 @@ describe('the scales', () => {
     })
   })
 
-  it('says something different after dark on every scale, and never the daylight words', () => {
-    // The obligation ADR 0033 accepted in exchange for keeping colour as the encoding: the ramp
-    // may collapse, the legend may not pretend it hasn't.
+  it('names no hue in any legend sentence, since one sentence serves both themes', () => {
+    // Every scale keeps its daylight meaning after dark (ADR 0043), so the legend has one sentence
+    // and no after-dark variant. What would break that is a colour word: the swatches beside it are
+    // a different hue in each theme, and the difference a sail stretch is red by day and amber at
+    // night.
     TRACK_OVERLAYS.forEach((overlay) => {
-      const { day, night } = TRACK_SCALES[overlay]
-      expect(night).not.toBe(day)
-      expect(night.length).toBeGreaterThan(20)
+      const { wording, caveat } = TRACK_SCALES[overlay]
+      ;[wording, caveat ?? ''].forEach((sentence) => {
+        expect(sentence).not.toMatch(/\b(red|green|blue|amber|gold|brown|crimson|grey|gray)\b/i)
+      })
     })
   })
 

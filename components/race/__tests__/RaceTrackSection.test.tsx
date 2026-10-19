@@ -13,13 +13,13 @@
  * **Nothing that is not a measurement borrows a step of the ramp.** An uncoloured leg is drawn in
  * `--text-muted` and never in `--track-at`, which is the ramp's own grey and means *on target*.
  *
- * **Every colour is a token.** `.theme-nightvision` collapses every scale to one red depth ramp,
- * and a chart escaping the theme is the one thing `globals.css` forbids — a literal hex here would
- * leave a blue-and-amber map on a monochromatic red screen, which is the mistake the prototype
- * made and kept as a finding.
+ * **Every colour is a token.** `.theme-nightvision` redraws every scale in its own long-wavelength
+ * palette, and a chart escaping the theme is the one thing `globals.css` forbids — a literal hex
+ * here would leave daylight's colours on a red-and-amber screen, which is the mistake the
+ * prototype made and kept as a finding.
  *
- * **Each legend changes its words after dark**, because each scale loses something different then,
- * and the one thing none of them may do is keep the daylight sentence.
+ * **Each legend keeps its words after dark**, because every scale keeps its daylight meaning then
+ * (ADR 0043): the ratio ramp still diverges and the tacks are still two colours.
  *
  * **A ratio and a reading are gated differently** (ADR 0038): the parked row has no percent of
  * target and does have a speed over the ground, and the picture has to show both of those facts.
@@ -406,7 +406,7 @@ describe('the track, drawn', () => {
 })
 
 describe('switching what the track is coloured by', () => {
-  it('paints sail agreement green and red, and says a difference is not a fault', async () => {
+  it('paints sail agreement apart from a difference, and says a difference is not a fault', async () => {
     const { container } = render(<RaceTrackSection season={null} track={trackOf()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Sail vs chart' }))
@@ -417,7 +417,7 @@ describe('switching what the track is coloured by', () => {
     // The headline count is one line; "a difference and not a fault" is said where the colours
     // are explained — on the ramp's own line — and again in the detail behind the disclosure.
     expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent(
-      /green agrees with the chart · red differs — a difference, not a fault/
+      /agreed with the chart · differed — a difference, not a fault/
     )
     expect(screen.getByTestId('track-counts-why')).toHaveTextContent(/a difference and not a fault/)
   })
@@ -557,26 +557,18 @@ describe('the legend beneath it', () => {
     expect(wording).toHaveTextContent('faster')
   })
 
-  it('stops claiming a side after dark, because the ramp no longer carries one', () => {
+  it('keeps the daylight sentence after dark, because every scale keeps its meaning', async () => {
+    // The ramp still diverges and the tacks are still two colours (ADR 0043), so a side and a tack
+    // are as true at night as by day — there is no after-dark sentence to swap in.
     mockTheme = 'nightvision'
     render(<RaceTrackSection season={null} track={trackOf()} />)
 
     const wording = screen.getByTestId('track-ramp-wording')
-    expect(wording).toHaveTextContent(/depth is distance from target/)
-    expect(wording).toHaveTextContent(/either way/)
-    // The daylight sentence is gone rather than reworded around: 85% and 115% are the same colour
-    // on this theme, so "slower … faster" would be a lie about the swatches above it.
-    expect(wording).not.toHaveTextContent('slower than target')
-  })
-
-  it('says what a tack scale loses after dark, which is the tack', async () => {
-    mockTheme = 'nightvision'
-    render(<RaceTrackSection season={null} track={trackOf()} />)
+    expect(wording).toHaveTextContent('slower than target · 100% · faster')
 
     await userEvent.click(screen.getByRole('button', { name: 'Wind angle' }))
-
     expect(screen.getByTestId('track-ramp-wording')).toHaveTextContent(
-      /the two tacks are the same colour/
+      'port · close-hauled · starboard; depth is how far off the wind'
     )
   })
 

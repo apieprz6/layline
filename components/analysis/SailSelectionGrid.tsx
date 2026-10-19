@@ -172,8 +172,8 @@ export default function SailSelectionGrid({
                         aria-hidden="true"
                         style={{
                           ...PRINT_STYLE,
-                          // Italic says Filler-Anchored: a shape, because the night-vision theme
-                          // flattens every colour this cell could have used (ADR 0036).
+                          // Italic says Filler-Anchored: a shape, because after dark the sail bands are
+                          // only two hues, and some sailors separate none (ADR 0036, ADR 0043).
                           fontStyle: isFillerAnchored(view, layer) ? 'italic' : 'normal',
                         }}
                       >
