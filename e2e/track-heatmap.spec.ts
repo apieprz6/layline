@@ -257,4 +257,24 @@ test.describe('the race track, zoomed and panned at 390px', () => {
     await expect(zoomIn).toBeDisabled()
     await expect(page.getByTestId('track-zoom-readout')).toContainText('12.0×')
   })
+
+  test('states its legend in time, never rows, and the time lines stay on the screen', async ({
+    page,
+  }) => {
+    const counts = page.getByTestId('track-counts')
+    await counts.scrollIntoViewIfNeeded()
+
+    // ADR 0037: the legend speaks in time, as the MCP's `race_track` does for the same figures.
+    await expect(counts).toContainText(/window carries no colour on this overlay/)
+    const legend = counts.locator('xpath=..')
+    await expect(legend).toContainText(/Frozen feed — \d/)
+    await expect(legend).not.toContainText(/\brows?\b/)
+
+    // A duration is longer than a count, so every line has to still end inside a 390px screen.
+    const width = page.viewportSize()?.width ?? 0
+    for (const line of await legend.locator('li').all()) {
+      const box = await line.boundingBox()
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width)
+    }
+  })
 })

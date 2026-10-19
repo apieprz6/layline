@@ -428,6 +428,25 @@ function undrawnReason(row: PlottableRow): PolarPlotUndrawnReason | null {
   return 'off_the_certificate'
 }
 
+/** Why a Race has no Polar Plot at all, in the race page's words. */
+export function noPlotNote(scoring: 'no-polar-version' | 'polar-unreadable' | 'polar'): string {
+  return scoring === 'polar-unreadable'
+    ? 'The Polar this race names could not be read, so there is nothing to draw its sailing against.'
+    : 'This race records no Polar Version, so there is nothing to draw its sailing against.'
+}
+
+/**
+ * Each reason a stretch is drawn nowhere, as a sailor would say it: the legend's words, and the
+ * MCP's `race_track` beside them.
+ */
+export const UNDRAWN_WORDS: Readonly<Record<PolarPlotUndrawnReason, string>> = {
+  not_countable: 'frozen, low-speed or mid-manoeuvre',
+  no_polar: 'in a race that records no Polar',
+  no_reading: 'with no speed or wind reading',
+  off_the_certificate: 'at an angle or wind speed the certificate does not reach',
+  zero_target: 'against a target of zero knots',
+}
+
 /**
  * How much of these rows is on no Polar Plot, and why — in time, never in rows (ADR 0037).
  *
@@ -476,6 +495,7 @@ export function racePolarPlot(
     polar,
     polar_version_id: race.polar_version_id,
     undrawn: timeNotDrawn(plottable),
+    patches: plotPatches(plottable),
     // The rows the dots are, summed: the Race's two figures, from the same payload as the picture.
     performance: sumEfficiency(plottable),
   }
