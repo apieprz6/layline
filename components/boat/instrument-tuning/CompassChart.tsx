@@ -31,6 +31,7 @@ import { spacing } from '@/lib/utils/design'
 import { BIN_SIZE_DEG, MIN_ROWS_PER_BIN } from '@/services/analysis/compass-deviation'
 import {
   binSpan,
+  compassAbsence,
   headingsUnread,
   noCurveSentence,
   raceHeadingReading,
@@ -210,8 +211,8 @@ export default function CompassChart({
 
       {excludedRace !== null && (
         <Absent>
-          {raceLabel(labels, excludedRace.race_id, excludedRace.window_start)} produced no curve —
-          only {rowsPhrase(excludedRace.row_count)} this check could read.
+          {raceLabel(labels, excludedRace.race_id, excludedRace.window_start)} produced no curve —{' '}
+          {compassAbsence(excludedRace)}.
         </Absent>
       )}
 

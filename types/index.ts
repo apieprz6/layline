@@ -4189,30 +4189,88 @@ export interface McpHeadingExtreme {
   offsetDegrees: number
 }
 
+// A Race as the Instrument Tuning charts name it: its day and the sailor's title, or the day alone.
+export interface McpRaceRef {
+  id: string
+  label: string
+}
+
+// A Race behind a check that produced no figure on it, with the chart's own reason.
+export interface McpRaceWithNoFigure extends McpRaceRef {
+  reason: string
+}
+
+// One 10° heading of the compass curve, as the chart's readout states it when tapped. `offsetDegrees`
+// is null where no Race held three rows there. `readings` is every Race that put a row in it,
+// including the ones under the gate, which `reading` says were not counted.
+export interface McpHeading {
+  fromDegrees: number
+  toDegrees: number
+  compassPoint: string
+  offsetDegrees: number | null
+  races: number
+  readings: (McpRaceRef & { offsetDegrees: number | null; rows: number; reading: string })[]
+}
+
 export interface McpCompassFinding extends McpTuningFinding {
   era: McpCalibrationEra
   swing: { highest: McpHeadingExtreme; lowest: McpHeadingExtreme; swingDegrees: number } | null
+  // The chart's sentence in place of the swing, where no heading carries a figure.
+  noCurve?: string
   // The era mean ADR 0035 demotes beneath the swing, both ways it can be weighted, each named.
   meanEveryHeadingEqualDegrees: number | null
   meanEveryRaceEqualDegrees: number | null
-  races: number
-  racesWithNoFigure: number
+  headingsCovered: number
+  headingsUnread: number
+  // All 36, in heading order from north.
+  headings: McpHeading[]
+  // Each Race's own curve's share of the rose, 0–1.
+  races: (McpRaceRef & { shareOfRose: number })[]
+  racesWithNoFigure: McpRaceWithNoFigure[]
 }
 
-// One point of sail of the Apparent Wind Asymmetry: which tack reads wider, and by how much.
+// One point of sail of the Apparent Wind Asymmetry. `asymmetryDegrees` is half the gap between the
+// two tacks, positive where starboard reads wider; `heldDegrees` is the angle each tack held.
 export interface McpAsymmetrySide {
   widerTack: Tack | null
   widerByDegrees: number
+  asymmetryDegrees: number
+  heldDegrees: { starboard: number; port: number }
+  // The Tack Dial's words for it, and its flag for a side resting on too few pairs to lean on.
+  reading: string
+  tooFewToLeanOn: boolean
   tackPairs: number
   races: number
+}
+
+// One Tack Pair as the Tack Dial lists it. `at` is the earlier segment's start, in the recording's
+// own clock; each tack's rows is a count, never the rows themselves.
+export interface McpTackPair {
+  race: McpRaceRef
+  at: string
+  clock: string
+  pointOfSail: PairedPointOfSail
+  asymmetryDegrees: number
+  heldDegrees: { starboard: number; port: number }
+  widerTack: Tack
+  widerByDegrees: number
+  rows: { starboard: number; port: number }
+  gapSeconds: number
 }
 
 export interface McpWindAngleFinding extends McpTuningFinding {
   era: McpCalibrationEra
   upwind: McpAsymmetrySide | null
   downwind: McpAsymmetrySide | null
-  races: number
-  racesWithNoFigure: number
+  // Whether the two points of sail lean the same way, and what that does and does not imply.
+  leaning: string
+  races: (McpRaceRef & {
+    upwind: McpAsymmetrySide | null
+    downwind: McpAsymmetrySide | null
+    tackPairs: number
+  })[]
+  racesWithNoFigure: McpRaceWithNoFigure[]
+  tackPairs: McpTackPair[]
 }
 
 // The STW card's Recalibration Verdict (ADR 0041): whether, never by how much.
@@ -4222,11 +4280,68 @@ export interface McpRecalibrationVerdict {
   detail: string
 }
 
+// One knot of STW on the verdict's chart: its verdict, how many Races lean its way, and each
+// counted Race's own mean gap. Gaps as the chart says them, slow or fast, never signed.
+export interface McpSpeedBand {
+  knots: string
+  verdict: string
+  gap: string | null
+  rows: number
+  agreeing: number
+  sentence: string
+  races: (McpRaceRef & { gap: string })[]
+}
+
+// One of the checklist's five questions, answered.
+export interface McpChecklistItem {
+  question: string
+  answer: string
+  finding: string
+}
+
+// The Scatter's reading of one knot: the rows' own mean gap, and the fitted line's there.
+export interface McpScatterBand {
+  knots: string
+  meanGapKnots: number
+  rows: number
+  races: number
+  sentence: string
+  lineGapKnots: number | null
+  lineSentence: string | null
+}
+
+// One fit method's line through the Era's rows, as the Scatter states it. `summary` is its readout;
+// `gapsAtSpeeds` the line's gap from 1:1 at the headline speeds, null where it never reached one.
+export interface McpSpeedFit {
+  method: string
+  fitted: boolean
+  summary: string
+  rSquared: number | null
+  rows: number | null
+  gapsAtSpeeds: { stwKnots: number; gapKnots: number | null }[]
+  bands: McpScatterBand[]
+}
+
 export interface McpBoatSpeedFinding extends McpTuningFinding {
   era: McpCalibrationEra
   recalibration: McpRecalibrationVerdict
-  races: number
-  racesWithALine: number
+  // SOG − STW over every Countable row, each Race weighted equally: the Scatter's signed figure.
+  meanGapKnots: number | null
+  spotOnShare: number | null
+  bands: McpSpeedBand[]
+  checklist: McpChecklistItem[]
+  headingSectors: { sector: number; reading: string | null; gap: string | null; races: number }[]
+  headingSwingKnots: number | null
+  drift: { points: (McpRaceRef & { gapKnots: number })[]; changeKnots: number | null }
+  fits: { orthogonal: McpSpeedFit; sogOnStw: McpSpeedFit }
+  blankStw: string
+  races: (McpRaceRef & {
+    meanGapKnots: number | null
+    fitted: boolean
+    rSquared: number | null
+    gapsAtSpeeds: { stwKnots: number; gapKnots: number | null }[]
+    noLine: string | null
+  })[]
 }
 
 // One channel over the season. `headline` is what the "This season" row states, over what a tap

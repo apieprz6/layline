@@ -17,6 +17,9 @@ import {
   type SpeedBandGap,
 } from '@/services/analysis/paddlewheel'
 
+/** What the Scatter calls the Era it is reading, where no one Race is picked. */
+export const THIS_ERA = 'This Era'
+
 /** What each offered fit method assumes, said under the Scatter beside the line it drew. */
 export const METHOD_WORDS: Record<OfferedFitMethod, string> = {
   orthogonal: 'The fit treats GPS and paddlewheel as equally imperfect.',

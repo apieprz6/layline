@@ -58,7 +58,7 @@ export const BAND_WORDS: Record<SpeedBandVerdict, string> = {
 }
 
 /** One knot of `STW`, as "2–3 kt". */
-export function bandRange(band: SpeedBandRead): string {
+export function bandRange(band: Pick<SpeedBandRead, 'band'>): string {
   return `${band.band}–${band.band + 1} kt`
 }
 

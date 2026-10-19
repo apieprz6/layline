@@ -16,6 +16,11 @@ export function headingsUnread(era: EraHeadingOffset): number {
   return era.heading_bin_count - era.headings_covered
 }
 
+/** Why a Race produced no compass curve, as a clause: the chart's, the Race tile's and the tool's. */
+export function compassAbsence(excluded: { row_count: number }): string {
+  return `only ${rows(excluded.row_count)} this check could read`
+}
+
 /** An Era with no heading over the gate, and so no curve to read. */
 export function noCurveSentence(era: EraHeadingOffset): string {
   return `No heading in this Era rests on ${MIN_ROWS_PER_BIN} rows of any Race, so there is no curve to read. ${races(era.race_count)} measured; ${era.excluded.length} produced nothing.`

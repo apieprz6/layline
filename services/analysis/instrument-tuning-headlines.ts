@@ -41,12 +41,12 @@ import {
   headingCoverage,
   speedCoverage,
 } from '@/services/analysis/coverage-verdict'
+import { compassAbsence } from '@/services/analysis/compass-words'
 import { sharePercent } from '@/services/analysis/figures'
 import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
 import {
   NO_FIT_WORDS,
   asymmetryAbsence,
-  rows,
   signedKnots,
   tackPairs,
   widerReading,
@@ -273,7 +273,7 @@ function raceCompass({ heading, heading_swing_deg }: RaceInstrumentCheck): Chann
     return {
       channel: 'HDG',
       figures: [],
-      instead: `No compass reading — only ${rows(heading.row_count)} this check could read.`,
+      instead: `No compass reading — ${compassAbsence(heading)}.`,
       basis: null,
       bar: null,
     }

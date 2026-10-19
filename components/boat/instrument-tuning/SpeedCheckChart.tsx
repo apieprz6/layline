@@ -56,6 +56,7 @@ import {
 } from '@/services/analysis/paddlewheel-verdict-words'
 import {
   METHOD_WORDS,
+  THIS_ERA,
   bandRowsSentence,
   blankStwSentence,
   lineAtBand,
@@ -356,7 +357,7 @@ function Summary({
   labels: RaceLabels
 }): ReactElement {
   const line = lineOf(era, race)
-  const name = race === null ? 'This Era' : raceLabel(labels, race.race_id, race.sailed_at)
+  const name = race === null ? THIS_ERA : raceLabel(labels, race.race_id, race.sailed_at)
   const gap = race === null ? era.measured_offset_knots : race.measured_offset_knots
 
   if (line === null) {

@@ -8,24 +8,28 @@
  * here. The figures themselves are pinned in the suites for each rule, and against the archive.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import RaceBreakdown from '@/components/race/RaceBreakdown'
 import InstrumentTuningTeaser from '@/components/analysis/InstrumentTuningTeaser'
 import CompassChart from '@/components/boat/instrument-tuning/CompassChart'
 import SpeedCheckChart from '@/components/boat/instrument-tuning/SpeedCheckChart'
+import TackDial from '@/components/boat/instrument-tuning/TackDial'
 import {
   asymmetrySeason,
   era,
   event,
   headingEra,
+  raceDivergence,
   raceBins,
   raceHeading,
+  speedEra,
+  speedPoints,
   speedSeason,
   tuningSeason,
 } from '@/components/boat/instrument-tuning/__tests__/fixtures'
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
-import { signedDegrees } from '@/services/analysis/instrument-tuning-text'
+import { raceLabelsFrom, rows, signedDegrees } from '@/services/analysis/instrument-tuning-text'
 import { readInstrumentTuning } from '@/services/analysis/readInstrumentTuning'
 import { readRace } from '@/services/races/readRace'
 import type { CheckedChannel, McpInstrumentTuningSeason, McpTuningChannel, RaceDetail } from '@/types'
@@ -86,7 +90,7 @@ describe.each(SEASONS)('instrumentTuningSeasonAnswer over %s', (_name, season) =
   it('headlines each channel with what the "This season" row prints for it', () => {
     render(<InstrumentTuningTeaser read={{ ok: true, season, log: [], races: [] }} />)
 
-    expectTheRowToAgree(instrumentTuningSeasonAnswer(season, 10))
+    expectTheRowToAgree(instrumentTuningSeasonAnswer(season, []))
   })
 })
 
@@ -97,7 +101,7 @@ describe('over the season the screen itself reads', () => {
 
     render(<InstrumentTuningTeaser read={read} />)
 
-    const answer = instrumentTuningSeasonAnswer(read.season, read.races.length)
+    const answer = instrumentTuningSeasonAnswer(read.season, read.races)
     expectTheRowToAgree(answer)
     expect(answer.races).toBe(fixtureArchive().races.length)
   })
@@ -118,7 +122,7 @@ describe('the charts behind each card', () => {
 
   it('gives every compass Era the highest and lowest heading its chart leads with', () => {
     const heading = twoCompassEras()
-    const compass = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ heading }), 2).channels, 'HDG')
+    const compass = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ heading }), []).channels, 'HDG')
     if (compass.channel !== 'HDG') throw new Error('not the compass')
 
     expect(compass.eras).toHaveLength(heading.length)
@@ -143,7 +147,7 @@ describe('the charts behind each card', () => {
     ['most Races with a line', speedSeason(10, 9)],
     ['too few Races at any speed', speedSeason(1, 1)],
   ])('gives each STW Era the Recalibration Verdict its card leads with, over %s', (_name, speed) => {
-    const boatSpeed = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ speed }), 10).channels, 'STW')
+    const boatSpeed = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ speed }), []).channels, 'STW')
     if (boatSpeed.channel !== 'STW') throw new Error('not boat speed')
     const { recalibration } = boatSpeed.eras[boatSpeed.eras.length - 1]
 
@@ -161,7 +165,7 @@ describe('the charts behind each card', () => {
   })
 
   it('never states a value to set the paddlewheel to', () => {
-    const text = JSON.stringify(instrumentTuningSeasonAnswer(tuningSeason(), 10))
+    const text = JSON.stringify(instrumentTuningSeasonAnswer(tuningSeason(), []))
 
     // A slope, an intercept or a percentage is a drafted correction however it is labelled (ADR 0041).
     expect(text).not.toMatch(/slope|intercept|multiplier"|measured_offset|measuredOffset/i)
@@ -170,13 +174,188 @@ describe('the charts behind each card', () => {
 
 describe('one channel', () => {
   it('answers that channel alone, with no thinnest word to compare it against', () => {
-    const answer = instrumentTuningSeasonAnswer(tuningSeason(), 10, 'AWA')
+    const answer = instrumentTuningSeasonAnswer(tuningSeason(), [], 'AWA')
 
     expect(answer.channels.map((each) => each.channel)).toEqual(['AWA'])
     expect(answer.thinnest).toBeUndefined()
   })
 })
 
+describe('what each chart shows when tapped', () => {
+  const DAY = '2026-06-03 18:00:00'
+  const REFS = [
+    { race_id: 'race-june', title: 'Beer-can 3', window_start: '2026-06-03 18:00:00' },
+    { race_id: 'race-july', title: null, window_start: '2026-07-10 18:00:00' },
+    { race_id: 'race-awa', title: 'Verve Cup', window_start: DAY },
+  ]
+  const LABELS = raceLabelsFrom(REFS)
+
+  it('lists, at every heading, each Race the compass readout lists and what it says of each', () => {
+    const era = headingEra([
+      raceHeading('race-june', '2026-06-03 18:00:00', raceBins({ 1: { mean: 12.7, rows: 40 }, 2: { mean: null, rows: 2 } })),
+      raceHeading('race-july', '2026-07-10 18:00:00', raceBins({ 1: { mean: 8.1, rows: 12 }, 20: { mean: -8.9, rows: 40 } })),
+    ])
+    const compass = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ heading: [era] }), REFS).channels, 'HDG')
+    if (compass.channel !== 'HDG') throw new Error('not the compass')
+    const { headings, races } = compass.eras[0]
+
+    render(<CompassChart era={era} previous={null} log={[]} labels={LABELS} />)
+    const strip = screen.getByTestId('compass-strip')
+
+    expect(headings).toHaveLength(era.bins.length)
+    expect(races.map((race) => race.label)).toEqual(['3 Jun · Beer-can 3', '10 Jul'])
+    for (const heading of headings) {
+      fireEvent.keyDown(strip, { key: 'ArrowRight' })
+      const readout = screen.getByTestId('chart-readout')
+
+      expect(readout).toHaveTextContent(`${heading.fromDegrees}°–${heading.toDegrees}° · ${heading.compassPoint}`)
+      if (heading.readings.length === 0) expect(readout).toHaveTextContent('No Race in this Era sailed this heading.')
+      for (const reading of heading.readings) {
+        expect(readout).toHaveTextContent(reading.label)
+        expect(readout).toHaveTextContent(reading.reading)
+      }
+    }
+    // The fixture puts a Race under the gate at 20°–30°, so "not counted" is exercised.
+    expect(headings[2].readings[0].reading).toMatch(/not counted/)
+  })
+
+  it('gives the Tack Dial’s two sides, its leaning sentence and every Tack Pair as the dial lists it', () => {
+    const asymmetry = asymmetrySeason(6, 3)
+    const windAngle = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ asymmetry }), REFS).channels, 'AWA')
+    if (windAngle.channel !== 'AWA') throw new Error('not the wind angle')
+    const { season } = windAngle
+
+    render(
+      <TackDial
+        season={asymmetry.season}
+        eras={asymmetry.eras}
+        compassEras={asymmetry.compass_eras}
+        log={[]}
+        labels={LABELS}
+      />
+    )
+
+    const dial = screen.getByTestId('tack-dial')
+    expect(dial).toHaveTextContent(season.leaning)
+    for (const side of [season.upwind, season.downwind]) {
+      expect(dial).toHaveTextContent(side!.reading)
+      expect(dial).toHaveTextContent(signedDegrees(side!.asymmetryDegrees))
+    }
+    // Three downwind pairs is under the line the dial flags in words.
+    expect(season.downwind?.tooFewToLeanOn).toBe(true)
+    expect(dial).toHaveTextContent('too few to lean on')
+
+    expect(season.tackPairs).toHaveLength(9)
+    for (const pair of season.tackPairs) {
+      // A pair is named in the list by its Race, its time and its point of sail, as "… 18:00 up".
+      const side = pair.pointOfSail === 'upwind' ? 'up' : 'down'
+      const row = screen
+        .getAllByRole('button')
+        .find((button) => button.textContent?.includes(`${pair.race.label} ${pair.clock}${side}`))
+      if (row === undefined) throw new Error(`no list row for the ${pair.pointOfSail} pair at ${pair.clock}`)
+      fireEvent.click(row)
+      const readout = screen.getByTestId('chart-readout')
+
+      expect(readout).toHaveTextContent(`${pair.pointOfSail} · ${signedDegrees(pair.asymmetryDegrees)}`)
+      expect(readout).toHaveTextContent(
+        `${rows(pair.rows.starboard)} on starboard and ${rows(pair.rows.port)} on port`
+      )
+      expect(readout).toHaveTextContent(
+        `starboard ${pair.heldDegrees.starboard.toFixed(1)}° · port ${pair.heldDegrees.port.toFixed(1)}° · ${pair.widerTack} ${pair.widerByDegrees.toFixed(1)}° wider`
+      )
+    }
+  })
+
+  describe('boat speed', () => {
+    // Four Races of 120 rows from 2 to 8 kt: twenty a knot, enough for each Race to count in a band.
+    const anEra = () =>
+      speedEra(Array.from({ length: 4 }, (_, index) => raceDivergence(`race-${index}`, DAY, speedPoints(120, 0.3))))
+    const speed: InstrumentTuningSeason['speed'] = { orthogonal: [anEra()], 'sog-on-stw': [anEra()] }
+    const answer = (): Extract<McpTuningChannel, { channel: 'STW' }> => {
+      const boatSpeed = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ speed }), REFS).channels, 'STW')
+      if (boatSpeed.channel !== 'STW') throw new Error('not boat speed')
+      return boatSpeed
+    }
+    const renderChart = (): void => {
+      render(
+        <SpeedCheckChart
+          byMethod={{ orthogonal: speed.orthogonal[0], 'sog-on-stw': speed['sog-on-stw'][0] }}
+          log={[]}
+          labels={LABELS}
+        />
+      )
+    }
+
+    it('answers the checklist’s five questions as the Checklist view does', () => {
+      const { checklist } = answer().eras[0]
+      renderChart()
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Checklist' }))
+      const view = screen.getByTestId('speed-checklist')
+
+      expect(checklist).toHaveLength(5)
+      for (const item of checklist) {
+        expect(view).toHaveTextContent(item.question)
+        expect(view).toHaveTextContent(item.finding)
+        // Each question's own mark, read off its own row.
+        const row = within(view).getByText(item.question).closest('li')
+        expect(within(row!).getByRole('img')).toHaveAccessibleName(item.answer)
+      }
+    })
+
+    it('gives every knot the verdict, the agreement and each Race’s gap the Chart view shows tapped', () => {
+      const { bands } = answer().eras[0]
+      renderChart()
+      const chart = screen.getByTestId('speed-bands')
+
+      for (const band of bands) {
+        fireEvent.keyDown(chart, { key: 'ArrowRight' })
+        const readout = screen.getByTestId('chart-readout')
+
+        expect(readout).toHaveTextContent(band.knots)
+        if (band.rows === 0) continue
+        expect(readout).toHaveTextContent(band.verdict)
+        expect(readout).toHaveTextContent(band.sentence)
+        for (const race of band.races) expect(readout).toHaveTextContent(`${race.label}: ${race.gap}`)
+      }
+      expect(bands.some((band) => band.races.length > 0)).toBe(true)
+    })
+
+    it.each([
+      ['orthogonal', 'both noisy'],
+      ['sogOnStw', 'SOG on STW'],
+    ] as const)('gives the %s line the R² and readout the Scatter shows with it picked', (key, toggle) => {
+      const fit = answer().eras[0].fits[key]
+      renderChart()
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Scatter' }))
+      fireEvent.click(screen.getByRole('radio', { name: toggle }))
+      const chart = screen.getByTestId('speed-check-chart')
+
+      expect(screen.getByTestId('chart-readout')).toHaveTextContent(fit.summary)
+      expect(screen.getByTestId('chart-readout')).toHaveTextContent(`R² ${fit.rSquared!.toFixed(2)}`)
+      expect(chart).toHaveTextContent(fit.method)
+
+      const scatter = screen.getByTestId('speed-scatter')
+      for (const band of fit.bands) {
+        // Every knot up to this one, from wherever the last test of the loop left the selection.
+        while (!screen.getByTestId('chart-readout').textContent?.startsWith(band.knots)) {
+          fireEvent.keyDown(scatter, { key: 'ArrowRight' })
+        }
+        expect(screen.getByTestId('chart-readout')).toHaveTextContent(band.sentence)
+        if (band.lineSentence !== null) expect(screen.getByTestId('chart-readout')).toHaveTextContent(band.lineSentence)
+      }
+    })
+
+    it('says what the Scatter’s coverage note says of blank STW rows', () => {
+      const { blankStw } = answer().eras[0]
+      renderChart()
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Scatter' }))
+      expect(screen.getByTestId('speed-check-chart')).toHaveTextContent(blankStw)
+    })
+  })
+})
 describe('instrumentTuningRaceAnswer', () => {
   /** A Race as its page reads it, through the page's own `readRace`. */
   async function pageRead(raceId: string): Promise<RaceDetail> {

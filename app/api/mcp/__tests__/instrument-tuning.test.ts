@@ -117,7 +117,7 @@ describe('instrument_tuning', () => {
 
     expect(tuning).toHaveBeenCalledWith(CALLERS_CLIENT)
     expect(answer.isError).toBeFalsy()
-    expect(answer.structuredContent).toEqual(instrumentTuningSeasonAnswer(SEASON, RACE_REFS.length))
+    expect(answer.structuredContent).toEqual(instrumentTuningSeasonAnswer(SEASON, RACE_REFS))
     expect(JSON.parse(answer.content[0].text)).toEqual(answer.structuredContent)
   })
 
@@ -125,7 +125,7 @@ describe('instrument_tuning', () => {
     const answer = await result({ channel: 'STW' })
 
     expect(answer.structuredContent).toEqual(
-      instrumentTuningSeasonAnswer(SEASON, RACE_REFS.length, 'STW')
+      instrumentTuningSeasonAnswer(SEASON, RACE_REFS, 'STW')
     )
   })
 
