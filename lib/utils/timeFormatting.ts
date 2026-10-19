@@ -1,3 +1,5 @@
+import { MONTHS } from './calendarDate'
+
 /**
  * Format a Date as HH:MM (24-hour time)
  */
@@ -52,4 +54,24 @@ export function formatRelativeTime(timestamp: string, currentTime: number): stri
 
   const diffDays = Math.floor(diffHr / 24)
   return `${diffDays}d ago`
+}
+
+/**
+ * A moment as the reader's own clock states it: `'17 Oct 2026, 16:04'`. The day-month-year order
+ * matches `formatCalendarDate`, and the time is 24-hour, as every other time in the app is.
+ *
+ * @param timeZone Left out in the app, so the reader's own zone applies; a test names one.
+ */
+export function formatMoment(timestamp: string, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone,
+  }).formatToParts(new Date(timestamp))
+  const part = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? ''
+  return `${Number(part('day'))} ${MONTHS[Number(part('month')) - 1]} ${part('year')}, ${part('hour')}:${part('minute')}`
 }

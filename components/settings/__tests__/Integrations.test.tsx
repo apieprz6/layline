@@ -5,6 +5,12 @@ import { askToSignIn } from '@/lib/account/askToSignIn'
 
 jest.mock('@/lib/account/askToSignIn', () => ({ askToSignIn: jest.fn() }))
 
+// The Connected Apps list reads grants on mount; its own behaviour is ConnectedApps.test.tsx.
+const listGrants = jest.fn(async () => ({ data: [], error: null }))
+jest.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ auth: { oauth: { listGrants } } }),
+}))
+
 const URL = 'https://layline-git-lay-191.vercel.app/api/mcp'
 
 const ROWS = ['Connect Claude', 'Connect ChatGPT', 'Using another app?']
@@ -17,6 +23,13 @@ describe('Integrations', () => {
   beforeEach(() => jest.clearAllMocks())
 
   describe('signed in', () => {
+    it('lists the apps this Account has connected under the rows', async () => {
+      render(<Integrations mcpServerUrl={URL} />)
+
+      expect(await screen.findByText('No apps connected yet.')).toBeInTheDocument()
+      expect(listGrants).toHaveBeenCalledTimes(1)
+    })
+
     it('offers Claude, ChatGPT and any other app, each with what it covers', () => {
       render(<Integrations mcpServerUrl={URL} />)
 
@@ -170,6 +183,13 @@ describe('Integrations', () => {
         expect(row(title)).toHaveTextContent('Sign in to connect')
         expect(within(row(title)).getByTestId('padlock')).toBeInTheDocument()
       }
+    })
+
+    it('lists no connected apps, and asks Supabase for none', () => {
+      render(<Integrations mcpServerUrl={null} />)
+
+      expect(screen.queryByText('Connected apps')).not.toBeInTheDocument()
+      expect(listGrants).not.toHaveBeenCalled()
     })
 
     it('opens the Auth Sheet, not the steps, and shows no address', async () => {
