@@ -27,8 +27,9 @@ export const HAIRLINE = { stroke: 'var(--text-muted)', width: 1.6, opacity: 0.55
 /**
  * **Filler-Anchored**: the same band colour, stitched.
  *
- * A texture rather than a second hue, because after dark there is no second hue to mark anything
- * with — and because it costs no extra ink on a track made of a thousand segments. The dash is
+ * A texture rather than a second hue, because every hue on the track is already some overlay's, and
+ * after dark the theme has few to spare (ADR 0043) — and because it costs no extra ink on a track
+ * made of a thousand segments. The dash is
  * proportioned to the stroke: on a 5.4-wide line a 2.5/2 pattern read as beads rather than as a
  * stitched version of the same line.
  */

@@ -8,10 +8,10 @@
  * ## The number is the fact; the colour only finds the shape
  *
  * Every cell prints its number or glyph **whatever its colour** (ADR 0030). This is not belt and
- * braces: the night-vision theme collapses all eight `--sail-band-*` tokens to red tints and
- * flattens `--state-success` / `--state-warning` / `--state-danger` to reds, so on the exact screen
- * a sailor reads at night — and this archive holds a fourteen-hour overnight race — the print is
- * the only thing left that says which band a cell is in.
+ * braces: the night-vision theme draws all eight `--sail-band-*` tokens in two hues, red and amber
+ * alternating and deepening in pairs (ADR 0043), so on the exact screen a sailor reads at night —
+ * and this archive holds a fourteen-hour overnight race — the print is the only thing that says
+ * which band a cell is in.
  *
  * Which is also why every colour here is a `color-mix()` of a token the app already owns rather
  * than a hex value: the night-vision override is on the token, so mixing keeps it working, and the

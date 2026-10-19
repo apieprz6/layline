@@ -12,7 +12,8 @@ Filter** is a rail over a **Coverage Ledger**, filters client-side, and gives th
 dimensions), ADR 0023 (the Crossover Chart owns the only sail vocabulary) and ADR 0012 (absence
 renders as a legitimate answer). Constrained throughout by the night-vision theme (ADR 0024's store,
 `app/globals.css`), which collapses all eight `--sail-band-*` tokens to red tints and flattens
-`--state-success` / `--state-warning` / `--state-danger` to reds.
+`--state-success` / `--state-warning` / `--state-danger` to reds. (Amended by ADR 0043: after dark the bands
+are two hues and the state colours are distinct; every cell still prints its number.)
 
 The three variants this was decided against live on the throwaway branch
 `prototype/lay-146-sail-selection-cells` (`7dd039e`, refined in `6d8e077`), not in `main`. That branch
@@ -50,6 +51,12 @@ What that produced is the whole design problem, and it breaks the mockup in four
 - **Colour cannot be the carrier.** In night vision the eight sail bands become red tints of each
   other and the three state colours become reds, so any encoding that lives only in hue is unreadable
   on the exact screen a sailor uses at night — and this archive contains a 14-hour overnight race.
+
+  > **Amended by [ADR 0043](./0043-night-vision-is-long-wavelength-with-dim-green-and-blue-only-on-meaning.md)
+  > (LAY-195).** The rule stands; the reason has changed. After dark the eight sail bands are now
+  > two hues, red and amber alternating and deepening in pairs, and the state colours are distinct
+  > again (success green, warning yellow, danger red). Eight bands in two hues still cannot name a
+  > sail, and some sailors cannot separate hues at all, so every cell still prints its number.
 
 Average percent of target across reached cells runs 63.5% to 114.1%, median 89.6, with 32 cells below
 85%.

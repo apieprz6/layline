@@ -14,7 +14,8 @@
  *
  * Every colour is a token. The ramp is the **Race Track Heatmap**'s own seven bands
  * (`overlayBand('target_speed', …)`, ADR 0033), never a second scale for the same quantity, and
- * `.theme-nightvision` collapses it with everything else.
+ * `.theme-nightvision` redraws it with the rest: amber below target and green above, as by day
+ * (ADR 0043).
  */
 
 import type { KeyboardEvent, ReactElement } from 'react'

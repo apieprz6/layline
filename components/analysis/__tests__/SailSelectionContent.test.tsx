@@ -24,8 +24,8 @@ import type { AnalysisFilter, MatchableRow } from '@/types'
  * that, and `archive-sail-selection.test.ts` holds it against the real archive):
  *
  *   - **every cell prints its number or glyph**, on every layer, independently of its colour —
- *     which is the whole of what makes the night-vision theme readable, since there the sail bands
- *     and the three state colours all collapse to reds;
+ *     which is the whole of what makes the night-vision theme readable, since there the eight sail
+ *     bands are only two hues, red and amber;
  *   - the **Chart** layer is never narrowed and never ghosted, and the other three are;
  *   - a tap opens *that cell's* breakdown, with each line's own percent of target.
  *

@@ -11,6 +11,9 @@ Amends ADR 0033 in two places — its single ramp, and its "the client gets draw
 rule — and extends ADR 0025's Countable rule to a case it was not written for. Does not touch ADR
 0036's per-cell trust, ADR 0028's lookup rules, or ADR 0009's stored-payload rule.
 
+Amended by ADR 0043 (LAY-195): no scale loses its meaning after dark, so no overlay carries an
+after-dark sentence.
+
 Numbered **0038, not 0037**: this was written as 0037 and
 [LAY-155](https://linear.app/layline-sailing/issue/LAY-155) landed on `main` with that number first,
 for the **Coverage Ledger**. Renumbered here on the merge, following what this log already does
@@ -134,6 +137,15 @@ obligation: the legend must stop claiming a side. That obligation now applies pe
 loses something different — the sequential ramp loses nothing, the tack scale loses the tack, the
 quadrants keep all four steps. Every scale therefore carries both sentences as data, and the one
 thing none of them may do is keep the daylight words.
+
+> **Amended by [ADR 0043](./0043-night-vision-is-long-wavelength-with-dim-green-and-blue-only-on-meaning.md)
+> (LAY-195).** No scale loses anything after dark any more. The ratio ramp diverges (amber below,
+> green above), the tack pair is port red and starboard green, the wind bands are four hues, the
+> speed ramp is one amber ramp, and agreement is dim green against an amber difference, which is
+> kept clear of the Dropout ring's red. So no overlay owes an after-dark sentence. `TrackScale`
+> carries one, `wording`, which names no hue, and the daylight sentence for sails was reworded to
+> `agreed with the chart · differed — a difference, not a fault`, since the difference is red by day
+> and amber at night.
 
 ### The client gets each row's values and verdicts, and bands them through the server's own module
 

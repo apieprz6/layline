@@ -59,8 +59,8 @@ describe('the Crossover Chart grid', () => {
   it('prints the sail number in every cell, so colour is never how a sail is identified', () => {
     render(<CrossoverChartGrid payload={CHART} />)
 
-    // The night-vision theme is one red on purpose, and hues fail anyone who cannot separate
-    // them — so the number is in the cell, not only in the legend.
+    // The night-vision theme draws the eight sail bands in two hues, and hues fail anyone who
+    // cannot separate them — so the number is in the cell, not only in the legend.
     const printed = screen
       .getAllByTestId('crossover-chart-cell')
       .map((cell) => cell.textContent)

@@ -1,6 +1,14 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+/**
+ * Night vision's rules, as invariants rather than hex pins (ADR 0043).
+ *
+ * Red and amber are the theme: text, surfaces, accent and chrome. Dim green and blue appear only
+ * on marks that carry meaning, where that hue already means the same thing by day, and each is no
+ * brighter than the red or amber it sits beside. What these tests hold is that rule and the
+ * readability it buys, so a hex can be retuned by eye without rewriting them.
+ */
 describe('.theme-nightvision CSS token overrides', () => {
   const css = readFileSync(resolve(__dirname, '../../app/globals.css'), 'utf8')
 
@@ -18,149 +26,190 @@ describe('.theme-nightvision CSS token overrides', () => {
     return match ? match[1].trim() : null
   }
 
-  function redChannelBrightness(hex: string): number {
-    const clean = hex.replace('#', '')
-    return parseInt(clean.substring(0, 2), 16)
+  const root = extractBlock(':root')
+  const nightvision = extractBlock('.theme-nightvision')
+  const night = (token: string): string => getPropertyValue(nightvision, token)!
+  const day = (token: string): string => getPropertyValue(root, token)!
+
+  type Rgba = [red: number, green: number, blue: number, alpha: number]
+
+  /** A `#RRGGBB` or `rgba(r, g, b, a)` value as channels, or null for anything else. */
+  function parse(value: string): Rgba | null {
+    const hex = value.match(/^#([0-9a-f]{6})$/i)
+    if (hex) {
+      const [red, green, blue] = [0, 2, 4].map((at) => parseInt(hex[1].substring(at, at + 2), 16))
+      return [red, green, blue, 1]
+    }
+    const rgba = value.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/)
+    if (rgba) return [Number(rgba[1]), Number(rgba[2]), Number(rgba[3]), Number(rgba[4] ?? 1)]
+    return null
+  }
+
+  const linear = (byte: number): number => {
+    const value = byte / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
   }
 
   /**
-   * Relative luminance, for the ramps whose steps differ in more than the red channel.
-   *
-   * This theme's lightest reds are washed out rather than saturated — `#FFB3B3` and `#FF6B6B` are
-   * two depths and the same red byte — so the proxy above cannot order them.
+   * Relative luminance (WCAG), with a translucent value composited over the card it is drawn on —
+   * a 10% wash is not as bright as the colour it is mixed from.
    */
-  function lightness(hex: string): number {
-    const clean = hex.replace('#', '')
-    const channel = (at: number): number => {
-      const value = parseInt(clean.substring(at, at + 2), 16) / 255
-      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-    }
-
-    return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  function luminance(value: string): number {
+    const [red, green, blue, alpha] = parse(value)!
+    const [baseRed, baseGreen, baseBlue] = parse(night('--surface-raised'))!
+    const mix = (channel: number, base: number): number => linear(channel * alpha + base * (1 - alpha))
+    return 0.2126 * mix(red, baseRed) + 0.7152 * mix(green, baseGreen) + 0.0722 * mix(blue, baseBlue)
   }
 
-  const nightvision = extractBlock('.theme-nightvision')
+  function contrast(foreground: string, background: string): number {
+    const [lighter, darker] = [luminance(foreground), luminance(background)].sort((a, b) => b - a)
+    return (lighter + 0.05) / (darker + 0.05)
+  }
+
+  /** OKLab, for perceived lightness and hue — the measure the ramps were tuned in. */
+  function oklab(hex: string): [lightness: number, a: number, b: number] {
+    const [red, green, blue] = parse(hex)!.slice(0, 3).map(linear)
+    const l = Math.cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue)
+    const m = Math.cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue)
+    const s = Math.cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue)
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+    ]
+  }
+
+  const lightness = (hex: string): number => oklab(hex)[0]
+
+  function hueDegrees(hex: string): number {
+    const [, a, b] = oklab(hex)
+    return ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360
+  }
+
+  function difference(one: string, other: string): number {
+    const [x, y] = [oklab(one), oklab(other)]
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2])
+  }
+
+  /** Green or blue outweighs red: the short-wavelength hues this theme spends sparingly. */
+  function coolDominant(value: string): boolean {
+    const [red, green, blue] = parse(value)!
+    return green > red || blue > red
+  }
+
+  /** Every token the theme declares, by name. */
+  const declared = [...nightvision.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(
+    ([, token, value]) => [token, value.trim()] as const
+  )
 
   it('defines a .theme-nightvision block', () => {
     expect(nightvision).not.toBe('')
   })
 
-  describe('surface tokens', () => {
-    it('overrides --surface-base to near-black', () => {
-      expect(getPropertyValue(nightvision, '--surface-base')).toBe('#0A0000')
-    })
+  it('keeps the near-black surfaces', () => {
+    expect(night('--surface-base')).toBe('#0A0000')
+    expect(night('--surface-raised')).toBe('#120000')
+    expect(night('--surface-elevated')).toBe('#1A0000')
+  })
 
-    it('overrides --surface-raised', () => {
-      expect(getPropertyValue(nightvision, '--surface-raised')).toBe('#120000')
-    })
-
-    it('overrides --surface-elevated', () => {
-      expect(getPropertyValue(nightvision, '--surface-elevated')).toBe('#1A0000')
-    })
-
-    it('overrides --surface-border', () => {
-      expect(getPropertyValue(nightvision, '--surface-border')).toBe('rgba(180,0,0,0.25)')
-    })
-
-    it('overrides --surface-divider', () => {
-      expect(getPropertyValue(nightvision, '--surface-divider')).toBe('rgba(180,0,0,0.12)')
+  describe('readability', () => {
+    it('holds primary and secondary text to 4.5:1 and muted to 3:1 against the card', () => {
+      // On main before ADR 0043, secondary was 2.9:1 and muted 1.6:1 — and between them they are
+      // most of the labels, units and captions on every screen.
+      const card = night('--surface-raised')
+      expect(contrast(night('--text-primary'), card)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(night('--text-secondary'), card)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(night('--text-muted'), card)).toBeGreaterThanOrEqual(3)
     })
   })
 
-  describe('text tokens', () => {
-    it('overrides --text-primary to brightest red', () => {
-      expect(getPropertyValue(nightvision, '--text-primary')).toBe('#FF4444')
+  describe('red and amber are the theme', () => {
+    it('makes no text, surface or accent token green- or blue-dominant', () => {
+      const chrome = declared.filter(
+        ([token, value]) =>
+          /^--(text|surface|accent|blue-|skeleton|page-bg|chart-bg|chart-label|chart-grid|chart-center|chart-ink|logo)/.test(
+            token
+          ) && parse(value) !== null
+      )
+
+      expect(chrome.length).toBeGreaterThan(20)
+      chrome.forEach(([token, value]) => {
+        expect({ token, cool: coolDominant(value) }).toEqual({ token, cool: false })
+      })
     })
 
-    it('overrides --text-secondary to mid-brightness red', () => {
-      expect(getPropertyValue(nightvision, '--text-secondary')).toBe('#AA2222')
+    it('holds every green or blue mark at or below the brightest red or amber on its own scale', () => {
+      // Rods are most sensitive near blue-green, and what dark adaptation pays for is brightness ×
+      // area. So a cool mark may carry meaning, but it may never be the brightest thing beside it.
+      const scales: string[][] = [
+        ['--tack-port', '--tack-starboard'],
+        ['--wind-light', '--wind-medium', '--wind-heavy', '--wind-storm'],
+        [
+          '--trend-building',
+          '--trend-easing',
+          '--trend-steady',
+          '--trend-veering',
+          '--trend-backing',
+        ],
+        ['--state-success', '--state-warning', '--state-danger', '--state-info', '--state-neutral'],
+        [1, 2, 3].flatMap((step) => [`--track-port-${step}`, `--track-stbd-${step}`]),
+        [
+          '--track-below-3',
+          '--track-below-2',
+          '--track-below-1',
+          '--track-at',
+          '--track-above-1',
+          '--track-above-2',
+          '--track-above-3',
+        ],
+        ['--track-agree', '--track-differ'],
+      ]
+
+      const cool = declared.filter(([, value]) => parse(value) !== null && coolDominant(value))
+      const covered = new Set(scales.flat())
+      // A cool token outside these scales has no warm neighbour to be measured against, which means
+      // a hue arrived somewhere this rule has not been asked about.
+      cool
+        .filter(([token]) => !/-(bg|border)$/.test(token))
+        .forEach(([token]) => expect({ token, covered: covered.has(token) }).toEqual({ token, covered: true }))
+
+      scales.forEach((scale) => {
+        const warm = scale.filter((token) => !coolDominant(night(token)))
+        const ceiling = Math.max(...warm.map((token) => luminance(night(token))))
+        scale
+          .filter((token) => coolDominant(night(token)))
+          .forEach((token) => {
+            expect({ token, withinCeiling: luminance(night(token)) <= ceiling }).toEqual({
+              token,
+              withinCeiling: true,
+            })
+          })
+      })
     })
 
-    it('overrides --text-muted to dimmest red', () => {
-      expect(getPropertyValue(nightvision, '--text-muted')).toBe('#661111')
-    })
-  })
-
-  describe('accent tokens', () => {
-    it('overrides --blue-500 to red', () => {
-      expect(getPropertyValue(nightvision, '--blue-500')).toBe('#CC0000')
-    })
-
-    it('overrides --accent to red', () => {
-      expect(getPropertyValue(nightvision, '--accent')).toBe('#CC0000')
-    })
-  })
-
-  describe('wind condition colors with ascending brightness', () => {
-    it('overrides all four wind tokens', () => {
-      expect(getPropertyValue(nightvision, '--wind-light')).toBe('#993333')
-      expect(getPropertyValue(nightvision, '--wind-medium')).toBe('#CC2222')
-      expect(getPropertyValue(nightvision, '--wind-heavy')).toBe('#EE3300')
-      expect(getPropertyValue(nightvision, '--wind-storm')).toBe('#FF0000')
-    })
-
-    it('wind colors increase in brightness from light to storm', () => {
-      const light = redChannelBrightness('#993333')
-      const medium = redChannelBrightness('#CC2222')
-      const heavy = redChannelBrightness('#EE3300')
-      const storm = redChannelBrightness('#FF0000')
-
-      expect(medium).toBeGreaterThan(light)
-      expect(heavy).toBeGreaterThan(medium)
-      expect(storm).toBeGreaterThan(heavy)
-    })
-  })
-
-  describe('trend tokens collapse to red brightness variants', () => {
-    it('overrides --trend-building', () => {
-      expect(getPropertyValue(nightvision, '--trend-building')).not.toBeNull()
-    })
-
-    it('overrides --trend-easing', () => {
-      expect(getPropertyValue(nightvision, '--trend-easing')).not.toBeNull()
-    })
-
-    it('overrides --trend-veering', () => {
-      expect(getPropertyValue(nightvision, '--trend-veering')).not.toBeNull()
-    })
-
-    it('overrides --trend-backing', () => {
-      expect(getPropertyValue(nightvision, '--trend-backing')).not.toBeNull()
-    })
-
-    it('overrides --trend-steady', () => {
-      expect(getPropertyValue(nightvision, '--trend-steady')).not.toBeNull()
-    })
-
-    it('trend colors are distinguishable by brightness', () => {
-      const building = getPropertyValue(nightvision, '--trend-building')!
-      const easing = getPropertyValue(nightvision, '--trend-easing')!
-      const steady = getPropertyValue(nightvision, '--trend-steady')!
-      const veering = getPropertyValue(nightvision, '--trend-veering')!
-      const backing = getPropertyValue(nightvision, '--trend-backing')!
-
-      const brightnesses = [building, easing, steady, veering, backing].map(redChannelBrightness)
-      const unique = new Set(brightnesses)
-      expect(unique.size).toBe(brightnesses.length)
-    })
-  })
-
-  describe('state tokens', () => {
-    it('overrides --state-success', () => {
-      expect(getPropertyValue(nightvision, '--state-success')).toBe('#AA2222')
+    it('draws the four wind bands in four distinct hues', () => {
+      // Heavy air and storm were 1.03:1 apart on the old all-red ramp: the same colour.
+      const hues = ['--wind-light', '--wind-medium', '--wind-heavy', '--wind-storm'].map((token) =>
+        hueDegrees(night(token))
+      )
+      hues.forEach((hue, index) => {
+        hues.slice(index + 1).forEach((other) => {
+          const apart = Math.min(Math.abs(hue - other), 360 - Math.abs(hue - other))
+          expect(apart).toBeGreaterThanOrEqual(25)
+        })
+      })
     })
   })
 
   /**
-   * The Race Track Heatmap's percent-of-target ramp (ADR 0033).
+   * The Race Track Heatmap's scales (ADRs 0033, 0038).
    *
-   * Every one of the seven has to be declared here, or the map keeps its daylight blue and amber on
-   * a near-black screen — a chart escaping the theme, which is the one thing `globals.css` forbids
-   * and the exact mistake the prototype made and kept as a finding.
+   * Every band of every overlay has to be declared in both themes, or that overlay keeps its
+   * daylight hues on a near-black screen — a chart escaping the theme, which is the one thing
+   * `globals.css` forbids.
    */
-  describe('the race track ramp', () => {
-    const root = extractBlock(':root')
-    const BANDS = [
+  describe('the race track scales', () => {
+    const RATIO = [
       '--track-below-3',
       '--track-below-2',
       '--track-below-1',
@@ -169,118 +218,96 @@ describe('.theme-nightvision CSS token overrides', () => {
       '--track-above-2',
       '--track-above-3',
     ]
+    const OTHERS = [
+      ...[1, 2, 3, 4, 5].map((step) => `--track-speed-${step}`),
+      ...[1, 2, 3].map((step) => `--track-port-${step}`),
+      ...[1, 2, 3].map((step) => `--track-stbd-${step}`),
+      '--track-agree',
+      '--track-differ',
+    ]
 
-    it('declares all seven bands by day and overrides all seven after dark', () => {
-      BANDS.forEach((band) => {
-        expect(getPropertyValue(root, band)).not.toBeNull()
-        expect(getPropertyValue(nightvision, band)).not.toBeNull()
+    it('declares every band in both themes, and never as a var()', () => {
+      // ADR 0033's refusal is about the *token*, not the hue: the ramp being written as
+      // `var(--wind-heavy)` would mean a change to what 16–22 knots looks like silently moved what
+      // 85–95% of target looks like.
+      ;[...RATIO, ...OTHERS].forEach((token) => {
+        expect(getPropertyValue(root, token)).not.toBeNull()
+        expect(getPropertyValue(nightvision, token)).not.toBeNull()
+        expect(getPropertyValue(root, token)).not.toMatch(/var\(/)
+        expect(getPropertyValue(nightvision, token)).not.toMatch(/var\(/)
       })
     })
 
     it('is a neutral gray at the midpoint by day, never a hue', () => {
       // The diverging rule: a hue in the middle makes on-target look like a side.
-      const at = getPropertyValue(root, '--track-at')!.replace('#', '')
-      const [red, green, blue] = [0, 2, 4].map((at_) => parseInt(at.substring(at_, at_ + 2), 16))
+      const [red, green, blue] = parse(day('--track-at'))!
       expect(Math.max(red, green, blue) - Math.min(red, green, blue)).toBeLessThan(0x20)
     })
 
-    it('holds its own value for every band rather than aliasing a wind-speed token', () => {
-      // ADR 0033's refusal is about the *token*, not the hue: two of these steps are the design
-      // system's own amber and blue, and the ramp needs an amber and a blue. What must not happen
-      // is the ramp being written as `var(--wind-heavy)`, which would mean a change to what 16–22
-      // knots looks like silently moved what 85–95% of target looks like.
-      BANDS.forEach((band) => {
-        expect(getPropertyValue(root, band)).not.toMatch(/var\(/)
-        expect(getPropertyValue(nightvision, band)).not.toMatch(/var\(/)
-      })
-    })
-
-    /**
-     * The three scales ADR 0038 adds beside the ratio ramp.
-     *
-     * Every band of every overlay has to be declared in both themes, or that overlay keeps its
-     * daylight hues on a near-black screen — a chart escaping the theme, which is the one thing
-     * `globals.css` forbids.
-     */
-    it('declares the speed, tack and quadrant scales in both themes too', () => {
-      const scales = [
-        ...[1, 2, 3, 4, 5].map((step) => `--track-speed-${step}`),
-        ...[1, 2, 3].map((step) => `--track-port-${step}`),
-        ...[1, 2, 3].map((step) => `--track-stbd-${step}`),
-        '--track-agree',
-        '--track-differ',
-      ]
-
-      scales.forEach((token) => {
-        expect(getPropertyValue(root, token)).not.toBeNull()
-        expect(getPropertyValue(nightvision, token)).not.toBeNull()
-        expect(getPropertyValue(root, token)).not.toMatch(/var\(/)
-      })
-    })
-
-    it('keeps the speed ramp monotone after dark, since one hue survives one hue', () => {
-      // Measured as real lightness rather than by the red byte: this theme's lightest steps are
-      // washed-out reds like `#FFB3B3` and `#FF6B6B`, which are the *same* in red and differ in
-      // the other two channels — so a red-byte reading would call them one depth.
-      const depth = [1, 2, 3, 4, 5].map((step) =>
-        lightness(getPropertyValue(nightvision, `--track-speed-${step}`)!)
-      )
-
-      expect(depth).toEqual([...depth].sort((a, b) => b - a))
-      expect(new Set(depth).size).toBe(depth.length)
-    })
-
-    it('collapses the two tacks onto one ramp after dark, and says so in the legend', () => {
-      // Accepted, like the diverging ramp: there is one hue to be symmetric in, so port and
-      // starboard *are* the same colour and depth becomes the angle. The obligation that comes
-      // with it is on the words, which `RaceTrackSection.test.tsx` pins.
+    it('still diverges after dark: green above target, amber below, balanced step for step', () => {
       ;[1, 2, 3].forEach((step) => {
-        expect(getPropertyValue(nightvision, `--track-port-${step}`)).toBe(
-          getPropertyValue(nightvision, `--track-stbd-${step}`)
-        )
+        const above = night(`--track-above-${step}`)
+        const below = night(`--track-below-${step}`)
+        const [red, green, blue] = parse(above)!
+        expect(green).toBeGreaterThan(Math.max(red, blue))
+
+        // Amber: red leads, green follows well clear of blue — not a red, not a yellow-green.
+        const [belowRed, belowGreen, belowBlue] = parse(below)!
+        expect(belowRed).toBeGreaterThan(belowGreen)
+        expect(belowGreen).toBeGreaterThan(belowBlue)
+        expect(belowGreen / belowRed).toBeGreaterThan(0.45)
+
+        // Neither arm shouts: depth is distance from target, whichever side it is on.
+        const [brighter, dimmer] = [luminance(above), luminance(below)].sort((a, b) => b - a)
+        expect(brighter / dimmer).toBeLessThanOrEqual(1.25)
       })
     })
 
-    it('keeps agreement and difference apart after dark, with the difference brighter', () => {
-      // Two steps is the least a ramp can hold, and which way round matters: a difference between
-      // the two records is the thing worth noticing on a dark boat.
-      const agree = lightness(getPropertyValue(nightvision, '--track-agree')!)
-      const differ = lightness(getPropertyValue(nightvision, '--track-differ')!)
-
-      expect(differ).toBeGreaterThan(agree)
+    it('keeps port and starboard apart after dark', () => {
+      ;[1, 2, 3].forEach((step) => {
+        expect(coolDominant(night(`--track-port-${step}`))).toBe(false)
+        expect(coolDominant(night(`--track-stbd-${step}`))).toBe(true)
+      })
     })
 
-    it('does not paint a difference in the Dropout ring’s own red', () => {
+    it('runs the speed ramp darker-is-faster by day and brighter-is-faster after dark', () => {
+      // Real lightness, not a channel byte: the steps differ in all three channels at once.
+      const steps = [1, 2, 3, 4, 5].map((step) => `--track-speed-${step}`)
+      const byDay = steps.map((token) => lightness(day(token)))
+      const afterDark = steps.map((token) => lightness(night(token)))
+
+      byDay.slice(1).forEach((value, index) => expect(value).toBeLessThan(byDay[index]))
+      afterDark.slice(1).forEach((value, index) => expect(value).toBeGreaterThan(afterDark[index]))
+    })
+
+    it('keeps the boat-speed ramp off the UI accent’s blue by day', () => {
+      // The ramp used to be the accent's own blue, so the data read as interface.
+      ;[1, 2, 3, 4, 5].forEach((step) => {
+        expect(coolDominant(day(`--track-speed-${step}`))).toBe(false)
+      })
+    })
+
+    it('does not paint a difference in the Dropout ring’s own red, in either theme', () => {
       // --wind-storm rings every Frozen row and dashes every bridge. A disagreeing stretch sharing
       // that colour would make a dead feed and a sail decision the same thing on one map.
-      expect(getPropertyValue(root, '--track-differ')).not.toBe(
-        getPropertyValue(root, '--wind-storm')
-      )
+      expect(day('--track-differ')).not.toBe(day('--wind-storm'))
+      expect(difference(night('--track-differ'), night('--wind-storm'))).toBeGreaterThanOrEqual(0.05)
+    })
+
+    it('keeps every port step distinguishable from the Dropout ring after dark', () => {
+      // 0.05 in OKLab: the prototype's own difference red, #FF5A40, sat at 0.043 from the ring's
+      // #FF3A2A and was rejected as the same colour.
+      ;[1, 2, 3].forEach((step) => {
+        expect(
+          difference(night(`--track-port-${step}`), night('--wind-storm'))
+        ).toBeGreaterThanOrEqual(0.05)
+      })
     })
 
     it('spends the wind-speed tokens on no scale of its own', () => {
       // `TWS` reads `--wind-*` directly, which is why there is no `--track-wind-*` family: two
       // copies of what medium air looks like would be two chances to disagree about it.
       expect(getPropertyValue(root, '--track-wind-1')).toBeNull()
-    })
-
-    it('collapses after dark to one red ramp, symmetric about the brightest midpoint', () => {
-      // Accepted, not worked around: with one hue to be symmetric in, 85% and 115% *are* the same
-      // colour. The obligation that comes with it is on the legend's words, which
-      // `RaceTrackSection.test.tsx` pins — a legend keeping "slower … faster" here is the defect.
-      const value = (band: string): string => getPropertyValue(nightvision, band)!
-      expect(value('--track-below-3')).toBe(value('--track-above-3'))
-      expect(value('--track-below-2')).toBe(value('--track-above-2'))
-      expect(value('--track-below-1')).toBe(value('--track-above-1'))
-
-      const depth = [
-        value('--track-at'),
-        value('--track-below-1'),
-        value('--track-below-2'),
-        value('--track-below-3'),
-      ].map(redChannelBrightness)
-      expect(depth).toEqual([...depth].sort((a, b) => b - a))
-      expect(new Set(depth).size).toBe(depth.length)
     })
   })
 
