@@ -1,92 +1,203 @@
 'use client'
 
 /**
- * PROTOTYPE — LAY-191, variant B: "One row, opens a sheet with steps". Throwaway.
+ * PROTOTYPE — LAY-191, variant B: "Integrations rows, each opens a sheet". Throwaway.
  *
- * Settings stays short: one row says what it is and whether anything is connected. Tapping it
- * opens a bottom sheet that walks one step at a time, with a single primary action per step.
- * Claude Code is a footnote inside the sheet, not a peer of the Claude app.
+ * Settings gets an Integrations section of three rows: Claude, ChatGPT, and any other app. Each
+ * row says whether it is connected; tapping it opens a bottom sheet that walks that app's three
+ * steps one at a time, with a single primary action per step.
  */
 
 import { useState } from 'react'
 import { EXAMPLE_QUESTIONS, MOBILE_NOTE, PRIVACY_LINE, STUB_GRANTS, claudeCodeCommand } from './fixture'
 import { body, formatGranted, mono, sectionHeading, stubSignIn, useCopy, useMcpUrl } from './shared'
 
+type AppKey = 'claude' | 'chatgpt' | 'other'
+
+const APPS: { key: AppKey; title: string; glyph: string; pitch: string; opener: string }[] = [
+  { key: 'claude', title: 'Connect Claude', glyph: '✳', pitch: 'Web, desktop and phone', opener: 'Claude' },
+  { key: 'chatgpt', title: 'Connect ChatGPT', glyph: '◎', pitch: 'Plus, Pro or Business, on the web', opener: 'ChatGPT' },
+  { key: 'other', title: 'Using another app?', glyph: '⋯', pitch: 'Claude Code, Cursor, VS Code…', opener: 'Your app' },
+]
+
+/**
+ * Which stub grant belongs to which row. In the real build this is an open question: a client's
+ * name comes from dynamic registration, so it is whatever the client called itself.
+ */
+function grantsFor(key: AppKey) {
+  const named = (n: string) => STUB_GRANTS.filter((g) => g.client.toLowerCase().includes(n))
+  if (key === 'claude') return named('claude')
+  if (key === 'chatgpt') return named('chatgpt')
+  return STUB_GRANTS.filter((g) => !/claude|chatgpt/i.test(g.client))
+}
+
 export default function VariantB({ signedIn }: { signedIn: boolean }) {
-  const [open, setOpen] = useState(false)
-  const connected = signedIn ? STUB_GRANTS.length : 0
+  const [open, setOpen] = useState<AppKey | null>(null)
 
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={sectionHeading}>Integrations</h2>
-      <button
-        type="button"
-        onClick={() => (signedIn ? setOpen(true) : stubSignIn())}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          width: '100%',
-          padding: '14px 16px',
-          borderRadius: 8,
-          border: '1px solid var(--surface-border)',
-          background: 'var(--surface-raised)',
-          cursor: 'pointer',
-          textAlign: 'left',
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            background: 'var(--blue-muted)',
-            color: 'var(--text-accent)',
-            display: 'grid',
-            placeItems: 'center',
-            fontFamily: 'var(--font-display)',
-            fontWeight: 'var(--weight-bold)',
-            flexShrink: 0,
-          }}
-        >
-          ✳
-        </span>
-        <span style={{ flex: 1 }}>
-          <span
-            style={{
-              display: 'block',
-              fontFamily: 'var(--font-body)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--weight-medium)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            Connect Claude
-          </span>
-          <span style={{ ...body, display: 'block', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2 }}>
-            {!signedIn
-              ? 'Sign in to ask Claude about the wind and your races'
-              : connected > 0
-                ? `${connected} app connected`
-                : 'Ask Claude about the wind and your races'}
-          </span>
-        </span>
-        <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>
-          {signedIn ? '›' : '🔒'}
-        </span>
-      </button>
+      <p style={{ ...body, margin: '-4px 0 12px' }}>
+        Ask an AI assistant about the wind, your races and the boat. It gets the figures these
+        screens show.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {APPS.map((app) => {
+          const grants = signedIn ? grantsFor(app.key) : []
+          return (
+            <button
+              key={app.key}
+              type="button"
+              onClick={() => (signedIn ? setOpen(app.key) : stubSignIn())}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: 8,
+                border: '1px solid var(--surface-border)',
+                background: 'var(--surface-raised)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: 'var(--blue-muted)',
+                  color: 'var(--text-accent)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 'var(--weight-bold)',
+                  flexShrink: 0,
+                }}
+              >
+                {app.glyph}
+              </span>
+              <span style={{ flex: 1 }}>
+                <span
+                  style={{
+                    display: 'block',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-base)',
+                    fontWeight: 'var(--weight-medium)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {app.title}
+                </span>
+                <span
+                  style={{
+                    ...body,
+                    display: 'block',
+                    fontSize: 'var(--text-sm)',
+                    color: grants.length > 0 ? 'var(--text-accent)' : 'var(--text-muted)',
+                    marginTop: 2,
+                  }}
+                >
+                  {!signedIn
+                    ? 'Sign in to connect'
+                    : grants.length > 0
+                      ? `Connected since ${formatGranted(grants[0].grantedAt)}`
+                      : app.pitch}
+                </span>
+              </span>
+              <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>
+                {signedIn ? '›' : '🔒'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
 
-      {open && <Sheet onClose={() => setOpen(false)} />}
+      {open && <Sheet appKey={open} onClose={() => setOpen(null)} />}
     </section>
   )
 }
 
-function Sheet({ onClose }: { onClose: () => void }) {
+function Sheet({ appKey, onClose }: { appKey: AppKey; onClose: () => void }) {
   const url = useMcpUrl()
   const { copied, copy } = useCopy()
   const [step, setStep] = useState(0)
-  const [app, setApp] = useState<'claude' | 'chatgpt' | 'other' | null>('claude')
+  const app = APPS.find((a) => a.key === appKey)!
+  const grants = grantsFor(appKey)
+
+  const addStep = {
+    claude: {
+      title: 'Add it in Claude',
+      content: (
+        <>
+          <p style={body}>
+            On claude.ai, open <b>Settings → Connectors → Add custom connector</b>. Name it Layline
+            and paste the address.
+          </p>
+          <p style={{ ...body, marginTop: 10, color: 'var(--text-muted)' }}>{MOBILE_NOTE}</p>
+          <BigButton onPress={() => window.open('https://claude.ai/settings/connectors', '_blank')}>
+            Open Claude settings ↗
+          </BigButton>
+        </>
+      ),
+    },
+    chatgpt: {
+      title: 'Add it in ChatGPT',
+      content: (
+        <>
+          <ol style={{ ...body, margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
+            <li>
+              On chatgpt.com, open <b>Settings → Apps &amp; Connectors → Advanced settings</b> and
+              turn on <b>Developer mode</b>.
+            </li>
+            <li>
+              Back in <b>Apps &amp; Connectors</b>, choose <b>Create</b>. Name it Layline, paste the
+              address, and pick <b>OAuth</b> for authentication.
+            </li>
+            <li>In a chat, turn Layline on from the + menu before you ask.</li>
+          </ol>
+          <BigButton onPress={() => window.open('https://chatgpt.com', '_blank')}>Open ChatGPT ↗</BigButton>
+        </>
+      ),
+    },
+    other: {
+      title: 'Add it to your app',
+      content: (
+        <>
+          <p style={body}>
+            Any app that supports remote MCP servers: add a server with the address from step 1 and
+            sign in when it asks. No key or token is needed.
+          </p>
+          <p style={{ ...body, marginTop: 14, color: 'var(--text-primary)' }}>Claude Code:</p>
+          <button
+            type="button"
+            onClick={() => copy('cmd', claudeCodeCommand(url))}
+            style={{
+              display: 'block',
+              width: '100%',
+              marginTop: 6,
+              padding: '8px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--surface-border)',
+              background: 'var(--surface-raised)',
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+          >
+            <code style={{ ...mono, fontSize: 'var(--text-xs)' }}>{claudeCodeCommand(url)}</code>
+            <span style={{ ...body, display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: 4 }}>
+              {copied === 'cmd' ? 'Copied ✓' : 'Tap to copy'}
+            </span>
+          </button>
+          <p style={{ ...body, marginTop: 6, fontSize: 'var(--text-xs)' }}>
+            Then <code style={mono}>/mcp</code> to sign in.
+          </p>
+        </>
+      ),
+    },
+  }[appKey]
 
   const steps = [
     {
@@ -107,92 +218,13 @@ function Sheet({ onClose }: { onClose: () => void }) {
         </>
       ),
     },
-    {
-      title: 'Add it to your app',
-      content: (
-        <div style={{ display: 'grid', gap: 8 }}>
-          <AppCard
-            name="Claude"
-            hint="Web, desktop and phone"
-            open={app === 'claude'}
-            onToggle={() => setApp(app === 'claude' ? null : 'claude')}
-          >
-            <p style={body}>
-              On claude.ai, open <b>Settings → Connectors → Add custom connector</b>. Name it
-              Layline and paste the address.
-            </p>
-            <p style={{ ...body, marginTop: 8, color: 'var(--text-muted)' }}>{MOBILE_NOTE}</p>
-            <BigButton onPress={() => window.open('https://claude.ai/settings/connectors', '_blank')}>
-              Open Claude settings ↗
-            </BigButton>
-          </AppCard>
-
-          <AppCard
-            name="ChatGPT"
-            hint="Plus, Pro or Business, on the web"
-            open={app === 'chatgpt'}
-            onToggle={() => setApp(app === 'chatgpt' ? null : 'chatgpt')}
-          >
-            <ol style={{ ...body, margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
-              <li>
-                On chatgpt.com, open <b>Settings → Apps &amp; Connectors → Advanced settings</b>{' '}
-                and turn on <b>Developer mode</b>.
-              </li>
-              <li>
-                Back in <b>Apps &amp; Connectors</b>, choose <b>Create</b>. Name it Layline, paste
-                the address, and pick <b>OAuth</b> for authentication.
-              </li>
-              <li>In a chat, turn Layline on from the + menu before you ask.</li>
-            </ol>
-            <BigButton onPress={() => window.open('https://chatgpt.com', '_blank')}>
-              Open ChatGPT ↗
-            </BigButton>
-          </AppCard>
-
-          <AppCard
-            name="Using another app?"
-            hint="Claude Code, Cursor, VS Code…"
-            open={app === 'other'}
-            onToggle={() => setApp(app === 'other' ? null : 'other')}
-          >
-            <p style={body}>
-              Any app that supports remote MCP servers: add a server with the address from step 1
-              and sign in when it asks. No key or token is needed.
-            </p>
-            <p style={{ ...body, marginTop: 12, color: 'var(--text-primary)' }}>Claude Code:</p>
-            <button
-              type="button"
-              onClick={() => copy('cmd', claudeCodeCommand(url))}
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: 6,
-                padding: '8px 10px',
-                borderRadius: 6,
-                border: '1px solid var(--surface-border)',
-                background: 'var(--surface-base)',
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <code style={{ ...mono, fontSize: 'var(--text-xs)' }}>{claudeCodeCommand(url)}</code>
-              <span style={{ ...body, display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: 4 }}>
-                {copied === 'cmd' ? 'Copied ✓' : 'Tap to copy'}
-              </span>
-            </button>
-            <p style={{ ...body, marginTop: 6, fontSize: 'var(--text-xs)' }}>
-              Then <code style={mono}>/mcp</code> to sign in.
-            </p>
-          </AppCard>
-        </div>
-      ),
-    },
+    addStep,
     {
       title: 'Sign in and approve',
       content: (
         <>
           <p style={body}>
-            Your app opens Layline’s sign-in. Sign in with Google and approve. {PRIVACY_LINE}
+            {app.opener} opens Layline’s sign-in. Sign in with Google and approve. {PRIVACY_LINE}
           </p>
           <p style={{ ...body, marginTop: 14, color: 'var(--text-primary)' }}>Then try:</p>
           <ul style={{ ...body, margin: '6px 0 0', paddingLeft: 18, color: 'var(--text-primary)' }}>
@@ -211,7 +243,7 @@ function Sheet({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-modal
-      aria-label="Connect Claude"
+      aria-label={app.title}
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -260,7 +292,7 @@ function Sheet({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         <p style={{ ...body, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          Step {step + 1} of {steps.length}
+          {app.title} · Step {step + 1} of {steps.length}
         </p>
         <h2
           style={{
@@ -284,83 +316,22 @@ function Sheet({ onClose }: { onClose: () => void }) {
           </TextButton>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--surface-divider)', marginTop: 20, paddingTop: 14 }}>
-          <p style={{ ...body, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 6 }}>
-            Connected (LAY-192, stub)
-          </p>
-          {STUB_GRANTS.map((g) => (
-            <div key={g.client} style={{ display: 'flex', alignItems: 'center' }}>
-              <span style={{ ...body, flex: 1, color: 'var(--text-primary)' }}>
-                {g.client} · since {formatGranted(g.grantedAt)}
-              </span>
-              <TextButton onPress={() => undefined}>Revoke</TextButton>
-            </div>
-          ))}
-        </div>
+        {grants.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--surface-divider)', marginTop: 20, paddingTop: 14 }}>
+            <p style={{ ...body, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 6 }}>
+              Connected (LAY-192, stub)
+            </p>
+            {grants.map((g) => (
+              <div key={g.client} style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{ ...body, flex: 1, color: 'var(--text-primary)' }}>
+                  {g.client} · since {formatGranted(g.grantedAt)}
+                </span>
+                <TextButton onPress={() => undefined}>Revoke</TextButton>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
-
-/** One app's instructions. One card open at a time, so step 2 stays a phone's height. */
-function AppCard({
-  name,
-  hint,
-  open,
-  onToggle,
-  children,
-}: {
-  name: string
-  hint: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      style={{
-        borderRadius: 10,
-        border: open ? '1.5px solid var(--accent, var(--blue-500))' : '1px solid var(--surface-border)',
-        background: 'var(--surface-raised)',
-      }}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={onToggle}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          width: '100%',
-          minHeight: 52,
-          padding: '10px 14px',
-          border: 'none',
-          background: 'transparent',
-          cursor: 'pointer',
-          textAlign: 'left',
-        }}
-      >
-        <span style={{ flex: 1 }}>
-          <span
-            style={{
-              display: 'block',
-              fontFamily: 'var(--font-body)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--weight-semibold)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {name}
-          </span>
-          <span style={{ ...body, display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-            {hint}
-          </span>
-        </span>
-        <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-          {open ? '▾' : '▸'}
-        </span>
-      </button>
-      {open && <div style={{ padding: '0 14px 14px' }}>{children}</div>}
     </div>
   )
 }

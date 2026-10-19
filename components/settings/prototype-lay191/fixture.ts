@@ -10,7 +10,7 @@ export type VariantKey = (typeof VARIANT_KEYS)[number]
 
 export const VARIANT_NAMES: Record<VariantKey, string> = {
   A: 'Inline section, client tabs',
-  B: 'One row, opens a sheet with steps',
+  B: 'Integrations rows, each opens a sheet',
   C: 'Questions first, steps folded',
 }
 

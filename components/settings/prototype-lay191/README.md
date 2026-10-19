@@ -22,10 +22,17 @@ Stubbed: sign-in (an alert, not the auth sheet), the connected-apps list and Rev
 which are fixtures. The URL is the page's own origin + `MCP_PATH`, the same as
 `requestOrigin` would give.
 
-**Verdict (2026-10-19): B**, revised. Step 2 is "Add it to your app" with three cards, one
-open at a time: **Claude** (web, desktop and phone, open by default), **ChatGPT** (Developer
-mode → Create → OAuth), and **Using another app?** (any remote-MCP client + the Claude Code
-command). The Claude Code footnote is gone; step 3 says "your app", not "Claude".
+**Verdict (2026-10-19): B**, revised. Settings gets an **Integrations** section of three rows,
+each opening its own three-step sheet (copy the address → add it in that app → sign in):
+
+- **Connect Claude**: web, desktop and phone; Settings → Connectors → Add custom connector.
+- **Connect ChatGPT**: Developer mode → Create → paste the address → OAuth.
+- **Using another app?**: any remote-MCP client, plus the Claude Code command.
+
+A row reads "Connected since …" when the Account holds a grant for that app, and "Sign in to
+connect" with a padlock when signed out. Matching a grant to a row is open: a grant's client
+name is whatever the client registered itself as, so the real build needs a rule for it (or a
+single connected-apps list instead, LAY-192).
 
 To check before shipping: ChatGPT's menu names (Apps & Connectors, Developer mode, Create) and
 plan requirement drift often, so confirm them against ChatGPT on the day. Whether ChatGPT,
