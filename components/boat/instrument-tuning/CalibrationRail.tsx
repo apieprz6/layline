@@ -39,7 +39,7 @@ import { spacing } from '@/lib/utils/design'
 import type { CalibrationChannel, CalibrationLogEntry } from '@/types'
 
 import { CHART_FONT, TUNING_CHART_WIDTH } from './chart-furniture'
-import { raceLabel, shortDate, type RaceLabels } from './chart-text'
+import { raceLabel, shortDate, type RaceLabels } from '@/services/analysis/instrument-tuning-text'
 
 /** One Race on the rail: where it sits in the season and whether it produced a figure. */
 export interface RailRace {

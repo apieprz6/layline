@@ -28,7 +28,14 @@
 import { useState, type KeyboardEvent, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 import { DOWNWIND_MIN_AWA_DEG, UPWIND_MAX_AWA_DEG } from '@/services/analysis/awa-asymmetry'
-import { ASYMMETRY_THIN_PAIRS, asymmetryCoverage } from '@/services/analysis/coverage-verdict'
+import { asymmetryCoverage } from '@/services/analysis/coverage-verdict'
+import {
+  leaning,
+  pairClock,
+  pairHeld,
+  tooFewToLeanOn,
+  widerSentence,
+} from '@/services/analysis/tack-dial-words'
 import type {
   AsymmetryFigure,
   CalibrationLogEntry,
@@ -65,7 +72,7 @@ import {
   signedDegrees,
   tackPairs,
   type RaceLabels,
-} from './chart-text'
+} from '@/services/analysis/instrument-tuning-text'
 
 const SEASON = 'season'
 const POINTS_OF_SAIL: readonly PairedPointOfSail[] = ['upwind', 'downwind']
@@ -633,7 +640,7 @@ function Dot({
       fill="transparent"
       role="button"
       tabIndex={0}
-      aria-label={`${entry.pair.point_of_sail} Tack Pair at ${entry.pair.at.slice(11, 16)}, ${tack} tack`}
+      aria-label={`${entry.pair.point_of_sail} Tack Pair at ${pairClock(entry.pair)}, ${tack} tack`}
       data-testid="tack-pair-dot"
       data-tack={tack}
       style={{ cursor: 'pointer' }}
@@ -708,22 +715,18 @@ function SideFigure({
       ) : (
         <>
           <Big>{signedDegrees(figure.asymmetry_deg)}</Big>
-          <div>
-            {figure.wider_tack === null
-              ? 'Both tacks held the same angle'
-              : `${figure.wider_tack === 'port' ? 'Port' : 'Starboard'} reads ${figure.wider_by_deg.toFixed(1)}° wider`}
-          </div>
+          <div>{widerSentence(figure)}</div>
           <div
             style={{
               fontSize: 10,
               color:
-                figure.pair_count < ASYMMETRY_THIN_PAIRS
+                tooFewToLeanOn(figure)
                   ? 'var(--state-warning)'
                   : 'var(--text-muted)',
             }}
           >
             {tackPairs(figure.pair_count)} · {racesPhrase(raceCount)}
-            {figure.pair_count < ASYMMETRY_THIN_PAIRS ? ' — too few to lean on' : ''}
+            {tooFewToLeanOn(figure) ? ' — too few to lean on' : ''}
           </div>
         </>
       )}
@@ -765,28 +768,6 @@ function Verdict({
   )
 }
 
-/**
- * Whether the two points of sail lean the same way, and what that does and does not imply.
- *
- * Three answers, not two. A side that read *exactly* symmetric leans neither way, so comparing it
- * with `Math.sign` would call a 0.0° upwind figure "the opposite way" from any downwind one at all —
- * reporting a disagreement between a measurement and a measurement of nothing.
- */
-function leaning(upwind: AsymmetryFigure | null, downwind: AsymmetryFigure | null): string {
-  if (upwind === null || downwind === null) {
-    return `No ${upwind === null ? 'upwind' : 'downwind'} pairs here, so the check that separates a vane set off-centre from everything else cannot be made.`
-  }
-
-  if (upwind.wider_tack === null || downwind.wider_tack === null) {
-    const flat = upwind.wider_tack === null ? 'Upwind' : 'Downwind'
-    return `${flat} the two tacks held the same angle, so there is nothing to compare the other point of sail’s lean against.`
-  }
-
-  return upwind.wider_tack === downwind.wider_tack
-    ? 'Upwind and downwind lean the same way — what a vane set off-centre would do. The compass, or qtVlm’s true-wind model, could still produce it.'
-    : 'Upwind and downwind lean opposite ways. A vane set off-centre leans the same way on both points of sail, so this is not, on its own, a vane offset.'
-}
-
 function PairDetail({
   entry,
   labels,
@@ -796,9 +777,7 @@ function PairDetail({
   labels: RaceLabels
   onClear: () => void
 }): ReactElement {
-  const starboard = Math.abs(entry.pair.starboard.held_angle_deg)
-  const port = Math.abs(entry.pair.port.held_angle_deg)
-  const wider = port > starboard ? 'port' : 'starboard'
+  const held = pairHeld(entry.pair)
 
   return (
     <>
@@ -824,14 +803,14 @@ function PairDetail({
       </div>
       <div>
         {raceLabel(labels, entry.race.race_id, entry.race.window_start)} ·{' '}
-        {entry.pair.at.slice(11, 16)} ·{' '}
+        {pairClock(entry.pair)} ·{' '}
         {rowsPhrase(entry.pair.starboard.row_indexes.length)} on starboard and{' '}
         {rowsPhrase(entry.pair.port.row_indexes.length)} on port,{' '}
         {Math.round(entry.pair.gap_seconds)}s apart
       </div>
       <div style={{ fontFamily: 'var(--font-mono)' }}>
-        starboard {starboard.toFixed(1)}° · port {port.toFixed(1)}° · {wider}{' '}
-        {Math.abs(port - starboard).toFixed(1)}° wider
+        starboard {held.starboard_deg.toFixed(1)}° · port {held.port_deg.toFixed(1)}° ·{' '}
+        {held.wider_tack} {held.wider_by_deg.toFixed(1)}° wider
       </div>
     </>
   )
@@ -879,14 +858,14 @@ function PairList({
           >
             <span>
               {raceLabel(labels, entry.race.race_id, entry.race.window_start)}{' '}
-              {entry.pair.at.slice(11, 16)}
+              {pairClock(entry.pair)}
             </span>
             <span>{entry.pair.point_of_sail === 'upwind' ? 'up' : 'down'}</span>
             <span style={{ color: 'var(--tack-starboard)' }}>
-              {Math.abs(entry.pair.starboard.held_angle_deg).toFixed(0)}°
+              {pairHeld(entry.pair).starboard_deg.toFixed(0)}°
             </span>
             <span style={{ color: 'var(--tack-port)' }}>
-              {Math.abs(entry.pair.port.held_angle_deg).toFixed(0)}°
+              {pairHeld(entry.pair).port_deg.toFixed(0)}°
             </span>
             <span style={{ textAlign: 'right' }}>{signedDegrees(entry.pair.asymmetry_deg)}</span>
           </button>

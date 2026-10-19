@@ -2971,6 +2971,55 @@ export interface CoverageStatement {
   reason: string
 }
 
+/**
+ * The three channels the Instrument Tuning screen checks, in the causal order it reads them in:
+ * `HDG → AWA → STW`. Not every **Calibration Channel**: `AWS` has no check of its own, there being
+ * nothing in a Recording to measure a wind speed against.
+ */
+export type CheckedChannel = Extract<CalibrationChannel, 'HDG' | 'AWA' | 'STW'>
+
+/** One headline figure, with the speed or point of sail it belongs to where there are two of them. */
+export interface ChannelFigure {
+  /** `4 kt`, `up`, `down` — absent where the channel has one figure and nothing to tell apart. */
+  at?: string
+  reading: string
+}
+
+/**
+ * One channel's headline over a season, as the "This season" rail's **Instrument tuning** row
+ * states it (ADR 0035): its figures or the words in their place, the coverage they rest on, and
+ * how close that is to `SOLID`. Built by `services/analysis/instrument-tuning-headlines.ts`, which
+ * the row and the MCP `instrument_tuning` tool both call.
+ */
+export interface SeasonChannelHeadline {
+  channel: CheckedChannel
+  /** The Era it is over: the current one, or for AWA the pooled season. Null where none holds a Race. */
+  era: CalibrationEra | null
+  figures: ChannelFigure[]
+  /** Words in place of the figures, where the channel produced none. Null where it did. */
+  instead: string | null
+  coverage: CoverageStatement
+  /** 0–1 of the way to `SOLID`, or null where there is no figure to draw evidence for. */
+  towards_solid: number | null
+  /** What must be said wherever the figure is. */
+  caveat: string
+}
+
+/**
+ * One channel's column in LAY-149 variant D's tile, which the season row and a Race page's
+ * calibration check both draw: the figures, what they rest on, and a bar.
+ */
+export interface ChannelColumn {
+  channel: CheckedChannel
+  figures: ChannelFigure[]
+  /** Words in place of the figures, where the channel produced none. Null where it did. */
+  instead: string | null
+  /** What the figure rests on, in words. Null where there is nothing to say it of. */
+  basis: string | null
+  /** 0–1, or null where there is no figure to draw evidence for. */
+  bar: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Uploading a race, and what a race states afterwards
 // ---------------------------------------------------------------------------
@@ -4100,4 +4149,243 @@ export interface McpRaceSummary {
     flips: { at: string; maneuver: Maneuver; twaBefore: string; twaAfter: string }[]
   }
   performance: McpRacePerformance
+}
+
+// A Calibration Era as the Instrument Tuning charts name it: bounded by the Calibration Log's own
+// entries for the channel, never by a step in the data (ADR 0027). `fromDate` null is the stretch
+// before anything was recorded; `untilDate` null is the Era still running. `openedBy` is the
+// Log's own entries on the boundary day, in the Log's words.
+export interface McpCalibrationEra {
+  channel: CheckedChannel
+  label: string
+  fromDate: string | null
+  untilDate: string | null
+  openedBy: McpCalibrationLogEntry[]
+}
+
+// What a season figure rests on (ADR 0034): the verdict, the reason that earned it, and how close
+// that is to SOLID, 0–1. A statement about the evidence, never about the instrument.
+export interface McpTuningCoverage {
+  verdict: CoverageVerdict
+  reason: string
+  towardsSolid: number | null
+}
+
+// One channel's headline over one Era, as its card and the "This season" row state it (ADR 0035):
+// the figures, or `instead` in words where there are none, and the coverage beneath them.
+export interface McpTuningFinding {
+  // Null only on a headline for a channel no Race has produced a figure for, which has no Era.
+  era: McpCalibrationEra | null
+  figures: ChannelFigure[]
+  instead: string | null
+  coverage: McpTuningCoverage
+  caveat: string
+}
+
+// The compass's curve at its highest or lowest heading: one 10° bin's figure, never an aggregate.
+export interface McpHeadingExtreme {
+  headingDegrees: number
+  compassPoint: string
+  offsetDegrees: number
+}
+
+// A Race as the Instrument Tuning charts name it: its day and the sailor's title, or the day alone.
+export interface McpRaceRef {
+  id: string
+  label: string
+}
+
+// A Race behind a check that produced no figure on it, with the chart's own reason.
+export interface McpRaceWithNoFigure extends McpRaceRef {
+  reason: string
+}
+
+// One 10° heading of the compass curve, as the chart's readout states it when tapped. `offsetDegrees`
+// is null where no Race held three rows there. `readings` is every Race that put a row in it,
+// including the ones under the gate, which `reading` says were not counted.
+export interface McpHeading {
+  fromDegrees: number
+  toDegrees: number
+  compassPoint: string
+  offsetDegrees: number | null
+  races: number
+  readings: (McpRaceRef & { offsetDegrees: number | null; rows: number; reading: string })[]
+}
+
+export interface McpCompassFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  swing: { highest: McpHeadingExtreme; lowest: McpHeadingExtreme; swingDegrees: number } | null
+  // The chart's sentence in place of the swing, where no heading carries a figure.
+  noCurve?: string
+  // The era mean ADR 0035 demotes beneath the swing, both ways it can be weighted, each named.
+  meanEveryHeadingEqualDegrees: number | null
+  meanEveryRaceEqualDegrees: number | null
+  headingsCovered: number
+  headingsUnread: number
+  // All 36, in heading order from north.
+  headings: McpHeading[]
+  // Each Race's own curve's share of the rose, 0–1.
+  races: (McpRaceRef & { shareOfRose: number })[]
+  racesWithNoFigure: McpRaceWithNoFigure[]
+}
+
+// One point of sail of the Apparent Wind Asymmetry. `asymmetryDegrees` is half the gap between the
+// two tacks, positive where starboard reads wider; `heldDegrees` is the angle each tack held.
+export interface McpAsymmetrySide {
+  widerTack: Tack | null
+  widerByDegrees: number
+  asymmetryDegrees: number
+  heldDegrees: { starboard: number; port: number }
+  // The Tack Dial's words for it, and its flag for a side resting on too few pairs to lean on.
+  reading: string
+  tooFewToLeanOn: boolean
+  tackPairs: number
+  races: number
+}
+
+// One Tack Pair as the Tack Dial lists it. `at` is the earlier segment's start, in the recording's
+// own clock; each tack's rows is a count, never the rows themselves.
+export interface McpTackPair {
+  race: McpRaceRef
+  at: string
+  clock: string
+  pointOfSail: PairedPointOfSail
+  asymmetryDegrees: number
+  heldDegrees: { starboard: number; port: number }
+  widerTack: Tack
+  widerByDegrees: number
+  rows: { starboard: number; port: number }
+  gapSeconds: number
+}
+
+export interface McpWindAngleFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  upwind: McpAsymmetrySide | null
+  downwind: McpAsymmetrySide | null
+  // Whether the two points of sail lean the same way, and what that does and does not imply.
+  leaning: string
+  races: (McpRaceRef & {
+    upwind: McpAsymmetrySide | null
+    downwind: McpAsymmetrySide | null
+    tackPairs: number
+  })[]
+  racesWithNoFigure: McpRaceWithNoFigure[]
+  tackPairs: McpTackPair[]
+}
+
+// The STW card's Recalibration Verdict (ADR 0041): whether, never by how much.
+export interface McpRecalibrationVerdict {
+  recommendation: 'recalibrate' | 'clean-first' | 'leave-it' | 'cant-tell'
+  headline: string
+  detail: string
+}
+
+// One knot of STW on the verdict's chart: its verdict, how many Races lean its way, and each
+// counted Race's own mean gap. Gaps as the chart says them, slow or fast, never signed.
+export interface McpSpeedBand {
+  knots: string
+  verdict: string
+  gap: string | null
+  rows: number
+  agreeing: number
+  sentence: string
+  races: (McpRaceRef & { gap: string })[]
+}
+
+// One of the checklist's five questions, answered.
+export interface McpChecklistItem {
+  question: string
+  answer: string
+  finding: string
+}
+
+// The Scatter's reading of one knot: the rows' own mean gap, and the fitted line's there.
+export interface McpScatterBand {
+  knots: string
+  meanGapKnots: number
+  rows: number
+  races: number
+  sentence: string
+  lineGapKnots: number | null
+  lineSentence: string | null
+}
+
+// One fit method's line through the Era's rows, as the Scatter states it. `summary` is its readout;
+// `gapsAtSpeeds` the line's gap from 1:1 at the headline speeds, null where it never reached one.
+export interface McpSpeedFit {
+  method: string
+  fitted: boolean
+  summary: string
+  rSquared: number | null
+  rows: number | null
+  gapsAtSpeeds: { stwKnots: number; gapKnots: number | null }[]
+  bands: McpScatterBand[]
+}
+
+export interface McpBoatSpeedFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  recalibration: McpRecalibrationVerdict
+  // SOG − STW over every Countable row, each Race weighted equally: the Scatter's signed figure.
+  meanGapKnots: number | null
+  spotOnShare: number | null
+  bands: McpSpeedBand[]
+  checklist: McpChecklistItem[]
+  headingSectors: { sector: number; reading: string | null; gap: string | null; races: number }[]
+  headingSwingKnots: number | null
+  drift: { points: (McpRaceRef & { gapKnots: number })[]; changeKnots: number | null }
+  fits: { orthogonal: McpSpeedFit; sogOnStw: McpSpeedFit }
+  blankStw: string
+  races: (McpRaceRef & {
+    meanGapKnots: number | null
+    fitted: boolean
+    rSquared: number | null
+    gapsAtSpeeds: { stwKnots: number; gapKnots: number | null }[]
+    noLine: string | null
+  })[]
+}
+
+// One channel over the season. `headline` is what the "This season" row states, over what a tap
+// on the screen opens: the current Era for HDG and STW, the pooled season for AWA. `eras` is every
+// Era holding a Race, oldest first, the last being the current one.
+export type McpTuningChannel =
+  | { channel: 'HDG'; name: string; headline: McpTuningFinding; eras: McpCompassFinding[] }
+  | {
+      channel: 'AWA'
+      name: string
+      headline: McpTuningFinding
+      // Every Race pooled, across AWA and HDG boundaries alike: the one figure that spans one.
+      season: McpWindAngleFinding
+      eras: McpWindAngleFinding[]
+      // The same Races cut on the compass's Eras, for whether the Asymmetry is compass-driven.
+      compassEras: McpWindAngleFinding[]
+    }
+  | { channel: 'STW'; name: string; headline: McpTuningFinding; eras: McpBoatSpeedFinding[] }
+
+// `instrument_tuning` over the season. `thinnest` is the row's "coverage is … at its thinnest",
+// given only when all three channels are.
+export interface McpInstrumentTuningSeason {
+  scope: 'season'
+  races: number
+  channels: McpTuningChannel[]
+  thinnest?: { channel: CheckedChannel; verdict: CoverageVerdict }
+  // Said in place of channels where the archive holds no Race, which is not a failure.
+  note?: string
+}
+
+// One Race's contribution to one channel, as its page's calibration tile states it. A Race has no
+// coverage verdict, being one Race: `basis` is what it rests on in words and `share` the tile's bar.
+export interface McpRaceTuningFinding {
+  channel: CheckedChannel
+  name: string
+  era: McpCalibrationEra | null
+  figures: ChannelFigure[]
+  instead: string | null
+  coverage: { basis: string | null; share: number | null }
+  caveat: string
+}
+
+export interface McpInstrumentTuningRace {
+  scope: 'race'
+  race: { id: string; title: string | null; windowStart: string }
+  channels: McpRaceTuningFinding[]
 }

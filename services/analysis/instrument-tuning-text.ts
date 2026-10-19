@@ -5,8 +5,9 @@
  * strip, in its readout, and on the card that opens it — three spellings of one figure are three
  * figures to a sailor glancing between them.
  *
- * Pure, and deliberately not `'use client'`: the cards a later ticket builds are Server Components
- * and print the same figures.
+ * In `services/` rather than beside the charts because the MCP `instrument_tuning` tool states the
+ * same figures, and a tool may not hold a copy of how one is written (ADR 0042). Pure, and
+ * deliberately not `'use client'`: the teaser and the Race page's tile are Server Components.
  */
 
 import {
@@ -15,15 +16,10 @@ import {
   type NoFitReason,
 } from '@/services/analysis/paddlewheel'
 import { countOf } from '@/services/analysis/figures'
-import type { AsymmetryFigure, CalibrationChannel, RaceAwaAsymmetryResult } from '@/types'
+import type { AsymmetryFigure, CheckedChannel, RaceAwaAsymmetryResult } from '@/types'
 
-/**
- * The three channels this screen checks, in the causal order it reads them in: `HDG → AWA → STW`.
- *
- * Not every **Calibration Channel**: `AWS` has no check of its own, there being nothing in a
- * Recording to measure a wind speed against.
- */
-export type CheckedChannel = Extract<CalibrationChannel, 'HDG' | 'AWA' | 'STW'>
+/** The three channels this screen checks, in the causal order it reads them in: `HDG → AWA → STW`. */
+export const CHECKED_CHANNELS = ['HDG', 'AWA', 'STW'] as const satisfies readonly CheckedChannel[]
 
 /**
  * What each of them is called on the face of the screen.
@@ -224,3 +220,9 @@ export function widerReading(figure: AsymmetryFigure | null): string {
 
   return `${figure.wider_tack === 'port' ? 'port' : 'stbd'} ${figure.wider_by_deg.toFixed(1)}°`
 }
+
+/** What the screen says of an archive with no Race in it — not a failure, and said as one isn't. */
+export const NO_RACES_TO_MEASURE = {
+  title: 'No races to measure yet',
+  detail: 'These checks read a season of recordings. They appear once a race has been uploaded.',
+} as const

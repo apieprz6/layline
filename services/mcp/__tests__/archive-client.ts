@@ -245,5 +245,9 @@ export function fixtureArchive(): ArchiveTables {
       { id: 'polar-v2', kind: 'polar', version_number: 2, effective_from: '2026-09-01' },
     ],
     rig_tune_bands: [],
+    // The Instrument Calibration artifact, with nothing recorded against it: a legitimate empty
+    // Calibration Log, so every channel has one Era over the whole archive.
+    boat_setup_artifacts: [{ id: 'artifact-calibration', kind: 'instrument_calibration' }],
+    calibration_events: [],
   }
 }
