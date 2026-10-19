@@ -16,13 +16,12 @@ import {
   isRatioOverlay,
   overlayGate,
 } from '@/services/analysis/track-overlays'
-import { UNCOLOURED_WORDS } from '@/services/analysis/track-time'
 import {
-  NO_CELL_NOTE,
-  noChartNote,
-  unjudgedNote,
-  verdictShares,
-} from '@/services/races/race-sail-chart'
+  UNCOLOURED_WORDS,
+  drawnNotColoured,
+  fillerAnchoredBandShare,
+} from '@/services/analysis/track-time'
+import { noChartNote, tileNote, verdictShares } from '@/services/races/race-sail-chart'
 import type {
   EfficiencyAggregate,
   McpEfficiencyFigure,
@@ -56,15 +55,15 @@ function vmgFigure(aggregate: EfficiencyAggregate): McpEfficiencyFigure {
   }
 }
 
-function run(overlay: TrackOverlay, each: TrackRun): McpTrackRun {
+function runAnswer(overlay: TrackOverlay, run: TrackRun): McpTrackRun {
   return {
-    from: each.from,
-    to: each.to,
-    time: duration(each.seconds),
-    band: each.band,
-    reason: each.reason,
-    label: each.band !== null ? bandLabel(overlay, each.band) : UNCOLOURED_WORDS[each.reason ?? 'no_position'],
-    fillerAnchored: isRatioOverlay(overlay) ? duration(each.filler_anchored_seconds) : null,
+    from: run.from,
+    to: run.to,
+    time: duration(run.seconds),
+    band: run.band,
+    reason: run.reason,
+    label: run.band === null ? UNCOLOURED_WORDS[run.reason] : bandLabel(overlay, run.band),
+    fillerAnchored: isRatioOverlay(overlay) ? duration(run.filler_anchored_seconds) : null,
   }
 }
 
@@ -85,30 +84,26 @@ function overlayAnswer(overlay: TrackOverlay, heatmap: RaceTrackHeatmap): McpTra
       label: bandLabel(overlay, band.band),
       time: duration(band.seconds),
       fillerAnchored: ratio ? duration(band.filler_anchored_seconds) : null,
+      fillerAnchoredShare: ratio ? fillerAnchoredBandShare(band) : null,
     })),
     coverage: {
       coloured: duration(time.coloured_seconds),
       fillerAnchored: ratio ? duration(time.filler_anchored_seconds) : null,
       uncoloured: duration(time.uncoloured_seconds),
+      drawnNotColoured: duration(drawnNotColoured(time)),
       uncolouredBy: time.uncoloured.map((part) => ({
         reason: part.reason,
         label: UNCOLOURED_WORDS[part.reason],
         time: duration(part.seconds),
       })),
     },
-    runs: heatmap.runs[overlay].map((each) => run(overlay, each)),
+    runs: heatmap.runs[overlay].map((run) => runAnswer(overlay, run)),
   }
 }
 
 /** The Polar Plot's patches and what it draws nowhere, or why there is no plot. */
 function polarPlotAnswer(plot: RacePolarPlot | null, scoring: RaceDetail['track']['scoring']): McpPolarPlot {
-  if (plot === null) {
-    return {
-      drawn: false,
-      scoring: scoring === 'polar-unreadable' ? 'polar-unreadable' : 'no-polar-version',
-      note: noPlotNote(scoring),
-    }
-  }
+  if (plot === null) return { drawn: false, scoring, note: noPlotNote(scoring) }
 
   return {
     drawn: true,
@@ -137,12 +132,6 @@ function sailChartAnswer(read: RaceSailChartRead): McpSailChart {
   if (!read.ok) return { ok: false, reason: read.reason, note: noChartNote(read.reason) }
 
   const { agreement } = read
-  const note =
-    agreement.placed_rows === 0
-      ? NO_CELL_NOTE
-      : agreement.agreement === null
-        ? unjudgedNote(agreement)
-        : null
 
   return {
     ok: true,
@@ -152,7 +141,7 @@ function sailChartAnswer(read: RaceSailChartRead): McpSailChart {
     differing: { ...polarFigure(agreement.differing), time: duration(agreement.differing.elapsed_seconds) },
     composition: verdictShares(agreement).map((part) => ({ ...part, percent: sharePercent(part.share) })),
     cells: agreement.cells,
-    note,
+    note: tileNote(agreement),
   }
 }
 

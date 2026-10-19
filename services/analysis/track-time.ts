@@ -31,6 +31,7 @@ import { TRACK_OVERLAYS, TRACK_SCALES, overlayPaint } from '@/services/analysis/
 import { wallClockSeconds } from '@/services/recordings/wall-clock'
 import type { RaceWindow } from '@/services/recordings/row-quality'
 import type {
+  TrackBandTime,
   TrackBandToken,
   TrackHeatmapTime,
   TrackOverlay,
@@ -76,6 +77,7 @@ export const UNCOLOURED_WORDS: Readonly<Record<TrackUncolouredReason, string>> =
   sail_unnamed: 'with a sail the chart has no word for',
   no_chart_cell: 'at an angle or wind speed below the chart’s own axes',
   no_position: 'with no position logged, so drawn nowhere',
+  bridged: 'the end of a dropout, where the map draws its bridge back to the first live reading',
   before_first_row: 'before the recording’s first reading',
   after_last_row: 'after the recording’s last reading',
 }
@@ -90,10 +92,27 @@ export function uncolouredFor(
     .reduce((total, part) => total + part.seconds, 0)
 }
 
-/** What the timing reads of a row: the map's own facts, and whether the map has a fix to draw. */
+/**
+ * What the map drew and left uncoloured: a hairline or a bridge. The window's unrecorded edges and
+ * the stretches with no fix are drawn nowhere at all, so they are not in it.
+ */
+export function drawnNotColoured(time: TrackOverlayTime): number {
+  return uncolouredFor(time, [...TRACK_EXCLUSIONS, ...TRACK_ABSENCES, 'bridged'])
+}
+
+/** Of a band's time, the Filler-Anchored part as a share, or null where the band holds none. */
+export function fillerAnchoredBandShare(band: TrackBandTime): number | null {
+  return band.seconds === 0 ? null : band.filler_anchored_seconds / band.seconds
+}
+
+/**
+ * What the timing reads of a row: the map's own facts, whether the map has a fix to draw, and
+ * whether it is the first live row after a **Dropout**, whose arriving leg the map bridges.
+ */
 export interface TimedRow {
   facts: TrackRowFacts
   positioned: boolean
+  after_dropout: boolean
 }
 
 /** One stretch of the window, and the row whose state it carries. Null at the window's edges. */
@@ -122,20 +141,27 @@ function stateOf(overlay: TrackOverlay, span: Span, hasPolar: boolean): SpanStat
   // Coloured by the rules, and drawn nowhere: a row that logged no position is in no part of the
   // picture, so the map coloured none of its time.
   if (!span.row.positioned) return { band: null, reason: 'no_position', flagged: false }
+  // Its leg is the end of the Dropout Bridge, drawn dashed rather than in its band.
+  if (span.row.after_dropout) return { band: null, reason: 'bridged', flagged: false }
 
   return { band: paint.band, reason: null, flagged: paint.flagged }
 }
 
 /**
- * The window as consecutive spans: the lead edge, each row's arrival interval, the tail edge.
- *
- * Without a window, the rows' own span — which is what a caller with no Race Window has.
+ * Where the timing starts and stops: the Race Window, or without one the rows' own span — which
+ * is what a caller with no Race Window has.
  */
-function spansOf(rows: readonly TimedRow[], window: RaceWindow | null): Span[] {
+function edgesOf(rows: readonly TimedRow[], window: RaceWindow | null): { start: string; finish: string } {
+  return {
+    start: window?.window_start ?? rows[0].facts.row_time,
+    finish: window?.window_finish ?? rows[rows.length - 1].facts.row_time,
+  }
+}
+
+/** The window as consecutive spans: the lead edge, each row's arrival interval, the tail edge. */
+function spansOf(rows: readonly TimedRow[], { start, finish }: { start: string; finish: string }): Span[] {
   const first = rows[0].facts.row_time
   const last = rows[rows.length - 1].facts.row_time
-  const start = window?.window_start ?? first
-  const finish = window?.window_finish ?? last
   const spans: Span[] = []
 
   const lead = wallClockSeconds(first) - wallClockSeconds(start)
@@ -206,14 +232,12 @@ function overlayRuns(overlay: TrackOverlay, spans: readonly Span[], hasPolar: bo
       continue
     }
 
-    runs.push({
-      from: span.from,
-      to: span.to,
-      seconds: span.seconds,
-      band: state.band,
-      reason: state.reason,
-      filler_anchored_seconds: filler,
-    })
+    const stretch = { from: span.from, to: span.to, seconds: span.seconds, filler_anchored_seconds: filler }
+    runs.push(
+      state.band === null
+        ? { ...stretch, band: null, reason: state.reason }
+        : { ...stretch, band: state.band, reason: null }
+    )
   }
 
   return runs
@@ -230,16 +254,15 @@ export function trackTimeline(
   hasPolar: boolean,
   window: RaceWindow | null
 ): { time: TrackHeatmapTime; runs: Record<TrackOverlay, TrackRun[]> } {
-  const spans = spansOf(rows, window)
-  const start = window?.window_start ?? rows[0].facts.row_time
-  const finish = window?.window_finish ?? rows[rows.length - 1].facts.row_time
+  const edges = edgesOf(rows, window)
+  const spans = spansOf(rows, edges)
 
   const each = <T>(of: (overlay: TrackOverlay) => T): Record<TrackOverlay, T> =>
     Object.fromEntries(TRACK_OVERLAYS.map((overlay) => [overlay, of(overlay)])) as Record<TrackOverlay, T>
 
   return {
     time: {
-      window_seconds: wallClockSeconds(finish) - wallClockSeconds(start),
+      window_seconds: wallClockSeconds(edges.finish) - wallClockSeconds(edges.start),
       overlays: each((overlay) => overlayTime(overlay, spans, hasPolar)),
     },
     runs: each((overlay) => overlayRuns(overlay, spans, hasPolar)),

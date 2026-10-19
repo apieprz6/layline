@@ -14,7 +14,7 @@ import RaceTrackSection from '@/components/race/RaceTrackSection'
 import { efficiencyPercent } from '@/services/analysis/figures'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { TRACK_OVERLAYS, TRACK_SCALES } from '@/services/analysis/track-overlays'
-import { readRaceSailChart } from '@/services/races/race-sail-chart'
+import { readRaceSailChart, verdictShares } from '@/services/races/race-sail-chart'
 import { readRace } from '@/services/races/readRace'
 import { trackView } from '@/services/races/track-view'
 import type { McpRaceTrack, RaceDetail } from '@/types'
@@ -83,6 +83,14 @@ describe('raceTrack, against the heatmap’s legend', () => {
       )
       const frozen = overlay.coverage.uncolouredBy.find((part) => part.reason === 'frozen')
       expect(screen.getByText(`Frozen feed — ${frozen?.time.label}`)).toBeInTheDocument()
+      expect(
+        screen.getByText(`Drawn, not coloured — ${overlay.coverage.drawnNotColoured.label}`)
+      ).toBeInTheDocument()
+      if (overlay.coverage.fillerAnchored !== null) {
+        expect(
+          screen.getByText(`Filler-anchored — ${overlay.coverage.fillerAnchored.label}`)
+        ).toBeInTheDocument()
+      }
     }
   })
 
@@ -155,6 +163,10 @@ describe('raceTrack, against the Polar Plot', () => {
 
     const { patches } = answer.polarPlot
     expect(patches.length).toBeGreaterThan(0)
+    // The page's own payload's patches, bin for bin and second for second.
+    expect(patches.map((patch) => [patch.twaDeg, patch.sogKnots, patch.time.seconds])).toEqual(
+      race.track.plot.patches.map((patch) => [patch.twa, patch.sog, patch.efficiency.elapsed_seconds])
+    )
     // Every second the plot's dots stand for is in exactly one patch.
     const patched = patches.reduce((total, patch) => total + patch.time.seconds, 0)
     const dotted = race.track.plot.moments.reduce((total, moment) => total + moment.seconds, 0)
@@ -210,9 +222,12 @@ describe('raceTrack, against the sail tile', () => {
 
     const verdicts = answer.composition.map((part) => part.verdict)
     expect(new Set(verdicts).size).toBe(verdicts.length)
-    for (const part of answer.composition) {
-      expect(part.share).toBe(sailChart.agreement.verdicts[part.verdict] / sailChart.agreement.placed_rows)
-    }
+    // The fixture's code zero is a sail the chart has no word for: Off-chart, never Differs.
+    expect(verdicts).toContain('off-chart')
+    // The tile's own shares, verdict for verdict.
+    expect(answer.composition.map(({ verdict, share }) => ({ verdict, share }))).toEqual(
+      verdictShares(sailChart.agreement).map(({ verdict, share }) => ({ verdict, share }))
+    )
   })
 
   it('says why there is no tile figure, in the tile’s words', async () => {

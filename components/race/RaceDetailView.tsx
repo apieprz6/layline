@@ -110,6 +110,9 @@ export default function RaceDetailView({
   season,
   sailChart,
 }: RaceDetailViewProps): ReactElement {
+  // What the client sections draw, without the runs only the MCP reads.
+  const track = trackView(race.track)
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
       {/*
@@ -246,14 +249,14 @@ export default function RaceDetailView({
          * drawn where it happened, and the same race drawn at the angles it was sailed (ADR 0040).
          * They share one selection and one readout, so they are one section, not two.
          */}
-        <RaceTrackSection track={trackView(race.track)} season={season} />
+        <RaceTrackSection track={track} season={season} />
 
         {/*
          * The rest of the breakdown, each its own row under the two cards and nothing between
          * them: the race's two figures, its sails against the chart, its calibration check
          * (ADR 0033). The sticky readout floats over these as the page scrolls, by design.
          */}
-        <RaceBreakdown track={trackView(race.track)} sailChart={sailChart} instruments={race.instruments} />
+        <RaceBreakdown track={track} sailChart={sailChart} instruments={race.instruments} />
 
         {/* Capped at a measure: every one of these is a label on the left and a figure on the
             right, and across 800px of desktop the two stop reading as a pair. */}

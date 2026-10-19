@@ -55,12 +55,7 @@ import type {
   RaceChartAgreement,
   RaceSailChartRead,
 } from '@/services/analysis/sail-selection'
-import {
-  NO_CELL_NOTE,
-  noChartNote,
-  unjudgedNote,
-  verdictShares,
-} from '@/services/races/race-sail-chart'
+import { noChartNote, tileNote, verdictShares } from '@/services/races/race-sail-chart'
 import { describeDuration } from '@/services/recordings/coverage'
 import type { RaceInstrumentCheck, RaceTrackView } from '@/types'
 
@@ -185,14 +180,14 @@ function SailChartTile({ read }: { read: RaceSailChartRead }): ReactElement {
 }
 
 function Agreement({ agreement }: { agreement: RaceChartAgreement }): ReactElement {
-  if (agreement.placed_rows === 0) return <Absent>{NO_CELL_NOTE}</Absent>
+  if (agreement.placed_rows === 0) return <Absent>{tileNote(agreement)}</Absent>
 
   const share = efficiencyPercent(agreement.agreement)
 
   return (
     <>
       {share === null ? (
-        <Absent>{unjudgedNote(agreement)}</Absent>
+        <Absent>{tileNote(agreement)}</Absent>
       ) : (
         <>
           <span

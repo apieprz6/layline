@@ -168,11 +168,33 @@ describe('a track as runs', () => {
     ]
     const { runs } = heatmapOf(rows, TARGETS)
 
+    // The interval landing on the first live fix is the end of the bridge, not a coloured leg.
     expect(runs.sog.map(({ from, to, band, reason }) => ({ from, to, band, reason }))).toEqual([
       { from: stamp(0), to: stamp(1), band: 'track-speed-4', reason: null },
       { from: stamp(1), to: stamp(3), band: null, reason: 'frozen' },
-      { from: stamp(3), to: stamp(5), band: 'track-speed-4', reason: null },
+      { from: stamp(3), to: stamp(4), band: null, reason: 'bridged' },
+      { from: stamp(4), to: stamp(5), band: 'track-speed-4', reason: null },
     ])
+  })
+
+  it('spans a Dropout’s bridge exactly with its frozen and bridged runs', () => {
+    const rows = [row(0), row(1), row(2, { frozen: true }), row(3, { frozen: true }), row(4), row(5)]
+    const heatmap = heatmapOf(rows, TARGETS)
+    const [bridge] = heatmap.bridges
+    const dropout = heatmap.runs.target_speed.filter(
+      (run) => run.reason === 'frozen' || run.reason === 'bridged'
+    )
+
+    expect(dropout[0].from).toBe(bridge.from)
+    expect(dropout[dropout.length - 1].to).toBe(bridge.to)
+    expect(dropout.reduce((total, run) => total + run.seconds, 0)).toBe(bridge.seconds)
+  })
+
+  it('keeps the frozen time to the dead rows themselves, as the coverage readout counts it', () => {
+    const rows = [row(0), row(1), row(2, { frozen: true }), row(3, { frozen: true }), row(4), row(5)]
+    const { time } = heatmapOf(rows, TARGETS)
+
+    expect(uncolouredSeconds(time.overlays.sog)).toEqual({ frozen: 60, bridged: 30 })
   })
 
   it('agrees with the overlay’s own time: the runs in a band sum to the band', () => {

@@ -283,6 +283,8 @@ export function raceTrackHeatmap(
   const projection = projectTrack(fixes, box)
   if (projection === null) return null
 
+  const positioned = fixes.map((fix) => fix.latitude !== null && fix.longitude !== null)
+
   const hasPolar = targets !== null
   const segments: TrackSegment[] = []
   const points: TrackPoint[] = []
@@ -293,7 +295,7 @@ export function raceTrackHeatmap(
 
     if (rowFacts.excluded !== null) counts[rowFacts.excluded] += 1
     tally(counts, rowFacts, hasPolar)
-    if (fixes[index].latitude !== null && fixes[index].longitude !== null) counts.with_fix += 1
+    if (positioned[index]) counts.with_fix += 1
 
     return rowFacts
   })
@@ -338,7 +340,9 @@ export function raceTrackHeatmap(
   const { time, runs: timeline } = trackTimeline(
     facts.map((rowFacts, index) => ({
       facts: rowFacts,
-      positioned: fixes[index].latitude !== null && fixes[index].longitude !== null,
+      positioned: positioned[index],
+      // `breakTrack` closes the run at a frozen row, so the leg arriving here is the bridge's end.
+      after_dropout: index > 0 && rows[index - 1].quality.frozen && !rows[index].quality.frozen,
     })),
     hasPolar,
     window

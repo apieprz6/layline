@@ -27,8 +27,8 @@ import { spacing } from '@/lib/utils/design'
 import { TRACK_SCALES, isRatioOverlay, overlayColour } from '@/services/analysis/track-overlays'
 import {
   TRACK_ABSENCES,
-  TRACK_EXCLUSIONS,
   WINDOW_EDGES,
+  drawnNotColoured,
   uncolouredFor,
 } from '@/services/analysis/track-time'
 import { describeDuration } from '@/services/recordings/coverage'
@@ -244,14 +244,6 @@ export default function TrackHeatmapLegend({
 }
 
 /**
- * What the map drew and left uncoloured: the overlay's uncoloured time, less the window's edges and
- * the stretches with no fix, which are drawn nowhere at all.
- */
-function drawnNotColoured(time: TrackOverlayTime): number {
-  return uncolouredFor(time, [...TRACK_EXCLUSIONS, ...TRACK_ABSENCES])
-}
-
-/**
  * The one line the legend owes: how much of the race this overlay could not colour.
  *
  * ADR 0033 requires the proportion to be *stated* rather than inferred from how much grey is on
@@ -293,6 +285,7 @@ function countDetail(
   const parked = describeDuration(uncolouredFor(time, ['low_speed', 'maneuver_window']))
   const withoutValue = describeDuration(uncolouredFor(time, TRACK_ABSENCES))
   const noFix = uncolouredFor(time, ['no_position'])
+  const bridged = uncolouredFor(time, ['bridged'])
   const edges = uncolouredFor(time, WINDOW_EDGES)
 
   const sentences: string[] = []
@@ -340,6 +333,13 @@ function countDetail(
     sentences.push(
       `${describeDuration(noFix)} logged no position at all, so it is in no part of this picture — ` +
         'only in these figures.'
+    )
+  }
+
+  if (bridged > 0) {
+    sentences.push(
+      `${describeDuration(bridged)} is the dashed bridge from each dropout back to the first live ` +
+        'reading, which the map draws but does not colour.'
     )
   }
 

@@ -2175,6 +2175,12 @@ export interface TrackOverlayCounts {
 export type TrackUncolouredReason =
   | TrackNotScored
   | 'no_position'
+  /**
+   * The interval landing on the first live fix after a **Dropout**: the map draws it as the end
+   * of the Dropout Bridge, not as a coloured leg. Apart from `frozen`, so the frozen time stays
+   * the coverage readout's, and a Dropout's two runs together span exactly its bridge.
+   */
+  | 'bridged'
   | 'before_first_row'
   | 'after_last_row'
 
@@ -2222,16 +2228,17 @@ export interface TrackHeatmapTime {
  * `reason` is set, as on `TrackPaint`: a run never bridges a **Dropout** or an uncoloured stretch,
  * because those are runs of their own with their reason.
  */
-export interface TrackRun {
+export type TrackRun = {
   /** The recording's own naive stamps (ADR 0008). */
   from: string
   to: string
   seconds: number
-  band: TrackBandToken | null
-  reason: TrackUncolouredReason | null
   /** Of `seconds`, Filler-Anchored. Zero on an uncoloured run and on every reading overlay. */
   filler_anchored_seconds: number
-}
+} & (
+  | { band: TrackBandToken; reason: null }
+  | { band: null; reason: TrackUncolouredReason }
+)
 
 /** A piece of **Testimony** the map could not place: no fix of the window is near its stamp. */
 export interface TrackUnplacedAnnotation {
@@ -4103,6 +4110,8 @@ export interface McpTrackBand {
   label: string
   time: McpDuration
   fillerAnchored: McpDuration | null
+  // Of the band's time, the Filler-Anchored part as a share; null on a reading or an empty band.
+  fillerAnchoredShare: number | null
 }
 
 // A stretch of the window in one state: a band, or the reason it carries none. Merged and in time
@@ -4130,6 +4139,9 @@ export interface McpTrackOverlay {
     coloured: McpDuration
     fillerAnchored: McpDuration | null
     uncoloured: McpDuration
+    // The legend's "Drawn, not coloured": the uncoloured time the map draws as a hairline or a
+    // bridge, which leaves out the window's unrecorded edges and anything with no position.
+    drawnNotColoured: McpDuration
     // By reason, largest first, each in its own words; no reason folded into another.
     uncolouredBy: { reason: TrackUncolouredReason; label: string; time: McpDuration }[]
   }
@@ -4155,7 +4167,7 @@ export type McpPolarPlot =
       // The sailing drawn nowhere on the Polar Plot, by its legend's reasons.
       undrawn: McpDuration & { parts: { reason: PolarPlotUndrawnReason; label: string; time: McpDuration }[] }
     }
-  | { drawn: false; scoring: 'no-polar-version' | 'polar-unreadable'; note: string }
+  | { drawn: false; scoring: RaceTrack['scoring']; note: string }
 
 // The race page's Sail selection vs. chart tile. `composition` is every verdict as a share of the
 // Race's sailing on the chart, Not recorded and Off-chart beside Differs and never inside it.

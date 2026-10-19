@@ -77,12 +77,17 @@ export function noChartNote(reason: NoChartReason): string {
   return NO_CHART_WORDS[reason]
 }
 
-/** What the tile says where the Race's Countable sailing reached no cell at all. */
-export const NO_CELL_NOTE =
-  'This race’s Countable sailing falls on no cell of the chart, so there is nothing to compare.'
-
-/** Why sailing on the chart produced no share, from what it was instead. */
-export function unjudgedNote({ verdicts, placed_rows }: RaceChartAgreement): string {
+/**
+ * Why the tile has no share to print, in its words, or null where it has one.
+ *
+ * Two different absences: sailing that reached no cell of the chart at all, and sailing on the
+ * chart none of which could be judged — and of that, sailing whose sail nobody wrote down.
+ */
+export function tileNote({ verdicts, placed_rows, agreement }: RaceChartAgreement): string | null {
+  if (placed_rows === 0) {
+    return 'This race’s Countable sailing falls on no cell of the chart, so there is nothing to compare.'
+  }
+  if (agreement !== null) return null
   if (verdicts['not-recorded'] === placed_rows) {
     return 'This race recorded no sail for any of its sailing on the chart, so none of it can be judged.'
   }
