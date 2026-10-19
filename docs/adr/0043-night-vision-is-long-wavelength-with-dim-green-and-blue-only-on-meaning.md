@@ -8,7 +8,8 @@ red-on-black" since the theme was introduced (ADR 0024's store applies it).
 **Amends ADR 0033** (the diverging ramp no longer collapses after dark, and the theme-aware legend it
 required is gone), **ADR 0038** (the tack pair no longer merges, and no overlay owes an after-dark
 sentence) and **ADR 0030** (the sail bands are two hues after dark rather than one, and the state
-colours are distinct again; a cell still prints its number).
+colours are distinct again; a cell still prints its number). Notes the same in ADRs 0032 and 0041,
+whose "words as well as colour" rules stand for colour-blind readers.
 
 Decided on a throwaway branch, `prototype/night-vision-palettes`, which built four variants and two
 optional hue layers on the real fixture screens. The owner chose **variant C (red and amber), plus

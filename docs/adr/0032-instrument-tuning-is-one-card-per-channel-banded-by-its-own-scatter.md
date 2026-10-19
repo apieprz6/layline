@@ -85,6 +85,10 @@ thirteen Races carry no **Sea State** and no **Sail Configuration** (ADR 0029) â
 this screen's spine. And in night vision every state colour becomes a red tint of every other, so no
 verdict may live in hue.
 
+> **Amended by [ADR 0043](./0043-night-vision-is-long-wavelength-with-dim-green-and-blue-only-on-meaning.md)
+> (LAY-195).** The state colours are distinct after dark now (success green, warning yellow, danger
+> red). The rule stands: some sailors cannot separate hues at all, so no verdict lives in hue alone.
+
 ## Decision
 
 ### One card per Calibration Channel, stacked, each card a summary of one measurement

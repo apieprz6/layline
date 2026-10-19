@@ -150,7 +150,7 @@ const RATIO_BANDS: readonly TrackBandStep[] = [
 ]
 
 /**
- * Boat speed, in knots, on a single-hue ramp.
+ * Boat speed, in knots, on a sequential ramp: gold to brown by day, one amber ramp after dark.
  *
  * The edges are this boat's own range rather than a generic one: a 4.5-knot beat in light air and
  * a 7.5-knot reach are the two ends of what Handsome Pete does, and a ramp stretched to 20 knots

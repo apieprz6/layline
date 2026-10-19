@@ -88,7 +88,8 @@ the Races agree, the gap is a straight line, and neither heading nor drift expla
   instrument was subtracted from which. The Scatter's readout keeps its signed figures, which are
   readings of the drawn line.
 - **No invented heading.** A row with no `COG` is left out of the heading check, never read as north.
-- **Words as well as colour**, because under the night-vision theme every verdict colour is a red.
+- **Words as well as colour**, because some sailors cannot separate hues. (Written when every verdict
+  colour was a red under night vision; ADR 0043 made them distinct again, and the rule stands.)
 
 ### The thresholds are starting values
 

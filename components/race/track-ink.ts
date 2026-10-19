@@ -29,9 +29,8 @@ export const HAIRLINE = { stroke: 'var(--text-muted)', width: 1.6, opacity: 0.55
  *
  * A texture rather than a second hue, because every hue on the track is already some overlay's, and
  * after dark the theme has few to spare (ADR 0043) — and because it costs no extra ink on a track
- * made of a thousand segments. The dash is
- * proportioned to the stroke: on a 5.4-wide line a 2.5/2 pattern read as beads rather than as a
- * stitched version of the same line.
+ * made of a thousand segments. The dash is proportioned to the stroke: on a 5.4-wide line a 2.5/2
+ * pattern read as beads rather than as a stitched version of the same line.
  */
 export const FILLER_DASH = '4.5 2.5'
 

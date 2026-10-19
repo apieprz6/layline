@@ -216,8 +216,8 @@ describe('four layers over one grid', () => {
 
   /**
    * The night-vision claim, in the form jsdom can hold: **no layer's print depends on its colour.**
-   * There the eight sail bands become red tints of each other and the three state colours become
-   * reds, so a cell whose fact lived only in its fill would be unreadable on the exact screen a
+   * There the eight sail bands are only two hues, red and amber (ADR 0043), and some sailors
+   * separate none, so a cell whose fact lived only in its fill would be unreadable on the exact screen a
    * sailor uses at night — and this archive holds a fourteen-hour overnight race (ADR 0030).
    */
   it('prints something in every cell that has anything to say, on every layer', async () => {
