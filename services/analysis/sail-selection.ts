@@ -960,6 +960,8 @@ export interface SailRegionView {
   /** Its cells, in the grid's own order. */
   views: SailSelectionCellView[]
   totals: CellTotals
+  /** Countable rows its cells hold with the filter cleared, as each cell's own ghost counts them. */
+  unfiltered_rows: number
 }
 
 /** The chart's regions, each with its cells and their figures folded, in region order. */
@@ -986,6 +988,7 @@ export function regionViews(
       name: chartSays(members[0].cell),
       views: members,
       totals: cellTotals(members.flatMap((member) => member.cell.slices)),
+      unfiltered_rows: members.reduce((sum, member) => sum + member.cell.unfiltered_rows, 0),
     }))
 }
 
@@ -1047,6 +1050,13 @@ export function emptyCellSentence(cell: Pick<SailSelectionCell, 'unfiltered_rows
   return cell.unfiltered_rows > 0
     ? `No Countable sailing here under this filter — ${countOf(cell.unfiltered_rows)} rows with the filter cleared.`
     : 'No race has reached this cell.'
+}
+
+/** The same, for a whole region of the chart. */
+export function emptyRegionSentence(region: Pick<SailRegionView, 'unfiltered_rows'>): string {
+  return region.unfiltered_rows > 0
+    ? `No Countable sailing in this region under this filter — ${countOf(region.unfiltered_rows)} rows with the filter cleared.`
+    : 'No race has reached this region.'
 }
 
 /** What a reached cell's figure is over, and how much of it rests on the Polar's own filler. */

@@ -3,12 +3,20 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { BOAT_SETUP_LABEL, BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
-import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
+import {
+  POLAR_PERFORMANCE_DIMENSIONS,
+  SAIL_SELECTION_DIMENSIONS,
+  analysisDimensions,
+} from '@/services/analysis/filter'
+import { polarDomain } from '@/services/analysis/polar-targets'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { readBoatSetup } from '@/services/boat/readBoatSetup'
-import { readCrossoverChartVersionsWithCharts } from '@/services/boat/readCrossoverChartVersions'
+import {
+  readCrossoverChartScreen,
+  readCrossoverChartVersionsWithCharts,
+} from '@/services/boat/readCrossoverChartVersions'
 import { readInstrumentCalibration } from '@/services/boat/readInstrumentCalibration'
-import { readPolarVersions } from '@/services/boat/readPolarVersions'
+import { readPolarScreen, readPolarVersions } from '@/services/boat/readPolarVersions'
 import { readRigTune } from '@/services/boat/readRigTune'
 import {
   fetchCHII2,
@@ -25,6 +33,7 @@ import { currentConditions } from './current-conditions'
 import { buoyHistory } from './buoy-history'
 import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 import { raceList, raceSummary } from './races'
+import { cellFromArgument, sailSelectionAnswer } from './sail-selection'
 import {
   boatSetupOverview,
   crossoverChartVersions,
@@ -92,6 +101,18 @@ const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficienc
 - A figure may be Filler-Anchored: part of it is compared against Polar cells the Polar manufactured rather than measured. Give the figure and say what share is Filler-Anchored; do not withhold it.
 - Target VMG is estimated from the Polar's grid, not the certificate's own optimum.
 - A null figure means nothing in the match could be scored; never fill one in.`
+
+/** The Sail Selection Screen's own caveats, told to Claude. Prose, so it is updated by hand (ADR 0042). */
+const SAIL_SELECTION_DESCRIPTION = `The boat's race archive laid over its own Crossover Chart, exactly as Layline's Sail Selection screen states it: whether the sail the crew carried was the one the chart calls for, cell by cell, narrowed by the Analysis Filter.
+
+- Cell Agreement is something to look at, never a verdict that the chart is wrong, nor that the crew was. A cell where the crew carried something else is a cell worth a conversation: the chart may not fit the boat there, or the crew may have had a reason. Never say the chart is wrong.
+- The grid is the Crossover Chart Version in force (crossoverChart.version): cells are named by the chart's own axis values, an angle (|TWA|, degrees) and a wind speed (TWS, knots), and each cell runs from its axis value up to the next one. Agreement is the integer Sail Definition comparison the screen makes, never a match on sail names.
+- Each row of sailing in a cell is one of five verdicts: agrees, differs, not-recorded (nobody wrote down the sail), off-chart (a sail the chart has no word for; never disagreement) or other-version (sailed under another Crossover Chart Version, so its sail numbers mean something else and it is not judged). A cell's Cell Agreement reads them together, and adds mixed for a cell with both agreeing and differing rows. Every verdict comes with its share of the cell's rows: say "2 of 3 rows" or "two thirds", not just "mixed". Not recorded and Off-chart are never Differs.
+- With no cell: chartAgreement (the share of judgeable sailing, agrees plus differs, that carried what its own cell calls for, and each side's own percent of target, side by side; never subtract them into a finding), then every region of the chart as the Chart layer outlines it (cells of one sail joined edge to edge, named by that sail; two regions of one sail are told apart by region number), each with its own Cell Agreement and its cells. judgeableShare is how much of the placed sailing recorded its sail at all: state it, because half an archive can be unannotated.
+- With a cell: that cell's sheet, its figures and the screen's own sentences (statement), and its breakdown by the sail actually carried, by Sea State and by time of day, each line with its own percent of target over its own rows. The sail carried is listed only here, which is why the filter has no sail dimension.
+- A cell nobody sailed in under the filter is unreached, with its reason: a narrowing emptied it, or no race has ever reached it. noTargetReason is different: a cell outside the Polar's axes can never hold a percent of target, however much it is sailed.
+- polarEfficiency is total distance over Target Speed distance across the cell's scored sailing, with its scored time. Give a Filler-Anchored share beside the figure when above zero, never withhold the figure for it. A null figure means nothing there could be scored; never fill one in.
+- The filter offers the screen's five dimensions: wind speed, point of sail, sea state, time of day and when. A dimension left out includes everything, Not recorded included. Every answer carries its Coverage Ledger and lists each dimension's valid buckets; state how much sailing is behind a figure, especially when it is little.`
 
 /** What a tool answers when the archive could not be read whole: an error, never a figure. */
 const ARCHIVE_UNREADABLE =
@@ -257,6 +278,63 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
 
       return answer(
         polarPerformanceAnswer(archive.rows, reading.filter, dimensions, archive.polars, window?.window ?? null)
+      )
+    }
+  )
+
+  server.registerTool(
+    'sail_selection',
+    {
+      title: 'Sail selection',
+      description: SAIL_SELECTION_DESCRIPTION,
+      inputSchema: {
+        filter: analysisFilterSchema(SAIL_SELECTION_DIMENSIONS),
+        cell: z
+          .object({
+            twa: z.number().describe("The cell's angle, one of the chart's TWA axis values, in degrees."),
+            tws: z.number().describe("The cell's wind speed, one of the chart's TWS axis values, in knots."),
+          })
+          .optional()
+          .describe(
+            'One cell, for its breakdown. Omit it for the whole chart. Every answer gives the axes as crossoverChart.'
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ filter, cell }) => {
+      // All or nothing (ADR 0026), and the three reads the screen makes, in one wave.
+      const [archive, chart, polar] = await Promise.all([
+        readAnalysisArchive(supabase),
+        readCrossoverChartScreen(supabase),
+        readPolarScreen(supabase),
+      ])
+      if (archive === null) return refusal(ARCHIVE_UNREADABLE)
+
+      const current = chart?.current ?? null
+      if (current === null) {
+        return refusal(
+          'No Crossover Chart could be read: none has been uploaded, or the read failed. The Sail Selection screen is the chart, so there is nothing to lay the archive over.'
+        )
+      }
+
+      const dimensions = analysisDimensions(SAIL_SELECTION_DIMENSIONS, archive.vocabulary)
+      const reading = filterFromArgument(filter, dimensions)
+      if (!reading.ok) return refusal(reading.message)
+
+      const target = cell === undefined ? null : cellFromArgument(cell, current.payload)
+      if (target !== null && !target.ok) return refusal(target.message)
+
+      return answer(
+        sailSelectionAnswer(
+          archive.rows,
+          reading.filter,
+          dimensions,
+          { payload: current.payload, versionId: current.id, versionNumber: current.version_number },
+          // A failed Polar read loses only the claim that a cell can never hold a figure, as on
+          // the screen: each row's Target Speed came from its own Race's Polar.
+          polar?.current == null ? null : polarDomain(polar.current.payload),
+          target?.cell ?? null
+        )
       )
     }
   )
