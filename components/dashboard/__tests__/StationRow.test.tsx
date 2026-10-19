@@ -20,8 +20,7 @@ jest.mock('@/lib/config/stations', () => ({
 
 // Mock wind utilities
 jest.mock('@/lib/utils/wind', () => ({
-  getWindCondition: () => ({ color: '#0055BB' }),
-  getWindColorHex: () => '#0055BB',
+  getWindCondition: () => ({ color: 'var(--wind-medium)' }),
 }))
 
 // Mock design utilities

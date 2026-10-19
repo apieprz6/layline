@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, type ReactElement } from 'react'
 import useSWR from 'swr'
 import { boatIconUrl } from '@/lib/boat/icon'
+import LogoMark from '@/components/dashboard/LogoMark'
 import type { BoatHeaderIdentity, BuoyDataResult } from '@/types'
 
 interface RaceHeaderProps {
@@ -112,8 +113,7 @@ export default function RaceHeader({ onOpenMenu, boat = null }: RaceHeaderProps)
           />
         ) : (
           // No icon yet keeps the layline mark — nothing is invented in its place.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src="/logo-icon.svg" width={24} height={24} alt="L" style={{ flexShrink: 0 }} />
+          <LogoMark size={24} />
         )}
         {boat ? (
           // Exactly as written, never lowercased to match the wordmark, and held to one line.

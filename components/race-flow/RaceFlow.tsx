@@ -2428,7 +2428,7 @@ function Chip({
         borderRadius: 999,
         border: `1px solid ${on ? 'var(--blue-500)' : 'var(--surface-border)'}`,
         background: on ? 'var(--blue-500)' : 'var(--surface-elevated)',
-        color: on ? '#fff' : 'var(--text-secondary)',
+        color: on ? 'var(--text-inverse)' : 'var(--text-secondary)',
         fontSize: 'var(--text-sm)',
         fontWeight: on ? 600 : 500,
         cursor: disabled ? 'not-allowed' : 'pointer',

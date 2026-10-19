@@ -1,6 +1,7 @@
 "use client";
 
 import type { TimeScale } from "@/lib/utils/windowing";
+import { tint } from "@/lib/utils/design";
 
 interface ScaleControlProps {
   activeScale: TimeScale;
@@ -48,7 +49,7 @@ export default function ScaleControl({
             transition: "all 150ms ease-out",
             WebkitTapHighlightColor: "transparent",
             boxShadow:
-              scale === activeScale ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+              scale === activeScale ? `0 1px 2px ${tint("var(--shadow-ink)", 8)}` : "none",
           }}
         >
           {scale}

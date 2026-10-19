@@ -3,6 +3,8 @@
  * Defines wind condition classifications and color mappings
  */
 
+import { tint } from '@/lib/utils/design'
+
 export interface WindCondition {
   color: string
   bg: string
@@ -21,22 +23,47 @@ export const WIND_THRESHOLDS = {
 } as const
 
 /**
- * Hex color values for wind conditions
- * Used when CSS variables cannot be applied (e.g., SVG fills)
+ * The colour of each wind band, as its token
+ *
+ * The one source of what each band looks like. Tokens, not hex: `.theme-nightvision` overrides
+ * the token, so a literal here would stay daylight-coloured after dark. In SVG, pass these
+ * through `style` (`style={{ stroke }}`), not a presentation attribute.
  */
-export const WIND_COLORS_HEX = {
-  LIGHT: '#007A52',
-  MEDIUM: '#0055BB',
-  HEAVY: '#C47000',
-  STORM: '#CC1100',
+export const WIND_COLORS = {
+  LIGHT: 'var(--wind-light)',
+  MEDIUM: 'var(--wind-medium)',
+  HEAVY: 'var(--wind-heavy)',
+  STORM: 'var(--wind-storm)',
 } as const
+
+/**
+ * Get the wind band colour for a speed in knots
+ *
+ * @param kts - Wind speed in knots
+ * @returns The band's `var(--wind-*)` token
+ */
+export function getWindColor(kts: number): string {
+  return windBand(kts).color
+}
+
+/** Each band's upper bound, colour and name, lightest first; storm has no upper bound. */
+const WIND_BANDS = [
+  { max: WIND_THRESHOLDS.LIGHT_MAX, color: WIND_COLORS.LIGHT, label: 'Light' },
+  { max: WIND_THRESHOLDS.MEDIUM_MAX, color: WIND_COLORS.MEDIUM, label: 'Medium' },
+  { max: WIND_THRESHOLDS.HEAVY_MAX, color: WIND_COLORS.HEAVY, label: 'Heavy' },
+  { max: Infinity, color: WIND_COLORS.STORM, label: 'Storm' },
+] as const
+
+function windBand(kts: number): (typeof WIND_BANDS)[number] {
+  return WIND_BANDS.find((band) => kts <= band.max) ?? WIND_BANDS[WIND_BANDS.length - 1]
+}
 
 /**
  * Get wind condition classification based on wind speed in knots
  * Uses CSS variables from globals.css design system
  *
  * @param kts - Wind speed in knots
- * @returns WindCondition object with color (CSS variable), bg, border, and label
+ * @returns WindCondition object with color (CSS variable), bg and border (tints of it), and label
  *
  * Classification ranges:
  * - Light: 0-8 kts
@@ -45,50 +72,8 @@ export const WIND_COLORS_HEX = {
  * - Storm: 23+ kts
  */
 export function getWindCondition(kts: number): WindCondition {
-  if (kts <= WIND_THRESHOLDS.LIGHT_MAX) {
-    return {
-      color: 'var(--wind-light)',
-      bg: 'rgba(0, 122, 82, 0.1)',
-      border: 'rgba(0, 122, 82, 0.4)',
-      label: 'Light',
-    }
-  }
-  if (kts <= WIND_THRESHOLDS.MEDIUM_MAX) {
-    return {
-      color: 'var(--wind-medium)',
-      bg: 'rgba(0, 85, 187, 0.1)',
-      border: 'rgba(0, 85, 187, 0.4)',
-      label: 'Medium',
-    }
-  }
-  if (kts <= WIND_THRESHOLDS.HEAVY_MAX) {
-    return {
-      color: 'var(--wind-heavy)',
-      bg: 'rgba(196, 112, 0, 0.1)',
-      border: 'rgba(196, 112, 0, 0.4)',
-      label: 'Heavy',
-    }
-  }
-  return {
-    color: 'var(--wind-storm)',
-    bg: 'rgba(204, 17, 0, 0.1)',
-    border: 'rgba(204, 17, 0, 0.4)',
-    label: 'Storm',
-  }
-}
-
-/**
- * Get wind condition hex color (for contexts where CSS variables cannot be used)
- * Use this variant for SVG fills, canvas rendering, or external libraries
- *
- * @param kts - Wind speed in knots
- * @returns Hex color string
- */
-export function getWindColorHex(kts: number): string {
-  if (kts <= WIND_THRESHOLDS.LIGHT_MAX) return WIND_COLORS_HEX.LIGHT
-  if (kts <= WIND_THRESHOLDS.MEDIUM_MAX) return WIND_COLORS_HEX.MEDIUM
-  if (kts <= WIND_THRESHOLDS.HEAVY_MAX) return WIND_COLORS_HEX.HEAVY
-  return WIND_COLORS_HEX.STORM
+  const { color, label } = windBand(kts)
+  return { color, bg: tint(color, 10), border: tint(color, 40), label }
 }
 
 /**

@@ -60,9 +60,8 @@ describe('RaceHeader', () => {
   it('renders layline logo and title', () => {
     render(<RaceHeader />)
 
-    const logo = screen.getByAltText('L')
-    expect(logo).toBeInTheDocument()
-    expect(logo).toHaveAttribute('src', '/logo-icon.svg')
+    const logo = screen.getByRole('img', { name: 'L' })
+    expect(logo).toBe(screen.getByTestId('logo-mark'))
 
     expect(screen.getByText('layline')).toBeInTheDocument()
   })
@@ -101,14 +100,14 @@ describe('RaceHeader', () => {
         'src',
         `/boat/icon?v=${encodeURIComponent('2026-10-16T18:00:00.123+00:00')}`
       )
-      expect(screen.queryByAltText('L')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('logo-mark')).not.toBeInTheDocument()
     })
 
     it('keeps the layline mark beside the name when the boat has no icon yet', () => {
       // No invented placeholder — no initials standing in for an icon nobody uploaded.
       render(<RaceHeader boat={{ name: 'Handsome Pete', iconUpdatedAt: null }} />)
 
-      expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
+      expect(screen.getByTestId('logo-mark')).toBeInTheDocument()
       expect(document.querySelector('img[src^="/boat/icon"]')).toBeNull()
     })
 
@@ -117,7 +116,7 @@ describe('RaceHeader', () => {
       render(<RaceHeader boat={null} />)
 
       expect(screen.getByText('layline')).toBeInTheDocument()
-      expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
+      expect(screen.getByTestId('logo-mark')).toBeInTheDocument()
       expect(document.querySelector('img[src^="/boat/icon"]')).toBeNull()
     })
   })

@@ -24,7 +24,7 @@ describe('WindRose', () => {
       )
 
       // The data point circle should exist and be positioned near the outer ring
-      const circles = container.querySelectorAll('circle[fill="#0055BB"], circle[fill="#007A52"], circle[fill="#C47000"], circle[fill="#CC1100"]')
+      const circles = container.querySelectorAll('circle[style*="fill: var(--wind-"]')
       expect(circles.length).toBeGreaterThan(0)
 
       // Calculate expected position for r01 ≈ 0.83 (5 mins ago in 30 min window)
@@ -49,7 +49,7 @@ describe('WindRose', () => {
         <WindRose data={currentData} referenceTime={now} timeWindowMinutes={30} />
       )
 
-      const circles = container.querySelectorAll('circle[fill="#0055BB"], circle[fill="#007A52"], circle[fill="#C47000"], circle[fill="#CC1100"]')
+      const circles = container.querySelectorAll('circle[style*="fill: var(--wind-"]')
       expect(circles.length).toBeGreaterThan(0)
 
       // For r01 = 1 at angle 0° (North), should be at top of circle
@@ -72,7 +72,7 @@ describe('WindRose', () => {
       )
 
       // Should only render 2 data points, not 3
-      const circles = container.querySelectorAll('circle[fill="#0055BB"], circle[fill="#007A52"], circle[fill="#C47000"], circle[fill="#CC1100"]')
+      const circles = container.querySelectorAll('circle[style*="fill: var(--wind-"]')
       expect(circles.length).toBeLessThanOrEqual(2)
     })
   })
@@ -236,8 +236,8 @@ describe('WindRose', () => {
 
     it('applies wind speed color to data points', () => {
       const data: WindDataPoint[] = [
-        { timestamp: '2026-05-19T18:00:00.000Z', spd: 7, dir: 0 },   // Light air (#007A52)
-        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 45 }, // Medium air (#0055BB)
+        { timestamp: '2026-05-19T18:00:00.000Z', spd: 7, dir: 0 },   // Light air
+        { timestamp: '2026-05-19T17:50:00.000Z', spd: 12, dir: 45 }, // Medium air
       ]
 
       const { container } = render(<WindRose data={data} referenceTime={now} timeWindowMinutes={60} />)
@@ -247,9 +247,9 @@ describe('WindRose', () => {
       expect(circles.length).toBeGreaterThan(0)
 
       // At least one circle should have a wind condition color
-      const fills = Array.from(circles).map(c => c.getAttribute('fill'))
+      const fills = Array.from(circles).map(c => (c as SVGElement).style.fill)
       const hasWindColor = fills.some(fill =>
-        fill === '#007A52' || fill === '#0055BB' || fill === '#C47000' || fill === '#CC1100'
+        fill === 'var(--wind-light)' || fill === 'var(--wind-medium)'
       )
       expect(hasWindColor).toBe(true)
     })
@@ -258,9 +258,9 @@ describe('WindRose', () => {
   describe('Swept connectors', () => {
     /** The connectors between observations: paths with a wind-condition stroke. */
     function connectors(container: HTMLElement): Element[] {
-      return Array.from(container.querySelectorAll('path[stroke]')).filter(path => {
-        const stroke = path.getAttribute('stroke')
-        return Boolean(stroke && stroke.match(/^#[0-9A-F]{6}$/i))
+      return Array.from(container.querySelectorAll('path')).filter(path => {
+        const stroke = (path as SVGElement).style.stroke
+        return stroke.startsWith('var(--wind-')
       })
     }
 
@@ -611,21 +611,21 @@ describe('WindRose', () => {
       // Should have a blue ring around the reference point
       const circles = container.querySelectorAll('circle')
       const referenceRing = Array.from(circles).find(circle => {
-        const stroke = circle.getAttribute('stroke')
+        const stroke = (circle as SVGElement).style.stroke
         const fill = circle.getAttribute('fill')
         const strokeWidth = circle.getAttribute('stroke-width')
-        // Reference ring: blue stroke, no fill, specific width
-        return stroke && stroke.includes('0,68,204') && fill === 'none' && strokeWidth === '2.5'
+        // Reference ring: accent stroke, no fill, specific width
+        return stroke.includes('var(--blue-500)') && fill === 'none' && strokeWidth === '2.5'
       })
 
       expect(referenceRing).toBeTruthy()
 
       // Should have a center dot at the reference point
       const referenceDot = Array.from(circles).find(circle => {
-        const fill = circle.getAttribute('fill')
+        const fill = (circle as SVGElement).style.fill
         const r = circle.getAttribute('r')
-        // Reference dot: blue fill, small radius
-        return fill && fill.includes('0,68,204') && r === '3'
+        // Reference dot: accent fill, small radius
+        return fill.includes('var(--blue-500)') && r === '3'
       })
 
       expect(referenceDot).toBeTruthy()
@@ -649,10 +649,10 @@ describe('WindRose', () => {
       // Should not have the reference ring (crosshair instead)
       const circles = container.querySelectorAll('circle')
       const referenceRing = Array.from(circles).find(circle => {
-        const stroke = circle.getAttribute('stroke')
+        const stroke = (circle as SVGElement).style.stroke
         const fill = circle.getAttribute('fill')
         const strokeWidth = circle.getAttribute('stroke-width')
-        return stroke && stroke.includes('0,68,204') && fill === 'none' && strokeWidth === '2.5'
+        return stroke.includes('var(--blue-500)') && fill === 'none' && strokeWidth === '2.5'
       })
 
       // Reference ring should not be present when hovering

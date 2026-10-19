@@ -308,12 +308,12 @@ describe('SpeedLineChart', () => {
       const lines = container.querySelectorAll('line')
       const bandLines = Array.from(lines).filter(line => {
         const dasharray = line.getAttribute('stroke-dasharray')
-        const stroke = line.getAttribute('stroke')
+        const stroke = (line as SVGElement).style.stroke
         // Band lines have specific dasharray (1 3) and wind-condition colors
         return dasharray === '1 3' && stroke && (
-          stroke === '#007A52' || // Light
-          stroke === '#0055BB' || // Medium
-          stroke === '#C47000'    // Heavy
+          stroke === 'var(--wind-light)' || // Light
+          stroke === 'var(--wind-medium)' || // Medium
+          stroke === 'var(--wind-heavy)'    // Heavy
         )
       })
 
@@ -340,8 +340,8 @@ describe('SpeedLineChart', () => {
       const lines = container.querySelectorAll('line')
       const bandLines = Array.from(lines).filter(line => {
         const dasharray = line.getAttribute('stroke-dasharray')
-        const stroke = line.getAttribute('stroke')
-        return dasharray === '1 3' && stroke === '#007A52' // Light air at 8 kts
+        const stroke = (line as SVGElement).style.stroke
+        return dasharray === '1 3' && stroke === 'var(--wind-light)' // Light air at 8 kts
       })
 
       expect(bandLines.length).toBe(1) // Only 8 kts
@@ -448,7 +448,7 @@ describe('SpeedLineChart', () => {
 
       const lone = container.querySelector('circle[r="1.75"]')
       expect(lone).toBeTruthy()
-      expect(lone).toHaveAttribute('fill', '#007A52') // 5 kts is light air
+      expect((lone as SVGElement).style.fill).toBe('var(--wind-light)') // 5 kts is light air
     })
 
     it('anchors the fill gradient to the plot so every run fades on one scale', () => {

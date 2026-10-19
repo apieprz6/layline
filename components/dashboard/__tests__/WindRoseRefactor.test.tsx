@@ -209,9 +209,9 @@ describe('WindRose - Card Refactor (LAY-34)', () => {
 
       // Wait for overlays to render after SVG dimensions are measured
       // Speed text should have wind condition color
-      // Light air = #007A52
+      // Light air
       const speedText = await waitFor(() => screen.getByText('7.0'))
-      expect(speedText).toHaveStyle({ color: '#007A52' })
+      expect(speedText.style.color).toBe('var(--wind-light)')
     })
 
     it('overlays are positioned absolutely over the chart', async () => {

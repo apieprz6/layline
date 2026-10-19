@@ -1,6 +1,8 @@
 'use client'
 
 import WindArrow from './WindArrow'
+import { getWindColor } from '@/lib/utils/wind'
+import { tint } from '@/lib/utils/design'
 
 interface Model {
   name: string
@@ -34,7 +36,7 @@ export default function ModelComparison({ models }: ModelComparisonProps) {
 
       <div className="space-y-2">
         {models.map((model, i) => {
-          const windColor = model.speed <= 8 ? '#007A52' : model.speed <= 15 ? '#0055BB' : model.speed <= 22 ? '#C47000' : '#CC1100'
+          const windColor = getWindColor(model.speed)
 
           return (
             <div
@@ -69,9 +71,9 @@ export default function ModelComparison({ models }: ModelComparisonProps) {
         <div
           className="mt-4 p-2 rounded text-xs"
           style={{
-            background: 'rgba(196,112,0,0.1)',
-            border: '1px solid rgba(196,112,0,0.3)',
-            color: '#C47000'
+            background: tint('var(--state-warning)', 10),
+            border: `1px solid ${tint('var(--state-warning)', 30)}`,
+            color: 'var(--state-warning)'
           }}
         >
           ⚠ High model divergence — treat forecast as approximate

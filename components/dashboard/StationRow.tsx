@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import type { DataSourceStatus } from '@/types'
 import WindArrow from './WindArrow'
 import { getStationInfo, getStatusColor } from '@/lib/config/stations'
-import { getWindCondition, getWindColorHex } from '@/lib/utils/wind'
+import { getWindCondition } from '@/lib/utils/wind'
 import { spacing } from '@/lib/utils/design'
 import { markInternalNavigation } from '@/lib/utils/navigation'
 import { formatRelativeTime } from '@/lib/utils/timeFormatting'
@@ -53,7 +53,6 @@ export default function StationRow({
 
   const statusColor = getStatusColor(status)
   const wc = getWindCondition(windSpeed)
-  const windColorHex = getWindColorHex(windSpeed)
 
   const handleClick = () => {
     if (onClick) {
@@ -117,7 +116,7 @@ export default function StationRow({
 
       {/* Wind arrow + speed + gust */}
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing(2), flexShrink: 0 }}>
-        <WindArrow deg={windDirection} kts={windSpeed} size={16} color={windColorHex} />
+        <WindArrow deg={windDirection} kts={windSpeed} size={16} color={wc.color} />
         <div style={{ textAlign: 'right' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
             <span

@@ -30,7 +30,7 @@ test.describe('the header, to a signed-in sailor', () => {
 
     if ((await icon.count()) === 0) {
       // No icon uploaded: the mark stays, and nothing is invented in its place.
-      await expect(header.getByAltText('L')).toBeVisible()
+      await expect(header.getByTestId('logo-mark')).toBeVisible()
       expect((await page.request.get('/boat/icon')).status()).toBe(404)
       return
     }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
+import { tint } from '@/lib/utils/design'
 
 interface TimeScrubberProps {
   value: number // Current offset in minutes (0 = now, 60 = 1h ago)
@@ -95,7 +96,7 @@ export default function TimeScrubber({
               top: 0,
               bottom: 0,
               width: `${handlePct - bandLeftPct}%`,
-              background: 'linear-gradient(90deg, rgba(0,68,204,0.10), rgba(0,68,204,0.35))',
+              background: `linear-gradient(90deg, ${tint('var(--blue-500)', 10)}, ${tint('var(--blue-500)', 35)})`,
               borderRadius: '999px',
             }}
           />
@@ -112,7 +113,7 @@ export default function TimeScrubber({
               left: `${tick.pct}%`,
               width: '1px',
               height: '6px',
-              background: 'rgba(0,0,0,0.18)',
+              background: tint('var(--chart-ink)', 18),
             }}
           />
         ))}
@@ -130,7 +131,7 @@ export default function TimeScrubber({
             background: 'var(--surface-raised)',
             border: '1.5px solid var(--accent-primary)',
             transform: 'translate(-50%, -50%)',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.20)',
+            boxShadow: `0 2px 6px ${tint('var(--shadow-ink)', 20)}`,
             pointerEvents: 'none',
           }}
         >

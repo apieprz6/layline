@@ -171,6 +171,21 @@
   --chart-label-bg:      rgba(240, 237, 230, 0.95);
   --chart-center-dot:    rgba(0, 0, 0, 0.5);
   --chart-center-text:   rgba(0, 0, 0, 0.4);
+
+  /* Ink for what a component tints itself with `tint()`, at whatever strength it needs: the chart
+     ink for axis ticks, crosshairs and shaded-out spans, the shadow ink for drop shadows. Black by
+     day — exactly what those components used to write as rgba(0,0,0,…) — and each its
+     night-vision red after dark, so neither paints a grey onto a dark boat. */
+  --chart-ink:  #000000;
+  --shadow-ink: #000000;
+
+  /* What dims the page behind a drawer or a sheet. Black in both themes and so not overridden
+     below: black emits nothing, and a red scrim would lighten a page that is already near black. */
+  --scrim: rgba(0, 0, 0, 0.55);
+
+  /* The layline mark in the header: a cyan mark on navy. */
+  --logo-ground: #0A1929;
+  --logo-mark:   #00E5FF;
 }
 
 /* ============================================================
@@ -501,6 +516,14 @@
   --chart-label-bg:      rgba(18, 0, 0, 0.95);
   --chart-center-dot:    rgba(180, 0, 0, 0.5);
   --chart-center-text:   rgba(180, 0, 0, 0.4);
+
+  /* The same reds the grid and the shadows above are mixed from. */
+  --chart-ink:  #B40000;
+  --shadow-ink: #640000;
+
+  /* The mark comes out in the theme's accent, on the theme's own ground. */
+  --logo-ground: var(--surface-elevated);
+  --logo-mark:   var(--accent);
 }
 
 @layer components {
@@ -716,9 +739,9 @@
 
 /* Animations */
 @keyframes pulseDot {
-  0%   { box-shadow: 0 0 0 0 rgba(0,122,47,0.55); }
-  70%  { box-shadow: 0 0 0 7px rgba(0,122,47,0); }
-  100% { box-shadow: 0 0 0 0 rgba(0,122,47,0); }
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--state-success) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--state-success) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--state-success) 0%, transparent); }
 }
 
 /* The breathing of a placeholder: opacity only, so one keyframe serves both
