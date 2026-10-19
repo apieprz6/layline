@@ -38,7 +38,7 @@ import {
   type GridCoverage,
 } from '@/services/analysis/sail-selection'
 import { sailBands } from '@/services/boat/crossoverSailBands'
-import { chartSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
+import { namedSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -127,7 +127,7 @@ export default function SailSelectionContent({
   const [selected, setSelected] = useState<string | null>(null)
 
   const bands = useMemo(() => sailBands(chart), [chart])
-  const regions = useMemo(() => chartSailRegions(chart), [chart])
+  const regions = useMemo(() => namedSailRegions(chart), [chart])
 
   // 338 cells folded **once** per narrowing and read by five grids — four thumbnails and the
   // full-size one — plus the summary line. Everything downstream reads the fold rather than

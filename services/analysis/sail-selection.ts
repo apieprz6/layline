@@ -41,12 +41,17 @@
  * Aug race that flew mainsail alone at 3.0–3.6 knots are the archive's own example (ADR 0030).
  */
 
-import { coverageLedger } from '@/services/analysis/coverage-ledger'
+import { coverageLedger, notCountableSeconds } from '@/services/analysis/coverage-ledger'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { countableRows, mergeEfficiency, sumEfficiency } from '@/services/analysis/efficiency'
 import { countOf, sharePercent } from '@/services/analysis/figures'
 import { EMPTY_FILTER, NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
-import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
+import {
+  NOT_COUNTABLE_REASON,
+  fillerAnchoredShare,
+  isFillerFlagged,
+  type FigureExclusion,
+} from '@/services/analysis/polar-performance'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
 import type { SailRegions } from '@/services/boat/crossoverSailRegions'
 import { describeDuration } from '@/services/recordings/coverage'
@@ -962,6 +967,10 @@ export interface SailRegionView {
   totals: CellTotals
   /** Countable rows its cells hold with the filter cleared, as each cell's own ghost counts them. */
   unfiltered_rows: number
+  /** Its cells with at least one matched Countable row. */
+  reached: SailSelectionCellView[]
+  /** The rest, grouped by `emptyCellSentence`: most of a chart is never sailed, for one reason. */
+  unreached: { reason: string; views: SailSelectionCellView[] }[]
 }
 
 /** The chart's regions, each with its cells and their figures folded, in region order. */
@@ -982,28 +991,45 @@ export function regionViews(
 
   return [...held.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([index, members]) => ({
-      index,
-      sail_number: members[0].cell.sail_number as number,
-      name: chartSays(members[0].cell),
-      views: members,
-      totals: cellTotals(members.flatMap((member) => member.cell.slices)),
-      unfiltered_rows: members.reduce((sum, member) => sum + member.cell.unfiltered_rows, 0),
-    }))
+    .map(([index, members]) => {
+      const unreached = new Map<string, SailSelectionCellView[]>()
+      for (const member of members) {
+        if (member.totals.rows > 0) continue
+        const reason = emptyCellSentence(member.cell)
+        unreached.set(reason, [...(unreached.get(reason) ?? []), member])
+      }
+
+      return {
+        index,
+        sail_number: members[0].cell.sail_number as number,
+        name: chartSays(members[0].cell),
+        views: members,
+        totals: cellTotals(members.flatMap((member) => member.cell.slices)),
+        unfiltered_rows: members.reduce((sum, member) => sum + member.cell.unfiltered_rows, 0),
+        reached: members.filter((member) => member.totals.rows > 0),
+        unreached: [...unreached].map(([reason, views]) => ({ reason, views })),
+      }
+    })
 }
 
+/** The five row verdicts, in the order the cell sheet's tally reads them. */
+export const CELL_VERDICTS: readonly CellVerdict[] = ['agrees', 'differs', 'not-recorded', 'off-chart', 'other-version']
+
 /**
- * The share of a cell's Countable rows each verdict holds, or null where the cell has none.
+ * Each verdict a cell's Countable rows hold, with its share of them, in the tally's order. A
+ * verdict no row holds is left out; a cell with no rows holds none.
  *
  * **Cell Agreement is a proportion** (ADR 0030): a mixed cell is 40 rows one way and 3 the other,
  * and this is that sentence as numbers.
  */
-export function verdictShares(totals: Pick<CellTotals, 'rows' | 'verdicts'>): Record<CellVerdict, number> | null {
-  if (totals.rows === 0) return null
-
-  return Object.fromEntries(
-    (Object.keys(totals.verdicts) as CellVerdict[]).map((verdict) => [verdict, totals.verdicts[verdict] / totals.rows])
-  ) as Record<CellVerdict, number>
+export function verdictShares(
+  totals: Pick<CellTotals, 'rows' | 'verdicts'>
+): { verdict: CellVerdict; rows: number; share: number }[] {
+  return CELL_VERDICTS.filter((verdict) => totals.verdicts[verdict] > 0).map((verdict) => ({
+    verdict,
+    rows: totals.verdicts[verdict],
+    share: totals.verdicts[verdict] / totals.rows,
+  }))
 }
 
 /**
@@ -1090,6 +1116,36 @@ export function verdictTallySentence(totals: Pick<CellTotals, 'verdicts'>): stri
     `${countOf(verdicts.agrees)} agreeing · ${countOf(verdicts.differs)} differing · ` +
     `${countOf(verdicts['not-recorded'])} with no sail written down${offChart}`
   )
+}
+
+/**
+ * Everything the cell sheet says about a cell in sentences, in the order it says them: for a
+ * reached cell its notes and then its verdict tally; for an empty one why it is empty, and why it
+ * could never hold a figure where it could not.
+ */
+export function cellNotes(
+  view: SailSelectionCellView,
+  domain: PolarDomain | null
+): { notes: string[]; tally: string | null } {
+  const { cell, totals } = view
+  const reason = unreachableReason(cell, domain)
+  const withoutTarget = cellWithoutTargetSentence(totals)
+
+  if (totals.rows === 0) return { notes: [emptyCellSentence(cell), ...(reason === null ? [] : [reason])], tally: null }
+
+  return {
+    notes: [cellScoredSentence(totals), ...(reason === null ? [] : [reason]), ...(withoutTarget === null ? [] : [withoutTarget])],
+    tally: verdictTallySentence(totals),
+  }
+}
+
+/**
+ * What the screen's figures leave out, in time: the matched sailing the Countable rule excludes
+ * (ADR 0025). The same exclusion the Polar performance screen states first.
+ */
+export function sailSelectionExclusions(ledger: CoverageLedger): FigureExclusion[] {
+  const seconds = notCountableSeconds(ledger)
+  return seconds > 0 ? [{ reason: NOT_COUNTABLE_REASON, seconds }] : []
 }
 
 /**

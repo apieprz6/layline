@@ -65,9 +65,6 @@ export const AGREEMENT_GLYPHS: Record<CellAgreement, string> = {
   'no-rows': '',
 }
 
-/** What each verdict is called in words: the service's own, so the tool and the sheet say one thing. */
-export { AGREEMENT_WORDS }
-
 /** A token mixed down to a tint, so the night-vision override on the token still applies. */
 function tint(token: string, percent: number): string {
   return `color-mix(in srgb, var(${token}) ${percent}%, transparent)`

@@ -160,9 +160,12 @@ function sides(agreement: ChartAgreement): string {
  * `placed_rows` cannot be nought.
  */
 function judged(agreement: ChartAgreement): string {
-  const share = judgeableShare(agreement) as number
+  const share = judgeableShare(agreement)
 
-  if (share === 1) return ', all of which recorded their sails'
+  // Null only where nothing was placed, which a card with a share to describe never is.
+  if (share === null || agreement.judgeable_rows === agreement.placed_rows) {
+    return ', all of which recorded their sails'
+  }
 
   return `, on the ${sharePercent(share)} of that sailing whose sail was written down`
 }

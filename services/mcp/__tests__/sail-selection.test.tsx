@@ -131,7 +131,9 @@ describe.each(FILTERS)('the whole chart over %s', (_name, filter) => {
     await showAgreement(user)
     const grid = gridCells()
 
-    for (const [twa, tws] of unreached) expect(grid.get(`${twa}/${tws}`)!.dataset.print).toBe('')
+    for (const { twaDegrees, twsKnots } of unreached) {
+      expect(grid.get(`${twaDegrees}/${twsKnots}`)!.dataset.print).toBe('')
+    }
     for (const cell of cells) {
       const drawn = grid.get(`${cell.twaDegrees}/${cell.twsKnots}`)!
       expect(drawn.dataset.print).toBe(AGREEMENT_GLYPHS[cell.agreement])
@@ -141,7 +143,7 @@ describe.each(FILTERS)('the whole chart over %s', (_name, filter) => {
     }
   })
 
-  it('states the grid’s own counts and the screen’s Coverage Ledger and placement words', () => {
+  it('states the grid’s own counts and placement note, and the screen’s Coverage Ledger', () => {
     const data = getSailSelectionData(FIXTURE, filter, DIMENSIONS, CHART, POLAR_RANGE, CHART_VERSION)
     const coverage = gridCoverage(cellViews(data.cells))
 
@@ -153,19 +155,17 @@ describe.each(FILTERS)('the whole chart over %s', (_name, filter) => {
       unreachable: coverage.unreachable,
       mixed: coverage.mixed,
       emptiedByFilter: coverage.ghosted,
+      placement: placementSentence(data),
     })
     expect(answer.coverageLedger.statement).toEqual([
       ledgerHeadline(data.ledger),
       countableSentence(data.ledger),
       ...data.ledger.gaps.map(gapSentence),
-      placementSentence(data),
     ])
 
     renderScreen(filter)
     expect(screen.getByTestId('coverage-ledger-headline')).toHaveTextContent(answer.coverageLedger.statement[0])
-    expect(screen.getByTestId('sail-selection-placement')).toHaveTextContent(
-      answer.coverageLedger.statement.at(-1)!
-    )
+    expect(screen.getByTestId('sail-selection-placement')).toHaveTextContent(answer.grid.placement)
   })
 
   it('states Chart Agreement as the screen’s own fold does, the share and both sides', () => {
@@ -200,7 +200,7 @@ describe('the verdicts', () => {
     answer.regions!.flatMap((region) => region.cells).find((cell) => cell.twaDegrees === twa && cell.twsKnots === tws)!
   const unreachedAt = (twa: number, tws: number) =>
     answer.regions!.flatMap((region) => region.unreached).find((group) =>
-      group.cells.some(([t, s]) => t === twa && s === tws)
+      group.cells.some((cell) => cell.twaDegrees === twa && cell.twsKnots === tws)
     )
 
   it('keeps Not recorded and Off-chart apart from Differs, each as a proportion of the cell’s rows', () => {

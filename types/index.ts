@@ -3751,7 +3751,7 @@ export type McpSailSelectionCell = { twaDegrees: number; twsKnots: number; noTar
 
 // One region of the chart, as the Chart layer outlines and names it: cells of one sail joined edge
 // to edge. Two regions of one sail are told apart by `region`. Its unreached cells are grouped by
-// reason, each as [twa, tws], because most of a chart is never sailed and says so in one sentence.
+// reason, because most of a chart is never sailed and says so in one sentence.
 export interface McpSailRegion {
   region: number
   sail: string
@@ -3760,7 +3760,7 @@ export interface McpSailRegion {
   reachedCells: number
   cellAgreement: McpCellAgreement | McpUnreachedCell
   cells: McpSailSelectionCell[]
-  unreached: { reason: string; cells: [number, number][] }[]
+  unreached: { reason: string; cells: { twaDegrees: number; twsKnots: number }[] }[]
 }
 
 // One line of a cell's breakdown, with its own percent of target over its own rows.
@@ -3812,6 +3812,9 @@ export interface SailSelectionAnswer {
     mixed: number
     emptiedByFilter: number
     noTargetRegions: string[]
+    // The screen's note under the grid: matched rows no cell holds, and why. In rows, as the
+    // screen states it, which is why it is here and not in the Coverage Ledger.
+    placement: string
   }
   dimensions: McpAnalysisDimension[]
   // What each id is called on the screen: a cell's Cell Agreement, and a sail line's verdict.

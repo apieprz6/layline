@@ -1,4 +1,3 @@
-import { countableSentence, gapSentence, ledgerHeadline, notCountableSeconds } from '@/services/analysis/coverage-ledger'
 import { efficiencyPercent } from '@/services/analysis/figures'
 import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
@@ -7,30 +6,29 @@ import {
   SAIL_VERDICT_WORDS,
   cellBreakdown,
   cellKey,
-  cellScoredSentence,
+  cellNotes,
   cellViews,
-  cellWithoutTargetSentence,
   chartAgreement,
   chartSays,
-  emptyCellSentence,
   emptyRegionSentence,
   getSailSelectionData,
   gridCoverage,
   judgeableShare,
   placementSentence,
   regionViews,
+  sailSelectionExclusions,
   unreachableReason,
   unreachableRegions,
   verdictShares,
-  verdictTallySentence,
   type BreakdownLine,
+  type CellAgreement,
   type CellTotals,
-  type CellVerdict,
-  type SailSelection,
+  type SailRegionView,
   type SailSelectionCellView,
 } from '@/services/analysis/sail-selection'
-import { chartSailRegions } from '@/services/boat/crossoverSailRegions'
+import { namedSailRegions } from '@/services/boat/crossoverSailRegions'
 import { filterAsArgument, offeredDimensions } from './analysis-filter'
+import { coverageLedgerAnswer } from './coverage-ledger'
 import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
@@ -38,11 +36,9 @@ import type {
   EfficiencyAggregate,
   MatchableRow,
   McpCellAgreement,
-  McpCoverageLedger,
   McpPolarPerformanceFigure,
   McpSailBreakdownLine,
   McpSailRegion,
-  McpSailSelectionCell,
   McpSailSelectionCellArgument,
   McpSailSelectionCellDetail,
   McpSailVerdict,
@@ -95,62 +91,47 @@ function figure(aggregate: EfficiencyAggregate): McpPolarPerformanceFigure {
 }
 
 /** The screen's words for a reached cell's Cell Agreement; an unreached one gives its reason. */
-const REACHED_AGREEMENT_WORDS: Record<McpSailVerdict | 'mixed', string> = {
-  agrees: AGREEMENT_WORDS.agrees,
-  differs: AGREEMENT_WORDS.differs,
-  mixed: AGREEMENT_WORDS.mixed,
-  'not-recorded': AGREEMENT_WORDS['not-recorded'],
-  'off-chart': AGREEMENT_WORDS['off-chart'],
-  'other-version': AGREEMENT_WORDS['other-version'],
-}
+const REACHED_AGREEMENT_WORDS = Object.fromEntries(
+  (Object.entries(AGREEMENT_WORDS) as [CellAgreement, string][]).filter(([agreement]) => agreement !== 'no-rows')
+) as Record<McpSailVerdict | 'mixed', string>
 
-/** The five row verdicts, in the order the sheet's tally reads them. */
-const VERDICTS: readonly CellVerdict[] = ['agrees', 'differs', 'not-recorded', 'off-chart', 'other-version']
-
-function cellAgreement(totals: CellTotals, reason: () => string): McpCellAgreement | McpUnreachedCell {
-  const shares = verdictShares(totals)
-  if (totals.agreement === 'no-rows' || shares === null) return { agreement: 'unreached', reason: reason() }
-
+/** A reached cell's or region's Cell Agreement, as proportions of its rows. */
+function reachedAgreement(totals: CellTotals): McpCellAgreement {
   return {
-    agreement: totals.agreement,
+    agreement: totals.agreement as McpCellAgreement['agreement'],
     rows: totals.rows,
     races: totals.races,
-    verdicts: VERDICTS.filter((verdict) => totals.verdicts[verdict] > 0).map((verdict) => ({
-      verdict,
-      rows: totals.verdicts[verdict],
-      share: shares[verdict],
-    })),
+    verdicts: verdictShares(totals),
     polarEfficiency: figure(totals.efficiency),
   }
 }
 
-/** A region's cells: the reached ones each with its Cell Agreement, the rest grouped by reason. */
-function regionCells(
-  views: readonly SailSelectionCellView[],
-  domain: PolarDomain | null
-): Pick<McpSailRegion, 'cells' | 'unreached'> {
-  const cells: McpSailSelectionCell[] = []
-  const unreached = new Map<string, [number, number][]>()
+function cellAgreement(totals: CellTotals, reason: () => string): McpCellAgreement | McpUnreachedCell {
+  return totals.agreement === 'no-rows' ? { agreement: 'unreached', reason: reason() } : reachedAgreement(totals)
+}
 
-  for (const { cell, totals } of views) {
-    const agreement = cellAgreement(totals, () => emptyCellSentence(cell))
-    if (agreement.agreement === 'unreached') {
-      const at = unreached.get(agreement.reason) ?? []
-      at.push([cell.twa, cell.tws])
-      unreached.set(agreement.reason, at)
-      continue
-    }
-
-    const noTarget = unreachableReason(cell, domain)
-    cells.push({
-      twaDegrees: cell.twa,
-      twsKnots: cell.tws,
-      ...agreement,
-      ...(noTarget === null ? {} : { noTargetReason: noTarget }),
-    })
+function regionAnswer(region: SailRegionView, domain: PolarDomain | null): McpSailRegion {
+  return {
+    region: region.index,
+    sail: region.name,
+    sailNumber: region.sail_number,
+    cellCount: region.views.length,
+    reachedCells: region.reached.length,
+    cellAgreement: cellAgreement(region.totals, () => emptyRegionSentence(region)),
+    cells: region.reached.map(({ cell, totals }) => {
+      const noTarget = unreachableReason(cell, domain)
+      return {
+        twaDegrees: cell.twa,
+        twsKnots: cell.tws,
+        ...reachedAgreement(totals),
+        ...(noTarget === null ? {} : { noTargetReason: noTarget }),
+      }
+    }),
+    unreached: region.unreached.map(({ reason, views }) => ({
+      reason,
+      cells: views.map(({ cell }) => ({ twaDegrees: cell.twa, twsKnots: cell.tws })),
+    })),
   }
-
-  return { cells, unreached: [...unreached].map(([reason, at]) => ({ reason, cells: at })) }
 }
 
 function lineAnswer(line: BreakdownLine): McpSailBreakdownLine {
@@ -160,9 +141,7 @@ function lineAnswer(line: BreakdownLine): McpSailBreakdownLine {
     aboutTheRecord: line.about_the_record,
     rows: line.rows,
     polarEfficiency: figure(line.efficiency),
-    ...(line.verdict === null
-      ? {}
-      : { verdict: line.verdict as McpSailVerdict }),
+    ...(line.verdict === null ? {} : { verdict: line.verdict }),
   }
 }
 
@@ -174,9 +153,7 @@ function cellDetail(
   domain: PolarDomain | null
 ): McpSailSelectionCellDetail {
   const { cell, totals } = view
-  const reason = unreachableReason(cell, domain)
-  const withoutTarget = cellWithoutTargetSentence(totals)
-  const reached = totals.rows > 0
+  const { notes, tally } = cellNotes(view, domain)
   const breakdown = cellBreakdown(cell, dimensions)
 
   return {
@@ -185,49 +162,16 @@ function cellDetail(
     region,
     chartSays: chartSays(cell),
     sailNumber: cell.sail_number,
-    cellAgreement: cellAgreement(totals, () => emptyCellSentence(cell)),
-    statement: reached
-      ? [
-          cellScoredSentence(totals),
-          ...(reason === null ? [] : [reason]),
-          ...(withoutTarget === null ? [] : [withoutTarget]),
-          verdictTallySentence(totals),
-        ]
-      : [emptyCellSentence(cell), ...(reason === null ? [] : [reason])],
-    breakdown: reached
-      ? {
-          sails: breakdown.sails.map(lineAnswer),
-          seas: breakdown.seas.map(lineAnswer),
-          times: breakdown.times.map(lineAnswer),
-        }
-      : null,
-  }
-}
-
-function coverageLedgerAnswer(data: SailSelection): McpCoverageLedger {
-  const { ledger } = data
-  const notCountable = notCountableSeconds(ledger)
-
-  return {
-    matchedSeconds: ledger.matched_seconds,
-    totalSeconds: ledger.total_seconds,
-    matchedRaces: ledger.matched_races,
-    totalRaces: ledger.total_races,
-    countableSeconds: ledger.countable_seconds,
-    excluded:
-      notCountable > 0 ? [{ reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: notCountable }] : [],
-    notRecorded: ledger.gaps.map((gap) => ({
-      dimension: gap.dimension,
-      missing: gap.label,
-      seconds: gap.seconds,
-      share: gap.share,
-    })),
-    statement: [
-      ledgerHeadline(ledger),
-      countableSentence(ledger),
-      ...ledger.gaps.map(gapSentence),
-      placementSentence(data),
-    ],
+    cellAgreement: cellAgreement(totals, () => notes[0]),
+    statement: tally === null ? notes : [...notes, tally],
+    breakdown:
+      totals.agreement === 'no-rows'
+        ? null
+        : {
+            sails: breakdown.sails.map(lineAnswer),
+            seas: breakdown.seas.map(lineAnswer),
+            times: breakdown.times.map(lineAnswer),
+          },
   }
 }
 
@@ -235,8 +179,8 @@ function coverageLedgerAnswer(data: SailSelection): McpCoverageLedger {
  * The **Sail Selection Screen** as it states itself, for the MCP `sail_selection` tool.
  *
  * Pure, and built on nothing but the screen's own functions: `getSailSelectionData` and the folds
- * beside it for the figures, `chartSailRegions` for the regions the Chart layer outlines, and the
- * cell sheet's own sentence builders for the words. It holds no rule of its own (ADR 0042, *A tool
+ * beside it for the figures, `namedSailRegions` for the regions the Chart layer outlines, and the
+ * cell sheet's own `cellNotes` for the words. It holds no rule of its own (ADR 0042, *A tool
  * inherits every rule and owns none*); it renames for a model. The caller hands in the rows
  * `readAnalysisArchive` read and the dimensions the screen would build from them.
  *
@@ -255,14 +199,15 @@ export function sailSelectionAnswer(
   const data = getSailSelectionData(rows, filter, dimensions, payload, domain, chart.versionId)
   const views = cellViews(data.cells)
   const coverage = gridCoverage(views)
-  const regions = regionViews(views, chartSailRegions(payload))
-
-  const opened =
-    cell === null ? null : views.find((view) => cellKey(view.cell.row, view.cell.column) === cellKey(cell.row, cell.column))
-  const openedRegion =
-    opened == null ? null : regions.find((region) => region.views.includes(opened))
-
+  const regions = regionViews(views, namedSailRegions(payload))
   const agreement = chartAgreement(data.cells)
+
+  const key = cell === null ? null : cellKey(cell.row, cell.column)
+  const opened = regions.flatMap((region) =>
+    region.views
+      .filter((view) => cellKey(view.cell.row, view.cell.column) === key)
+      .map((view) => cellDetail(view, region.index, dimensions, domain))
+  )
 
   return {
     filter: filterAsArgument(filter),
@@ -271,7 +216,7 @@ export function sailSelectionAnswer(
       twaAxisDegrees: [...payload.twa_axis],
       twsAxisKnots: [...payload.tws_axis],
     },
-    coverageLedger: coverageLedgerAnswer(data),
+    coverageLedger: coverageLedgerAnswer(data.ledger, sailSelectionExclusions(data.ledger)),
     grid: {
       cells: coverage.cells,
       reached: coverage.reached,
@@ -281,6 +226,7 @@ export function sailSelectionAnswer(
       mixed: coverage.mixed,
       emptiedByFilter: coverage.ghosted,
       noTargetRegions: unreachableRegions(data.cells, domain),
+      placement: placementSentence(data),
     },
     dimensions: offeredDimensions(dimensions),
     words: { cellAgreement: REACHED_AGREEMENT_WORDS, sailVerdict: SAIL_VERDICT_WORDS },
@@ -296,20 +242,7 @@ export function sailSelectionAnswer(
             following: figure(agreement.following),
             differing: figure(agreement.differing),
           },
-    regions:
-      cell !== null
-        ? null
-        : regions.map(
-            (region): McpSailRegion => ({
-              region: region.index,
-              sail: region.name,
-              sailNumber: region.sail_number,
-              cellCount: region.views.length,
-              reachedCells: region.views.filter((view) => view.totals.rows > 0).length,
-              cellAgreement: cellAgreement(region.totals, () => emptyRegionSentence(region)),
-              ...regionCells(region.views, domain),
-            })
-          ),
-    cell: opened == null || openedRegion == null ? null : cellDetail(opened, openedRegion.index, dimensions, domain),
+    regions: cell !== null ? null : regions.map((region) => regionAnswer(region, domain)),
+    cell: opened[0] ?? null,
   }
 }

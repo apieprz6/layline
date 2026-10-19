@@ -17,12 +17,8 @@ import {
   AGREEMENT_WORDS,
   SAIL_VERDICT_WORDS,
   cellBreakdown,
-  cellScoredSentence,
-  cellWithoutTargetSentence,
+  cellNotes,
   chartSays,
-  emptyCellSentence,
-  unreachableReason,
-  verdictTallySentence,
   type BreakdownLine,
 } from '@/services/analysis/sail-selection'
 import { UNKNOWN_SAIL_BAND } from '@/services/boat/crossoverSailBands'
@@ -61,8 +57,7 @@ export default function SailSelectionCellSheet({
   const { cell, totals } = view
   const breakdown = cellBreakdown(cell, dimensions)
   const percent = cellPercent(view)
-  const reason = unreachableReason(cell, domain)
-  const withoutTarget = cellWithoutTargetSentence(totals)
+  const { notes, tally } = cellNotes(view, domain)
   const band = cell.sail_number === null ? undefined : bands.get(cell.sail_number)
 
   return (
@@ -88,8 +83,7 @@ export default function SailSelectionCellSheet({
         <p style={{ ...NOTE_STYLE, marginTop: spacing(2) }}>
           {/* The ghost said as much in words. A cell a narrowing emptied and a cell no Race ever
               reached are different facts, and the second is not a defect (ADR 0014). */}
-          {emptyCellSentence(cell)}
-          {reason !== null && ` ${reason}`}
+          {notes.join(' ')}
         </p>
       ) : (
         <>
@@ -124,16 +118,18 @@ export default function SailSelectionCellSheet({
             </div>
           </dl>
 
-          <p style={NOTE_STYLE}>{cellScoredSentence(totals)}</p>
-
-          {reason !== null && <p style={NOTE_STYLE}>{reason}</p>}
-
-          {withoutTarget !== null && <p style={NOTE_STYLE}>{withoutTarget}</p>}
+          {/* What the figure is over, why the cell can never hold one where it cannot, and the
+              rows it leaves out for want of a Target Speed. */}
+          {notes.map((note) => (
+            <p key={note} style={NOTE_STYLE}>
+              {note}
+            </p>
+          ))}
 
           {/* The verdict as a proportion, which is what Cell Agreement is. A glyph alone cannot say
               that a mixed cell is 40 rows one way and 3 the other (ADR 0030). */}
           <p data-testid="cell-verdict-tally" style={NOTE_STYLE}>
-            {verdictTallySentence(totals)}
+            {tally}
           </p>
 
           <Group title="Sail actually carried" lines={breakdown.sails} testId="breakdown-sails" />
