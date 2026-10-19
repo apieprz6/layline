@@ -29,7 +29,7 @@ import type {
  * What identifies a Race, from its own window: the day the archive files it under, and the
  * calendar's weekday for that day. No `Date` is built, since the stamp carries no zone (ADR 0008).
  */
-function identity(
+export function identity(
   race: Pick<RaceListEntry, 'id' | 'title' | 'window_start' | 'window_finish'>
 ): McpRaceIdentity {
   const day = wallClockDate(race.window_start)
@@ -44,7 +44,7 @@ function identity(
   }
 }
 
-function duration(seconds: number): McpDuration {
+export function duration(seconds: number): McpDuration {
   return { seconds, label: describeDuration(seconds) }
 }
 

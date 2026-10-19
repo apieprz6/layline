@@ -165,7 +165,7 @@ export async function readRaceTrack(
 ): Promise<RaceTrack> {
   const chart = await sailChart(crossoverChartVersionId, annotations, client)
   const drawable = withSailAgreement(trackRows(rows, quality, window), chart)
-  const placed = { annotations: testimony(annotations) }
+  const placed = { annotations: testimony(annotations), window }
 
   if (polarVersionId === null) {
     // Every row still drawn, none of them coloured. The track is where the boat went, which is

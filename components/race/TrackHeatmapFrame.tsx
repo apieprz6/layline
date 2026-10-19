@@ -47,7 +47,7 @@ import { dropoutDuration } from '@/services/analysis/track-heatmap'
 import { overlayColour, overlayPaint } from '@/services/analysis/track-overlays'
 import { niceDistance, scaleBarLabel } from '@/services/recordings/track-projection'
 import { spacing } from '@/lib/utils/design'
-import type { RaceTrack, RaceTrackHeatmap, TrackOverlay, TrackRowFacts } from '@/types'
+import type { RaceTrack, RaceTrackHeatmapView, TrackOverlay, TrackRowFacts } from '@/types'
 
 import {
   DROPOUT,
@@ -145,7 +145,7 @@ export default function TrackHeatmapFrame({
   selected,
   onSelect,
 }: {
-  heatmap: RaceTrackHeatmap
+  heatmap: RaceTrackHeatmapView
   /** What the map is, for a reader who cannot see it. The section's own words, not a restatement. */
   label: string
   overlay: TrackOverlay
@@ -650,7 +650,7 @@ function DropoutBridges({
   width,
   zoom,
 }: {
-  bridges: RaceTrackHeatmap['bridges']
+  bridges: RaceTrackHeatmapView['bridges']
   width: number
   zoom: number
 }): ReactElement {

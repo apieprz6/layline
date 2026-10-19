@@ -43,16 +43,16 @@ import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import {
   AGREEMENT_WORDS,
   type CellAgreement,
-  type CellVerdict,
   type RaceChartAgreement,
   type RaceSailChartRead,
 } from '@/services/analysis/sail-selection'
+import { noChartNote, raceComposition, tileNote } from '@/services/races/race-sail-chart'
 import { describeDuration } from '@/services/recordings/coverage'
-import type { RaceInstrumentCheck, RaceTrack } from '@/types'
+import type { RaceInstrumentCheck, RaceTrackView } from '@/types'
 
 interface RaceBreakdownProps {
   /** The race's track, whose Polar Plot carries the race's two figures. */
-  track: RaceTrack
+  track: RaceTrackView
   sailChart: RaceSailChartRead
   instruments: RaceInstrumentCheck
 }
@@ -79,7 +79,7 @@ export default function RaceBreakdown({
  * Not named for the Polar Plot above it: that card is "Boat performance vs. polars", the picture,
  * and these are the two figures the picture adds up to.
  */
-function PerformanceTile({ track }: { track: RaceTrack }): ReactElement {
+function PerformanceTile({ track }: { track: RaceTrackView }): ReactElement {
   if (track.plot === null) {
     return (
       <Tile title="Polar & VMG efficiency" testId="race-performance">
@@ -128,23 +128,6 @@ const NOTHING_SCORED = 'Nothing in this race could be scored against its Polar.'
 
 /* ---------------------------------------------------------------------------- sail vs chart */
 
-/** Each verdict a row can take, in words that read after a share: "20% no sail recorded". */
-const VERDICT_WORDS: Readonly<Record<CellVerdict, string>> = {
-  agrees: 'the chart’s sail',
-  differs: 'another sail',
-  'not-recorded': 'no sail recorded',
-  'off-chart': 'a sail the chart has no word for',
-  'other-version': 'under another chart Version',
-}
-
-const VERDICT_ORDER: readonly CellVerdict[] = [
-  'agrees',
-  'differs',
-  'not-recorded',
-  'off-chart',
-  'other-version',
-]
-
 const CELL_ORDER: readonly CellAgreement[] = [
   'agrees',
   'mixed',
@@ -177,7 +160,7 @@ function SailChartTile({ read }: { read: RaceSailChartRead }): ReactElement {
           <Agreement agreement={read.agreement} />
         </>
       ) : (
-        <Absent>{noChart(read.reason)}</Absent>
+        <Absent>{noChartNote(read.reason)}</Absent>
       )}
 
       <Link href="/boat-performance/sail-selection" style={LINK_STYLE}>
@@ -187,35 +170,15 @@ function SailChartTile({ read }: { read: RaceSailChartRead }): ReactElement {
   )
 }
 
-/** Why there is no slice, in words — the map's sail overlay says the same of the same race. */
-const NO_CHART_WORDS: Readonly<Record<Extract<RaceSailChartRead, { ok: false }>['reason'], string>> = {
-  'no-chart-version':
-    'This race names no Crossover Chart Version, so there is nothing to lay its sails over.',
-  'chart-unreadable':
-    'The Crossover Chart Version this race names could not be read, so its sails cannot be laid over it.',
-  'archive-unreadable':
-    'The archive could not be read, so this race’s sailing cannot be laid over the chart.',
-}
-
-function noChart(reason: Extract<RaceSailChartRead, { ok: false }>['reason']): string {
-  return NO_CHART_WORDS[reason]
-}
-
 function Agreement({ agreement }: { agreement: RaceChartAgreement }): ReactElement {
-  if (agreement.placed_rows === 0) {
-    return (
-      <Absent>
-        This race’s Countable sailing falls on no cell of the chart, so there is nothing to compare.
-      </Absent>
-    )
-  }
+  if (agreement.placed_rows === 0) return <Absent>{tileNote(agreement)}</Absent>
 
   const share = efficiencyPercent(agreement.agreement)
 
   return (
     <>
       {share === null ? (
-        <Absent>{unjudged(agreement)}</Absent>
+        <Absent>{tileNote(agreement)}</Absent>
       ) : (
         <>
           <span
@@ -249,14 +212,6 @@ function Agreement({ agreement }: { agreement: RaceChartAgreement }): ReactEleme
   )
 }
 
-/** Why sailing on the chart produced no share, from what it was instead. */
-function unjudged({ verdicts, placed_rows }: RaceChartAgreement): string {
-  if (verdicts['not-recorded'] === placed_rows) {
-    return 'This race recorded no sail for any of its sailing on the chart, so none of it can be judged.'
-  }
-  return 'Nothing this race carried can be judged against the chart.'
-}
-
 /**
  * Each side's own percent of target, stated side by side and never subtracted (ADR 0030).
  *
@@ -277,9 +232,9 @@ function sides({ following, differing }: RaceChartAgreement): string {
   return 'None of it could be scored against the Polar.'
 }
 
-function composition({ verdicts, placed_rows }: RaceChartAgreement): string {
-  return VERDICT_ORDER.filter((verdict) => verdicts[verdict] > 0)
-    .map((verdict) => `${sharePercent(verdicts[verdict] / placed_rows)} ${VERDICT_WORDS[verdict]}`)
+function composition(agreement: RaceChartAgreement): string {
+  return raceComposition(agreement)
+    .map(({ share, words }) => `${sharePercent(share)} ${words}`)
     .join(', ')
 }
 

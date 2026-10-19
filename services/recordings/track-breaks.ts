@@ -55,7 +55,7 @@ export function breakTrack(
   /** The run in progress, or null where a break interrupted it. */
   let run: RunFix[] | null = null
   /** The last row either side of a Dropout: where the bridge starts, and when. */
-  let before: { x: number; y: number; seconds: number } | null = null
+  let before: { x: number; y: number; seconds: number; row_time: string } | null = null
   /** Rows of the Dropout being crossed. Zero outside one. */
   let frozenRun = 0
 
@@ -96,6 +96,8 @@ export function breakTrack(
         x2: here.x,
         y2: here.y,
         seconds: seconds - before.seconds,
+        from: before.row_time,
+        to: row.row_time,
         rows: frozenRun,
       })
     }
@@ -103,7 +105,7 @@ export function breakTrack(
     if (run === null) run = []
     run.push(here)
 
-    before = { x: here.x, y: here.y, seconds }
+    before = { x: here.x, y: here.y, seconds, row_time: row.row_time }
     frozenRun = 0
   })
 

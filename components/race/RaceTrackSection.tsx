@@ -13,7 +13,7 @@
  */
 
 import type { ReactElement } from 'react'
-import type { PolarPlotTraceBin, RaceTrack } from '@/types'
+import type { PolarPlotTraceBin, RaceTrackView } from '@/types'
 
 import RaceTrackAndPolarPlot from './RaceTrackAndPolarPlot'
 
@@ -21,7 +21,7 @@ export default function RaceTrackSection({
   track,
   season,
 }: {
-  track: RaceTrack
+  track: RaceTrackView
   /** The whole archive behind this Race on the Polar Plot. Null where it could not be read. */
   season: PolarPlotTraceBin[] | null
 }): ReactElement {
