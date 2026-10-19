@@ -2993,12 +2993,16 @@ export interface ChannelFigure {
  */
 export interface SeasonChannelHeadline {
   channel: CheckedChannel
+  /** The Era it is over: the current one, or for AWA the pooled season. Null where none holds a Race. */
+  era: CalibrationEra | null
   figures: ChannelFigure[]
   /** Words in place of the figures, where the channel produced none. Null where it did. */
   instead: string | null
   coverage: CoverageStatement
   /** 0–1 of the way to `SOLID`, or null where there is no figure to draw evidence for. */
   towards_solid: number | null
+  /** What must be said wherever the figure is. */
+  caveat: string
 }
 
 /**

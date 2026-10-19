@@ -25,7 +25,7 @@ import { readRaces } from '@/services/races/readRaces'
 import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
 import {
-  NO_RACES_TO_MEASURE,
+  NO_RACES_ANSWER,
   instrumentTuningRaceAnswer,
   instrumentTuningSeasonAnswer,
   unknownRaceRefusal,
@@ -320,7 +320,7 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       // All or nothing (ADR 0026): a season over the Races that happened to load would present as
       // the whole season, and its coverage verdicts would be claims about evidence it did not have.
       const read = await readInstrumentTuning(supabase)
-      if (!read.ok) return read.reason === 'no-races' ? answer(NO_RACES_TO_MEASURE) : refusal(ARCHIVE_UNREADABLE)
+      if (!read.ok) return read.reason === 'no-races' ? answer(NO_RACES_ANSWER) : refusal(ARCHIVE_UNREADABLE)
 
       return answer(instrumentTuningSeasonAnswer(read.season, read.races.length, channel))
     }

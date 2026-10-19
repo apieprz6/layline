@@ -220,3 +220,9 @@ export function widerReading(figure: AsymmetryFigure | null): string {
 
   return `${figure.wider_tack === 'port' ? 'port' : 'stbd'} ${figure.wider_by_deg.toFixed(1)}°`
 }
+
+/** What the screen says of an archive with no Race in it — not a failure, and said as one isn't. */
+export const NO_RACES_TO_MEASURE = {
+  title: 'No races to measure yet',
+  detail: 'These checks read a season of recordings. They appear once a race has been uploaded.',
+} as const

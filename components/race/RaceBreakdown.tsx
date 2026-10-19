@@ -32,10 +32,8 @@ import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-se
 import ChannelColumns from '@/components/boat/instrument-tuning/ChannelColumns'
 import Explainer from '@/components/common/Explainer'
 import { radius, spacing } from '@/lib/utils/design'
-import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
-import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
-import { RACE_SPEED_CAVEAT, raceHeadlines } from '@/services/analysis/instrument-tuning-headlines'
+import { RACE_CAVEATS, raceHeadlines } from '@/services/analysis/instrument-tuning-headlines'
 import {
   fillerAnchoredShare,
   noFigureNote,
@@ -324,7 +322,7 @@ function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElemen
       </p>
 
       <Explainer summary="What do these rest on?">
-        {HEADING_OFFSET_CAVEAT} {ASYMMETRY_CAVEAT} {RACE_SPEED_CAVEAT}
+        {RACE_CAVEATS.HDG} {RACE_CAVEATS.AWA} {RACE_CAVEATS.STW}
       </Explainer>
 
       <Link href="/boat-performance/instrument-tuning" style={LINK_STYLE}>

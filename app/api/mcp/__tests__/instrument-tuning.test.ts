@@ -55,7 +55,7 @@ const RACE: Pick<RaceDetail, 'id' | 'title' | 'window_start' | 'instruments'> = 
   },
 }
 
-const LISTED = RACE_REFS.map((ref) => ({ id: ref.race_id, title: ref.title })) as RaceListEntry[]
+const LISTED = RACE_REFS.map((ref) => ({ id: ref.race_id, title: ref.title, window_start: ref.window_start })) as RaceListEntry[]
 
 function call(args: object): Request {
   return new Request('https://layline.example/api/mcp', {
@@ -152,6 +152,9 @@ describe('instrument_tuning', () => {
     expect(races).toHaveBeenCalledWith(CALLERS_CLIENT)
     expect(answer.content[0].text).toContain('race-9')
     for (const listed of LISTED) expect(answer.content[0].text).toContain(listed.id)
+    // Each named as the charts name it, so Claude can tell the sailor which is which.
+    expect(answer.content[0].text).toContain('3 Jun · Beer-can 3')
+    expect(answer.content[0].text).toContain('(10 Jun)')
   })
 
   it('says so when the archive holds no Race, which is an answer and not a failure', async () => {

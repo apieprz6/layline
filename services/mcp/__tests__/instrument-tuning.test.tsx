@@ -15,15 +15,20 @@ import CompassChart from '@/components/boat/instrument-tuning/CompassChart'
 import SpeedCheckChart from '@/components/boat/instrument-tuning/SpeedCheckChart'
 import {
   asymmetrySeason,
-  speedSeason,
+  era,
   event,
+  headingEra,
+  raceBins,
+  raceHeading,
+  speedSeason,
   tuningSeason,
 } from '@/components/boat/instrument-tuning/__tests__/fixtures'
 import { buildCalibrationLog } from '@/lib/boat/calibrationLog'
 import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
 import { signedDegrees } from '@/services/analysis/instrument-tuning-text'
+import { readInstrumentTuning } from '@/services/analysis/readInstrumentTuning'
 import { readRace } from '@/services/races/readRace'
-import type { CheckedChannel, McpTuningChannel, RaceDetail } from '@/types'
+import type { CheckedChannel, McpInstrumentTuningSeason, McpTuningChannel, RaceDetail } from '@/types'
 
 import { instrumentTuningRaceAnswer, instrumentTuningSeasonAnswer } from '../instrument-tuning'
 import { FIXTURE_CHART, FIXTURE_POLAR, FIXTURE_RACE_ID, OLDER_RACE_ID, archiveClient, fixtureArchive } from './archive-client'
@@ -55,51 +60,83 @@ function channelOf(channels: readonly McpTuningChannel[], channel: CheckedChanne
   return found
 }
 
-describe.each(SEASONS)('instrumentTuningSeasonAnswer over %s', (_name, season) => {
-  const answer = instrumentTuningSeasonAnswer(season, 10)
+/** The rendered "This season" row says what the answer says, channel by channel. */
+function expectTheRowToAgree(answer: McpInstrumentTuningSeason): void {
+  for (const channel of ['HDG', 'AWA', 'STW'] as const) {
+    const { headline, name } = channelOf(answer.channels, channel)
+    const figures = inTeaser('tuning-figures', channel)
 
-  beforeEach(() => {
-    render(<InstrumentTuningTeaser read={{ ok: true, season, log: [], races: [] }} />)
-  })
-
-  it.each(['HDG', 'AWA', 'STW'] as const)(
-    'headlines %s with what the "This season" row prints for it',
-    (channel) => {
-      const { headline, name } = channelOf(answer.channels, channel)
-      const figures = inTeaser('tuning-figures', channel)
-
-      expect(screen.getAllByTestId('tuning-channel').map((node) => node.textContent)).toContain(name)
-      if (headline.instead !== null) expect(figures).toHaveTextContent(headline.instead)
-      for (const figure of headline.figures) {
-        expect(figures).toHaveTextContent(figure.reading)
-        if (figure.at !== undefined) expect(figures).toHaveTextContent(figure.at)
-      }
-      expect(inTeaser('tuning-reason', channel)).toHaveTextContent(headline.coverage.reason)
-
-      const bar = inTeaser('coverage-bar', channel)
-      if (headline.coverage.towardsSolid === null) expect(bar).toBeNull()
-      else expect(bar).toHaveAttribute('data-share', headline.coverage.towardsSolid.toFixed(2))
+    expect(screen.getAllByTestId('tuning-channel').map((node) => node.textContent)).toContain(name)
+    if (headline.instead !== null) expect(figures).toHaveTextContent(headline.instead)
+    for (const figure of headline.figures) {
+      expect(figures).toHaveTextContent(figure.reading)
+      if (figure.at !== undefined) expect(figures).toHaveTextContent(figure.at)
     }
-  )
+    expect(inTeaser('tuning-reason', channel)).toHaveTextContent(headline.coverage.reason)
 
-  it('names the thinnest coverage the row names', () => {
-    expect(answer.thinnest?.verdict.toLowerCase()).toBe(screen.getByTestId('tuning-coverage').textContent)
+    const bar = inTeaser('coverage-bar', channel)
+    if (headline.coverage.towardsSolid === null) expect(bar).toBeNull()
+    else expect(bar).toHaveAttribute('data-share', headline.coverage.towardsSolid.toFixed(2))
+  }
+
+  expect(answer.thinnest?.verdict.toLowerCase()).toBe(screen.getByTestId('tuning-coverage').textContent)
+}
+
+describe.each(SEASONS)('instrumentTuningSeasonAnswer over %s', (_name, season) => {
+  it('headlines each channel with what the "This season" row prints for it', () => {
+    render(<InstrumentTuningTeaser read={{ ok: true, season, log: [], races: [] }} />)
+
+    expectTheRowToAgree(instrumentTuningSeasonAnswer(season, 10))
+  })
+})
+
+describe('over the season the screen itself reads', () => {
+  it('agrees with the row rendered from the same readInstrumentTuning, through one caller’s client', async () => {
+    const read = await readInstrumentTuning(archiveClient(fixtureArchive()).client)
+    if (!read.ok) throw new Error(`the fixture archive did not read: ${read.reason}`)
+
+    render(<InstrumentTuningTeaser read={read} />)
+
+    const answer = instrumentTuningSeasonAnswer(read.season, read.races.length)
+    expectTheRowToAgree(answer)
+    expect(answer.races).toBe(fixtureArchive().races.length)
   })
 })
 
 describe('the charts behind each card', () => {
-  it('gives the compass Era the highest and lowest heading its chart leads with', () => {
-    const season = tuningSeason()
-    const compass = channelOf(instrumentTuningSeasonAnswer(season, 2).channels, 'HDG')
+  /** Two compass Eras either side of an autocompensation, each with a curve of its own. */
+  const twoCompassEras = (): InstrumentTuningSeason['heading'] => [
+    headingEra(
+      [raceHeading('race-june', '2026-06-03 18:00:00', raceBins({ 3: { mean: 6.1, rows: 40 }, 30: { mean: -2.4, rows: 40 } }))],
+      { era: era('HDG', null, '2026-07-04') }
+    ),
+    headingEra(
+      [raceHeading('race-july', '2026-07-10 18:00:00', raceBins({ 1: { mean: 12.7, rows: 40 }, 20: { mean: -8.9, rows: 40 } }))],
+      { era: era('HDG', '2026-07-04') }
+    ),
+  ]
+
+  it('gives every compass Era the highest and lowest heading its chart leads with', () => {
+    const heading = twoCompassEras()
+    const compass = channelOf(instrumentTuningSeasonAnswer(tuningSeason({ heading }), 2).channels, 'HDG')
     if (compass.channel !== 'HDG') throw new Error('not the compass')
-    const current = compass.eras[compass.eras.length - 1]
 
-    render(<CompassChart era={season.heading[0]} previous={null} log={[]} labels={{}} />)
+    expect(compass.eras).toHaveLength(heading.length)
+    compass.eras.forEach((finding, index) => {
+      const { unmount } = render(
+        <CompassChart era={heading[index]} previous={heading[index - 1] ?? null} log={[]} labels={{}} />
+      )
 
-    const readout = screen.getByTestId('chart-readout')
-    const { highest, lowest } = current.swing!
-    expect(readout).toHaveTextContent(`${signedDegrees(highest.offsetDegrees)} ${highest.compassPoint}`)
-    expect(readout).toHaveTextContent(`${signedDegrees(lowest.offsetDegrees)} ${lowest.compassPoint}`)
+      const readout = screen.getByTestId('chart-readout')
+      const { highest, lowest } = finding.swing!
+      expect(readout).toHaveTextContent(`${signedDegrees(highest.offsetDegrees)} ${highest.compassPoint}`)
+      expect(readout).toHaveTextContent(`${signedDegrees(lowest.offsetDegrees)} ${lowest.compassPoint}`)
+      expect(finding.era.fromDate).toBe(heading[index].era.from_date)
+      unmount()
+    })
+
+    // The headline is the current Era's, which is the one the chart opens on.
+    expect(compass.headline.era).toEqual(compass.eras[1].era)
   })
 
   it.each([

@@ -32,6 +32,8 @@
  * wrong, and no figure here is a value to type into a display (LAY-138 decision 7).
  */
 
+import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
+import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import {
   ASYMMETRY_SOLID_PAIRS,
   SOLID_SHARE,
@@ -50,8 +52,10 @@ import {
   widerReading,
 } from '@/services/analysis/instrument-tuning-text'
 import { HEADLINE_SPEEDS_KNOTS, lineGapAt, type EraDivergence } from '@/services/analysis/paddlewheel'
+import { PADDLEWHEEL_CAVEAT } from '@/services/analysis/paddlewheel-verdict-words'
 import type {
   ChannelColumn,
+  CheckedChannel,
   CoverageStatement,
   CoverageVerdict,
   EraAwaAsymmetry,
@@ -101,9 +105,12 @@ export function seasonHeadlines(season: InstrumentTuningSeason): SeasonChannelHe
 
 /** The compass over one `HDG` Era, or null where no Race produced a compass reading. */
 export function compassHeadline(era: EraHeadingOffset | null): SeasonChannelHeadline {
+  const over = { era: era?.era ?? null, caveat: era?.caveat ?? HEADING_OFFSET_CAVEAT }
+
   if (era === null) {
     return {
       channel: 'HDG',
+      ...over,
       figures: [],
       instead: 'No Race has produced a compass reading yet.',
       coverage: nothingMeasured('no Race has produced a compass reading yet'),
@@ -119,6 +126,7 @@ export function compassHeadline(era: EraHeadingOffset | null): SeasonChannelHead
   if (era.swing === null) {
     return {
       channel: 'HDG',
+      ...over,
       figures: [],
       instead: 'No heading carries a figure yet.',
       coverage,
@@ -128,6 +136,7 @@ export function compassHeadline(era: EraHeadingOffset | null): SeasonChannelHead
 
   return {
     channel: 'HDG',
+    ...over,
     figures: [{ reading: `${era.swing.swing_deg.toFixed(1)}° swing` }],
     instead: null,
     coverage,
@@ -139,10 +148,12 @@ export function compassHeadline(era: EraHeadingOffset | null): SeasonChannelHead
 export function windAngleHeadline(era: EraAwaAsymmetry): SeasonChannelHeadline {
   const { upwind, downwind } = era
   const coverage = asymmetryCoverage(era)
+  const over = { era: era.era, caveat: era.caveat }
 
   if (upwind === null && downwind === null) {
     return {
       channel: 'AWA',
+      ...over,
       figures: [],
       instead: 'No Tack Pair has been found yet.',
       coverage,
@@ -152,6 +163,7 @@ export function windAngleHeadline(era: EraAwaAsymmetry): SeasonChannelHeadline {
 
   return {
     channel: 'AWA',
+    ...over,
     figures: [
       { at: 'up', reading: widerReading(upwind) },
       { at: 'down', reading: widerReading(downwind) },
@@ -170,9 +182,12 @@ export function windAngleHeadline(era: EraAwaAsymmetry): SeasonChannelHeadline {
 
 /** Boat speed over one `STW` Era, or null where no Race produced a speed comparison. */
 export function boatSpeedHeadline(era: EraDivergence | null): SeasonChannelHeadline {
+  const over = { era: era?.era ?? null, caveat: PADDLEWHEEL_CAVEAT }
+
   if (era === null) {
     return {
       channel: 'STW',
+      ...over,
       figures: [],
       instead: 'No Race has produced a speed comparison yet.',
       coverage: nothingMeasured('no Race has produced a speed comparison yet'),
@@ -186,6 +201,7 @@ export function boatSpeedHeadline(era: EraDivergence | null): SeasonChannelHeadl
   if (!era.fit.fitted) {
     return {
       channel: 'STW',
+      ...over,
       figures: [],
       instead: `No season line yet — ${NO_FIT_WORDS[era.fit.reason]}.`,
       coverage,
@@ -199,6 +215,7 @@ export function boatSpeedHeadline(era: EraDivergence | null): SeasonChannelHeadl
   // arithmetic. A speed the line was never fitted over is off the chart rather than extrapolated.
   return {
     channel: 'STW',
+    ...over,
     figures: HEADLINE_SPEEDS_KNOTS.map((knots) => {
       const gap = lineGapAt(line, knots)
       return {
@@ -229,11 +246,15 @@ export function thinnestChannel(headlines: readonly SeasonChannelHeadline[]): Se
 /* ------------------------------------------------------------------------------------ race */
 
 /**
- * What one Race's `STW` figure is, said wherever it is. The season's caveat is about current; a
- * Race's line is its own rows alone, which is what a reader of one Race needs told.
+ * What must be said wherever one Race's figure on each channel is. `STW`'s differs from the
+ * season's: that caveat is about current, and a Race's line is its own rows alone, which is what a
+ * reader of one Race needs told.
  */
-export const RACE_SPEED_CAVEAT =
-  'Boat speed is the paddlewheel against GPS, as a line fitted through this race’s own rows.'
+export const RACE_CAVEATS: Readonly<Record<CheckedChannel, string>> = {
+  HDG: HEADING_OFFSET_CAVEAT,
+  AWA: ASYMMETRY_CAVEAT,
+  STW: 'Boat speed is the paddlewheel against GPS, as a line fitted through this race’s own rows.',
+}
 
 /**
  * One Race's share of each channel: the figure, what it rests on, and a bar.

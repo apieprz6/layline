@@ -23,6 +23,7 @@ import {
   type SpeedBandRead,
   type SpeedBandVerdict,
 } from '@/services/analysis/paddlewheel-verdict'
+import { sharePercent } from '@/services/analysis/figures'
 
 /**
  * The `STW` caveat — the one of the three the checks themselves do not carry.
@@ -80,10 +81,6 @@ function whereOff(bands: readonly SpeedBandRead[]): string {
     .join(' and ')
 }
 
-export function percent(share: number): string {
-  return `${Math.round(share * 100)}%`
-}
-
 /** The verdict as a headline and the one sentence that earns it. */
 export function verdictWords(verdict: PaddlewheelVerdict): { headline: string; detail: string } {
   const { bands, recommendation, spot_on_share: share, heading, drift } = verdict
@@ -106,7 +103,7 @@ export function verdictWords(verdict: PaddlewheelVerdict): { headline: string; d
       if (off !== '') {
         return {
           headline: 'No recalibration needed',
-          detail: `Spot on at ${spot}, where ${percent(share ?? 0)} of your sailing is. It ${off} — but recalibrating moves every speed together, so fixing that would make the rest read wrong.`,
+          detail: `Spot on at ${spot}, where ${sharePercent(share ?? 0)} of your sailing is. It ${off} — but recalibrating moves every speed together, so fixing that would make the rest read wrong.`,
         }
       }
       return {

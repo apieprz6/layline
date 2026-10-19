@@ -22,9 +22,9 @@ import {
   type SpeedBandRead,
   type SpeedBandVerdict,
 } from '@/services/analysis/paddlewheel-verdict'
+import { sharePercent } from '@/services/analysis/figures'
 import {
   bandRange,
-  percent,
   slowFast,
   spans,
   verdictWords,
@@ -101,7 +101,7 @@ export function Checklist({ verdict }: { verdict: PaddlewheelVerdict }): ReactEl
         question="Is it off where you sail most?"
         finding={
           sailedMostSpotOn
-            ? `No — spot on at ${spans(bands, ['spot-on'])}, ${percent(share ?? 0)} of your sailing.${listed === '' ? '' : ` Off at ${listed}.`}`
+            ? `No — spot on at ${spans(bands, ['spot-on'])}, ${sharePercent(share ?? 0)} of your sailing.${listed === '' ? '' : ` Off at ${listed}.`}`
             : agreeing.length > 0
               ? `Yes, at ${listed}.`
               : 'Not enough Races at the speeds you sail most to say.'

@@ -1,20 +1,24 @@
-import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
 import { calibrationEras, eraOf } from '@/services/analysis/calibration-eras'
-import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import type { InstrumentTuningSeason } from '@/services/analysis/instrument-tuning'
 import {
   boatSpeedHeadline,
-  RACE_SPEED_CAVEAT,
+  RACE_CAVEATS,
   compassHeadline,
   raceHeadlines,
   seasonHeadlines,
   thinnestChannel,
   windAngleHeadline,
 } from '@/services/analysis/instrument-tuning-headlines'
-import { CHANNEL_TITLE, compassPoint, eraLabel } from '@/services/analysis/instrument-tuning-text'
+import {
+  CHANNEL_TITLE,
+  NO_RACES_TO_MEASURE,
+  compassPoint,
+  eraLabel,
+  raceLabelsFrom,
+} from '@/services/analysis/instrument-tuning-text'
 import type { EraDivergence } from '@/services/analysis/paddlewheel'
 import { paddlewheelVerdict } from '@/services/analysis/paddlewheel-verdict'
-import { PADDLEWHEEL_CAVEAT, verdictWords } from '@/services/analysis/paddlewheel-verdict-words'
+import { verdictWords } from '@/services/analysis/paddlewheel-verdict-words'
 import type {
   CalibrationEra,
   CalibrationLogEntry,
@@ -39,7 +43,7 @@ import type {
   SeasonChannelHeadline,
 } from '@/types'
 
-import { calibrationLogEntry } from './boat-setup'
+import { calibrationLogEntryAnswer } from './boat-setup'
 
 /**
  * `instrument_tuning`'s answers, shaped from the Instrument Tuning screen's own season and a Race
@@ -58,17 +62,13 @@ function eraAnswer(era: CalibrationEra, channel: CheckedChannel): McpCalibration
     label: eraLabel(era),
     fromDate: era.from_date,
     untilDate: era.until_date,
-    openedBy: era.opened_by.map(calibrationLogEntry),
+    openedBy: era.opened_by.map(calibrationLogEntryAnswer),
   }
 }
 
-function finding(
-  headline: SeasonChannelHeadline,
-  era: CalibrationEra | null,
-  caveat: string
-): McpTuningFinding {
+function finding(headline: SeasonChannelHeadline): McpTuningFinding {
   return {
-    era: era === null ? null : eraAnswer(era, headline.channel),
+    era: headline.era === null ? null : eraAnswer(headline.era, headline.channel),
     figures: headline.figures,
     instead: headline.instead,
     coverage: {
@@ -76,7 +76,7 @@ function finding(
       reason: headline.coverage.reason,
       towardsSolid: headline.towards_solid,
     },
-    caveat,
+    caveat: headline.caveat,
   }
 }
 
@@ -90,7 +90,7 @@ function extreme(bin: EraHeadingBin & { mean_error_deg: number }): McpHeadingExt
 
 function compassEra(era: EraHeadingOffset): McpCompassFinding {
   return {
-    ...finding(compassHeadline(era), era.era, era.caveat),
+    ...finding(compassHeadline(era)),
     era: eraAnswer(era.era, 'HDG'),
     swing:
       era.swing === null
@@ -120,7 +120,7 @@ function side(figure: EraAsymmetryFigure | null): McpAsymmetrySide | null {
 
 function windAngleEra(era: EraAwaAsymmetry): McpWindAngleFinding {
   return {
-    ...finding(windAngleHeadline(era), era.era, era.caveat),
+    ...finding(windAngleHeadline(era)),
     era: eraAnswer(era.era, 'AWA'),
     upwind: side(era.upwind),
     downwind: side(era.downwind),
@@ -134,15 +134,13 @@ function boatSpeedEra(era: EraDivergence): McpBoatSpeedFinding {
   const verdict = paddlewheelVerdict(era)
 
   return {
-    ...finding(boatSpeedHeadline(era), era.era, PADDLEWHEEL_CAVEAT),
+    ...finding(boatSpeedHeadline(era)),
     era: eraAnswer(era.era, 'STW'),
     recalibration: { recommendation: verdict.recommendation, ...verdictWords(verdict) },
     races: era.races.length,
     racesWithALine: era.races_with_a_line,
   }
 }
-
-const last = <Item>(items: readonly Item[]): Item | null => items[items.length - 1] ?? null
 
 /**
  * The season, every channel or one, as the screen and the "This season" row state it.
@@ -159,20 +157,18 @@ export function instrumentTuningSeasonAnswer(
 ): McpInstrumentTuningSeason {
   const headlines = seasonHeadlines(season)
   const [hdg, awa, stw] = headlines
-  const currentHeading = last(season.heading)
-  const currentSpeed = last(season.speed.orthogonal)
 
   const channels: McpTuningChannel[] = [
     {
       channel: 'HDG',
       name: CHANNEL_TITLE.HDG,
-      headline: finding(hdg, currentHeading?.era ?? null, currentHeading?.caveat ?? HEADING_OFFSET_CAVEAT),
+      headline: finding(hdg),
       eras: season.heading.map(compassEra),
     },
     {
       channel: 'AWA',
       name: CHANNEL_TITLE.AWA,
-      headline: finding(awa, season.asymmetry.season.era, season.asymmetry.season.caveat),
+      headline: finding(awa),
       season: windAngleEra(season.asymmetry.season),
       eras: season.asymmetry.eras.map(windAngleEra),
       compassEras: season.asymmetry.compass_eras.map(windAngleEra),
@@ -180,7 +176,7 @@ export function instrumentTuningSeasonAnswer(
     {
       channel: 'STW',
       name: CHANNEL_TITLE.STW,
-      headline: finding(stw, currentSpeed?.era ?? null, PADDLEWHEEL_CAVEAT),
+      headline: finding(stw),
       eras: season.speed.orthogonal.map(boatSpeedEra),
     },
   ]
@@ -196,13 +192,6 @@ export function instrumentTuningSeasonAnswer(
     channels,
     thinnest: { channel: thinnest.channel, verdict: thinnest.coverage.verdict },
   }
-}
-
-/** What travels with one Race's figure on each channel: the caveats its page's tile folds away. */
-const RACE_CAVEAT: Readonly<Record<CheckedChannel, string>> = {
-  HDG: HEADING_OFFSET_CAVEAT,
-  AWA: ASYMMETRY_CAVEAT,
-  STW: RACE_SPEED_CAVEAT,
 }
 
 /**
@@ -226,7 +215,7 @@ export function instrumentTuningRaceAnswer(
       figures: column.figures,
       instead: column.instead,
       coverage: { basis: column.basis, share: column.bar },
-      caveat: RACE_CAVEAT[column.channel],
+      caveat: RACE_CAVEATS[column.channel],
     }
   })
 
@@ -238,11 +227,11 @@ export function instrumentTuningRaceAnswer(
 }
 
 /** An archive with no Race in it, in the screen's own words: an answer, never a failure. */
-export const NO_RACES_TO_MEASURE: McpInstrumentTuningSeason = {
+export const NO_RACES_ANSWER: McpInstrumentTuningSeason = {
   scope: 'season',
   races: 0,
   channels: [],
-  note: 'No races to measure yet. These checks read a season of recordings; they appear once a race has been uploaded.',
+  note: `${NO_RACES_TO_MEASURE.title}. ${NO_RACES_TO_MEASURE.detail}`,
 }
 
 /**
@@ -251,9 +240,16 @@ export const NO_RACES_TO_MEASURE: McpInstrumentTuningSeason = {
  * A missing Race, one RLS hides and one that could not be read whole are one answer, as on the
  * Race page: there is no Race here to check, and never part of one.
  */
-export function unknownRaceRefusal(raceId: string, races: readonly Pick<RaceListEntry, 'id'>[]): string {
+export function unknownRaceRefusal(
+  raceId: string,
+  races: readonly Pick<RaceListEntry, 'id' | 'title' | 'window_start'>[]
+): string {
+  // Named as the charts name a Race, so one id can be told from another without list_races.
+  const labels = raceLabelsFrom(races.map((each) => ({ ...each, race_id: each.id })))
   const valid =
-    races.length === 0 ? 'The archive lists no Race to choose from.' : `Races there are: ${races.map((each) => each.id).join(', ')}.`
+    races.length === 0
+      ? 'The archive lists no Race to choose from.'
+      : `Races there are: ${races.map((each) => `${each.id} (${labels[each.id]})`).join(', ')}.`
 
   return `No Race with id ${raceId} could be read. ${valid} If it is listed, the read failed and may be retried.`
 }
