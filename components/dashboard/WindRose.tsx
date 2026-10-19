@@ -3,12 +3,13 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import type { StationCapability, WindDataPoint, WindDataPointWithOffset } from "@/types";
 import {
-  getWindColorHex,
+  getWindColor,
   getWindCondition,
   getCompassDirection,
 } from "@/lib/utils/wind";
 import { TIME_SCALES, exceedsGapThreshold, inWindow, withMinutesAgo } from "@/lib/utils/windowing";
 import { formatTimeOffset, formatTime } from "@/lib/utils/time";
+import { tint } from "@/lib/utils/design";
 import { findPointByRadius } from "@/lib/utils/radialSelection";
 import { arcPath, radialToXY } from "@/lib/utils/windRoseGeometry";
 import { readingAt, shows } from "@/lib/utils/stationReadings";
@@ -141,7 +142,7 @@ export default function WindRose({
         const relativeAge = point.minsAgo - nowOffsetMinutes;
         const r01 = 1 - relativeAge / timeWindowMinutes;
         const [x, y] = radialToXY(point.dir, r01, CENTER_X, CENTER_Y, R);
-        const color = getWindColorHex(point.spd);
+        const color = getWindColor(point.spd);
         const opacity =
           Math.round((0.15 + 0.85 * Math.pow(r01, 1.2)) * 1e6) / 1e6;
 
@@ -153,7 +154,7 @@ export default function WindRose({
 
   // Outer ring color matches the displayed reference point's wind strength
   const outerRingColor = useMemo(() => {
-    if (displayPoint) return getWindColorHex(displayPoint.spd);
+    if (displayPoint) return getWindColor(displayPoint.spd);
     if (dataPoints.length === 0) return "var(--blue-500)";
     return dataPoints[dataPoints.length - 1].color;
   }, [displayPoint, dataPoints]);
@@ -185,7 +186,7 @@ export default function WindRose({
       segments.push({
         // Oldest end first: the sweep of an exact reversal is resolved against chronology.
         d: arcPath(older, newer, CENTER_X, CENTER_Y, R),
-        color: getWindColorHex(avgSpeed),
+        color: getWindColor(avgSpeed),
         opacity,
       });
     }
@@ -409,7 +410,7 @@ export default function WindRose({
                   fontSize: "26px",
                   fontWeight: "600",
                   lineHeight: "1",
-                  color: getWindColorHex(displayPoint.spd),
+                  color: getWindColor(displayPoint.spd),
                 }}
               >
                 {displayPoint.spd.toFixed(1)}
@@ -429,7 +430,7 @@ export default function WindRose({
                 fontSize: "10.5px",
                 fontWeight: "500",
                 marginTop: "1px",
-                color: getWindColorHex(displayPoint.spd),
+                color: getWindColor(displayPoint.spd),
               }}
             >
               {getWindCondition(displayPoint.spd).label}
@@ -451,7 +452,7 @@ export default function WindRose({
                   style={{
                     fontSize: "15px",
                     fontWeight: "600",
-                    color: gust === null ? "var(--text-muted)" : getWindColorHex(gust),
+                    color: gust === null ? "var(--text-muted)" : getWindColor(gust),
                   }}
                 >
                   {gust === null ? "—" : Math.round(gust)}
@@ -659,7 +660,7 @@ export default function WindRose({
               key={`seg-${i}`}
               d={segment.d}
               fill="none"
-              stroke={segment.color}
+              style={{ stroke: segment.color }}
               strokeWidth={2.5}
               strokeOpacity={segment.opacity}
               strokeLinecap="round"
@@ -679,7 +680,7 @@ export default function WindRose({
                 cx={point.x}
                 cy={point.y}
                 r={2.2}
-                fill={point.color}
+                style={{ fill: point.color }}
                 opacity={point.opacity}
               />
             );
@@ -709,7 +710,7 @@ export default function WindRose({
                     y1={CENTER_Y}
                     x2={hx}
                     y2={hy}
-                    stroke="rgba(0,68,204,0.6)"
+                    style={{ stroke: tint("var(--blue-500)", 60) }}
                     strokeWidth={1.5}
                     strokeDasharray="4 2"
                   />
@@ -749,17 +750,17 @@ export default function WindRose({
 
               return (
                 <g>
-                  {/* Blue ring around reference point */}
+                  {/* Accent ring around reference point */}
                   <circle
                     cx={rx}
                     cy={ry}
                     r={6}
                     fill="none"
-                    stroke="rgba(0,68,204,0.7)"
+                    style={{ stroke: tint("var(--blue-500)", 70) }}
                     strokeWidth={2.5}
                   />
-                  {/* Blue center dot */}
-                  <circle cx={rx} cy={ry} r={3} fill="rgba(0,68,204,0.8)" />
+                  {/* Accent center dot */}
+                  <circle cx={rx} cy={ry} r={3} style={{ fill: tint("var(--blue-500)", 80) }} />
                 </g>
               );
             })()}

@@ -26,7 +26,7 @@
  * has no order at all**, so Agreement is three state tokens and a muted neutral.
  */
 
-import { radius } from '@/lib/utils/design'
+import { radius, tint } from '@/lib/utils/design'
 import { UNKNOWN_SAIL_BAND } from '@/services/boat/crossoverSailBands'
 import {
   AGREEMENT_WORDS,
@@ -65,11 +65,6 @@ export const AGREEMENT_GLYPHS: Record<CellAgreement, string> = {
   'no-rows': '',
 }
 
-/** A token mixed down to a tint, so the night-vision override on the token still applies. */
-function tint(token: string, percent: number): string {
-  return `color-mix(in srgb, var(${token}) ${percent}%, transparent)`
-}
-
 /**
  * Below target, near it, on it, over it — the four bands the legend names.
  *
@@ -88,12 +83,12 @@ export function targetToken(percent: number): string {
 }
 
 export function targetTint(percent: number | null, alpha = 34): string {
-  return percent === null ? 'var(--surface-divider)' : tint(targetToken(percent), alpha)
+  return percent === null ? 'var(--surface-divider)' : tint(`var(${targetToken(percent)})`, alpha)
 }
 
 /** One hue, more of it with more races. The count is printed anyway. */
 export function coverageTint(races: number): string {
-  return races === 0 ? 'transparent' : tint('--text-accent', 13 + Math.round((Math.min(races, 9) / 9) * 34))
+  return races === 0 ? 'transparent' : tint('var(--text-accent)', 13 + Math.round((Math.min(races, 9) / 9) * 34))
 }
 
 /**
@@ -118,7 +113,7 @@ export function agreementTint(agreement: CellAgreement, alpha = 34): string {
   const token = AGREEMENT_TOKENS[agreement]
   if (token === null) return 'transparent'
 
-  return tint(token, token === '--text-muted' ? 14 : alpha)
+  return tint(`var(${token})`, token === '--text-muted' ? 14 : alpha)
 }
 
 /**

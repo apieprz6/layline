@@ -28,6 +28,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { tint } from '@/lib/utils/design'
 import type { RaceChartAxis } from '@/services/recordings/chart-series'
 import { raceChannel, raceChartSpans } from '@/services/recordings/chart-series'
 import { dragWindowBound, type RaceWindowSeconds } from '@/services/recordings/race-window'
@@ -267,7 +268,7 @@ export default function ChannelChart({
           patternUnits="userSpaceOnUse"
           patternTransform="rotate(45)"
         >
-          <rect width="5" height="5" fill="rgba(204,17,0,0.10)" />
+          <rect width="5" height="5" style={{ fill: tint('var(--wind-storm)', 10) }} />
           <line
             x1="0"
             y1="0"
@@ -309,14 +310,14 @@ export default function ChannelChart({
         y={PAD_TOP}
         width={Math.max(0, x(window.start) - PAD_LEFT)}
         height={plotHeight}
-        fill="rgba(0,0,0,0.055)"
+        style={{ fill: tint('var(--chart-ink)', 5.5) }}
       />
       <rect
         x={x(window.finish)}
         y={PAD_TOP}
         width={Math.max(0, WIDTH - PAD_RIGHT - x(window.finish))}
         height={plotHeight}
-        fill="rgba(0,0,0,0.055)"
+        style={{ fill: tint('var(--chart-ink)', 5.5) }}
       />
 
       {gpsWindSpans.map((span, index) => (
@@ -326,7 +327,7 @@ export default function ChannelChart({
           y={PAD_TOP}
           width={Math.max(0.6, x(span.to) - x(span.from))}
           height={plotHeight}
-          fill="rgba(0,68,204,0.10)"
+          style={{ fill: 'var(--blue-muted)' }}
         />
       ))}
 
@@ -563,7 +564,7 @@ export function TraceLegend({ channel }: { channel: RaceChannelKey }): ReactElem
             style={{
               width: 10,
               height: 8,
-              background: 'rgba(204,17,0,0.10)',
+              background: tint('var(--wind-storm)', 10),
               border: '1px solid var(--wind-storm)',
               opacity: 0.7,
             }}
@@ -574,7 +575,7 @@ export function TraceLegend({ channel }: { channel: RaceChannelKey }): ReactElem
       </LegendItem>
       {channel !== 'sog' && (
         <LegendItem
-          swatch={<span style={{ width: 10, height: 8, background: 'rgba(0,68,204,0.10)' }} />}
+          swatch={<span style={{ width: 10, height: 8, background: 'var(--blue-muted)' }} />}
         >
           Wind from GPS, not through the water
         </LegendItem>

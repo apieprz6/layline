@@ -1,6 +1,6 @@
 import type { BuoyDataResult } from '@/types'
 import WindArrow from './WindArrow'
-import { getWindColorHex } from '@/lib/utils/wind'
+import { getWindColor } from '@/lib/utils/wind'
 import { averageDirections } from '@/lib/utils/statistics'
 import { spacing } from '@/lib/utils/design'
 
@@ -43,7 +43,7 @@ export default function SummaryBar({ buoys }: SummaryBarProps) {
     minute: '2-digit',
   })
 
-  const speedColor = getWindColorHex(avgWindSpeed)
+  const speedColor = getWindColor(avgWindSpeed)
   const statusColor = hasOnlineStations ? 'var(--state-success)' : 'var(--state-neutral)'
 
   return (

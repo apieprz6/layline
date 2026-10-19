@@ -49,9 +49,9 @@ export default function WindCard({ current, forecast }: WindCardProps) {
       <div
         className="inline-block px-3 py-1 rounded-full text-xs font-medium"
         style={{
-          background: `${condition.color}1a`,
+          background: condition.bg,
           color: condition.color,
-          border: `1px solid ${condition.color}66`
+          border: `1px solid ${condition.border}`
         }}
       >
         {condition.label} air

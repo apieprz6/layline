@@ -521,7 +521,7 @@ export default function TrackMap({
                   y={railY + 10}
                   textAnchor="middle"
                   fontSize="8"
-                  fill="#fff"
+                  style={{ fill: 'var(--text-inverse)' }}
                   fontFamily="var(--font-mono)"
                 >
                   {which === 'start' ? '⟩' : '⟨'}

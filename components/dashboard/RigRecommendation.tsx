@@ -1,5 +1,8 @@
 'use client'
 
+import { WIND_COLORS } from '@/lib/utils/wind'
+import { tint } from '@/lib/utils/design'
+
 interface RigRecommendationProps {
   condition: 'light' | 'medium' | 'heavy'
   windSpeed: number
@@ -8,12 +11,13 @@ interface RigRecommendationProps {
 
 export default function RigRecommendation({ condition, windSpeed, recommendations }: RigRecommendationProps) {
   const conditionConfig = {
-    light: { label: 'Light air setup', color: '#007A52' },
-    medium: { label: 'Medium air setup', color: '#0055BB' },
-    heavy: { label: 'Heavy air setup', color: '#C47000' }
+    light: { label: 'Light air setup', color: WIND_COLORS.LIGHT },
+    medium: { label: 'Medium air setup', color: WIND_COLORS.MEDIUM },
+    heavy: { label: 'Heavy air setup', color: WIND_COLORS.HEAVY }
   }
 
   const config = conditionConfig[condition]
+  // The badge tints are the old hex alphas 1a and 66, i.e. 26/255 and 102/255.
 
   return (
     <div className="layline-card">
@@ -24,9 +28,9 @@ export default function RigRecommendation({ condition, windSpeed, recommendation
         <div
           className="px-2 py-0.5 rounded text-xs font-semibold data-mono"
           style={{
-            background: `${config.color}1a`,
+            background: tint(config.color, 10.2),
             color: config.color,
-            border: `1px solid ${config.color}66`
+            border: `1px solid ${tint(config.color, 40)}`
           }}
         >
           {windSpeed} kts

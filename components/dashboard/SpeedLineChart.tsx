@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { StationCapability, WindDataPoint, WindDataPointWithOffset } from '@/types'
 import { getMinutesAgo } from '@/lib/utils/time'
 import { exceedsGapThreshold } from '@/lib/utils/windowing'
+import { getWindColor } from '@/lib/utils/wind'
+import { tint } from '@/lib/utils/design'
 
 interface SpeedLineChartProps {
   data: WindDataPoint[]
@@ -194,14 +196,6 @@ export default function SpeedLineChart({
     return PAD_T + (1 - speed / maxSpeed) * innerH
   }
 
-  // Wind condition colors
-  function windColor(kts: number) {
-    if (kts <= 8) return '#007A52'  // Light
-    if (kts <= 15) return '#0055BB' // Medium
-    if (kts <= 22) return '#C47000' // Heavy
-    return '#CC1100'                // Storm
-  }
-
   // Band lines at wind condition thresholds
   const bandLines = [8, 15, 22].filter((v) => v <= maxSpeed)
 
@@ -281,7 +275,7 @@ export default function SpeedLineChart({
             y1={yFor(v)}
             x2={PAD_L + innerW}
             y2={yFor(v)}
-            stroke="rgba(0,0,0,0.08)"
+            style={{ stroke: tint('var(--chart-ink)', 8) }}
             strokeWidth={0.75}
             strokeDasharray={v === 0 ? '0' : '2 4'}
           />
@@ -291,7 +285,7 @@ export default function SpeedLineChart({
             textAnchor="end"
             fontFamily="JetBrains Mono"
             fontSize={9}
-            fill="#666"
+            style={{ fill: 'var(--text-muted)' }}
           >
             {v}
           </text>
@@ -306,7 +300,7 @@ export default function SpeedLineChart({
           y1={yFor(v)}
           x2={PAD_L + innerW}
           y2={yFor(v)}
-          stroke={windColor(v - 0.1)}
+          style={{ stroke: getWindColor(v - 0.1) }}
           strokeWidth={0.75}
           strokeOpacity={0.22}
           strokeDasharray="1 3"
@@ -324,7 +318,7 @@ export default function SpeedLineChart({
               y1={PAD_T + innerH}
               x2={x}
               y2={PAD_T + innerH + 3}
-              stroke="rgba(0,0,0,0.25)"
+              style={{ stroke: tint('var(--chart-ink)', 25) }}
               strokeWidth={0.75}
             />
             <text
@@ -333,7 +327,7 @@ export default function SpeedLineChart({
               textAnchor={i === 0 ? 'start' : i === xFracs.length - 1 ? 'end' : 'middle'}
               fontFamily="JetBrains Mono"
               fontSize={9}
-              fill="#666"
+              style={{ fill: 'var(--text-muted)' }}
             >
               {fmtOffset(minAgo)}
             </text>
@@ -349,7 +343,7 @@ export default function SpeedLineChart({
         fontSize={8.5}
         fontWeight={600}
         letterSpacing="0.10em"
-        fill="#666"
+        style={{ fill: 'var(--text-muted)' }}
       >
         KTS
       </text>
@@ -369,8 +363,8 @@ export default function SpeedLineChart({
           x2={0}
           y2={PAD_T + innerH}
         >
-          <stop offset="0%" stopColor="#0044CC" stopOpacity="0.30" />
-          <stop offset="100%" stopColor="#0044CC" stopOpacity="0.02" />
+          <stop offset="0%" style={{ stopColor: 'var(--blue-500)' }} stopOpacity="0.30" />
+          <stop offset="100%" style={{ stopColor: 'var(--blue-500)' }} stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
@@ -385,8 +379,7 @@ export default function SpeedLineChart({
           key={`gust${i}`}
           data-testid="gust-band"
           d={d}
-          fill="rgba(196,112,0,0.14)"
-          stroke="rgba(196,112,0,0.5)"
+          style={{ fill: tint('var(--wind-heavy)', 14), stroke: tint('var(--wind-heavy)', 50) }}
           strokeWidth={0.6}
           strokeDasharray="2 2"
         />
@@ -420,7 +413,7 @@ export default function SpeedLineChart({
             y1={y1}
             x2={x2}
             y2={y2}
-            stroke={windColor(avgSpd)}
+            style={{ stroke: getWindColor(avgSpd) }}
             strokeWidth={1.75}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -435,7 +428,7 @@ export default function SpeedLineChart({
           cx={point.x}
           cy={point.y}
           r={1.75}
-          fill={windColor(point.spd)}
+          style={{ fill: getWindColor(point.spd) }}
         />
       ))}
 
@@ -459,7 +452,7 @@ export default function SpeedLineChart({
               y1={PAD_T}
               x2={x}
               y2={PAD_T + innerH}
-              stroke="rgba(0,0,0,0.45)"
+              style={{ stroke: tint('var(--chart-ink)', 45) }}
               strokeWidth={1}
               strokeDasharray="2 3"
             />
@@ -468,8 +461,7 @@ export default function SpeedLineChart({
               cx={x}
               cy={y}
               r={5}
-              fill="white"
-              stroke={windColor(hoverPoint.spd)}
+              style={{ fill: 'var(--surface-raised)', stroke: getWindColor(hoverPoint.spd) }}
               strokeWidth={2}
             />
             {/* Speed label tooltip */}
@@ -480,7 +472,7 @@ export default function SpeedLineChart({
                 width={labelWidth}
                 height={14}
                 rx={3}
-                fill="#0A0A0A"
+                style={{ fill: 'var(--text-primary)' }}
               />
               <text
                 x={0}
@@ -489,7 +481,7 @@ export default function SpeedLineChart({
                 fontFamily="JetBrains Mono"
                 fontSize={9.5}
                 fontWeight={600}
-                fill="white"
+                style={{ fill: 'var(--text-inverse)' }}
               >
                 {label}
               </text>

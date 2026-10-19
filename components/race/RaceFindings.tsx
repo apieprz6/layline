@@ -12,29 +12,28 @@
  */
 
 import type { ReactElement } from 'react'
-import { spacing } from '@/lib/utils/design'
+import { spacing, tint } from '@/lib/utils/design'
 import type { RaceFinding, RaceFindingSeverity } from '@/types'
 
 /**
  * Foreground, background and border per severity.
  *
- * The foregrounds are `globals.css` tokens. The washes behind them are literal rgba of those same
- * token colours, because a token is one colour and a wash is a colour at 6% — there is nothing in
- * `globals.css` to name them, and inventing two tokens for one screen would be worse than saying so
- * here. The note's wash is the only one that is a token, since a surface already exists for it.
+ * The foregrounds are `globals.css` tokens, and the washes behind them are `tint()`s of those same
+ * tokens, so night vision recolours both. The note's wash is a token outright, since a surface
+ * already exists for it.
  */
 const TONES: Record<RaceFindingSeverity, { fg: string; bg: string; border: string; label: string }> =
   {
     refusal: {
       fg: 'var(--wind-storm)',
-      bg: 'rgba(204,17,0,0.06)',
-      border: 'rgba(204,17,0,0.35)',
+      bg: tint('var(--wind-storm)', 6),
+      border: tint('var(--wind-storm)', 35),
       label: 'Cannot be saved',
     },
     confirmation: {
       fg: 'var(--wind-heavy)',
-      bg: 'rgba(196,112,0,0.07)',
-      border: 'rgba(196,112,0,0.35)',
+      bg: tint('var(--wind-heavy)', 7),
+      border: tint('var(--wind-heavy)', 35),
       label: 'Worth checking',
     },
     note: {

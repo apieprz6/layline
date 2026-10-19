@@ -1,6 +1,8 @@
 'use client'
 
 import WindArrow from './WindArrow'
+import { getWindColor } from '@/lib/utils/wind'
+import { tint } from '@/lib/utils/design'
 
 interface ForecastData {
   time: string
@@ -25,7 +27,8 @@ export default function ForecastChart({ data }: ForecastChartProps) {
         {data.map((forecast, i) => {
           const heightPercent = (forecast.speed / maxSpeed) * 100
           const gustHeightPercent = forecast.gust ? (forecast.gust / maxSpeed) * 100 : heightPercent
-          const windColor = forecast.speed <= 8 ? '#007A52' : forecast.speed <= 15 ? '#0055BB' : forecast.speed <= 22 ? '#C47000' : '#CC1100'
+          const windColor = getWindColor(forecast.speed)
+          // The gust bar's tints are the old hex alphas 22 and 44, i.e. 34/255 and 68/255.
 
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-2">
@@ -40,8 +43,8 @@ export default function ForecastChart({ data }: ForecastChartProps) {
                     className="absolute bottom-0 left-0 right-0"
                     style={{
                       height: `${gustHeightPercent}%`,
-                      background: `${windColor}22`,
-                      border: `1px solid ${windColor}44`,
+                      background: tint(windColor, 13.33),
+                      border: `1px solid ${tint(windColor, 26.67)}`,
                       borderRadius: '4px 4px 0 0'
                     }}
                   />

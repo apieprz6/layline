@@ -80,7 +80,7 @@ describe('(app) route group layout', () => {
     await renderLayout()
 
     // RaceHeader's logo is the chrome the three pages used to mount for themselves
-    expect(screen.getByAltText('L')).toBeInTheDocument()
+    expect(screen.getByTestId('logo-mark')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument()
     expect(screen.getByText('Page content')).toBeInTheDocument()
   })
@@ -121,7 +121,7 @@ describe('(app) route group layout', () => {
     await renderLayout()
 
     expect(readBoatHeaderIdentity).not.toHaveBeenCalled()
-    expect(screen.getByAltText('L')).toHaveAttribute('src', '/logo-icon.svg')
+    expect(screen.getByTestId('logo-mark')).toBeInTheDocument()
   })
 
   it('shows a Guest the guest footer', async () => {

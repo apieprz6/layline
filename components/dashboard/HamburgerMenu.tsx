@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import AccountBlock from './AccountBlock'
 import type { Account } from '@/types'
+import { tint } from '@/lib/utils/design'
 
 interface HamburgerMenuProps {
   isOpen: boolean
@@ -221,7 +222,7 @@ export default function HamburgerMenu({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.55)',
+          background: 'var(--scrim)',
           opacity: isOpen ? 1 : 0,
           pointerEvents: isOpen ? 'auto' : 'none',
           transition: 'opacity 200ms ease-out',
@@ -245,7 +246,7 @@ export default function HamburgerMenu({
           zIndex: 100,
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: isOpen ? '4px 0 24px rgba(0,0,0,0.5)' : 'none',
+          boxShadow: isOpen ? `4px 0 24px ${tint('var(--shadow-ink)', 50)}` : 'none',
         }}
       >
         {/* Header */}

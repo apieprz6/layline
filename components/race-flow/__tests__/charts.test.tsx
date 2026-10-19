@@ -204,10 +204,10 @@ describe('the channel chart marks a Dropout rather than hiding it', () => {
     const rows = [row(0, { sog: '6.2', tws: '11.4' }), row(1, { sog: '6.3', tws: '11.6' })]
 
     expect(
-      chartOf(rows, 'sog').container.querySelectorAll('rect[fill="rgba(0,68,204,0.10)"]')
+      chartOf(rows, 'sog').container.querySelectorAll('rect[style*="fill: var(--blue-muted)"]')
     ).toHaveLength(0)
     expect(
-      chartOf(rows, 'tws').container.querySelectorAll('rect[fill="rgba(0,68,204,0.10)"]')
+      chartOf(rows, 'tws').container.querySelectorAll('rect[style*="fill: var(--blue-muted)"]')
     ).toHaveLength(1)
   })
 })

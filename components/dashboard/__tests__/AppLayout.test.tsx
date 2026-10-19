@@ -68,9 +68,7 @@ describe('AppLayout', () => {
     render(<AppLayout {...defaultProps} />)
 
     // Check header content - logo should be visible
-    const logo = screen.getByAltText('L')
-    expect(logo).toBeInTheDocument()
-    expect(logo).toHaveAttribute('src', '/logo-icon.svg')
+    expect(screen.getByRole('img', { name: 'L' })).toBe(screen.getByTestId('logo-mark'))
 
     // Check wind display with one decimal
     expect(screen.getByText(/12\.0 kts/i)).toBeInTheDocument()

@@ -184,7 +184,7 @@ export default function ChartStack({
                     borderRadius: 5,
                     border: '1px solid var(--surface-border)',
                     background: on ? 'var(--blue-500)' : 'var(--surface-elevated)',
-                    color: on ? '#fff' : 'var(--text-secondary)',
+                    color: on ? 'var(--text-inverse)' : 'var(--text-secondary)',
                     fontSize: 10.5,
                     fontFamily: 'var(--font-mono)',
                     fontWeight: on ? 700 : 500,

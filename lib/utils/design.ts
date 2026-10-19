@@ -77,3 +77,20 @@ export function spacingShorthand(...values: SpacingUnit[]): string {
   }
   return values.map((v) => spacing(v)).join(' ')
 }
+
+/**
+ * A colour mixed down toward transparent — the token-safe way to write a translucent tint
+ *
+ * Hex-alpha concatenation (`${hex}33`) only works on a hex, and an `rgba()` restates the daylight
+ * value, so neither follows `.theme-nightvision`. `color-mix()` keeps the `var()` inside it, and
+ * mixing with transparent in srgb gives exactly `rgba(<the colour>, percent / 100)`.
+ *
+ * @param color - Any CSS colour, usually a `var(--…)` token
+ * @param percent - How much of the colour, 0–100
+ *
+ * @example
+ * tint('var(--wind-light)', 10) // 'color-mix(in srgb, var(--wind-light) 10%, transparent)'
+ */
+export function tint(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`
+}
