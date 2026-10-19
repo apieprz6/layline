@@ -141,6 +141,17 @@ valid values, never silently ignored.
   token its OAuth server issues, and a browser session has none, so `lib/mcp/auth.ts` refuses a
   token without one. A Profile is required too, checked at the consent screen, where an account
   with none is denied before a code exists, and again at the endpoint.
+- **Decided (LAY-192): revoking a Connected App takes up to an hour, not an instant.** Settings
+  lists the Account's grants and revokes one with `supabase.auth.oauth.revokeGrant`, which marks
+  the consent revoked, deletes that client's sessions and invalidates its refresh tokens. The
+  access token the app already holds is a JWT that `lib/mcp/auth.ts` checks with `getClaims`,
+  locally against the project's keys, so it keeps opening the endpoint until it expires (the
+  project's JWT expiry, an hour by default). The owner chose that window over making revocation
+  immediate, which would mean asking Supabase about the session (`getUser`, or a session lookup)
+  on every MCP request: a round trip per tool call to close a gap of under an hour on a read-only
+  server. So the copy says "stops within the hour", never "disconnected". Shortening the JWT
+  expiry narrows the window for every token, browser sessions included; enforcing it at the
+  endpoint is the change to make if a lost laptop ever needs an instant answer.
 
 ## Rejected alternatives
 

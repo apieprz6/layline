@@ -1,4 +1,4 @@
-import { formatTimeHHMM, formatOffset, observationAgeMinutes } from '../timeFormatting'
+import { formatTimeHHMM, formatOffset, observationAgeMinutes, formatMoment } from '../timeFormatting'
 
 describe('formatTimeHHMM', () => {
   it('formats afternoon time correctly', () => {
@@ -48,5 +48,21 @@ describe('observationAgeMinutes', () => {
     expect(observationAgeMinutes('2026-07-15T23:00:00.000Z', NOW)).toBe(12)
     expect(observationAgeMinutes('2026-07-15T23:11:01.000Z', NOW)).toBe(0)
     expect(observationAgeMinutes('2026-07-15T21:40:00.000Z', NOW)).toBe(92)
+  })
+})
+
+describe('formatMoment', () => {
+  it('states a moment as day, month, year and 24-hour time in the zone it is read in', () => {
+    // Chicago is UTC-5 in October: 21:04Z is 16:04 on the lake.
+    expect(formatMoment('2026-10-17T21:04:00Z', 'America/Chicago')).toBe('17 Oct 2026, 16:04')
+    expect(formatMoment('2026-10-17T21:04:00Z', 'UTC')).toBe('17 Oct 2026, 21:04')
+  })
+
+  it('moves to the reader’s day when the zone crosses midnight', () => {
+    expect(formatMoment('2026-01-03T02:15:00Z', 'America/Chicago')).toBe('2 Jan 2026, 20:15')
+  })
+
+  it('names the month as formatCalendarDate does, Sep and not Sept', () => {
+    expect(formatMoment('2026-09-10T12:00:00Z', 'UTC')).toBe('10 Sep 2026, 12:00')
   })
 })

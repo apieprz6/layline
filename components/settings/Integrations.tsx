@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { askToSignIn } from '@/lib/account/askToSignIn'
+import ConnectedApps from './ConnectedApps'
 import {
   CHATGPT_URL,
   CLAUDE_CONNECTORS_URL,
@@ -48,8 +49,9 @@ const mono: CSSProperties = {
  * app to the **MCP Server**. Three rows styled like Theme's options, each opening a bottom sheet
  * that walks its three steps (LAY-191, the prototype's variant B).
  *
- * The rows say nothing about whether an app is connected: that needs the grants API, which is
- * LAY-192's.
+ * The rows say nothing about whether an app is connected: a grant's app name is whatever the app
+ * registered itself as, so matching one to a row would be a guess. The **Connected Apps** list
+ * under them says it instead (LAY-192).
  */
 export default function Integrations({ mcpServerUrl }: IntegrationsProps): ReactElement {
   const [open, setOpen] = useState<Integration | null>(null)
@@ -146,6 +148,8 @@ export default function Integrations({ mcpServerUrl }: IntegrationsProps): React
           </button>
         ))}
       </div>
+
+      {signedIn && <ConnectedApps />}
 
       {open && mcpServerUrl && (
         // Keyed, so each sheet opens at step 1 rather than wherever the last one was left.

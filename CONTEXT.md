@@ -369,6 +369,10 @@ _Avoid_: Account Merging (ADR 0004's term, and now a misnomer — nothing merges
 Layline's read-only face to an AI assistant such as Claude: an endpoint an **Account** connects once, signs in to with Google, and then asks questions through. It answers only to an Account. Unlike the app, it has no **Guest** tier, not even for weather. See ADR 0042.
 _Avoid_: API, integration, plugin (it is not a general-purpose interface to the data). Settings' **Integrations** section is named for the apps a crew member connects to it (Claude, ChatGPT, others), not for the MCP Server itself
 
+**Connected App**:
+An app an **Account** has approved at Layline's consent screen to reach the **MCP Server** as them, such as Claude or ChatGPT: a standing grant Supabase's OAuth server records. Settings lists each under the name the app registered itself with, which Layline shows verbatim and cannot vouch for, so a grant is never matched to the Claude or ChatGPT row. Revoking one stops it within the hour, not at once: the token it already holds works until it expires. See ADR 0042.
+_Avoid_: Connector (Claude's own word for the setting, not a grant), integration (Settings' section, not a grant), session
+
 **MCP Tool**:
 One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and it holds no rule of its own to make them with, so a changed rule reaches it unaided. That is what makes it a tool rather than a second analysis. See ADR 0042.
 _Avoid_: Endpoint, query (a tool does not search the archive, it states what a screen states)
