@@ -7,6 +7,7 @@ import InstrumentTuningCharts, {
 import { resolveAccount } from '@/lib/account/resolveAccount'
 import { signInFirst } from '@/lib/account/signInFirst'
 import { spacing } from '@/lib/utils/design'
+import { NO_RACES_TO_MEASURE } from '@/services/analysis/instrument-tuning-text'
 import { readInstrumentTuning } from '@/services/analysis/readInstrumentTuning'
 
 export const dynamic = 'force-dynamic'
@@ -58,8 +59,8 @@ export default async function InstrumentTuningPage(): Promise<ReactElement> {
         ) : read.reason === 'no-races' ? (
           <EmptyState
             mark="⛵"
-            title="No races to measure yet"
-            detail="These checks read a season of recordings. They appear once a race has been uploaded."
+            title={NO_RACES_TO_MEASURE.title}
+            detail={NO_RACES_TO_MEASURE.detail}
           />
         ) : (
           // Said rather than drawn around. A season computed over the Races that happened to load

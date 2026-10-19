@@ -16,9 +16,31 @@ const METADATA_PATH = '/.well-known/oauth-protected-resource'
  */
 export function requestOrigin(request: Request): string {
   const url = new URL(request.url)
-  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? url.host
-  const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(/:$/, '')
+  return forwardedOrigin(request.headers, { host: url.host, proto: url.protocol.replace(/:$/, '') })
+}
+
+/**
+ * The same origin for a Server Component, which has `headers()` but no `Request`. `next start`
+ * sets both forwarded headers on every request it serves and Vercel sets them in front of it, so
+ * the fallbacks are only reached by a request that came from neither.
+ */
+export function headersOrigin(headers: Headers): string {
+  return forwardedOrigin(headers, { host: 'localhost', proto: 'https' })
+}
+
+function forwardedOrigin(headers: Headers, fallback: { host: string; proto: string }): string {
+  const host = headers.get('x-forwarded-host') ?? headers.get('host') ?? fallback.host
+  const proto = headers.get('x-forwarded-proto') ?? fallback.proto
   return `${proto.split(',')[0].trim()}://${host.split(',')[0].trim()}`
+}
+
+/**
+ * The address a crew member pastes into Claude, ChatGPT or another app. It is the metadata's
+ * `resource`, built by this one function, because a client refuses metadata whose `resource`
+ * is not the URL it connected to.
+ */
+export function mcpServerUrl(origin: string): string {
+  return `${origin}${MCP_PATH}`
 }
 
 /** RFC 9728 §3.1: the resource's path goes after the well-known segment. */
@@ -38,7 +60,7 @@ export function protectedResourceMetadata(origin: string): ProtectedResourceMeta
   if (!supabaseUrl) throw new Error('Missing Supabase environment variables')
 
   return {
-    resource: `${origin}${MCP_PATH}`,
+    resource: mcpServerUrl(origin),
     authorization_servers: [`${supabaseUrl.replace(/\/$/, '')}/auth/v1`],
     bearer_methods_supported: ['header'],
     resource_name: 'Layline',

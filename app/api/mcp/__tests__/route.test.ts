@@ -183,6 +183,7 @@ describe('/api/mcp with a crew token', () => {
       'race_summary',
       'polar_performance',
       'sail_selection',
+      'instrument_tuning',
       'boat_setup',
       'race_track',
     ])

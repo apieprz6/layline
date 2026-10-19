@@ -26,7 +26,7 @@ describe('SettingsContent', () => {
   })
 
   it('renders three theme options: Auto, Solar, Night Vision', () => {
-    render(<SettingsContent />)
+    render(<SettingsContent mcpServerUrl={null} />)
 
     expect(screen.getByRole('button', { name: /auto/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /solar/i })).toBeInTheDocument()
@@ -34,13 +34,13 @@ describe('SettingsContent', () => {
   })
 
   it('displays explanatory subtitle for the Auto option about civil twilight', () => {
-    render(<SettingsContent />)
+    render(<SettingsContent mcpServerUrl={null} />)
 
     expect(screen.getByText(/civil twilight/i)).toBeInTheDocument()
   })
 
   it('visually indicates the active preference', () => {
-    render(<SettingsContent />)
+    render(<SettingsContent mcpServerUrl={null} />)
 
     const autoButton = screen.getByRole('button', { name: /auto/i })
     expect(autoButton).toHaveAttribute('aria-pressed', 'true')
@@ -51,7 +51,7 @@ describe('SettingsContent', () => {
 
   it('clicking an option calls setPreference with the correct value', async () => {
     const user = userEvent.setup()
-    render(<SettingsContent />)
+    render(<SettingsContent mcpServerUrl={null} />)
 
     await user.click(screen.getByRole('button', { name: /solar/i }))
     expect(mockSetPreference).toHaveBeenCalledWith('solar')
@@ -62,7 +62,7 @@ describe('SettingsContent', () => {
 
   it('updates visually when preference changes', () => {
     mockPreference = 'nightvision'
-    render(<SettingsContent />)
+    render(<SettingsContent mcpServerUrl={null} />)
 
     const nightVisionButton = screen.getByRole('button', { name: /night vision/i })
     expect(nightVisionButton).toHaveAttribute('aria-pressed', 'true')

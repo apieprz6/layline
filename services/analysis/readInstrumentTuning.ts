@@ -162,6 +162,9 @@ interface RaceWindowOf {
 /**
  * The Log, or null where either half of it failed to load.
  *
+ * Exported for the MCP `instrument_tuning` tool, which names the Era one Race was sailed in and so
+ * needs the Log without the season: the same read, so the Eras it cuts are the screen's.
+ *
  * Both halves or neither, for the reason `readInstrumentCalibration` gives: a Log missing the
  * source that failed would read as a complete history, and here it would also mean a chart drawing
  * one Era where the boat had two — which is two instrument configurations averaged together with
@@ -170,7 +173,7 @@ interface RaceWindowOf {
  * An artifact with nothing recorded against it is a legitimate empty Log, and yields one Era per
  * channel over the whole archive (ADR 0032's correct failure).
  */
-async function readCalibrationLog(
+export async function readCalibrationLog(
   supabase: SupabaseClient
 ): Promise<CalibrationLogEntry[] | null> {
   const { data: artifact, error: artifactError } = await supabase
