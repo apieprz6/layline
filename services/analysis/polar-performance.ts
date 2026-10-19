@@ -134,6 +134,9 @@ export function scoredSailingSentence(overall: EfficiencyAggregate): string {
 }
 
 /** Matched sailing left out of a figure, and why. */
+/** Matched sailing every figure leaves out, said the same way on every screen that states it. */
+export const NOT_COUNTABLE_REASON = 'Not Countable: frozen, low-speed or mid-maneuver'
+
 export interface FigureExclusion {
   reason: string
   seconds: number
@@ -149,7 +152,7 @@ export interface FigureExclusion {
  */
 export function excludedFromFigures({ ledger, overall }: PolarPerformance): FigureExclusion[] {
   return [
-    { reason: 'Not Countable: frozen, low-speed or mid-maneuver', seconds: notCountableSeconds(ledger) },
+    { reason: NOT_COUNTABLE_REASON, seconds: notCountableSeconds(ledger) },
     {
       reason:
         'Countable, but not scored: no SOG, or no Target Speed (outside the Polar, or no Polar ' +

@@ -28,7 +28,8 @@ import Link from 'next/link'
 import type { CSSProperties, ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
-import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-selection-chrome'
+import { AGREEMENT_GLYPHS } from '@/components/analysis/sail-selection-chrome'
+import { AGREEMENT_WORDS } from '@/services/analysis/sail-selection'
 import {
   NO_FIT_WORDS,
   asymmetryAbsence,
