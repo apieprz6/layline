@@ -21,6 +21,7 @@ const EMPTY_AGGREGATE: EfficiencyAggregate = {
   filler_anchored_rows: 0,
   vmg_rows: 0,
   vmg_filler_anchored_rows: 0,
+  vmg_elapsed_seconds: 0,
   rows_without_interval: 0,
   rows_without_target: 0,
   elapsed_seconds: 0,

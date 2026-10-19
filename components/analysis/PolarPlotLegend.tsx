@@ -16,17 +16,9 @@ import type { ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import Explainer from '@/components/common/Explainer'
 import { FILLER_DASH } from '@/components/race/track-ink'
+import { UNDRAWN_REASONS } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
-import type { PolarPlotUndrawn, PolarPlotUndrawnReason } from '@/types'
-
-/** Each reason a stretch is drawn nowhere, as a sailor would say it. */
-const WHY: Record<PolarPlotUndrawnReason, string> = {
-  not_countable: 'frozen, low-speed or mid-manoeuvre',
-  no_polar: 'in a race that records no Polar',
-  no_reading: 'with no speed or wind reading',
-  off_the_certificate: 'at an angle or wind speed the certificate does not reach',
-  zero_target: 'against a target of zero knots',
-}
+import type { PolarPlotUndrawn } from '@/types'
 
 export default function PolarPlotLegend({
   form,
@@ -63,7 +55,7 @@ export default function PolarPlotLegend({
             {' '}
             {describeDuration(undrawn.seconds)} of this sailing is not drawn:{' '}
             {undrawn.parts
-              .map((part) => `${describeDuration(part.seconds)} ${WHY[part.reason]}`)
+              .map((part) => `${describeDuration(part.seconds)} ${UNDRAWN_REASONS[part.reason]}`)
               .join(', ')}
             .
           </>

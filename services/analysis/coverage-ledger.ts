@@ -135,6 +135,11 @@ export function ledgerHeadline(ledger: CoverageLedger): string {
   )
 }
 
+/** Matched sailing that is not **Countable**: frozen, low-speed or mid-maneuver (ADR 0025). */
+export function notCountableSeconds(ledger: CoverageLedger): number {
+  return ledger.matched_seconds - ledger.countable_seconds
+}
+
 /**
  * `3h 1m of it can be scored; 1h 11m is frozen, low-speed or mid-maneuver.`
  *
@@ -144,7 +149,7 @@ export function ledgerHeadline(ledger: CoverageLedger): string {
  * because "0s is frozen" is a sentence about nothing.
  */
 export function countableSentence(ledger: CoverageLedger): string {
-  const excluded = ledger.matched_seconds - ledger.countable_seconds
+  const excluded = notCountableSeconds(ledger)
   const scored = `${describeDuration(ledger.countable_seconds)} of it can be scored`
 
   return excluded <= 0

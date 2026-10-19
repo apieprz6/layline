@@ -23,6 +23,7 @@ function sums(over: Partial<EfficiencyAggregate> = {}): EfficiencyAggregate {
     filler_anchored_rows: 0,
     vmg_rows: 30,
     vmg_filler_anchored_rows: 0,
+    vmg_elapsed_seconds: 1500,
     rows_without_interval: 0,
     rows_without_target: 0,
     elapsed_seconds: 1500,
