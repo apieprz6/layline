@@ -85,10 +85,11 @@ export function getWindCondition(kts: number): WindCondition {
  * @returns Hex color string
  */
 export function getWindColorHex(kts: number): string {
-  if (kts <= WIND_THRESHOLDS.LIGHT_MAX) return WIND_COLORS_HEX.LIGHT
-  if (kts <= WIND_THRESHOLDS.MEDIUM_MAX) return WIND_COLORS_HEX.MEDIUM
-  if (kts <= WIND_THRESHOLDS.HEAVY_MAX) return WIND_COLORS_HEX.HEAVY
-  return WIND_COLORS_HEX.STORM
+  // 🚧 PROTOTYPE — night vision palettes: tokens, not hex, so the SVG follows the theme.
+  if (kts <= WIND_THRESHOLDS.LIGHT_MAX) return 'var(--wind-light)'
+  if (kts <= WIND_THRESHOLDS.MEDIUM_MAX) return 'var(--wind-medium)'
+  if (kts <= WIND_THRESHOLDS.HEAVY_MAX) return 'var(--wind-heavy)'
+  return 'var(--wind-storm)'
 }
 
 /**

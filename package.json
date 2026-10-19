@@ -10,7 +10,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "playwright test",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "prototype:nightvision": "LAYLINE_NV_PROTOTYPE=1 LAYLINE_TRACK_HARNESS=1 LAYLINE_STATION_HARNESS=1 next build && LAYLINE_NV_PROTOTYPE=1 LAYLINE_TRACK_HARNESS=1 LAYLINE_STATION_HARNESS=1 next start -p 4310"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

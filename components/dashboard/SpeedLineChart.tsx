@@ -196,10 +196,11 @@ export default function SpeedLineChart({
 
   // Wind condition colors
   function windColor(kts: number) {
-    if (kts <= 8) return '#007A52'  // Light
-    if (kts <= 15) return '#0055BB' // Medium
-    if (kts <= 22) return '#C47000' // Heavy
-    return '#CC1100'                // Storm
+    // 🚧 PROTOTYPE — tokens so the chart follows the night palettes.
+    if (kts <= 8) return 'var(--wind-light)'
+    if (kts <= 15) return 'var(--wind-medium)'
+    if (kts <= 22) return 'var(--wind-heavy)'
+    return 'var(--wind-storm)'
   }
 
   // Band lines at wind condition thresholds
@@ -306,7 +307,7 @@ export default function SpeedLineChart({
           y1={yFor(v)}
           x2={PAD_L + innerW}
           y2={yFor(v)}
-          stroke={windColor(v - 0.1)}
+          style={{ stroke: windColor(v - 0.1) }}
           strokeWidth={0.75}
           strokeOpacity={0.22}
           strokeDasharray="1 3"
@@ -369,8 +370,8 @@ export default function SpeedLineChart({
           x2={0}
           y2={PAD_T + innerH}
         >
-          <stop offset="0%" stopColor="#0044CC" stopOpacity="0.30" />
-          <stop offset="100%" stopColor="#0044CC" stopOpacity="0.02" />
+          <stop offset="0%" style={{ stopColor: 'var(--blue-500)' }} stopOpacity="0.30" />
+          <stop offset="100%" style={{ stopColor: 'var(--blue-500)' }} stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
@@ -420,7 +421,7 @@ export default function SpeedLineChart({
             y1={y1}
             x2={x2}
             y2={y2}
-            stroke={windColor(avgSpd)}
+            style={{ stroke: windColor(avgSpd) }}
             strokeWidth={1.75}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -469,7 +470,7 @@ export default function SpeedLineChart({
               cy={y}
               r={5}
               fill="white"
-              stroke={windColor(hoverPoint.spd)}
+              style={{ stroke: windColor(hoverPoint.spd) }}
               strokeWidth={2}
             />
             {/* Speed label tooltip */}

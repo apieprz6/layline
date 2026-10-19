@@ -1,0 +1,337 @@
+/* ============================================================
+   🚧 PROTOTYPE — throwaway. Night vision palette variants.
+   Question: how far can the red-only rule relax before night vision stops being night vision?
+   Each block overrides `.theme-nightvision` (globals.css) when <html data-nv="X"> is set by
+   components/theme/NightVisionPrototypeSwitcher.tsx. Variant A is the current theme, untouched.
+   Never merge to main.
+   ============================================================ */
+
+/* ---------- B — Red only, contrast fixed ----------
+   Same single hue. Uses the whole lightness range instead of only the dark half: pale reds for the
+   top of the ramp, a floor of ~3:1 for muted. Answers "is it the hue, or just the contrast?" */
+html.theme-nightvision[data-nv="B"] {
+  --surface-border: rgba(255, 70, 50, 0.32);
+  --surface-border-hover: rgba(255, 70, 50, 0.50);
+  --surface-divider: rgba(255, 70, 50, 0.18);
+
+  --text-primary: #FF8A78;
+  --text-secondary: #E05A4A;
+  --text-muted: #A8443A;
+  --text-accent: #FF5544;
+
+  --blue-500: #FF5544;
+  --blue-400: #FF6655;
+  --blue-300: #E04434;
+  --blue-600: #C03424;
+  --blue-700: #902418;
+  --blue-muted: rgba(255, 85, 68, 0.12);
+  --blue-muted-40: rgba(255, 85, 68, 0.40);
+  --accent: #FF5544;
+  --accent-primary: #FF5544;
+
+  --wind-light: #9A3026;
+  --wind-medium: #E04434;
+  --wind-heavy: #FF8A78;
+  --wind-storm: #FFD0C8;
+
+  --tack-starboard: #A8443A;
+  --tack-port: #FF6655;
+
+  --trend-building: #FF8A78;
+  --trend-building-bg: rgba(255, 138, 120, 0.10);
+  --trend-building-border: rgba(255, 138, 120, 0.30);
+  --trend-easing: #C84A3C;
+  --trend-easing-bg: rgba(200, 74, 60, 0.10);
+  --trend-easing-border: rgba(200, 74, 60, 0.30);
+  --trend-steady: #A8443A;
+  --trend-veering: #FFC0B4;
+  --trend-veering-bg: rgba(255, 192, 180, 0.08);
+  --trend-veering-border: rgba(255, 192, 180, 0.25);
+  --trend-backing: #FF5544;
+  --trend-backing-bg: rgba(255, 85, 68, 0.08);
+  --trend-backing-border: rgba(255, 85, 68, 0.25);
+
+  --sail-band-1: rgba(255, 70, 50, 0.10);
+  --sail-band-2: rgba(255, 70, 50, 0.20);
+  --sail-band-3: rgba(255, 70, 50, 0.30);
+  --sail-band-4: rgba(255, 70, 50, 0.40);
+  --sail-band-5: rgba(255, 70, 50, 0.50);
+  --sail-band-6: rgba(255, 70, 50, 0.60);
+  --sail-band-7: rgba(255, 70, 50, 0.70);
+  --sail-band-8: rgba(255, 70, 50, 0.80);
+
+  /* Still collapsed — one hue cannot diverge. The current after-dark legend wording stays correct. */
+  --track-below-3: #9A3026;
+  --track-below-2: #E04434;
+  --track-below-1: #FF8A78;
+  --track-at:      #FFD0C8;
+  --track-above-1: #FF8A78;
+  --track-above-2: #E04434;
+  --track-above-3: #9A3026;
+
+  --track-speed-1: #7A2018;
+  --track-speed-2: #B83426;
+  --track-speed-3: #F04A3A;
+  --track-speed-4: #FF8A78;
+  --track-speed-5: #FFD0C8;
+
+  --track-port-1: #FFD0C8;
+  --track-port-2: #FF6655;
+  --track-port-3: #9A3026;
+  --track-stbd-1: #FFD0C8;
+  --track-stbd-2: #FF6655;
+  --track-stbd-3: #9A3026;
+
+  --track-agree:  #8A2A20;
+  --track-differ: #FFB0A0;
+
+  --state-success: #FF8A78;
+  --state-warning: #FFB0A0;
+  --state-danger: #FF5544;
+  --state-info: #E05A4A;
+  --state-neutral: #A8443A;
+
+  --chart-grid-cardinal: rgba(255, 70, 50, 0.50);
+  --chart-grid-inter:    rgba(255, 70, 50, 0.32);
+  --chart-grid-coarse:   rgba(255, 70, 50, 0.20);
+  --chart-grid-fine:     rgba(255, 70, 50, 0.09);
+  --chart-center-dot:    rgba(255, 70, 50, 0.6);
+  --chart-center-text:   rgba(255, 120, 100, 0.6);
+}
+
+/* ---------- C — Red + amber (recommended) ----------
+   Red stays the theme and the text. Amber (~600nm) becomes a second hue, used only to tell things
+   apart: heavier wind, starboard, faster-than-target. The collapses the current theme accepted come
+   back as hue differences. */
+html.theme-nightvision[data-nv="C"] {
+  --surface-border: rgba(255, 80, 60, 0.30);
+  --surface-border-hover: rgba(255, 80, 60, 0.48);
+  --surface-divider: rgba(255, 80, 60, 0.16);
+
+  --text-primary: #FF9478;
+  --text-secondary: #E0604A;
+  --text-muted: #B04838;
+  --text-accent: #FF5A40;
+
+  --blue-500: #FF5A40;
+  --blue-400: #FF6A50;
+  --blue-300: #E04A34;
+  --blue-600: #C03A26;
+  --blue-700: #902A1A;
+  --blue-muted: rgba(255, 90, 64, 0.12);
+  --blue-muted-40: rgba(255, 90, 64, 0.40);
+  --accent: #FF5A40;
+  --accent-primary: #FF5A40;
+
+  --wind-light: #B03A30;
+  --wind-medium: #FF5040;
+  --wind-heavy: #FF9A30;
+  --wind-storm: #FFD060;
+
+  --tack-starboard: #FFA040;
+  --tack-port: #FF4A3A;
+
+  --trend-building: #FFA040;
+  --trend-building-bg: rgba(255, 160, 64, 0.10);
+  --trend-building-border: rgba(255, 160, 64, 0.30);
+  --trend-easing: #FF5040;
+  --trend-easing-bg: rgba(255, 80, 64, 0.10);
+  --trend-easing-border: rgba(255, 80, 64, 0.30);
+  --trend-steady: #A86050;
+  --trend-veering: #FFC870;
+  --trend-veering-bg: rgba(255, 200, 112, 0.08);
+  --trend-veering-border: rgba(255, 200, 112, 0.25);
+  --trend-backing: #FF7A8A;
+  --trend-backing-bg: rgba(255, 122, 138, 0.08);
+  --trend-backing-border: rgba(255, 122, 138, 0.25);
+
+  --sail-band-1: rgba(255, 80, 60, 0.16);
+  --sail-band-2: rgba(255, 160, 48, 0.16);
+  --sail-band-3: rgba(255, 80, 60, 0.32);
+  --sail-band-4: rgba(255, 160, 48, 0.32);
+  --sail-band-5: rgba(255, 80, 60, 0.48);
+  --sail-band-6: rgba(255, 160, 48, 0.48);
+  --sail-band-7: rgba(255, 80, 60, 0.64);
+  --sail-band-8: rgba(255, 160, 48, 0.64);
+
+  /* Diverging again: red arm = slower than target, amber arm = faster, dim warm neutral midpoint. */
+  --track-below-3: #8E1A10;
+  --track-below-2: #D23A28;
+  --track-below-1: #FF7A60;
+  --track-at:      #7A5A50;
+  --track-above-1: #FFC070;
+  --track-above-2: #F09020;
+  --track-above-3: #A86010;
+
+  --track-speed-1: #8E1A10;
+  --track-speed-2: #D23A28;
+  --track-speed-3: #FF6A40;
+  --track-speed-4: #FF9A30;
+  --track-speed-5: #FFD060;
+
+  --track-port-1: #FF8A7A;
+  --track-port-2: #E0402F;
+  --track-port-3: #8E1A10;
+  --track-stbd-1: #FFC870;
+  --track-stbd-2: #E89020;
+  --track-stbd-3: #9A5A10;
+
+  --track-agree:  #8A5A30;
+  --track-differ: #FF5A40;
+
+  --state-success: #FFA040;
+  --state-warning: #FFD060;
+  --state-danger: #FF4A3A;
+  --state-info: #FF9478;
+  --state-neutral: #A86050;
+
+  --chart-grid-cardinal: rgba(255, 100, 70, 0.48);
+  --chart-grid-inter:    rgba(255, 100, 70, 0.30);
+  --chart-grid-coarse:   rgba(255, 100, 70, 0.18);
+  --chart-grid-fine:     rgba(255, 100, 70, 0.08);
+  --chart-center-dot:    rgba(255, 100, 70, 0.6);
+  --chart-center-text:   rgba(255, 140, 110, 0.6);
+}
+
+/* ---------- D — Amber type, red ink ----------
+   Text in amber, the way marine instrument and old amber-CRT displays are crisp at night; red is
+   kept for data and alarms, so storm is the brightest red rather than the palest colour. */
+html.theme-nightvision[data-nv="D"] {
+  --surface-base: #0C0502;
+  --surface-raised: #140804;
+  --surface-elevated: #1C0C06;
+  --surface-overlay: rgba(12, 5, 2, 0.90);
+  --surface-dock-bg: rgba(12, 5, 2, 0.94);
+  --surface-border: rgba(255, 150, 60, 0.24);
+  --surface-border-hover: rgba(255, 150, 60, 0.40);
+  --surface-divider: rgba(255, 150, 60, 0.13);
+  --text-inverse: #0C0502;
+  --page-bg-2: #160904;
+  --chart-bg-center: #140804;
+  --chart-bg-mid: #120703;
+  --chart-bg-edge: #100602;
+  --chart-label-bg: rgba(20, 8, 4, 0.95);
+
+  --text-primary: #FFB070;
+  --text-secondary: #D88A50;
+  --text-muted: #A0683E;
+  --text-accent: #FF5A3A;
+
+  --blue-500: #FF5A3A;
+  --blue-400: #FF6A4A;
+  --blue-300: #E04A2E;
+  --blue-600: #C03A22;
+  --blue-700: #902A16;
+  --blue-muted: rgba(255, 90, 58, 0.12);
+  --blue-muted-40: rgba(255, 90, 58, 0.40);
+  --accent: #FF5A3A;
+  --accent-primary: #FF5A3A;
+
+  --wind-light: #9A6A3A;
+  --wind-medium: #FFA040;
+  --wind-heavy: #FF6A3A;
+  --wind-storm: #FF2A1A;
+
+  --tack-starboard: #FFB050;
+  --tack-port: #FF3A2A;
+
+  --trend-building: #FFB050;
+  --trend-building-bg: rgba(255, 176, 80, 0.10);
+  --trend-building-border: rgba(255, 176, 80, 0.30);
+  --trend-easing: #FF5A3A;
+  --trend-easing-bg: rgba(255, 90, 58, 0.10);
+  --trend-easing-border: rgba(255, 90, 58, 0.30);
+  --trend-steady: #A0683E;
+  --trend-veering: #FFD490;
+  --trend-veering-bg: rgba(255, 212, 144, 0.08);
+  --trend-veering-border: rgba(255, 212, 144, 0.25);
+  --trend-backing: #FF7A6A;
+  --trend-backing-bg: rgba(255, 122, 106, 0.08);
+  --trend-backing-border: rgba(255, 122, 106, 0.25);
+
+  --sail-band-1: rgba(255, 160, 64, 0.16);
+  --sail-band-2: rgba(255, 70, 50, 0.16);
+  --sail-band-3: rgba(255, 160, 64, 0.32);
+  --sail-band-4: rgba(255, 70, 50, 0.32);
+  --sail-band-5: rgba(255, 160, 64, 0.48);
+  --sail-band-6: rgba(255, 70, 50, 0.48);
+  --sail-band-7: rgba(255, 160, 64, 0.64);
+  --sail-band-8: rgba(255, 70, 50, 0.64);
+
+  --track-below-3: #8E1A10;
+  --track-below-2: #D23A28;
+  --track-below-1: #FF7A60;
+  --track-at:      #7A6050;
+  --track-above-1: #FFC870;
+  --track-above-2: #F09020;
+  --track-above-3: #A86010;
+
+  --track-speed-1: #6A4020;
+  --track-speed-2: #A86A30;
+  --track-speed-3: #E89040;
+  --track-speed-4: #FFB050;
+  --track-speed-5: #FFD890;
+
+  --track-port-1: #FF8A7A;
+  --track-port-2: #E0402F;
+  --track-port-3: #8E1A10;
+  --track-stbd-1: #FFC870;
+  --track-stbd-2: #E89020;
+  --track-stbd-3: #9A5A10;
+
+  --track-agree:  #7A5A3A;
+  --track-differ: #FF7A3A;
+
+  --state-success: #FFB050;
+  --state-warning: #FF8A3A;
+  --state-danger: #FF2A1A;
+  --state-info: #FFB070;
+  --state-neutral: #A0683E;
+
+  --chart-grid-cardinal: rgba(255, 150, 60, 0.46);
+  --chart-grid-inter:    rgba(255, 150, 60, 0.28);
+  --chart-grid-coarse:   rgba(255, 150, 60, 0.17);
+  --chart-grid-fine:     rgba(255, 150, 60, 0.08);
+  --chart-center-dot:    rgba(255, 150, 60, 0.6);
+  --chart-center-text:   rgba(255, 176, 112, 0.6);
+}
+
+/* ---------- Signal hues — a layer over any variant ----------
+   Toggled by <html data-nv-signal="on">. Green only where green already means something by day:
+   starboard, faster than target, agreement, success, building. Marks only — no text token, no
+   surface. Every green is held at or below the luminance of the red beside it (port #FF4A3A is
+   Y≈0.27; starboard here is Y≈0.25), because rods are most sensitive near blue-green and it is
+   brightness × area that costs dark adaptation. No blue: green carries everything blue would. */
+html.theme-nightvision[data-nv-signal="on"] {
+  --tack-starboard: #3A9A68;
+
+  --track-stbd-1: #48A673;
+  --track-stbd-2: #2F8A5A;
+  --track-stbd-3: #1E6542;
+
+  /* Wind bands carry daylight's meanings: light air green (day: teal), medium rose (day: blue —
+     the one hue we still refuse), heavy amber, storm red. The storm red is the Dropout ring's, which
+     the track scales below no longer use. */
+  --wind-light: #3A9A68;
+  --wind-medium: #FF7A8A;
+  --wind-heavy: #FF9A30;
+  --wind-storm: #FF3A2A;
+
+  /* % of target: daylight's own amber below / green above, which is also the colour-blind-safe
+     pairing. Arms balanced in luminance so neither side shouts; depth is distance from target. */
+  --track-below-1: #D08A40;
+  --track-below-2: #A86A28;
+  --track-below-3: #7A4A16;
+  --track-at:      #7A5A50;
+  --track-above-1: #48A673;
+  --track-above-2: #2F8A5A;
+  --track-above-3: #1E6542;
+
+  --track-agree: #2A6E4A;
+
+  --state-success: #3A9A68;
+
+  --trend-building: #3A9A68;
+  --trend-building-bg: rgba(58, 154, 104, 0.10);
+  --trend-building-border: rgba(58, 154, 104, 0.30);
+}

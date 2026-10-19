@@ -659,7 +659,7 @@ export default function WindRose({
               key={`seg-${i}`}
               d={segment.d}
               fill="none"
-              stroke={segment.color}
+              style={{ stroke: segment.color }}
               strokeWidth={2.5}
               strokeOpacity={segment.opacity}
               strokeLinecap="round"
@@ -679,7 +679,7 @@ export default function WindRose({
                 cx={point.x}
                 cy={point.y}
                 r={2.2}
-                fill={point.color}
+                style={{ fill: point.color }}
                 opacity={point.opacity}
               />
             );
@@ -709,7 +709,7 @@ export default function WindRose({
                     y1={CENTER_Y}
                     x2={hx}
                     y2={hy}
-                    stroke="rgba(0,68,204,0.6)"
+                    style={{ stroke: "var(--blue-500)" }} strokeOpacity={0.6}
                     strokeWidth={1.5}
                     strokeDasharray="4 2"
                   />
@@ -755,11 +755,11 @@ export default function WindRose({
                     cy={ry}
                     r={6}
                     fill="none"
-                    stroke="rgba(0,68,204,0.7)"
+                    style={{ stroke: "var(--blue-500)" }} strokeOpacity={0.7}
                     strokeWidth={2.5}
                   />
                   {/* Blue center dot */}
-                  <circle cx={rx} cy={ry} r={3} fill="rgba(0,68,204,0.8)" />
+                  <circle cx={rx} cy={ry} r={3} style={{ fill: "var(--blue-500)" }} fillOpacity={0.8} />
                 </g>
               );
             })()}

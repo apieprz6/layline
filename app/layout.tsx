@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import ThemeRuntime from "@/components/theme/ThemeRuntime";
 import "./globals.css";
+// 🚧 PROTOTYPE — night vision palettes. Never merge to main.
+import "./nightvision-prototype.css";
+import NightVisionPrototypeSwitcher from "@/components/theme/NightVisionPrototypeSwitcher";
 
 export const metadata: Metadata = {
   title: "Layline — Lake Michigan Sailing Weather",
@@ -53,6 +56,7 @@ export default function RootLayout({
         */}
         <ThemeRuntime />
         {children}
+        {process.env.LAYLINE_NV_PROTOTYPE === "1" && <NightVisionPrototypeSwitcher />}
       </body>
     </html>
   );

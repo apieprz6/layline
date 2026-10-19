@@ -17,8 +17,7 @@ export default function WindArrow({ deg, kts, size = 32, color }: WindArrowProps
       <g transform={`rotate(${deg})`}>
         <polygon
           points="0,-28 6,-12 0,-18 -6,-12"
-          fill={c}
-          style={{ filter: `drop-shadow(0 0 8px ${c})` }}
+          style={{ fill: c, filter: `drop-shadow(0 0 8px ${c})` }}
         />
         <rect
           x="-2"
@@ -26,7 +25,8 @@ export default function WindArrow({ deg, kts, size = 32, color }: WindArrowProps
           width="4"
           height="24"
           rx="1.2"
-          fill={`${c}33`}
+          style={{ fill: c }}
+          fillOpacity={0.2}
         />
       </g>
     </svg>
