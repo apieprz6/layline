@@ -6,6 +6,9 @@
  * It carries no identity and unlocks nothing, which is what ADR 0018's "no React context"
  * guards: the server still decides who is signed in, and signing in still lands through
  * `/auth/callback`. Signing in lands back on the screen that asked.
+ *
+ * Not `?signin=<route>`, the redirect's way in: `AppLayout` reads that once per pathname, so a
+ * screen putting it on its own URL would open nothing. See ADR 0018's LAY-191 amendment.
  */
 
 const EVENT = 'layline:ask-to-sign-in'

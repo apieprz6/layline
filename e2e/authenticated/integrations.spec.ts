@@ -79,6 +79,11 @@ test.describe('the Integrations sheets', () => {
       }
     }
 
+    await gotoHydrated(page, '/settings')
+    for (const title of [/^Connect Claude/, /^Connect ChatGPT/, /^Using another app\?/]) {
+      expect((await page.getByRole('button', { name: title }).boundingBox())!.height).toBeGreaterThanOrEqual(36)
+    }
+
     const sheet = await openSheet(page, 'Using another app?')
     await sheet.getByText(/\/api\/mcp$/).evaluate((el, url) => (el.textContent = url), long)
     await fits(sheet)

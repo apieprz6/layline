@@ -52,7 +52,7 @@ const mono: CSSProperties = {
  * LAY-192's.
  */
 export default function Integrations({ mcpServerUrl }: IntegrationsProps): ReactElement {
-  const [open, setOpen] = useState<IntegrationKey | null>(null)
+  const [open, setOpen] = useState<Integration | null>(null)
   const signedIn = mcpServerUrl !== null
 
   return (
@@ -68,7 +68,7 @@ export default function Integrations({ mcpServerUrl }: IntegrationsProps): React
           <button
             key={integration.key}
             type="button"
-            onClick={() => (signedIn ? setOpen(integration.key) : askToSignIn())}
+            onClick={() => (signedIn ? setOpen(integration) : askToSignIn())}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -122,9 +122,27 @@ export default function Integrations({ mcpServerUrl }: IntegrationsProps): React
                 {signedIn ? integration.subtitle : 'Sign in to connect'}
               </span>
             </span>
-            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: '18px', flexShrink: 0 }}>
-              {signedIn ? '›' : '🔒'}
-            </span>
+            {signedIn ? (
+              <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: '18px', flexShrink: 0 }}>
+                ›
+              </span>
+            ) : (
+              // The drawer's Locked Entry padlock, drawn rather than an emoji.
+              <svg
+                data-testid="padlock"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--text-muted)"
+                strokeWidth="2"
+                aria-hidden
+                style={{ flexShrink: 0 }}
+              >
+                <rect x="4" y="11" width="16" height="10" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+            )}
           </button>
         ))}
       </div>
@@ -132,8 +150,8 @@ export default function Integrations({ mcpServerUrl }: IntegrationsProps): React
       {open && mcpServerUrl && (
         // Keyed, so each sheet opens at step 1 rather than wherever the last one was left.
         <StepsSheet
-          key={open}
-          integration={INTEGRATIONS.find((i) => i.key === open) as Integration}
+          key={open.key}
+          integration={open}
           url={mcpServerUrl}
           onClose={() => setOpen(null)}
         />
@@ -142,26 +160,31 @@ export default function Integrations({ mcpServerUrl }: IntegrationsProps): React
   )
 }
 
-type CopyState = 'copied' | 'failed' | null
+type CopyResult = 'copied' | 'failed'
+
+const COPY_LABEL: Record<CopyResult, string> = {
+  copied: 'Copied ✓',
+  failed: 'Couldn’t copy. Select it instead.',
+}
 
 /**
  * A copy action per thing to copy. "Copied ✓" only once the clipboard took it: a browser may
  * refuse (no permission, an insecure origin), and then the sailor is told to select it instead.
  */
-function useCopy(): { state: (key: string) => CopyState; copy: (key: string, text: string) => void } {
-  const [result, setResult] = useState<{ key: string; state: Exclude<CopyState, null> } | null>(null)
+function useCopy(): { label: (key: string, idle: string) => string; copy: (key: string, text: string) => void } {
+  const [result, setResult] = useState<{ key: string; result: CopyResult } | null>(null)
   const timer = useRef<number | undefined>(undefined)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
-  const settle = (key: string, state: Exclude<CopyState, null>): void => {
-    setResult({ key, state })
+  const settle = (key: string, outcome: CopyResult): void => {
+    setResult({ key, result: outcome })
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => setResult(null), 2000)
   }
 
   return {
-    state: (key) => (result?.key === key ? result.state : null),
+    label: (key, idle) => (result?.key === key ? COPY_LABEL[result.result] : idle),
     copy: (key, text) => {
       if (!navigator.clipboard) return settle(key, 'failed')
       navigator.clipboard.writeText(text).then(
@@ -182,7 +205,7 @@ function StepsSheet({
   onClose: () => void
 }): ReactElement {
   const [step, setStep] = useState(0)
-  const { state, copy } = useCopy()
+  const { label, copy } = useCopy()
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -193,10 +216,8 @@ function StepsSheet({
   }, [onClose])
 
   const command = claudeCodeCommand(url)
-  const addressCopy = state('address')
-  const commandCopy = state('command')
 
-  const addStep: Record<IntegrationKey, { title: string; content: ReactNode }> = {
+  const secondStep: Record<IntegrationKey, { title: string; content: ReactNode }> = {
     claude: {
       title: 'Add it in Claude',
       content: (
@@ -267,11 +288,7 @@ function StepsSheet({
                 marginTop: '4px',
               }}
             >
-              {commandCopy === 'copied'
-                ? 'Copied ✓'
-                : commandCopy === 'failed'
-                  ? 'Couldn’t copy. Select the command instead.'
-                  : 'Tap to copy'}
+              {label('command', 'Tap to copy')}
             </span>
           </button>
           <p style={{ ...body, marginTop: '6px', fontSize: 'var(--text-xs)' }}>
@@ -298,18 +315,11 @@ function StepsSheet({
           >
             <span style={mono}>{url}</span>
           </div>
-          <PrimaryButton onClick={() => copy('address', url)}>
-            {addressCopy === 'copied' ? 'Copied ✓' : 'Copy address'}
-          </PrimaryButton>
-          {addressCopy === 'failed' && (
-            <p role="status" style={{ ...body, marginTop: '8px', color: 'var(--text-muted)' }}>
-              Couldn’t copy. Select the address and copy it instead.
-            </p>
-          )}
+          <PrimaryButton onClick={() => copy('address', url)}>{label('address', 'Copy address')}</PrimaryButton>
         </>
       ),
     },
-    addStep[integration.key],
+    secondStep[integration.key],
     {
       title: 'Sign in and approve',
       content: (
@@ -379,7 +389,7 @@ function StepsSheet({
                 flex: 1,
                 height: '4px',
                 borderRadius: '2px',
-                background: i <= step ? 'var(--accent, var(--blue-500))' : 'var(--surface-border)',
+                background: i <= step ? 'var(--accent)' : 'var(--surface-border)',
               }}
             />
           ))}
@@ -420,7 +430,7 @@ const primary: CSSProperties = {
   minHeight: '48px',
   borderRadius: '10px',
   border: 'none',
-  background: 'var(--accent, var(--blue-500))',
+  background: 'var(--accent)',
   color: 'var(--text-inverse)',
   fontFamily: 'var(--font-body)',
   fontSize: 'var(--text-base)',

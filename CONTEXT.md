@@ -367,7 +367,7 @@ _Avoid_: Account Merging (ADR 0004's term, and now a misnomer — nothing merges
 
 **MCP Server**:
 Layline's read-only face to an AI assistant such as Claude: an endpoint an **Account** connects once, signs in to with Google, and then asks questions through. It answers only to an Account. Unlike the app, it has no **Guest** tier, not even for weather. See ADR 0042.
-_Avoid_: API, integration, plugin (it is not a general-purpose interface to the data)
+_Avoid_: API, integration, plugin (it is not a general-purpose interface to the data). Settings' **Integrations** section is named for the apps a crew member connects to it (Claude, ChatGPT, others), not for the MCP Server itself
 
 **MCP Tool**:
 One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and it holds no rule of its own to make them with, so a changed rule reaches it unaided. That is what makes it a tool rather than a second analysis. See ADR 0042.
@@ -494,7 +494,7 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 - A **Profile** is created by a trigger whenever an account is, whatever made the account
 - A **Profile** has exactly one **Role**, `admin` or `viewer`, and never null
 - **Identity Linking** attaches a Google identity to the row the owner created, matching on email address
-- The **Auth Sheet** opens over any screen, from the drawer's account block or from a **Locked Entry**'s "Sign in"; it does not navigate to a separate route
+- The **Auth Sheet** opens over any screen, from the drawer's account block, from a **Locked Entry**'s "Sign in", or from a screen's own Sign in such as Settings' Integrations rows (ADR 0018, LAY-191); it does not navigate to a separate route
 - A **Locked Entry** has no screen behind it; a **Guest** who asks for one of its routes is redirected to the dashboard with the sheet open and the route remembered
 - `/auth/callback` is the only dedicated auth route; there is no recovery route, because there is no credential to recover
 - `/auth/callback` **renders as well as redirects**: it shows the **Refused Stranger** screen rather than sending a reason back to the **Auth Sheet** (ADR 0021)

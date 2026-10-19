@@ -166,7 +166,10 @@ describe('Integrations', () => {
     it('asks a Guest to sign in on every row', () => {
       render(<Integrations mcpServerUrl={null} />)
 
-      for (const title of ROWS) expect(row(title)).toHaveTextContent('Sign in to connect')
+      for (const title of ROWS) {
+        expect(row(title)).toHaveTextContent('Sign in to connect')
+        expect(within(row(title)).getByTestId('padlock')).toBeInTheDocument()
+      }
     })
 
     it('opens the Auth Sheet, not the steps, and shows no address', async () => {
