@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Integrations from '@/components/settings/Integrations'
 import { useTheme } from '@/lib/hooks/useTheme'
 import type { ThemePreference } from '@/types'
 
@@ -20,7 +21,12 @@ const themeOptions: { value: ThemePreference; label: string; subtitle?: string }
   },
 ]
 
-export default function SettingsContent(): React.ReactElement {
+interface SettingsContentProps {
+  /** The **MCP Server**'s address, or `null` for a **Guest**, who is shown none. */
+  mcpServerUrl: string | null
+}
+
+export default function SettingsContent({ mcpServerUrl }: SettingsContentProps): React.ReactElement {
   const { preference, setPreference } = useTheme()
 
   return (
@@ -120,6 +126,8 @@ export default function SettingsContent(): React.ReactElement {
           })}
         </div>
       </section>
+
+      <Integrations mcpServerUrl={mcpServerUrl} />
     </div>
   )
 }

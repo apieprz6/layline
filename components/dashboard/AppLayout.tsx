@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import RaceHeader from './RaceHeader'
 import HamburgerMenu from './HamburgerMenu'
 import AuthSheet from '@/components/auth/AuthSheet'
+import { onAskToSignIn } from '@/lib/account/askToSignIn'
 import { signInWithGoogle, signOutHere } from '@/lib/account/browserAuth'
 import { relativePathOrHome } from '@/lib/account/nextPath'
 import { useThemeSync } from '@/lib/hooks/useTheme'
@@ -73,6 +74,18 @@ export default function AppLayout({
     const rest = params.toString()
     window.history.replaceState(null, '', rest ? `${pathname}?${rest}` : pathname)
   }, [pathname])
+
+  // A screen's own Sign in, such as Settings' Integrations rows for a Guest. It names no
+  // destination, so signing in lands back on that screen.
+  useEffect(
+    () =>
+      onAskToSignIn(() => {
+        setMenuOpen(false)
+        setSignInDestination(null)
+        setSheetOpen(true)
+      }),
+    []
+  )
 
   function closeSheet(): void {
     setSheetOpen(false)

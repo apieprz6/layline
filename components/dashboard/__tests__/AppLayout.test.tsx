@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AppLayout from '../AppLayout'
 import { CREW } from '@/__tests__/fixtures/accounts'
+import { askToSignIn } from '@/lib/account/askToSignIn'
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -250,6 +251,42 @@ describe('AppLayout', () => {
       render(<AppLayout {...defaultProps} />)
 
       expect(screen.queryByTestId('auth-sheet')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the sheet a screen asked for', () => {
+    // A page has no prop from the layout to call, so it asks through `askToSignIn` (LAY-191:
+    // Settings' Integrations rows, for a Guest).
+    const asking = (
+      <button type="button" onClick={() => askToSignIn()}>
+        Connect Claude
+      </button>
+    )
+
+    beforeEach(() => {
+      jest.clearAllMocks()
+      window.history.replaceState(null, '', '/')
+    })
+
+    it('opens over that screen', async () => {
+      const user = userEvent.setup({ delay: null })
+      render(<AppLayout {...defaultProps}>{asking}</AppLayout>)
+
+      await user.click(screen.getByRole('button', { name: 'Connect Claude' }))
+
+      expect(screen.getByTestId('auth-sheet')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Connect Claude' })).toBeInTheDocument()
+    })
+
+    it('lands the sailor back on that screen', async () => {
+      const user = userEvent.setup({ delay: null })
+      const { signInWithGoogle } = jest.requireMock('@/lib/account/browserAuth')
+      render(<AppLayout {...defaultProps}>{asking}</AppLayout>)
+
+      await user.click(screen.getByRole('button', { name: 'Connect Claude' }))
+      await user.click(screen.getByRole('button', { name: /continue with google/i }))
+
+      expect(signInWithGoogle).toHaveBeenCalledWith('/')
     })
   })
 
