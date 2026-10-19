@@ -30,6 +30,8 @@ import {
 import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import { readRace } from '@/services/races/readRace'
 import { readRaces } from '@/services/races/readRaces'
+import { readRaceSailChart } from '@/services/races/race-sail-chart'
+import { TRACK_OVERLAYS, TRACK_SCALES } from '@/services/analysis/track-overlays'
 import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
 import {
@@ -41,6 +43,7 @@ import {
 import { buoyHistory } from './buoy-history'
 import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 import { raceList, raceSummary } from './races'
+import { raceTrack } from './race-track'
 import { cellFromArgument, sailSelectionAnswer } from './sail-selection'
 import {
   boatSetupOverview,
@@ -50,7 +53,7 @@ import {
   rigTuneVersions,
 
 } from './boat-setup'
-import type { BoatSetupKind, McpBoatSetupResult } from '@/types'
+import type { BoatSetupKind, McpBoatSetupResult, TrackOverlay } from '@/types'
 
 /**
  * What the dashboard's own copy tells a sailor about these numbers, told to Claude instead.
@@ -86,6 +89,19 @@ const RACE_SUMMARY_DESCRIPTION = `One Race as its page in Layline states it, com
 - testimony is what the sailor recorded: each sail change and each sea state, with its time, in the race page's own words. A sail is named in the Crossover Chart Version the Race was sailed under; an entry with no sail named is only its note, so never put a chart sail to it. An empty list means nobody wrote that down, not that nothing changed: say "not recorded". Sea state is the sailor's own reading of the water, not a buoy measurement.
 - maneuvers are TWA sign flips the detector classified as tacks, gybes and roundings. A recording at roughly thirty-second resolution holds a maneuver in one or two rows: count them, but do not state what one cost.
 - performance is Polar Efficiency (speed over the ground against the Race's own Polar) and VMG Efficiency, over countable time only. fillerAnchoredShare is how much of each figure is compared against a cell the Polar manufactured rather than measured: state it beside the figure whenever it is above zero, never drop the figure for it. Target VMG is estimated, per its caveat. Where there is no figure, note says why.`
+
+const RACE_TRACK_DESCRIPTION = `Where in one Race the figures came from, as its page in Layline draws it: the Race Track Heatmap's overlays, the Polar Plot and the Sail selection vs. chart tile, put as time. Use it for "where did we lose it: upwind or downwind?", "were we on the wrong sail on the second beat?" or "when did the feed drop out?". Aggregates and time spans only, never the recording's rows.
+
+- track.overlays are the map's six: percent of Target Speed and of Target VMG (ratios against the Race's own Polar), sails vs. the Crossover Chart, and SOG, TWS and TWA (readings). Each gives the time in every band of its own scale with the band's words; TWS uses the wind bands and TWA is split by tack. Pass overlay to get one.
+- gate says which sailing an overlay may colour. The ratios and the sail overlay read only countable time: not frozen, not below the speed gate, not mid-manoeuvre. The readings colour any live reading, so a parked boat still has a speed over the ground. Do not compare an overlay's coloured time with another's as if they were over the same sailing.
+- coverage is time, never rows. Band time plus uncoloured time is the whole Race Window. uncolouredBy keeps each reason apart, including the window's edges before the first reading and after the last; for the sail overlay, no sail written down, a sail the chart has no word for and an angle below the chart's axes are each their own reason, never a difference from the chart. drawnNotColoured is the heatmap legend's own figure: the uncoloured time the map still draws. fillerAnchored (and each band's fillerAnchoredShare) is the part of a ratio's time compared against a cell the Polar manufactured rather than measured: say so beside the figure, never drop it.
+- runs are the race as a timeline: consecutive stretches in one band or one uncoloured reason, merged, in time order, each with from, to and its time. A run never bridges a dropout: each dropout is a frozen run (the dead readings) followed by a bridged run (the interval landing on the first live reading), and the two together are exactly the dropout listed under dropouts. Times are the recording's own clock, exactly as logged, with no time zone.
+- dropouts are each dead stretch of the instrument feed, as the map bridges it. A frozen feed is the last reading repeated, not a boat sitting still.
+- testimony is what the sailor said about sails and sea state, placed is where the map could put it on the track, and unplaced is still what the sailor said, about a moment no position is near.
+- polarPlot.patches bin the Race's countable sailing by |TWA| and SOG (binWidth gives the bin sizes; twaDeg and sogKnots are each bin's lower edge), with each patch's Polar and VMG Efficiency and the time behind it. Low |TWA| is upwind, high is downwind: this is what answers upwind against downwind. undrawn is the sailing on no patch, by reason.
+- sailChart is the race page's tile, against the Crossover Chart Version the Race names, never the current chart. composition is every verdict as a share of the Race's sailing on the chart. following and differing are each side's own percent of target, side by side; never subtract them into a verdict. Where there is no figure, note says why.
+- A difference from the chart is something to look at, not a fault: the crew may have had a good reason. Never call the sailing or the chart wrong.
+- Every wind figure (TWS, TWA, and so each target) was computed by qtVlm from the recording, not measured at the masthead. Target VMG is estimated, per the overlay's caveat.`
 
 /** The Boat Management screens' own caveats, told to Claude. Prose, so it is updated by hand (ADR 0042). */
 const BOAT_SETUP_DESCRIPTION = `The boat's Boat Setup exactly as Layline's Boat Management screens state it: the four artifacts a Race is sailed under (Polar, Crossover Chart, Rig Tune, Instrument Calibration), and every Version of each.
@@ -441,6 +457,49 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       }
 
       return artifactVersions(artifact, version, supabase)
+    }
+  )
+
+  server.registerTool(
+    'race_track',
+    {
+      title: 'Race track',
+      description: RACE_TRACK_DESCRIPTION,
+      inputSchema: {
+        race: z.string().describe("The Race's id, as list_races gives it."),
+        overlay: z
+          .enum(TRACK_OVERLAYS as [TrackOverlay, ...TrackOverlay[]])
+          .optional()
+          .describe(
+            `One of the map's overlays: ${TRACK_OVERLAYS.map(
+              (overlay) => `${overlay} (${TRACK_SCALES[overlay].title})`
+            ).join(', ')}. Every overlay without it.`
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ race: raceId, overlay }) => {
+      // The page's two reads, together, as the caller: the Race, and the archive its sail tile is
+      // folded from. No second read of the Transcription.
+      const [race, archive] = await Promise.all([
+        readRace(raceId, supabase),
+        readAnalysisArchive(supabase),
+      ])
+
+      if (race === null) {
+        // Never a partial track. The Races the caller can read, so the id can be checked; a list
+        // that could not be read is empty, and the sentence still points at list_races.
+        const known = (await readRaces(supabase)).map(
+          (each) => `${each.id} (${each.title ?? `untitled, ${each.window_start}`})`
+        )
+        return refusal(
+          `No Race with id ${raceId} could be read.${
+            known.length > 0 ? ` The Races this account can read are: ${known.join('; ')}.` : ''
+          } Check the id against list_races; if it is listed, the read failed and may be retried.`
+        )
+      }
+
+      return answer(raceTrack(race, await readRaceSailChart(race, archive, supabase), overlay))
     }
   )
 

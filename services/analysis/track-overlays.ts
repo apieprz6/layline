@@ -322,6 +322,11 @@ export function overlayColour(band: TrackBandToken): string {
   return `var(--${band})`
 }
 
+/** A band's own words on an overlay's scale: "85–95% of target", "light air, 0–8 kt". */
+export function bandLabel(overlay: TrackOverlay, band: TrackBandToken): string {
+  return TRACK_SCALES[overlay].bands.find((step) => step.band === band)?.label ?? band
+}
+
 /** Which step of a scale a value lands in. The upper edge of each step belongs to the next. */
 export function overlayBand(overlay: TrackOverlay, value: number): TrackBandToken {
   const { bands } = TRACK_SCALES[overlay]

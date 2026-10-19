@@ -43,6 +43,7 @@ function scored(performance: EfficiencyAggregate): RaceTrack {
     polar: { twa_axis: [], tws_axis: [], boat_speed: [] },
     polar_version_id: 'polar-1',
     undrawn: { seconds: 0, parts: [] },
+    patches: [],
     performance,
   }
   return { heatmap: null, scoring: 'polar', plot }

@@ -27,7 +27,15 @@
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { RaceTrack, RaceTrackHeatmap, TrackRowFacts } from '@/types'
+import type {
+  RaceTrackHeatmap,
+  RaceTrackHeatmapView,
+  RaceTrackView,
+  TrackBandToken,
+  TrackHeatmapTime,
+  TrackOverlayTime,
+  TrackRowFacts,
+} from '@/types'
 
 let mockTheme: 'solar' | 'nightvision' = 'solar'
 
@@ -100,7 +108,56 @@ const COUNTS: RaceTrackHeatmap['counts'] = {
   },
 }
 
-function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
+/** One overlay's time: a single band carrying what it coloured, and its uncoloured parts. */
+function overlayTime(
+  band: TrackBandToken,
+  coloured: number,
+  filler: number,
+  uncoloured: TrackOverlayTime['uncoloured']
+): TrackOverlayTime {
+  return {
+    bands: [{ band, seconds: coloured, filler_anchored_seconds: filler }],
+    coloured_seconds: coloured,
+    filler_anchored_seconds: filler,
+    uncoloured_seconds: uncoloured.reduce((total, part) => total + part.seconds, 0),
+    uncoloured,
+  }
+}
+
+/**
+ * Three hours of window, as the legend states it: an hour of dropout, half an hour parked or
+ * mid-manoeuvre, five minutes before the recording began. Each overlay adds up to the window.
+ */
+const RATIO_TIME = overlayTime('track-at', 4200, 1200, [
+  { reason: 'frozen', seconds: 3600 },
+  { reason: 'low_speed', seconds: 1200 },
+  { reason: 'no_target', seconds: 900 },
+  { reason: 'maneuver_window', seconds: 600 },
+  { reason: 'before_first_row', seconds: 300 },
+])
+const READING_TIME = overlayTime('track-speed-4', 6900, 0, [
+  { reason: 'frozen', seconds: 3600 },
+  { reason: 'before_first_row', seconds: 300 },
+])
+const TIME: TrackHeatmapTime = {
+  window_seconds: 10800,
+  overlays: {
+    target_speed: RATIO_TIME,
+    target_vmg: RATIO_TIME,
+    sog: READING_TIME,
+    tws: READING_TIME,
+    twa: READING_TIME,
+    sail: overlayTime('track-agree', 3000, 0, [
+      { reason: 'frozen', seconds: 3600 },
+      { reason: 'no_sail_recorded', seconds: 2100 },
+      { reason: 'low_speed', seconds: 1200 },
+      { reason: 'maneuver_window', seconds: 600 },
+      { reason: 'before_first_row', seconds: 300 },
+    ]),
+  },
+}
+
+function heatmapOf(over: Partial<RaceTrackHeatmapView> = {}): RaceTrackHeatmapView {
   return {
     width: 360,
     height: 440,
@@ -112,7 +169,9 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
     ],
     // A fix with no neighbour to join, which is drawn as a point rather than dropped.
     points: [{ x: 300, y: 320, row: LONE }],
-    bridges: [{ x1: 120, y1: 140, x2: 300, y2: 320, seconds: 3436, rows: 2 }],
+    bridges: [
+      { x1: 120, y1: 140, x2: 300, y2: 320, seconds: 3436, from: '2026-06-20T16:05:00', to: '2026-06-20T17:02:16', rows: 2 },
+    ],
     rings: [
       { cx: 120, cy: 140 },
       { cx: 120, cy: 140 },
@@ -123,12 +182,14 @@ function heatmapOf(over: Partial<RaceTrackHeatmap> = {}): RaceTrackHeatmap {
       // Recorded seconds after the sail change, so it lands on the same fix and is lifted clear.
       { x: 40, y: 40, lane: 'sea', label: 'Moderate', at: '2026-06-20T16:04:40', gap_seconds: 10, dy: -19 },
     ],
+    unplaced_annotations: [],
     counts: COUNTS,
+    time: TIME,
     ...over,
   }
 }
 
-function trackOf(over: Partial<RaceTrack> = {}): RaceTrack {
+function trackOf(over: Partial<RaceTrackView> = {}): RaceTrackView {
   return { heatmap: heatmapOf(), scoring: 'polar', plot: null, ...over }
 }
 
@@ -240,7 +301,9 @@ describe('the track, drawn', () => {
       <RaceTrackSection
         season={null}
         track={trackOf({
-          heatmap: heatmapOf({ counts: { ...COUNTS, annotations_not_placed: 1 } }),
+          heatmap: heatmapOf({
+            unplaced_annotations: [{ lane: 'sea', label: 'Choppy', at: '2026-06-20T19:30:00' }],
+          }),
         })}
       />
     )
@@ -289,7 +352,9 @@ describe('the track, drawn', () => {
         season={null}
         track={trackOf({
           heatmap: heatmapOf({
-            bridges: [{ x1: 100, y1: 100, x2: 104, y2: 102, seconds: 95, rows: 3 }],
+            bridges: [
+              { x1: 100, y1: 100, x2: 104, y2: 102, seconds: 95, from: '2026-06-20T16:05:00', to: '2026-06-20T16:06:35', rows: 3 },
+            ],
           }),
         })}
       />
@@ -520,16 +585,35 @@ describe('the legend beneath it', () => {
 
     // The proportion is stated rather than inferred from how much grey is on screen (ADR 0033),
     // and it is one line, because a line nobody reads states nothing.
+    // In time, never rows (ADR 0037): a row is thirty seconds on a beat and minutes in a dropout.
     expect(screen.getByTestId('track-counts')).toHaveTextContent(
-      '145 of 258 rows are drawn but not coloured.'
+      '1h 50m of the 3h window carries no colour on this overlay.'
     )
 
     // The reasons are a tap down, because "the boat was parked" and "the Polar cannot answer out
     // here" are different facts and the argument for each is longer than the claim.
     const why = screen.getByTestId('track-counts-why')
-    expect(why).toHaveTextContent('82 rows sat inside a dropout')
-    expect(why).toHaveTextContent('36 were parked or mid-manoeuvre')
-    expect(why).toHaveTextContent('27 are in range of nothing the Polar can answer')
+    expect(why).toHaveTextContent('1h sat inside a dropout')
+    expect(why).toHaveTextContent('30m was parked or mid-manoeuvre')
+    expect(why).toHaveTextContent('15m is in range of nothing the Polar can answer')
+    expect(why).toHaveTextContent('5m of the window lies outside the recording')
+  })
+
+  it('states each swatch’s share of the track in time, never in rows', () => {
+    render(<RaceTrackSection season={null} track={trackOf()} />)
+
+    // What is drawn and uncoloured is the window less its unrecorded edges.
+    expect(screen.getByText('Drawn, not coloured — 1h 45m')).toBeInTheDocument()
+    expect(screen.getByText('Filler-anchored — 20m')).toBeInTheDocument()
+    expect(screen.getByText('Frozen feed — 1h')).toBeInTheDocument()
+
+    for (const said of [
+      screen.getByTestId('track-counts'),
+      screen.getByTestId('track-counts-why'),
+      ...screen.getAllByRole('listitem'),
+    ]) {
+      expect(said).not.toHaveTextContent(/\brows?\b/)
+    }
   })
 
   it('counts a reading’s coverage by its own gate, not by the ratio’s', async () => {
@@ -538,13 +622,13 @@ describe('the legend beneath it', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Boat speed' }))
 
     expect(screen.getByTestId('track-counts')).toHaveTextContent(
-      '82 of 258 rows are drawn but not coloured.'
+      '1h 5m of the 3h window carries no colour on this overlay.'
     )
-    // 176 of 258 coloured: everything except the dead feed. And the detail says *why* a parked row
+    // Coloured everywhere except the dead feed and the unrecorded edge. The detail says *why* a parked row
     // keeps its colour here, rather than listing it among the exclusions (ADR 0038).
     const why = screen.getByTestId('track-counts-why')
-    expect(why).toHaveTextContent(/every value is a copy of the row above/)
-    expect(why).toHaveTextContent(/A parked or mid-manoeuvre row keeps its colour here/)
+    expect(why).toHaveTextContent(/every value is a copy of the reading before it/)
+    expect(why).toHaveTextContent(/Parked or mid-manoeuvre sailing keeps its colour here/)
   })
 
   it('says a race with no Polar Version has nothing to compare, and shows no ramp', async () => {

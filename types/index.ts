@@ -2021,6 +2021,10 @@ export interface DropoutBridge {
   y2: number
   /** Measured between the fixes either side, in the recording's own naive frame. */
   seconds: number
+  /** The live fix the bridge starts at, as the recording stamped it (ADR 0008). */
+  from: string
+  /** The live fix it lands on. `seconds` is the time between the two. */
+  to: string
   /** Frozen rows the gap holds, so a screen can state the run as well as its duration. */
   rows: number
 }
@@ -2161,6 +2165,89 @@ export interface TrackOverlayCounts {
 }
 
 /**
+ * Why a stretch of the window carries no colour on one overlay, as time is stated (ADR 0037).
+ *
+ * `TrackNotScored`'s own reasons, verbatim, plus the three that are about the *track* rather than
+ * the row: a row the overlay would colour that logged no position for the map to draw it at, and
+ * the two edges of the window the recording never reached. Those two are what let every overlay's
+ * time add up to the Race Window the sailor set, rather than to the part the rows happen to span.
+ */
+export type TrackUncolouredReason =
+  | TrackNotScored
+  | 'no_position'
+  /**
+   * The interval landing on the first live fix after a **Dropout**: the map draws it as the end
+   * of the Dropout Bridge, not as a coloured leg. Apart from `frozen`, so the frozen time stays
+   * the coverage readout's, and a Dropout's two runs together span exactly its bridge.
+   */
+  | 'bridged'
+  | 'before_first_row'
+  | 'after_last_row'
+
+/** One step of an overlay's scale, and how long the track spent in it. */
+export interface TrackBandTime {
+  band: TrackBandToken
+  seconds: number
+  /** Of those, **Filler-Anchored** (ADR 0036). Only ever above zero on a ratio overlay. */
+  filler_anchored_seconds: number
+}
+
+/**
+ * One overlay's coverage of the Race Window, in time.
+ *
+ * `coloured_seconds + uncoloured_seconds` is the whole window on every overlay — less only a clock
+ * that stepped backwards, which `RaceCoverage.backwards_steps` counts and no duration can hold.
+ */
+export interface TrackOverlayTime {
+  /** Every step of the scale, in the scale's own order, a step with no time in it included. */
+  bands: TrackBandTime[]
+  coloured_seconds: number
+  filler_anchored_seconds: number
+  uncoloured_seconds: number
+  /** By reason, largest first. A reason with no time behind it is not listed. */
+  uncoloured: { reason: TrackUncolouredReason; seconds: number }[]
+}
+
+/**
+ * What the track is made of, in time: the figure the legend states, and the tool beside it.
+ *
+ * Each row's span is the interval it *arrives at*, from the row before it — the stretch of track
+ * its segment draws, and the attribution `raceCoverage` makes, so the frozen time here is the
+ * frozen time the coverage readout prints for the same Race.
+ */
+export interface TrackHeatmapTime {
+  /** Finish minus start of the Race Window, or of the rows themselves where no window is given. */
+  window_seconds: number
+  overlays: Record<TrackOverlay, TrackOverlayTime>
+}
+
+/**
+ * A stretch of the window in one state on one overlay: the picture the map draws, as time spans.
+ *
+ * Merged, so two consecutive runs never share a state, and in time order. Exactly one of `band` and
+ * `reason` is set, as on `TrackPaint`: a run never bridges a **Dropout** or an uncoloured stretch,
+ * because those are runs of their own with their reason.
+ */
+export type TrackRun = {
+  /** The recording's own naive stamps (ADR 0008). */
+  from: string
+  to: string
+  seconds: number
+  /** Of `seconds`, Filler-Anchored. Zero on an uncoloured run and on every reading overlay. */
+  filler_anchored_seconds: number
+} & (
+  | { band: TrackBandToken; reason: null }
+  | { band: null; reason: TrackUncolouredReason }
+)
+
+/** A piece of **Testimony** the map could not place: no fix of the window is near its stamp. */
+export interface TrackUnplacedAnnotation {
+  lane: 'sail' | 'sea'
+  label: string
+  at: string
+}
+
+/**
  * One race's track, drawn into a stable frame.
  *
  * The frame is a fixed box whatever shape the track is, and the thin-track problem is solved by
@@ -2183,8 +2270,22 @@ export interface RaceTrackHeatmap {
   rings: TrackRing[]
   /** What the sailor said, where they said it happened. Empty where nobody wrote anything down. */
   annotations: TrackAnnotation[]
+  /** What the map could not place, still stated: the page lists them, and so does the tool. */
+  unplaced_annotations: TrackUnplacedAnnotation[]
   counts: TrackHeatmapCounts
+  /** The same coverage in time, which is what the legend states (ADR 0037). */
+  time: TrackHeatmapTime
+  /**
+   * Each overlay's runs over the window.
+   *
+   * Server-side only: the map draws its strokes, not these, so `trackView` takes them off before
+   * the track crosses to the client, and only the MCP's `race_track` reads them.
+   */
+  runs: Record<TrackOverlay, TrackRun[]>
 }
+
+/** The heatmap as the page's client sections receive it: everything but the runs. */
+export type RaceTrackHeatmapView = Omit<RaceTrackHeatmap, 'runs'>
 
 /**
  * The track section of a race's page: the drawing, and what it was scored against.
@@ -2218,6 +2319,9 @@ export interface RaceTrack {
    */
   plot: RacePolarPlot | null
 }
+
+/** The track as the page's client sections receive it, the heatmap without its runs. */
+export type RaceTrackView = Omit<RaceTrack, 'heatmap'> & { heatmap: RaceTrackHeatmapView | null }
 
 /**
  * One scored moment, as the **Polar Plot** draws it: a dot at its own angle and speed.
@@ -2283,6 +2387,11 @@ export interface RacePolarPlot {
   /** That Polar's Version id. */
   polar_version_id: string
   undrawn: PolarPlotUndrawn
+  /**
+   * The same moments binned by `|TWA|` and `SOG`: `plotPatches` over the rows the dots are drawn
+   * from, which is what tells upwind sailing from downwind as aggregates rather than as dots.
+   */
+  patches: PolarPlotPatch[]
   /**
    * The Race's **Polar Efficiency** and **VMG Efficiency**: `sumEfficiency` over the very rows the
    * dots are drawn from, computed once on the server beside them (ADR 0040). The figures under the
@@ -4149,6 +4258,117 @@ export interface McpRaceSummary {
     flips: { at: string; maneuver: Maneuver; twaBefore: string; twaAfter: string }[]
   }
   performance: McpRacePerformance
+}
+
+// One band of an overlay's scale, in the scale's own words, and the time the track spent in it.
+// `fillerAnchored` is the part of that time compared against a cell the Polar manufactured (ADR
+// 0036), on a ratio overlay only; null on a reading, which has no comparison to be weak.
+export interface McpTrackBand {
+  band: TrackBandToken
+  label: string
+  time: McpDuration
+  fillerAnchored: McpDuration | null
+  // Of the band's time, the Filler-Anchored part as a share; null on a reading or an empty band.
+  fillerAnchoredShare: number | null
+}
+
+// A stretch of the window in one state: a band, or the reason it carries none. Merged and in time
+// order, so a run never bridges a Dropout or an uncoloured stretch (ADR 0038).
+export interface McpTrackRun {
+  from: string
+  to: string
+  time: McpDuration
+  band: TrackBandToken | null
+  reason: TrackUncolouredReason | null
+  // The band's words, or the reason's.
+  label: string
+  fillerAnchored: McpDuration | null
+}
+
+export interface McpTrackOverlay {
+  overlay: TrackOverlay
+  title: string
+  unit: string | null
+  // `countable` reads Countable rows only (ADR 0025); `feed-alive` colours any live reading.
+  gate: 'countable' | 'feed-alive'
+  caveat: string | null
+  bands: McpTrackBand[]
+  coverage: {
+    coloured: McpDuration
+    fillerAnchored: McpDuration | null
+    uncoloured: McpDuration
+    // The legend's "Drawn, not coloured": the uncoloured time the map draws as a hairline or a
+    // bridge, which leaves out the window's unrecorded edges and anything with no position.
+    drawnNotColoured: McpDuration
+    // By reason, largest first, each in its own words; no reason folded into another.
+    uncolouredBy: { reason: TrackUncolouredReason; label: string; time: McpDuration }[]
+  }
+  runs: McpTrackRun[]
+}
+
+// One patch of the Polar Plot's plane: the lower edges of its `|TWA|` and `SOG` bins, and the
+// sailing that landed in it, summed as the race page sums it.
+export interface McpPolarPatch {
+  twaDeg: number
+  sogKnots: number
+  meanSogKnots: number | null
+  polarEfficiency: McpEfficiencyFigure
+  vmgEfficiency: McpEfficiencyFigure
+  time: McpDuration
+}
+
+export type McpPolarPlot =
+  | {
+      drawn: true
+      binWidth: { twaDeg: number; sogKnots: number }
+      patches: McpPolarPatch[]
+      // The sailing drawn nowhere on the Polar Plot, by its legend's reasons.
+      undrawn: McpDuration & { parts: { reason: PolarPlotUndrawnReason; label: string; time: McpDuration }[] }
+    }
+  | { drawn: false; scoring: RaceTrack['scoring']; note: string }
+
+// The race page's Sail selection vs. chart tile. `composition` is every verdict as a share of the
+// Race's sailing on the chart, Not recorded and Off-chart beside Differs and never inside it.
+export type McpSailChart =
+  | {
+      ok: true
+      chartVersion: number
+      // Agrees over Agrees plus Differs; null where nothing could be judged, and `note` says why.
+      agreement: { share: number | null; percent: string | null }
+      following: McpEfficiencyFigure & { time: McpDuration }
+      differing: McpEfficiencyFigure & { time: McpDuration }
+      composition: {
+        verdict: 'agrees' | 'differs' | 'off-chart' | 'not-recorded' | 'other-version'
+        share: number
+        percent: string
+        words: string
+      }[]
+      // The chart cells the Race reached, by the Cell Agreement its own sailing gives each.
+      cells: Partial<
+        Record<'agrees' | 'differs' | 'off-chart' | 'not-recorded' | 'other-version' | 'mixed', number>
+      >
+      note: string | null
+    }
+  | { ok: false; reason: 'no-chart-version' | 'chart-unreadable' | 'archive-unreadable'; note: string }
+
+// `race_track`'s answer: the race page's heatmap, Polar Plot and sail tile, as time. Never a
+// Recording Row or a per-row readout (ADR 0042).
+export interface McpRaceTrack {
+  race: McpRaceIdentity
+  window: McpDuration
+  scoring: RaceTrack['scoring']
+  // Null where the window holds no position fix at all, and `trackNote` says so.
+  track: {
+    overlays: McpTrackOverlay[]
+    dropouts: { from: string; to: string; time: McpDuration }[]
+    testimony: {
+      placed: { lane: 'sail' | 'sea'; label: string; at: string; secondsFromFix: number }[]
+      unplaced: { lane: 'sail' | 'sea'; label: string; at: string }[]
+    }
+  } | null
+  trackNote: string | null
+  polarPlot: McpPolarPlot
+  sailChart: McpSailChart
 }
 
 // A Calibration Era as the Instrument Tuning charts name it: bounded by the Calibration Log's own

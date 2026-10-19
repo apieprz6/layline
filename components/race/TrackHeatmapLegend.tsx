@@ -25,7 +25,14 @@ import type { ReactElement, ReactNode } from 'react'
 import { useTheme } from '@/lib/hooks/useTheme'
 import { spacing } from '@/lib/utils/design'
 import { TRACK_SCALES, isRatioOverlay, overlayColour } from '@/services/analysis/track-overlays'
-import type { RaceTrack, TrackHeatmapCounts, TrackOverlay } from '@/types'
+import {
+  TRACK_ABSENCES,
+  WINDOW_EDGES,
+  drawnNotColoured,
+  uncolouredFor,
+} from '@/services/analysis/track-time'
+import { describeDuration } from '@/services/recordings/coverage'
+import type { RaceTrack, TrackHeatmapTime, TrackOverlay, TrackOverlayTime } from '@/types'
 
 import Explainer from '@/components/common/Explainer'
 
@@ -33,20 +40,24 @@ import { DROPOUT, FILLER_DASH, HAIRLINE, TESTIMONY, TRACK_STROKE, testimonyGlyph
 
 export default function TrackHeatmapLegend({
   overlay,
-  counts,
+  time,
   scoring,
   /** How many pieces of Testimony the map placed, which is what draws that row of the legend. */
   annotations,
+  /** How many it could not place, which the legend states rather than drops. */
+  unplaced,
 }: {
   overlay: TrackOverlay
-  counts: TrackHeatmapCounts
+  /** The track's coverage in time — the figure the MCP's `race_track` states too (ADR 0037). */
+  time: TrackHeatmapTime
   scoring: RaceTrack['scoring']
   annotations: number
+  unplaced: number
 }): ReactElement {
   const { theme } = useTheme()
   const afterDark = theme === 'nightvision'
   const scale = TRACK_SCALES[overlay]
-  const tallies = counts.overlays[overlay]
+  const tallies = time.overlays[overlay]
   // A ratio overlay on a race that records no Polar has nothing to be a ratio of, so there is no
   // scale to draw — only the sentence saying why.
   const drawable = !isRatioOverlay(overlay) || scoring === 'polar'
@@ -117,7 +128,7 @@ export default function TrackHeatmapLegend({
           color: 'var(--text-muted)',
         }}
       >
-        <SwatchRow label={`Drawn, not coloured — ${counts.rows - counts.overlays[overlay].scored} rows`}>
+        <SwatchRow label={`Drawn, not coloured — ${describeDuration(drawnNotColoured(tallies))}`}>
           <svg width="26" height="10" aria-hidden>
             <line
               x1="1"
@@ -132,7 +143,7 @@ export default function TrackHeatmapLegend({
         </SwatchRow>
 
         {drawable && isRatioOverlay(overlay) && (
-          <SwatchRow label={`Filler-anchored — ${tallies.flagged} rows`}>
+          <SwatchRow label={`Filler-anchored — ${describeDuration(tallies.filler_anchored_seconds)}`}>
             <svg width="26" height="10" aria-hidden>
               <line
                 x1="1"
@@ -150,7 +161,7 @@ export default function TrackHeatmapLegend({
         {annotations > 0 && (
           <SwatchRow
             label={`What the sailor said — ${annotations} ${annotations === 1 ? 'note' : 'notes'}${
-              counts.annotations_not_placed > 0 ? `, ${counts.annotations_not_placed} unplaceable` : ''
+              unplaced > 0 ? `, ${unplaced} unplaceable` : ''
             }`}
           >
             <svg width="26" height="14" aria-hidden>
@@ -181,7 +192,7 @@ export default function TrackHeatmapLegend({
           </SwatchRow>
         )}
 
-        <SwatchRow label={`Frozen feed — ${counts.frozen} rows`}>
+        <SwatchRow label={`Frozen feed — ${describeDuration(uncolouredFor(tallies, ['frozen']))}`}>
           <svg width="26" height="10" aria-hidden>
             <line
               x1="1"
@@ -218,7 +229,7 @@ export default function TrackHeatmapLegend({
           fontStyle: 'italic',
         }}
       >
-        {headlineCount(overlay, counts, scoring)}
+        {headlineCount(overlay, time, scoring)}
       </p>
 
       {/* The reasoning, one tap down. ADR 0033 requires the proportion to be *stated* rather than
@@ -226,7 +237,7 @@ export default function TrackHeatmapLegend({
           is the argument behind that claim, and five lines of it under every map is five lines
           nobody reads twice. */}
       <Explainer summary="What isn’t coloured, and why?" testId="track-counts-why">
-        {countDetail(overlay, counts, scoring)}
+        {countDetail(overlay, tallies, scoring)}
       </Explainer>
     </div>
   )
@@ -237,47 +248,45 @@ export default function TrackHeatmapLegend({
  *
  * ADR 0033 requires the proportion to be *stated* rather than inferred from how much grey is on
  * screen, and this is that claim — short enough that it is read every time, with the reasoning
- * behind it in `countDetail` one tap down.
+ * behind it in `countDetail` one tap down. In time, never rows (ADR 0037): the recording is
+ * event-triggered, so a row is thirty seconds on a beat and minutes inside a dropout.
  */
 function headlineCount(
   overlay: TrackOverlay,
-  counts: TrackHeatmapCounts,
+  time: TrackHeatmapTime,
   scoring: RaceTrack['scoring']
 ): string {
-  const { rows, with_fix } = counts
-  const { scored } = counts.overlays[overlay]
-
   if (isRatioOverlay(overlay) && scoring !== 'polar') {
     return scoring === 'no-polar-version'
       ? 'This race records no Polar Version — nothing on the track is a comparison.'
       : 'This race’s Polar Version could not be read — the comparison is missing.'
   }
 
-  // "Drawn but not coloured" only where every row is in fact drawn, which is every race in this
-  // archive. A row that logged no position is in the count and in no part of the picture, and
-  // `countDetail` says so rather than this line quietly including it.
-  return with_fix === rows
-    ? `${rows - scored} of ${rows} rows are drawn but not coloured.`
-    : `${rows - scored} of ${rows} rows carry no figure on this overlay.`
+  return (
+    `${describeDuration(time.overlays[overlay].uncoloured_seconds)} of the ` +
+    `${describeDuration(time.window_seconds)} window carries no colour on this overlay.`
+  )
 }
 
 /**
- * Why each of those rows is not coloured, by reason — the argument behind the line above.
+ * Why that time is not coloured, by reason — the argument behind the line above.
  *
- * Three different sentences, because the overlays do not exclude the same rows: a ratio and sail
- * agreement are claims about how the boat was sailed and carry ADR 0025 whole, while a reading
- * excludes only the dead feed, since a parked boat's speed over the ground is simply what the GPS
- * recorded (ADR 0038).
+ * Three different sentences, because the overlays do not exclude the same sailing: a ratio and
+ * sail agreement are claims about how the boat was sailed and carry ADR 0025 whole, while a
+ * reading excludes only the dead feed, since a parked boat's speed over the ground is simply what
+ * the GPS recorded (ADR 0038).
  */
 function countDetail(
   overlay: TrackOverlay,
-  counts: TrackHeatmapCounts,
+  time: TrackOverlayTime,
   scoring: RaceTrack['scoring']
 ): string {
-  const { rows, frozen, low_speed, maneuver_window, with_fix } = counts
-  const { without_value } = counts.overlays[overlay]
-  const parked = low_speed + maneuver_window
-  const noFix = rows - with_fix
+  const frozen = describeDuration(uncolouredFor(time, ['frozen']))
+  const parked = describeDuration(uncolouredFor(time, ['low_speed', 'maneuver_window']))
+  const withoutValue = describeDuration(uncolouredFor(time, TRACK_ABSENCES))
+  const noFix = uncolouredFor(time, ['no_position'])
+  const bridged = uncolouredFor(time, ['bridged'])
+  const edges = uncolouredFor(time, WINDOW_EDGES)
 
   const sentences: string[] = []
 
@@ -291,8 +300,8 @@ function countDetail(
 
   if (isRatioOverlay(overlay) && scoring === 'no-polar-version') {
     sentences.push(
-      `No Polar Version is recorded for this race, so none of its ${rows} rows carries a percent ` +
-        'of target. The track is still where the boat went.'
+      'No Polar Version is recorded for this race, so none of it carries a percent of target. The ' +
+        'track is still where the boat went.'
     )
   } else if (isRatioOverlay(overlay) && scoring === 'polar-unreadable') {
     sentences.push(
@@ -301,29 +310,43 @@ function countDetail(
     )
   } else if (isRatioOverlay(overlay)) {
     sentences.push(
-      `${frozen} rows sat inside a dropout, ${parked} were parked or mid-manoeuvre — neither reads ` +
-        `in a performance figure (ADR 0025) — and ${without_value} are in range of nothing the ` +
-        'Polar can answer.'
+      `${frozen} sat inside a dropout, ${parked} was parked or mid-manoeuvre — neither reads in a ` +
+        `performance figure (ADR 0025) — and ${withoutValue} is in range of nothing the Polar can ` +
+        'answer.'
     )
   } else if (overlay === 'sail') {
     sentences.push(
-      `${frozen} rows sat inside a dropout and ${parked} were parked or mid-manoeuvre, where a ` +
-        `wind angle sweeping through head to wind makes the chart’s answer meaningless. ` +
-        `${without_value} have nothing to compare: no chart recorded, no sail written down, a sail ` +
+      `${frozen} sat inside a dropout and ${parked} was parked or mid-manoeuvre, where a wind ` +
+        'angle sweeping through head to wind makes the chart’s answer meaningless. ' +
+        `${withoutValue} has nothing to compare: no chart recorded, no sail written down, a sail ` +
         'the chart does not name, or an angle below its own axes.'
     )
   } else {
     sentences.push(
-      `${frozen} rows sat inside a dropout, where every value is a copy of the row above, and ` +
-        `${without_value} left this channel blank. A parked or mid-manoeuvre row keeps its colour ` +
+      `${frozen} sat inside a dropout, where every value is a copy of the reading before it, and ` +
+        `${withoutValue} left this channel blank. Parked or mid-manoeuvre sailing keeps its colour ` +
         'here: its speed over the ground is simply what the GPS recorded.'
     )
   }
 
   if (noFix > 0) {
     sentences.push(
-      `${noFix} logged no position at all, so they are in no part of this picture — only in the ` +
-        'counts.'
+      `${describeDuration(noFix)} logged no position at all, so it is in no part of this picture — ` +
+        'only in these figures.'
+    )
+  }
+
+  if (bridged > 0) {
+    sentences.push(
+      `${describeDuration(bridged)} is the dashed bridge from each dropout back to the first live ` +
+        'reading, which the map draws but does not colour.'
+    )
+  }
+
+  if (edges > 0) {
+    sentences.push(
+      `${describeDuration(edges)} of the window lies outside the recording, before its first ` +
+        'reading or after its last.'
     )
   }
 

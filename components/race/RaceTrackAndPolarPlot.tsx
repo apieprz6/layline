@@ -38,13 +38,14 @@ import PolarPlot from '@/components/analysis/PolarPlot'
 import PolarPlotLegend from '@/components/analysis/PolarPlotLegend'
 import PolarPlotReadingToggle from '@/components/analysis/PolarPlotReadingToggle'
 import { radius, spacing } from '@/lib/utils/design'
-import { certificateFamily, rimKnots } from '@/services/analysis/polar-plot'
+import { certificateFamily, noPlotNote, rimKnots } from '@/services/analysis/polar-plot'
+import { NO_TRACK_NOTE } from '@/services/analysis/track-heatmap'
 import { TRACK_OVERLAYS, TRACK_SCALES, isRatioOverlay } from '@/services/analysis/track-overlays'
 import { describeDuration } from '@/services/recordings/coverage'
 import type {
   PolarPlotReading,
   PolarPlotTraceBin,
-  RaceTrack,
+  RaceTrackView,
   TrackOverlay,
   TrackRowFacts,
 } from '@/types'
@@ -65,7 +66,7 @@ export default function RaceTrackAndPolarPlot({
   track,
   season,
 }: {
-  track: RaceTrack
+  track: RaceTrackView
   /** The whole archive as ten-degree sums, behind this Race. Null where it could not be read. */
   season: PolarPlotTraceBin[] | null
 }): ReactElement {
@@ -161,7 +162,7 @@ export default function RaceTrackAndPolarPlot({
         <Card title="Race track" subtitle="where the boat was" testId="race-track-card" ref={mapCard}>
           {heatmap === null ? (
             <p data-testid="track-no-fixes" style={{ ...NOTE_STYLE, fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-              No position was logged anywhere in this race window, so there is no track to draw.
+              {NO_TRACK_NOTE}
             </p>
           ) : (
             <>
@@ -215,9 +216,10 @@ export default function RaceTrackAndPolarPlot({
 
               <TrackHeatmapLegend
                 overlay={overlay}
-                counts={heatmap.counts}
+                time={heatmap.time}
                 scoring={scoring}
                 annotations={heatmap.annotations.length}
+                unplaced={heatmap.unplaced_annotations.length}
               />
             </>
           )}
@@ -231,9 +233,7 @@ export default function RaceTrackAndPolarPlot({
         >
           {plot === null ? (
             <p style={{ ...NOTE_STYLE, fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-              {scoring === 'polar-unreadable'
-                ? 'The Polar this race names could not be read, so there is nothing to draw its sailing against.'
-                : 'This race records no Polar Version, so there is nothing to draw its sailing against.'}
+              {noPlotNote(scoring)}
             </p>
           ) : (
             <>

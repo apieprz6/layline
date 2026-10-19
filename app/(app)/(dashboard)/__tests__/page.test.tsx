@@ -53,7 +53,7 @@ const LATEST: LatestRace = {
     height: 64,
     runs: ['6.0,40.0 30.0,10.0', '60.0,20.0 90.0,58.0'],
     points: [],
-    bridges: [{ x1: 30, y1: 10, x2: 60, y2: 20, seconds: 420, rows: 6 }],
+    bridges: [{ x1: 30, y1: 10, x2: 60, y2: 20, seconds: 420, from: '2026-06-20T17:10:00', to: '2026-06-20T17:17:00', rows: 6 }],
     rings: [{ cx: 30, cy: 10 }],
   },
 }

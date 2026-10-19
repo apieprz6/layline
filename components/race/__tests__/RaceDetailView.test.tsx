@@ -22,11 +22,14 @@
 
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { raceInstrumentCheck } from '@/services/analysis/instrument-tuning'
+import { TRACK_OVERLAYS } from '@/services/analysis/track-overlays'
 import type {
   RaceAnnotations,
   RaceBoatSetup,
   RaceDetail,
   RaceTrack,
+  TrackOverlay,
+  TrackOverlayTime,
   TrackRowFacts,
 } from '@/types'
 import RaceDetailView from '../RaceDetailView'
@@ -95,6 +98,22 @@ const PARKED: TrackRowFacts = {
   excluded: 'low_speed',
 }
 
+/** A minute of track, all of it in one band, on every overlay alike. */
+const MINUTE: TrackOverlayTime = {
+  bands: [{ band: 'track-at', seconds: 60, filler_anchored_seconds: 0 }],
+  coloured_seconds: 60,
+  filler_anchored_seconds: 0,
+  uncoloured_seconds: 0,
+  uncoloured: [],
+}
+
+function everyOverlay<T>(value: T): Record<TrackOverlay, T> {
+  return Object.fromEntries(TRACK_OVERLAYS.map((overlay) => [overlay, value])) as Record<
+    TrackOverlay,
+    T
+  >
+}
+
 const TRACK: RaceTrack = {
   heatmap: {
     width: 360,
@@ -108,6 +127,9 @@ const TRACK: RaceTrack = {
     bridges: [],
     rings: [],
     annotations: [],
+    unplaced_annotations: [],
+    time: { window_seconds: 60, overlays: everyOverlay(MINUTE) },
+    runs: everyOverlay([]),
     counts: {
       rows: 3,
       with_fix: 3,

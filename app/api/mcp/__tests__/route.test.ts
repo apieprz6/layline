@@ -19,6 +19,8 @@ import {
 import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readRace } from '@/services/races/readRace'
 import { raceSummary } from '@/services/mcp/races'
+import { raceTrack } from '@/services/mcp/race-track'
+import { readRaceSailChart } from '@/services/races/race-sail-chart'
 import {
   FIXTURE_CHART,
   FIXTURE_POLAR,
@@ -183,6 +185,7 @@ describe('/api/mcp with a crew token', () => {
       'sail_selection',
       'instrument_tuning',
       'boat_setup',
+      'race_track',
     ])
     tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
   })
@@ -452,5 +455,55 @@ describe('/api/mcp race tools', () => {
     expect(summary.structuredContent).toBeUndefined()
     expect(list.isError).toBe(true)
     expect(list.structuredContent).toBeUndefined()
+  })
+
+  it('answers race_track with the track its page draws, through the caller’s own client', async () => {
+    const asked = signInWith()
+
+    const result = await call('race_track', { race: FIXTURE_RACE_ID })
+    const { client } = archiveClient(fixtureArchive())
+    const [page, archive] = await Promise.all([
+      readRace(FIXTURE_RACE_ID, client),
+      readAnalysisArchive(client),
+    ])
+
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(
+      raceTrack(page!, await readRaceSailChart(page!, archive, client))
+    )
+    expect(asked).toContain('recording_rows')
+  })
+
+  it('narrows race_track to one overlay, and refuses one the map does not draw, naming them', async () => {
+    signInWith()
+
+    const one = await call('race_track', { race: FIXTURE_RACE_ID, overlay: 'tws' })
+    const unknown = await call('race_track', { race: FIXTURE_RACE_ID, overlay: 'cog' })
+
+    expect(one.structuredContent.track.overlays.map((o: { overlay: string }) => o.overlay)).toEqual([
+      'tws',
+    ])
+    expect(unknown.isError).toBe(true)
+    expect(unknown.content[0].text).toMatch(/target_speed.*target_vmg.*sail.*sog.*tws.*twa/)
+  })
+
+  it('refuses a Race that does not exist, naming the Races that do', async () => {
+    signInWith()
+
+    const result = await call('race_track', { race: '00000000-0000-0000-0000-000000000000' })
+
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toBeUndefined()
+    expect(result.content[0].text).toContain(FIXTURE_RACE_ID)
+    expect(result.content[0].text).toContain(OLDER_RACE_ID)
+  })
+
+  it('answers a failed read of race_track with an error, never a partial track', async () => {
+    signInWith(fixtureArchive(), ['recording_rows'])
+
+    const result = await call('race_track', { race: FIXTURE_RACE_ID })
+
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toBeUndefined()
   })
 })

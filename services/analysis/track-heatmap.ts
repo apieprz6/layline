@@ -41,6 +41,8 @@ import type { PolarTargets } from '@/services/analysis/polar-targets'
 import { channelValue } from '@/services/analysis/readable-rows'
 import type { SailComparison } from '@/services/analysis/sail-agreement'
 import { TRACK_OVERLAYS, overlayPaint } from '@/services/analysis/track-overlays'
+import { trackTimeline } from '@/services/analysis/track-time'
+import type { RaceWindow } from '@/services/recordings/row-quality'
 import type { TrackBox } from '@/services/recordings/track-projection'
 import { breakTrack } from '@/services/recordings/track-breaks'
 import { projectTrack, type TrackProjection } from '@/services/recordings/track-projection'
@@ -55,6 +57,7 @@ import type {
   TrackPoint,
   TrackRowFacts,
   TrackSegment,
+  TrackUnplacedAnnotation,
 } from '@/types'
 
 /**
@@ -87,6 +90,10 @@ export interface TrackHeatmapRow extends AnalysisRow {
   /** Signed, −180..180, positive = starboard (ADR 0008). */
   twa: string | null
 }
+
+/** What the race page says where the window holds no fix at all: an empty frame explains nothing. */
+export const NO_TRACK_NOTE =
+  'No position was logged anywhere in this race window, so there is no track to draw.'
 
 /** The box ADR 0033 fixes the frame's *shape* at. The element is fluid; the projection is not. */
 export const TRACK_BOX: TrackBox = { width: 360, height: 440, pad: 12 }
@@ -251,6 +258,9 @@ function tally(counts: TrackHeatmapCounts, facts: TrackRowFacts, hasPolar: boole
  * Hand this the rows of the **Race Window**, already assessed over the whole Transcription and
  * clipped afterwards (ADR 0009). A dropout beginning before the gun still froze the first rows of
  * the race, and the counts below are counts of the race.
+ *
+ * `window` is the Race Window the rows were clipped to, so the time reaches its edges; without one
+ * the time spans the rows alone.
  */
 export function raceTrackHeatmap(
   rows: readonly TrackHeatmapRow[],
@@ -258,7 +268,12 @@ export function raceTrackHeatmap(
   {
     box = TRACK_BOX,
     annotations = [],
-  }: { box?: TrackBox; annotations?: readonly TrackAnnotationInput[] } = {}
+    window = null,
+  }: {
+    box?: TrackBox
+    annotations?: readonly TrackAnnotationInput[]
+    window?: RaceWindow | null
+  } = {}
 ): RaceTrackHeatmap | null {
   const fixes = rows.map((row) => {
     const fix = fixOf(row)
@@ -267,6 +282,8 @@ export function raceTrackHeatmap(
 
   const projection = projectTrack(fixes, box)
   if (projection === null) return null
+
+  const positioned = fixes.map((fix) => fix.latitude !== null && fix.longitude !== null)
 
   const hasPolar = targets !== null
   const segments: TrackSegment[] = []
@@ -278,7 +295,7 @@ export function raceTrackHeatmap(
 
     if (rowFacts.excluded !== null) counts[rowFacts.excluded] += 1
     tally(counts, rowFacts, hasPolar)
-    if (fixes[index].latitude !== null && fixes[index].longitude !== null) counts.with_fix += 1
+    if (positioned[index]) counts.with_fix += 1
 
     return rowFacts
   })
@@ -316,8 +333,20 @@ export function raceTrackHeatmap(
     }
   }
 
-  const placed = placeAnnotations(annotations, rows, fixes, projection)
-  counts.annotations_not_placed = annotations.length - placed.length
+  const { placed, unplaced } = placeAnnotations(annotations, rows, fixes, projection)
+  counts.annotations_not_placed = unplaced.length
+
+  // The same facts the strokes carry, timed: what the legend states and the MCP reads.
+  const { time, runs: timeline } = trackTimeline(
+    facts.map((rowFacts, index) => ({
+      facts: rowFacts,
+      positioned: positioned[index],
+      // `breakTrack` closes the run at a frozen row, so the leg arriving here is the bridge's end.
+      after_dropout: index > 0 && rows[index - 1].quality.frozen && !rows[index].quality.frozen,
+    })),
+    hasPolar,
+    window
+  )
 
   return {
     width: box.width,
@@ -328,7 +357,10 @@ export function raceTrackHeatmap(
     bridges,
     rings,
     annotations: placed,
+    unplaced_annotations: unplaced,
     counts,
+    time,
+    runs: timeline,
   }
 }
 
@@ -350,8 +382,9 @@ function placeAnnotations(
   rows: readonly TrackHeatmapRow[],
   fixes: readonly { latitude: number | null; longitude: number | null }[],
   projection: TrackProjection
-): TrackAnnotation[] {
+): { placed: TrackAnnotation[]; unplaced: TrackUnplacedAnnotation[] } {
   const placed: TrackAnnotation[] = []
+  const unplaced: TrackUnplacedAnnotation[] = []
 
   for (const annotation of annotations) {
     const stamp = wallClockSeconds(annotation.at)
@@ -367,7 +400,10 @@ function placeAnnotations(
       }
     }
 
-    if (nearestIndex === -1 || nearestGap > PLACEABLE_SECONDS) continue
+    if (nearestIndex === -1 || nearestGap > PLACEABLE_SECONDS) {
+      unplaced.push({ lane: annotation.lane, label: annotation.label, at: annotation.at })
+      continue
+    }
 
     const fix = fixes[nearestIndex]
     const where = at(projection, fix.latitude as number, fix.longitude as number)
@@ -392,7 +428,7 @@ function placeAnnotations(
     })
   }
 
-  return placed
+  return { placed, unplaced }
 }
 
 /** Re-exported from where the bridge it labels is built, for the callers that already import it here. */
