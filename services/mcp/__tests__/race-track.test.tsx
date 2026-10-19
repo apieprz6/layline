@@ -14,7 +14,7 @@ import RaceTrackSection from '@/components/race/RaceTrackSection'
 import { efficiencyPercent } from '@/services/analysis/figures'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { TRACK_OVERLAYS, TRACK_SCALES } from '@/services/analysis/track-overlays'
-import { readRaceSailChart, verdictShares } from '@/services/races/race-sail-chart'
+import { raceComposition, readRaceSailChart } from '@/services/races/race-sail-chart'
 import { readRace } from '@/services/races/readRace'
 import { trackView } from '@/services/races/track-view'
 import type { McpRaceTrack, RaceDetail } from '@/types'
@@ -226,7 +226,7 @@ describe('raceTrack, against the sail tile', () => {
     expect(verdicts).toContain('off-chart')
     // The tile's own shares, verdict for verdict.
     expect(answer.composition.map(({ verdict, share }) => ({ verdict, share }))).toEqual(
-      verdictShares(sailChart.agreement).map(({ verdict, share }) => ({ verdict, share }))
+      raceComposition(sailChart.agreement).map(({ verdict, share }) => ({ verdict, share }))
     )
   })
 

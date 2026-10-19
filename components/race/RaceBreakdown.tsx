@@ -28,7 +28,8 @@ import Link from 'next/link'
 import type { CSSProperties, ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
-import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-selection-chrome'
+import { AGREEMENT_GLYPHS } from '@/components/analysis/sail-selection-chrome'
+import { AGREEMENT_WORDS } from '@/services/analysis/sail-selection'
 import {
   NO_FIT_WORDS,
   asymmetryAbsence,
@@ -55,7 +56,7 @@ import type {
   RaceChartAgreement,
   RaceSailChartRead,
 } from '@/services/analysis/sail-selection'
-import { noChartNote, tileNote, verdictShares } from '@/services/races/race-sail-chart'
+import { noChartNote, raceComposition, tileNote } from '@/services/races/race-sail-chart'
 import { describeDuration } from '@/services/recordings/coverage'
 import type { RaceInstrumentCheck, RaceTrackView } from '@/types'
 
@@ -242,7 +243,7 @@ function sides({ following, differing }: RaceChartAgreement): string {
 }
 
 function composition(agreement: RaceChartAgreement): string {
-  return verdictShares(agreement)
+  return raceComposition(agreement)
     .map(({ share, words }) => `${sharePercent(share)} ${words}`)
     .join(', ')
 }

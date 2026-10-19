@@ -13,6 +13,7 @@ import { polarDomain } from '@/services/analysis/polar-targets'
 import type { AnalysisArchive } from '@/services/analysis/readArchive'
 import {
   raceChartAgreement,
+  verdictShares,
   type CellVerdict,
   type RaceChartAgreement,
   type RaceSailChartRead,
@@ -103,30 +104,18 @@ const VERDICT_WORDS: Readonly<Record<CellVerdict, string>> = {
   'other-version': 'under another chart Version',
 }
 
-const VERDICT_ORDER: readonly CellVerdict[] = [
-  'agrees',
-  'differs',
-  'not-recorded',
-  'off-chart',
-  'other-version',
-]
-
 /**
  * The Race's sailing on the chart by verdict, as shares of all of it: the tile's composition line.
  *
- * Over every placed row, so **Not recorded** and **Off-chart** stand beside Agrees and Differs as
- * proportions of their own — never folded into Differs (ADR 0023, ADR 0030). A verdict nothing
- * carried is not listed. Empty where nothing was placed.
+ * `verdictShares` — the cell sheet's own proportions — over every placed row of the Race, so **Not
+ * recorded** and **Off-chart** stand beside Agrees and Differs as proportions of their own, never
+ * folded into Differs (ADR 0023, ADR 0030). A verdict nothing carried is not listed. Empty where
+ * nothing was placed.
  */
-export function verdictShares(
+export function raceComposition(
   agreement: RaceChartAgreement
 ): { verdict: CellVerdict; share: number; words: string }[] {
-  const { verdicts, placed_rows } = agreement
-  if (placed_rows === 0) return []
-
-  return VERDICT_ORDER.filter((verdict) => verdicts[verdict] > 0).map((verdict) => ({
-    verdict,
-    share: verdicts[verdict] / placed_rows,
-    words: VERDICT_WORDS[verdict],
-  }))
+  return verdictShares({ rows: agreement.placed_rows, verdicts: agreement.verdicts }).map(
+    ({ verdict, share }) => ({ verdict, share, words: VERDICT_WORDS[verdict] })
+  )
 }

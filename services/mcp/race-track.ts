@@ -21,7 +21,7 @@ import {
   drawnNotColoured,
   fillerAnchoredBandShare,
 } from '@/services/analysis/track-time'
-import { noChartNote, tileNote, verdictShares } from '@/services/races/race-sail-chart'
+import { noChartNote, raceComposition, tileNote } from '@/services/races/race-sail-chart'
 import type {
   EfficiencyAggregate,
   McpEfficiencyFigure,
@@ -139,7 +139,7 @@ function sailChartAnswer(read: RaceSailChartRead): McpSailChart {
     agreement: { share: agreement.agreement, percent: efficiencyPercent(agreement.agreement) },
     following: { ...polarFigure(agreement.following), time: duration(agreement.following.elapsed_seconds) },
     differing: { ...polarFigure(agreement.differing), time: duration(agreement.differing.elapsed_seconds) },
-    composition: verdictShares(agreement).map((part) => ({ ...part, percent: sharePercent(part.share) })),
+    composition: raceComposition(agreement).map((part) => ({ ...part, percent: sharePercent(part.share) })),
     cells: agreement.cells,
     note: tileNote(agreement),
   }
