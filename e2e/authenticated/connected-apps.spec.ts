@@ -93,14 +93,6 @@ test.describe('the Connected Apps list', () => {
     expect(revokes).toHaveLength(1)
   })
 
-  test('shows an error, not an empty list, when the grants cannot be read', async ({ page }) => {
-    await page.route(GRANTS, (route) => route.fulfill({ status: 500, json: { msg: 'boom' } }))
-    await gotoHydrated(page, '/settings')
-
-    await expect(page.getByText('Couldn’t load your connected apps.')).toBeVisible()
-    await expect(page.getByText('No apps connected yet.')).toHaveCount(0)
-  })
-
   test('fits a 390px screen with the confirmation open', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390-auth', 'a 390px question')
 

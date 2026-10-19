@@ -22,7 +22,10 @@ type GrantsState = { status: 'loading' } | { status: 'failed' } | { status: 'loa
  * Revoking ends the app's refresh, not the access token it already holds: the **MCP Server**
  * checks a token's signature locally (`lib/mcp/auth.ts`), so that token works until it expires,
  * an hour at most. ADR 0042 records the owner's choice of that window over a session lookup on
- * every tool call, and every sentence here says "within the hour" rather than "now".
+ * every tool call, so both the confirmation and this line say "within the hour", never "now".
+ *
+ * "The hour" is `jwt_expiry = 3600` in `supabase/config.toml`, and the hosted project's matching
+ * setting. Raise either and this copy, and the confirmation's, stop being true.
  */
 const ENDS_WITHIN_THE_HOUR = 'Its access stops within the hour.'
 
@@ -40,7 +43,7 @@ const ENDS_WITHIN_THE_HOUR = 'Its access stops within the hour.'
  */
 export default function ConnectedApps(): ReactElement {
   const [state, setState] = useState<GrantsState>({ status: 'loading' })
-  const [revoked, setRevoked] = useState<string | null>(null)
+  const [revokedAppName, setRevokedAppName] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -74,7 +77,7 @@ export default function ConnectedApps(): ReactElement {
         ? { status: 'loaded', grants: current.grants.filter((g) => g.client.id !== grant.client.id) }
         : current
     )
-    setRevoked(appName(grant))
+    setRevokedAppName(appName(grant))
   }
 
   return (
@@ -102,9 +105,9 @@ export default function ConnectedApps(): ReactElement {
           ))}
         </ul>
       )}
-      {revoked && (
+      {revokedAppName && (
         <p role="status" style={note}>
-          {revoked} can no longer sign in as you. {ENDS_WITHIN_THE_HOUR}
+          {revokedAppName} can no longer sign in as you. {ENDS_WITHIN_THE_HOUR}
         </p>
       )}
     </div>
