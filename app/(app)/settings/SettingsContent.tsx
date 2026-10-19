@@ -3,6 +3,7 @@
 import React from 'react'
 import { useTheme } from '@/lib/hooks/useTheme'
 import type { ThemePreference } from '@/types'
+import ConnectClaudePrototype from '@/components/settings/prototype-lay191/ConnectClaudePrototype'
 
 const themeOptions: { value: ThemePreference; label: string; subtitle?: string }[] = [
   {
@@ -120,6 +121,9 @@ export default function SettingsContent(): React.ReactElement {
           })}
         </div>
       </section>
+
+      {/* PROTOTYPE — LAY-191. Throwaway; lives only on prototype/lay-191-connect-claude. */}
+      <ConnectClaudePrototype />
     </div>
   )
 }
