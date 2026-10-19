@@ -3,7 +3,7 @@ import type { ReactElement } from 'react'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
-import type { ChartAgreement } from '@/services/analysis/sail-selection'
+import { judgeableShare, type ChartAgreement } from '@/services/analysis/sail-selection'
 
 /**
  * How many races the card looks back over. Said in the card, never implied.
@@ -160,9 +160,12 @@ function sides(agreement: ChartAgreement): string {
  * `placed_rows` cannot be nought.
  */
 function judged(agreement: ChartAgreement): string {
-  const { judgeable_rows, placed_rows } = agreement
+  const share = judgeableShare(agreement)
 
-  if (judgeable_rows === placed_rows) return ', all of which recorded their sails'
+  // Null only where nothing was placed, which a card with a share to describe never is.
+  if (share === null || agreement.judgeable_rows === agreement.placed_rows) {
+    return ', all of which recorded their sails'
+  }
 
-  return `, on the ${sharePercent(judgeable_rows / placed_rows)} of that sailing whose sail was written down`
+  return `, on the ${sharePercent(share)} of that sailing whose sail was written down`
 }

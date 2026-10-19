@@ -196,3 +196,14 @@ export function crossoverSailRegions(
 
   return { region, labels, edges }
 }
+
+/**
+ * `crossoverSailRegions` with each region named by the chart's own Sail Definitions, which is what
+ * the Chart layer draws: the screen and the MCP tool both read regions through this.
+ */
+export function namedSailRegions(
+  payload: Pick<CrossoverChartPayload, 'cells' | 'sail_definitions'>
+): SailRegions {
+  const labels = new Map(payload.sail_definitions.map((each) => [each.number, each.label]))
+  return crossoverSailRegions(payload, (sail) => labels.get(sail) ?? null)
+}

@@ -28,7 +28,7 @@ import Link from 'next/link'
 import type { CSSProperties, ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
-import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-selection-chrome'
+import { AGREEMENT_GLYPHS } from '@/components/analysis/sail-selection-chrome'
 import ChannelColumns from '@/components/boat/instrument-tuning/ChannelColumns'
 import Explainer from '@/components/common/Explainer'
 import { radius, spacing } from '@/lib/utils/design'
@@ -40,11 +40,12 @@ import {
   vmgFillerAnchoredShare,
 } from '@/services/analysis/polar-performance'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
-import type {
-  CellAgreement,
-  CellVerdict,
-  RaceChartAgreement,
-  RaceSailChartRead,
+import {
+  AGREEMENT_WORDS,
+  type CellAgreement,
+  type CellVerdict,
+  type RaceChartAgreement,
+  type RaceSailChartRead,
 } from '@/services/analysis/sail-selection'
 import { describeDuration } from '@/services/recordings/coverage'
 import type { RaceInstrumentCheck, RaceTrack } from '@/types'

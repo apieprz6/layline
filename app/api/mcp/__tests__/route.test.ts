@@ -7,7 +7,16 @@ import { GET as protectedResource } from '@/app/.well-known/oauth-protected-reso
 import { authenticateMcpRequest } from '@/lib/mcp/auth'
 import { clearHistoryCache, fetchCHII2, fetchCHII2History } from '@/services/buoys/ndbc'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
-import { POLAR, POLAR_VERSION, RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
+import {
+  CHART,
+  CHART_VERSION,
+  POLAR,
+  POLAR_VERSION,
+  RACES,
+  ROWS,
+  VOCABULARY,
+} from '@/components/analysis/__tests__/fixture'
+import { readCrossoverChartScreen } from '@/services/boat/readCrossoverChartVersions'
 import { readRace } from '@/services/races/readRace'
 import { raceSummary } from '@/services/mcp/races'
 import {
@@ -35,13 +44,33 @@ const { readAnalysisArchive: realReadArchive } = jest.requireActual<
 jest.mock('@/services/boat/readPolarVersions', () => ({
   readPolarVersion: async (versionId: string) =>
     versionId === 'polar-v1' ? { payload: FIXTURE_POLAR } : null,
+  readPolarScreen: async () => null,
 }))
 
 jest.mock('@/services/boat/readCrossoverChartVersions', () => ({
   readCrossoverChartVersion: async (versionId: string) =>
     versionId === 'chart-v1' ? { payload: FIXTURE_CHART } : null,
-  readCrossoverChartScreen: async () => null,
+  readCrossoverChartScreen: jest.fn(async () => null),
 }))
+
+const readChartScreen = readCrossoverChartScreen as jest.MockedFunction<typeof readCrossoverChartScreen>
+
+/** The Crossover Chart screen's read, with the fixture's chart in force as Version 3. */
+const CHART_SCREEN = {
+  current_version_id: CHART_VERSION,
+  versions: [],
+  current: {
+    id: CHART_VERSION,
+    version_number: 3,
+    effective_from: '2026-05-01',
+    recorded_at: '2026-05-01T00:00:00Z',
+    note: null,
+    filename: 'chart.csv',
+    content_sha256: 'x',
+    is_current: true,
+    payload: CHART,
+  },
+} as never
 
 const authenticate = authenticateMcpRequest as jest.MockedFunction<typeof authenticateMcpRequest>
 
@@ -151,6 +180,7 @@ describe('/api/mcp with a crew token', () => {
       'list_races',
       'race_summary',
       'polar_performance',
+      'sail_selection',
       'instrument_tuning',
       'boat_setup',
     ])
@@ -282,6 +312,62 @@ describe('/api/mcp with a crew token', () => {
     const refused = await (await POST(call('polar_performance', { windWindow: { centre: 12, width: 5 } }))).json()
     expect(refused.result.isError).toBe(true)
     expect(refused.result.content[0].text).toContain('2, 4, 6')
+  })
+
+  it('offers sail_selection the screen’s five dimensions, with no sail among them', async () => {
+    const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
+    const tool = (await response.json()).result.tools.find((t: { name: string }) => t.name === 'sail_selection')
+
+    expect(Object.keys(tool.inputSchema.properties.filter.properties)).toEqual([
+      'wind',
+      'pos',
+      'sea',
+      'time',
+      'when',
+      'dayRange',
+    ])
+    expect(Object.keys(tool.inputSchema.properties)).toEqual(['filter', 'cell'])
+  })
+
+  it('answers sail_selection through the caller’s own client, against the chart in force', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+    readChartScreen.mockResolvedValue(CHART_SCREEN)
+
+    const whole = (await (await POST(call('sail_selection', {}))).json()).result
+    expect(readArchive).toHaveBeenCalledWith(CALLERS_CLIENT)
+    expect(readChartScreen).toHaveBeenCalledWith(CALLERS_CLIENT)
+    expect(whole.isError).toBeFalsy()
+    expect(whole.structuredContent.crossoverChart.version).toBe(3)
+    expect(whole.structuredContent.regions.length).toBeGreaterThan(0)
+    expect(JSON.parse(whole.content[0].text)).toEqual(whole.structuredContent)
+
+    const one = (await (await POST(call('sail_selection', { cell: { twa: 40, tws: 10 } }))).json()).result
+    expect(one.structuredContent.cell).toMatchObject({ twaDegrees: 40, twsKnots: 10, chartSays: 'Main + Jib 1' })
+  })
+
+  it('refuses a cell the chart does not hold, with the valid range', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+    readChartScreen.mockResolvedValue(CHART_SCREEN)
+
+    const result = (await (await POST(call('sail_selection', { cell: { twa: 45, tws: 10 } }))).json()).result
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('40, 90')
+    expect(result.content[0].text).toContain('4, 10, 16')
+  })
+
+  it('says so when there is no Crossover Chart, and errs when the archive could not be read', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+    readChartScreen.mockResolvedValue(null)
+    const noChart = (await (await POST(call('sail_selection', {}))).json()).result
+    expect(noChart.isError).toBe(true)
+    expect(noChart.content[0].text).toMatch(/Crossover Chart/)
+
+    readArchive.mockResolvedValue(null)
+    readChartScreen.mockResolvedValue(CHART_SCREEN)
+    const unread = (await (await POST(call('sail_selection', {}))).json()).result
+    expect(unread.isError).toBe(true)
+    expect(unread.content[0].text).toMatch(/could not be read/)
   })
 
   it('makes a failed archive read an error, never a figure over a short archive', async () => {

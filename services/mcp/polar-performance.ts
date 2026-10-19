@@ -1,4 +1,3 @@
-import { countableSentence, gapSentence, ledgerHeadline } from '@/services/analysis/coverage-ledger'
 import { matchedRows } from '@/services/analysis/filter'
 import { efficiencyPercent, patchPercent } from '@/services/analysis/figures'
 import {
@@ -24,12 +23,12 @@ import {
 } from '@/services/analysis/polar-plot'
 import { TARGET_VMG_CAVEAT } from '@/services/analysis/polar-targets'
 import { filterAsArgument, offeredDimensions } from './analysis-filter'
+import { coverageLedgerAnswer } from './coverage-ledger'
 import type {
   AnalysisDimensionSpec,
   AnalysisFilter,
   EfficiencyAggregate,
   MatchableRow,
-  McpCoverageLedger,
   McpPolarPerformanceFigure,
   McpPolarPlotPatch,
   McpWindWindow,
@@ -163,26 +162,9 @@ export function polarPerformanceAnswer(
   const { ledger, overall } = getPolarPerformanceData(rows, filter, dimensions)
   const range = focusRange(Object.values(polars))
 
-  const coverageLedger: McpCoverageLedger = {
-    matchedSeconds: ledger.matched_seconds,
-    totalSeconds: ledger.total_seconds,
-    matchedRaces: ledger.matched_races,
-    totalRaces: ledger.total_races,
-    countableSeconds: ledger.countable_seconds,
-    excluded: excludedFromFigures({ ledger, overall }),
-    notRecorded: ledger.gaps.map((gap) => ({
-      dimension: gap.dimension,
-      missing: gap.label,
-      seconds: gap.seconds,
-      share: gap.share,
-    })),
-    statement: [
-      ledgerHeadline(ledger),
-      countableSentence(ledger),
-      ...ledger.gaps.map(gapSentence),
-      scoredSailingSentence(overall),
-    ],
-  }
+  const coverageLedger = coverageLedgerAnswer(ledger, excludedFromFigures({ ledger, overall }), [
+    scoredSailingSentence(overall),
+  ])
 
   return {
     filter: filterAsArgument(filter),

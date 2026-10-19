@@ -3766,6 +3766,115 @@ export interface PolarPerformanceAnswer {
   windWindow: McpWindWindow | null
 }
 
+// The Sail Selection Screen as the MCP `sail_selection` tool states it (LAY-186). Ids are the
+// screen's own: a row verdict is one of the five below, and a cell's Cell Agreement adds `mixed`.
+export type McpSailVerdict = 'agrees' | 'differs' | 'not-recorded' | 'off-chart' | 'other-version'
+
+// One cell, by the chart's own axis values, which is also how the tool's `cell` argument names it.
+export interface McpSailSelectionCellArgument {
+  twa: number
+  tws: number
+}
+
+// What a reached cell's (or region's) Countable rows say about the chart's recommendation:
+// Cell Agreement, and each verdict as a proportion of those rows (ADR 0030). Rows, because the
+// screen's own tally counts rows; the figure's time is `polarEfficiency.scoredSeconds`.
+// Words for each id are in the answer's `words`, once, rather than on every cell.
+export interface McpCellAgreement {
+  agreement: McpSailVerdict | 'mixed'
+  rows: number
+  races: number
+  verdicts: { verdict: McpSailVerdict; rows: number; share: number }[]
+  polarEfficiency: McpPolarPerformanceFigure
+}
+
+// A cell nobody sailed in under the filter, and why.
+export interface McpUnreachedCell {
+  agreement: 'unreached'
+  reason: string
+}
+
+// One reached cell in the whole-chart answer. `noTargetReason` says why the cell can never hold a
+// percent of target, where it cannot; it is about the Polar's axes, not about who sailed there.
+export type McpSailSelectionCell = { twaDegrees: number; twsKnots: number; noTargetReason?: string } & McpCellAgreement
+
+// One region of the chart, as the Chart layer outlines and names it: cells of one sail joined edge
+// to edge. Two regions of one sail are told apart by `region`. Its unreached cells are grouped by
+// reason, because most of a chart is never sailed and says so in one sentence.
+export interface McpSailRegion {
+  region: number
+  sail: string
+  sailNumber: number
+  cellCount: number
+  reachedCells: number
+  cellAgreement: McpCellAgreement | McpUnreachedCell
+  cells: McpSailSelectionCell[]
+  unreached: { reason: string; cells: { twaDegrees: number; twsKnots: number }[] }[]
+}
+
+// One line of a cell's breakdown, with its own percent of target over its own rows.
+export interface McpSailBreakdownLine {
+  id: string
+  label: string
+  aboutTheRecord: boolean
+  rows: number
+  polarEfficiency: McpPolarPerformanceFigure
+  verdict?: McpSailVerdict
+}
+
+// One cell as the screen's cell sheet states it. `statement` is the sheet's own sentences.
+export interface McpSailSelectionCellDetail {
+  twaDegrees: number
+  twsKnots: number
+  region: number
+  chartSays: string
+  sailNumber: number | null
+  cellAgreement: McpCellAgreement | McpUnreachedCell
+  statement: string[]
+  breakdown: { sails: McpSailBreakdownLine[]; seas: McpSailBreakdownLine[]; times: McpSailBreakdownLine[] } | null
+}
+
+// Chart Agreement: the share of judgeable sailing that carried what its own cell calls for, and
+// each side's own percent of target, side by side and never subtracted.
+export interface McpChartAgreement {
+  share: number | null
+  percent: string | null
+  placedRows: number
+  judgeableRows: number
+  judgeableShare: number | null
+  following: McpPolarPerformanceFigure
+  differing: McpPolarPerformanceFigure
+}
+
+export interface SailSelectionAnswer {
+  filter: McpAnalysisFilterArgument
+  crossoverChart: { version: number | null; twaAxisDegrees: number[]; twsAxisKnots: number[] }
+  coverageLedger: McpCoverageLedger
+  // The grid's own counts, as the line under each layer states them. `unreachable` null where no
+  // Polar was read, so where none can exist is unknown.
+  grid: {
+    cells: number
+    reached: number
+    withFigure: number
+    rowsWithoutFigure: number
+    unreachable: number | null
+    mixed: number
+    emptiedByFilter: number
+    noTargetRegions: string[]
+    // The screen's note under the grid: matched rows no cell holds, and why. In rows, as the
+    // screen states it, which is why it is here and not in the Coverage Ledger.
+    placement: string
+  }
+  dimensions: McpAnalysisDimension[]
+  // What each id is called on the screen: a cell's Cell Agreement, and a sail line's verdict.
+  words: { cellAgreement: Record<McpSailVerdict | 'mixed', string>; sailVerdict: Record<McpSailVerdict, string> }
+  // The whole chart: null when one cell was asked for.
+  chartAgreement: McpChartAgreement | null
+  regions: McpSailRegion[] | null
+  // The cell asked for, or null for the whole chart.
+  cell: McpSailSelectionCellDetail | null
+}
+
 // One observation in a station's history, as the station page plots it. `gustKnots` and
 // `waveHeightFeet` are present only where the page shows that quantity at all, and null where it
 // shows "—" for this moment (ADR 0008).
