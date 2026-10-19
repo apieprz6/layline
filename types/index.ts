@@ -462,6 +462,20 @@ export interface FileBackedVersionList {
 /** A Version with its payload, which is what the Version's own screen shows. */
 export type FileBackedVersionDetail<Payload> = FileBackedVersionSummary & { payload: Payload }
 
+/**
+ * Every Version of one file-backed artifact with its payload, newest first. A payload is `null` on
+ * a Version whose stored one the schema refuses: still listed, as the screen lists it, never drawn.
+ */
+export interface FileBackedVersionDetailList<Payload> {
+  current_version_id: string | null
+  versions: FileBackedVersionWithPayload<Payload>[]
+}
+
+/** A Version with its payload, or `payload: null` where the stored one is not readable as one. */
+export type FileBackedVersionWithPayload<Payload> = FileBackedVersionSummary & {
+  payload: Payload | null
+}
+
 /** What an artifact's screen shows: every Version, and the payload the pointer is at. */
 export interface FileBackedScreen<Payload> {
   list: FileBackedVersionList
@@ -3743,6 +3757,145 @@ export interface McpStationHistory {
   anemometerHeightFeet: number
   note?: string
 }
+
+/**
+ * Which Version of a Boat Setup artifact `boat_setup` is stating, and what identifies it to a
+ * sailor: its number, the day it took effect, the note it carries, and whether it is the one in
+ * force. A Race names a Version by `versionNumber`, which is unique within its artifact.
+ */
+export interface McpBoatSetupVersionIdentity {
+  versionNumber: number
+  /** Calendar date the sailor says this Version took effect. */
+  effectiveFrom: string
+  note: string | null
+  /** Whether the artifact's current pointer is at this Version. */
+  inForce: boolean
+}
+
+/** `boat_setup` with no arguments: the Boat Management list. `current: null` is *not recorded*. */
+export interface McpBoatSetupOverview {
+  boat: { name: string; model: string }
+  artifacts: {
+    artifact: BoatSetupKind
+    name: string
+    current: { versionNumber: number; effectiveFrom: string } | null
+  }[]
+}
+
+/** A Polar Version as its list row states it. The grid is deliberately not carried (ADR 0042). */
+export interface McpPolarVersion extends McpBoatSetupVersionIdentity {
+  filename: string
+}
+
+/** One Sail Definition as the Crossover Chart's legend states it. */
+export interface McpSailDefinition {
+  number: number
+  label: string
+  /** How many of the chart's cells call for it. Zero is legal. */
+  cells: number
+  /** The legend's own wording of `cells`: "never recommended", "1 cell", "5 cells". */
+  usage: string
+}
+
+export interface McpCrossoverChartVersion extends McpBoatSetupVersionIdentity {
+  filename: string
+  /** Null when the stored chart is no longer readable as one; the Version is still listed. */
+  sailDefinitions: McpSailDefinition[] | null
+}
+
+/** One side of one Shroud Position: both encodings, neither derived from the other (ADR 0007). */
+export interface McpShroudSetting {
+  gapMm: number
+  turnsFromBase: number
+  /** `turnsFromBase` as the screen prints it: signed, in half turns. */
+  turns: string
+}
+
+export interface McpWindBand {
+  /** The band's range as the screen prints it: "0–9 kt", "20 kt and up". */
+  range: string
+  lowKnots: number
+  /** Null on the open-ended top band. */
+  highKnots: number | null
+  /** The tuning guide's free text. Never the dashboard's wind classification. */
+  label: string | null
+  baseTune: boolean
+  note: string | null
+  /** As stored: the Base Tune was re-measured and this band's Gaps were not. Never recomputed. */
+  gapsStale: boolean
+  shrouds: { position: ShroudPosition; port: McpShroudSetting; starboard: McpShroudSetting }[]
+}
+
+export interface McpRigTuneVersion extends McpBoatSetupVersionIdentity {
+  /** The change reason, which a Rig Tune Version cannot exist without. */
+  note: string
+  /** Up the wind axis. */
+  windBands: McpWindBand[]
+}
+
+/** One Calibration Channel in the display's own encoding, figure and printed form both. */
+export interface McpCalibrationChannel {
+  channel: CalibrationChannel
+  name: string
+  /** Null on a channel the display gives no multiplier (AWA, HDG). */
+  multiplier: number | null
+  multiplierText: string
+  offset: number
+  offsetText: string
+}
+
+export interface McpInstrumentCalibrationVersion extends McpBoatSetupVersionIdentity {
+  channels: McpCalibrationChannel[]
+  /** What this Version changed against the one minted before it, as the Calibration Log says. */
+  changes: string[]
+}
+
+/** One line of the Calibration Log, newest first, in the Log's own words. */
+export type McpCalibrationLogEntry =
+  | {
+      entry: 'version'
+      date: string
+      headline: string
+      versionNumber: number
+      changes: string[]
+      note: string | null
+    }
+  | {
+      entry: 'event'
+      date: string
+      headline: string
+      type: CalibrationEventType
+      channels: CalibrationChannel[]
+      note: string
+      /** What the act did to the programmed figures, which is always nothing. */
+      consequence: string
+    }
+
+/** A `boat_setup` answer, or the refusal Claude reads as a failed call. Never part of an answer. */
+export type McpBoatSetupResult<Answer> = { ok: true; answer: Answer } | { ok: false; refusal: string }
+
+interface McpBoatSetupArtifactCommon {
+  name: string
+  /** The Version in force, or null when nothing is recorded. */
+  currentVersionNumber: number | null
+}
+
+/**
+ * `boat_setup` for one artifact: its Versions, newest first, or the one asked for. The Calibration
+ * Log is stated only when every Version is, because it is the history of all of them.
+ */
+export type McpBoatSetupArtifactAnswer =
+  | (McpBoatSetupArtifactCommon & { artifact: 'polar'; versions: McpPolarVersion[] })
+  | (McpBoatSetupArtifactCommon & {
+      artifact: 'crossover_chart'
+      versions: McpCrossoverChartVersion[]
+    })
+  | (McpBoatSetupArtifactCommon & { artifact: 'rig_tune'; versions: McpRigTuneVersion[] })
+  | (McpBoatSetupArtifactCommon & {
+      artifact: 'instrument_calibration'
+      versions: McpInstrumentCalibrationVersion[]
+      calibrationLog?: McpCalibrationLogEntry[]
+    })
 
 // A Boat Setup Version a Race was sailed under, as the Race froze it (ADR 0012). Null where the
 // Race records none: "not recorded", never the boat's current Version filled in.

@@ -151,6 +151,7 @@ describe('/api/mcp with a crew token', () => {
       'list_races',
       'race_summary',
       'polar_performance',
+      'boat_setup',
     ])
     tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
   })

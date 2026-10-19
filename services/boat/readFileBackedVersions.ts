@@ -24,7 +24,9 @@ import type {
   FileBackedBoatSetupKind,
   FileBackedScreen,
   FileBackedVersionDetail,
+  FileBackedVersionDetailList,
   FileBackedVersionList,
+  FileBackedVersionWithPayload,
   FileBackedVersionSummary,
 } from '@/types'
 
@@ -83,6 +85,14 @@ export interface FileBackedVersionReader<Payload> {
   ): Promise<FileBackedVersionDetail<Payload> | null>
   /** The list and the payload in force together, for the screen that shows both. */
   readScreen(client?: SupabaseClient): Promise<FileBackedScreen<Payload> | null>
+  /**
+   * Every Version with its payload, newest first, or `null` when the read failed — for a reader
+   * that states each Version's contents, as the MCP server's `boat_setup` does.
+   *
+   * A Version whose stored payload the schema refuses stays in the list with `payload: null`, as
+   * the screen still lists it: unreadable is a fact about that Version, not a failed read.
+   */
+  readVersionsWithPayloads(client?: SupabaseClient): Promise<FileBackedVersionDetailList<Payload> | null>
 }
 
 export function fileBackedVersionReader<Payload>(
@@ -179,22 +189,29 @@ export function fileBackedVersionReader<Payload>(
     // three are the same answer to the sailor — there is no such Version of this artifact.
     if (!data) return null
 
-    const validated = validate(data.payload)
+    const version = withPayload(artifact, data)
+    return version.payload === null ? null : { ...version, payload: version.payload }
+  }
+
+  /** A stored row as a Version, its payload `null` when the schema refuses it, which is logged. */
+  function withPayload(
+    artifact: ArtifactRow,
+    row: DetailRow
+  ): FileBackedVersionWithPayload<Payload> {
+    const { payload: stored, ...summary } = row
+    const validated = validate(stored)
 
     if (!validated.ok) {
       console.error(
-        `${label}: v${data.version_number} (${data.id}) holds a payload that is not ${payloadIs}:`,
+        `${label}: v${row.version_number} (${row.id}) holds a payload that is not ${payloadIs}:`,
         validated.issues.join('; ')
       )
-      return null
     }
-
-    const { payload: _stored, ...summary } = data
 
     return {
       ...summary,
-      is_current: data.id === artifact.current_version_id,
-      payload: validated.payload,
+      is_current: row.id === artifact.current_version_id,
+      payload: validated.ok ? validated.payload : null,
     }
   }
 
@@ -253,6 +270,33 @@ export function fileBackedVersionReader<Payload>(
       if (!list) return null
 
       return { list, current }
+    },
+
+    async readVersionsWithPayloads(
+      client?: Supabase
+    ): Promise<FileBackedVersionDetailList<Payload> | null> {
+      const supabase = await resolveClient(client)
+      if (!supabase) return null
+
+      const artifact = await readArtifact(supabase)
+      if (!artifact) return null
+
+      const { data, error } = await supabase
+        .from('boat_setup_versions')
+        .select(`${SUMMARY_COLUMNS}, payload`)
+        .eq('artifact_id', artifact.id)
+        .order('version_number', { ascending: false })
+        .returns<DetailRow[]>()
+
+      if (error) {
+        console.error(`${label}: versions read failed:`, error.message)
+        return null
+      }
+
+      return {
+        current_version_id: artifact.current_version_id,
+        versions: (data ?? []).map((row) => withPayload(artifact, row)),
+      }
     },
   }
 }

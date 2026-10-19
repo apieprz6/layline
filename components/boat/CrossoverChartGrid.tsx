@@ -1,5 +1,8 @@
 import type { CSSProperties, ReactElement } from 'react'
-import { crossoverDefinitionUsage } from '@/services/boat/crossoverDefinitionUsage'
+import {
+  crossoverDefinitionUsage,
+  describeDefinitionUsage,
+} from '@/services/boat/crossoverDefinitionUsage'
 import { UNKNOWN_SAIL_BAND, sailBand } from '@/services/boat/crossoverSailBands'
 import { spacing } from '@/lib/utils/design'
 import type { CrossoverChartPayload } from '@/types'
@@ -99,15 +102,8 @@ export default function CrossoverChartGrid({ payload }: CrossoverChartGridProps)
               {entry.definition.number}
             </span>
             <span style={LEGEND_LABEL_STYLE}>{entry.definition.label}</span>
-            {/* Nought is the answer worth printing: a definition no cell calls for is an
-                inventory entry the chart never recommends, which is not the same as an absent
-                definition and is not a mistake. */}
             <span data-testid="crossover-chart-legend-cells" style={LEGEND_COUNT_STYLE}>
-              {entry.cells === 0
-                ? 'never recommended'
-                : entry.cells === 1
-                  ? '1 cell'
-                  : `${entry.cells} cells`}
+              {describeDefinitionUsage(entry.cells)}
             </span>
           </li>
         ))}

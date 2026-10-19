@@ -49,6 +49,10 @@ above happen in your browser.
 - **Polar performance.** The season's Polar Efficiency and VMG Efficiency, narrowed the way the
   Polar performance screen's filter narrows them: point of sail, sail used, sea state, time of
   day and when.
+- **Boat Setup.** The Polar, Crossover Chart, Rig Tune and Instrument Calibration as the Boat
+  Management screens show them, every Version included: "what was the rig set to for the Fall
+  Closer?", "when did we last recalibrate the paddlewheel?". A Polar is named by its Version, never
+  handed over as a grid.
 - More tools (forecasts, sail selection) are on the way.
 
 ## Reading the answers
@@ -71,6 +75,11 @@ above happen in your browser.
 - **A Race with no title has none.** Claude should call it by its day, not invent a name.
 - **Sails and sea state are what you wrote down.** Where nobody recorded them for a Race, Claude is
   told they were not recorded, which is not the same as nothing changing.
+- **A Race was sailed under its own Versions.** Ask about a past Race's rig and Claude should open
+  the Version that Race names, not the one the boat is set to today.
+- **Rig figures are as measured.** Turnbuckle Gaps and Turns From Base are both given, and neither
+  is converted into the other. A band marked *Gaps stale* has Gaps that no longer match the rig;
+  Claude is told so.
 
 - **Wind speed works the way the Polar Plot's wind window does.** The season figures blend every
   wind, so 110% of target at 4 knots and 50% at 12 can read as one middling number. Ask about a
