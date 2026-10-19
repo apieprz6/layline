@@ -1,6 +1,10 @@
 import type { CSSProperties, ReactElement } from 'react'
-import { CALIBRATION_EVENT_LABEL } from '@/lib/boat/calibration'
-import { buildCalibrationLog, describeChange } from '@/lib/boat/calibrationLog'
+import {
+  buildCalibrationLog,
+  eventConsequence,
+  logEntryHeadline,
+  versionChangeLines,
+} from '@/lib/boat/calibrationLog'
 import { formatCalendarDate } from '@/lib/utils/calendarDate'
 import { spacing } from '@/lib/utils/design'
 import type { CalibrationEvent, InstrumentCalibrationVersion } from '@/types'
@@ -93,31 +97,30 @@ export default function CalibrationLog({ versions, events }: CalibrationLogProps
             {entry.entry === 'version' ? (
               <>
                 <div style={{ ...HEADLINE_STYLE, color: 'var(--text-primary)' }}>
-                  {entry.isFirst ? 'First recorded' : 'Values changed'} · v
-                  {entry.version.version_number}
+                  {logEntryHeadline(entry)}
                 </div>
 
-                {entry.changes.length === 0 ? (
-                  // A Version that snapshots the same six figures as the one before it.
-                  // Legitimate — a Version is minted per act, not per difference — and
-                  // saying so beats an entry that looks like a rendering failure.
-                  <div style={{ ...CHANGE_STYLE, fontFamily: 'var(--font-body)' }}>
-                    No figure moved.
+                {/* One line a figure moved, each naming its channel and field, so the line is its
+                    own key. A Version that moved nothing says so in prose rather than figures. */}
+                {versionChangeLines(entry.changes).map((line) => (
+                  <div
+                    key={line}
+                    style={
+                      entry.changes.length === 0
+                        ? { ...CHANGE_STYLE, fontFamily: 'var(--font-body)' }
+                        : CHANGE_STYLE
+                    }
+                  >
+                    {line}
                   </div>
-                ) : (
-                  entry.changes.map((change) => (
-                    <div key={`${change.channel}-${change.field}`} style={CHANGE_STYLE}>
-                      {describeChange(change)}
-                    </div>
-                  ))
-                )}
+                ))}
 
                 {entry.version.note !== null && <p style={PROSE_STYLE}>{entry.version.note}</p>}
               </>
             ) : (
               <>
                 <div style={{ ...HEADLINE_STYLE, color: 'var(--wind-heavy)' }}>
-                  {CALIBRATION_EVENT_LABEL[entry.event.type]} · {entry.event.channels.join(', ')}
+                  {logEntryHeadline(entry)}
                 </div>
 
                 {/* The note is the whole content of an Event, which is why it is
@@ -125,9 +128,7 @@ export default function CalibrationLog({ versions, events }: CalibrationLogProps
                 <p style={PROSE_STYLE}>{entry.event.note}</p>
 
                 <p style={{ ...PROSE_STYLE, color: 'var(--text-muted)' }}>
-                  {entry.event.type === 'autocompensation'
-                    ? 'No programmed figure changed — the instrument rebuilt its own deviation table.'
-                    : 'No programmed figure changed.'}
+                  {eventConsequence(entry.event.type)}
                 </p>
               </>
             )}

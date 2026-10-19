@@ -6,10 +6,11 @@ import { POST } from '../route'
 import { GET as protectedResource } from '@/app/.well-known/oauth-protected-resource/api/mcp/route'
 import { authenticateMcpRequest } from '@/lib/mcp/auth'
 import { clearHistoryCache, fetchCHII2, fetchCHII2History } from '@/services/buoys/ndbc'
+import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { POLAR, POLAR_VERSION, RACES, ROWS, VOCABULARY } from '@/components/analysis/__tests__/fixture'
 import { readRace } from '@/services/races/readRace'
 import { raceSummary } from '@/services/mcp/races'
 import { raceTrack } from '@/services/mcp/race-track'
-import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import { readRaceSailChart } from '@/services/races/race-sail-chart'
 import {
   FIXTURE_CHART,
@@ -21,6 +22,17 @@ import {
 } from '@/services/mcp/__tests__/archive-client'
 
 jest.mock('@/lib/mcp/auth', () => ({ authenticateMcpRequest: jest.fn() }))
+// The real read by default, which the race tools run over their fixture client; a polar test
+// stubs it for itself, and `beforeEach` puts the real one back so no stub outlives its test.
+jest.mock('@/services/analysis/readArchive', () => {
+  const actual = jest.requireActual('@/services/analysis/readArchive')
+  return { ...actual, readAnalysisArchive: jest.fn(actual.readAnalysisArchive) }
+})
+
+const readArchive = readAnalysisArchive as jest.MockedFunction<typeof readAnalysisArchive>
+const { readAnalysisArchive: realReadArchive } = jest.requireActual<
+  typeof import('@/services/analysis/readArchive')
+>('@/services/analysis/readArchive')
 
 jest.mock('@/services/boat/readPolarVersions', () => ({
   readPolarVersion: async (versionId: string) =>
@@ -63,6 +75,7 @@ function rpc(body: object, authorization?: string): Request {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  readArchive.mockImplementation(realReadArchive)
   clearHistoryCache()
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://ref.supabase.co'
   // Purdue then falls back from Supabase to NDBC, so every upstream read is the fetch below.
@@ -113,10 +126,17 @@ describe('/api/mcp without a token', () => {
   })
 })
 
+/** The caller's own client, which every archive read must go out on (ADR 0042). */
+const CALLERS_CLIENT = { caller: 'crew' } as never
+
+function call(name: string, args: object): Request {
+  return rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: args } }, 'Bearer t')
+}
+
 describe('/api/mcp with a crew token', () => {
   beforeEach(() => {
     authenticate.mockResolvedValue({
-      supabase: {} as never,
+      supabase: CALLERS_CLIENT,
       authInfo: { token: 't', clientId: 'claude', scopes: [] },
     })
   })
@@ -132,6 +152,8 @@ describe('/api/mcp with a crew token', () => {
       'buoy_history',
       'list_races',
       'race_summary',
+      'polar_performance',
+      'boat_setup',
       'race_track',
     ])
     tools.forEach((t) => expect(t.annotations).toMatchObject({ readOnlyHint: true }))
@@ -184,6 +206,23 @@ describe('/api/mcp with a crew token', () => {
     expect(body.result.content[0].text).toMatch(/30m.*1h.*6h.*24h.*72h/)
   })
 
+  it('offers polar_performance the screen’s five dimensions, and wind as the screen’s window', async () => {
+    const response = await POST(rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'Bearer t'))
+    const tool = (await response.json()).result.tools.find(
+      (t: { name: string }) => t.name === 'polar_performance'
+    )
+
+    expect(Object.keys(tool.inputSchema.properties.filter.properties)).toEqual([
+      'pos',
+      'sail',
+      'sea',
+      'time',
+      'when',
+      'dayRange',
+    ])
+    expect(Object.keys(tool.inputSchema.properties)).toEqual(['filter', 'windWindow'])
+  })
+
   it('answers current_conditions with the figure the dashboard prints for CHII2', async () => {
     const response = await POST(
       rpc(
@@ -204,6 +243,58 @@ describe('/api/mcp with a crew token', () => {
     expect(chii2.wind.speedKnots).toBe(15)
     expect(chii2).toMatchObject({ dataStatus: 'online', anemometerHeightFeet: 85, staleness: { label: '10m ago' } })
     expect(JSON.parse(body.result.content[0].text)).toEqual(body.result.structuredContent)
+  })
+
+  it('answers polar_performance through the caller’s own client, narrowed by the filter', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+
+    const response = await POST(call('polar_performance', { filter: { sail: ['Main + Jib 1'] } }))
+    const body = await response.json()
+
+    expect(readArchive).toHaveBeenCalledWith(CALLERS_CLIENT)
+    expect(body.result.isError).toBeFalsy()
+    // The two June rows: 6 and 3 knots against 6 kt targets.
+    expect(body.result.structuredContent.polarEfficiency.percent).toBe('75.0%')
+    expect(body.result.structuredContent.coverageLedger.statement[0]).toBe('1 of 2 races · 2m recorded')
+    expect(JSON.parse(body.result.content[0].text)).toEqual(body.result.structuredContent)
+  })
+
+  it('refuses an unknown bucket with the valid ones, rather than answering a wider match', async () => {
+    readArchive.mockResolvedValue({ rows: ROWS, races: RACES, vocabulary: VOCABULARY, polars: {} })
+
+    const response = await POST(call('polar_performance', { filter: { wind: ['medium'] } }))
+    const body = await response.json()
+
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toContain('pos, sail, sea, time, when, dayRange')
+    expect(body.result.structuredContent).toBeUndefined()
+  })
+
+  it('answers a wind window, and refuses one the screen’s slider could not hold', async () => {
+    readArchive.mockResolvedValue({
+      rows: ROWS,
+      races: RACES,
+      vocabulary: VOCABULARY,
+      polars: { [POLAR_VERSION]: POLAR },
+    })
+
+    const answered = await (await POST(call('polar_performance', { windWindow: { centre: 12, width: 4 } }))).json()
+    expect(answered.result.structuredContent.windWindow).toMatchObject({ lowKnots: 10, highKnots: 14 })
+
+    const refused = await (await POST(call('polar_performance', { windWindow: { centre: 12, width: 5 } }))).json()
+    expect(refused.result.isError).toBe(true)
+    expect(refused.result.content[0].text).toContain('2, 4, 6')
+  })
+
+  it('makes a failed archive read an error, never a figure over a short archive', async () => {
+    readArchive.mockResolvedValue(null)
+
+    const response = await POST(call('polar_performance', {}))
+    const body = await response.json()
+
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toMatch(/could not be read/)
+    expect(body.result.structuredContent).toBeUndefined()
   })
 })
 

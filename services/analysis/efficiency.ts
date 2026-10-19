@@ -181,6 +181,7 @@ export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate
     filler_anchored_rows: 0,
     vmg_rows: 0,
     vmg_filler_anchored_rows: 0,
+    vmg_elapsed_seconds: 0,
     rows_without_interval: 0,
     rows_without_target: 0,
     elapsed_seconds: 0,
@@ -217,6 +218,7 @@ export function sumEfficiency(rows: readonly SummableRow[]): EfficiencyAggregate
     // silently divide distances the boat covered by targets for a different set of rows.
     if (scored.vmg !== null && scored.target_vmg !== null) {
       totals.vmg_rows += 1
+      totals.vmg_elapsed_seconds += seconds
       totals.actual_vmg_distance_nm += distanceNm(scored.vmg, seconds)
       totals.target_vmg_distance_nm += distanceNm(scored.target_vmg.estimated_knots, seconds)
       // Target VMG's own trust, not the Target Speed bracket's: the search reads a whole zone of
@@ -270,6 +272,7 @@ export function mergeEfficiency(parts: readonly EfficiencyAggregate[]): Efficien
     filler_anchored_rows: 0,
     vmg_rows: 0,
     vmg_filler_anchored_rows: 0,
+    vmg_elapsed_seconds: 0,
     rows_without_interval: 0,
     rows_without_target: 0,
     elapsed_seconds: 0,
@@ -284,6 +287,7 @@ export function mergeEfficiency(parts: readonly EfficiencyAggregate[]): Efficien
     totals.filler_anchored_rows += part.filler_anchored_rows
     totals.vmg_rows += part.vmg_rows
     totals.vmg_filler_anchored_rows += part.vmg_filler_anchored_rows
+    totals.vmg_elapsed_seconds += part.vmg_elapsed_seconds
     totals.rows_without_interval += part.rows_without_interval
     totals.rows_without_target += part.rows_without_target
     totals.elapsed_seconds += part.elapsed_seconds

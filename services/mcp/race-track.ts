@@ -2,7 +2,7 @@ import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import {
   PATCH_SOG_KNOTS,
   PATCH_TWA_DEG,
-  UNDRAWN_WORDS,
+  UNDRAWN_REASONS,
   aggregateKnots,
   noPlotNote,
 } from '@/services/analysis/polar-plot'
@@ -125,7 +125,7 @@ function polarPlotAnswer(plot: RacePolarPlot | null, scoring: RaceDetail['track'
       ...duration(plot.undrawn.seconds),
       parts: plot.undrawn.parts.map((part) => ({
         reason: part.reason,
-        label: UNDRAWN_WORDS[part.reason],
+        label: UNDRAWN_REASONS[part.reason],
         time: duration(part.seconds),
       })),
     },

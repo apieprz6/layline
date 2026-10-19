@@ -2,7 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { BOAT_SETUP_LABEL, BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
+import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { readBoatSetup } from '@/services/boat/readBoatSetup'
+import { readCrossoverChartVersionsWithCharts } from '@/services/boat/readCrossoverChartVersions'
+import { readInstrumentCalibration } from '@/services/boat/readInstrumentCalibration'
+import { readPolarVersions } from '@/services/boat/readPolarVersions'
+import { readRigTune } from '@/services/boat/readRigTune'
 import {
   fetchCHII2,
   fetchCHII2History,
@@ -15,11 +22,21 @@ import { readRace } from '@/services/races/readRace'
 import { readRaces } from '@/services/races/readRaces'
 import { readRaceSailChart } from '@/services/races/race-sail-chart'
 import { TRACK_OVERLAYS, TRACK_SCALES } from '@/services/analysis/track-overlays'
-import type { TrackOverlay } from '@/types'
+import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
 import { buoyHistory } from './buoy-history'
+import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 import { raceList, raceSummary } from './races'
 import { raceTrack } from './race-track'
+import {
+  boatSetupOverview,
+  crossoverChartVersions,
+  instrumentCalibrationVersions,
+  polarVersions,
+  rigTuneVersions,
+
+} from './boat-setup'
+import type { BoatSetupKind, McpBoatSetupResult, TrackOverlay } from '@/types'
 
 /**
  * What the dashboard's own copy tells a sailor about these numbers, told to Claude instead.
@@ -69,6 +86,33 @@ const RACE_TRACK_DESCRIPTION = `Where in one Race the figures came from, as its 
 - A difference from the chart is something to look at, not a fault: the crew may have had a good reason. Never call the sailing or the chart wrong.
 - Every wind figure (TWS, TWA, and so each target) was computed by qtVlm from the recording, not measured at the masthead. Target VMG is estimated, per the overlay's caveat.`
 
+/** The Boat Management screens' own caveats, told to Claude. Prose, so it is updated by hand (ADR 0042). */
+const BOAT_SETUP_DESCRIPTION = `The boat's Boat Setup exactly as Layline's Boat Management screens state it: the four artifacts a Race is sailed under (Polar, Crossover Chart, Rig Tune, Instrument Calibration), and every Version of each.
+
+- With no arguments: the boat and each artifact's Version in force. current null means not recorded, which is a real answer about the boat, not a fault.
+- With an artifact: every Version of it, newest first, or with version the one Version of that number. race_summary names the Versions a Race was sailed under by number: pass that number here to open the Version the Race holds, which is often not the one in force now. Never answer for a Race from the current Version.
+- Every Version carries its effectiveFrom (the calendar date the sailor says it took effect), its note, and inForce.
+- rig_tune: each Version's change reason and its Wind Bands up the wind axis. A band's range, label and note are the tuning guide's words; label is never the dashboard's light/medium/heavy wind classification. Every shroud position is stated port and starboard, both as the Turnbuckle Gap in mm and as Turns From Base (signed half turns, counted from the Base Tune). Neither derives from the other, since no thread pitch is recorded, so never convert one to the other. gapsStale means the Base Tune was re-measured after that band was, so its Gaps describe a rig that no longer exists while its Turns still hold; say so, and never recompute a Gap.
+- instrument_calibration: each Version's figures per channel in the TL-25 display's own encoding, exactly as transcribed: a multiplier reads 1.02, not +2%, and each channel corrects a reading as multiplier × reading + offset. AWA and HDG take an offset alone ("no multiplier"), which is not a missing figure. changes is what that Version moved against the one before it. With every Version, calibrationLog is the dated history, newest first, of Version changes and Calibration Events (acts such as an autocompensation that changed no programmed figure). That log answers when a channel was last recalibrated.
+- crossover_chart: each Version's Sail Definitions by number and label, and how many chart cells call for each; a sail no cell calls for is "never recommended", which is legal. sailDefinitions null means that Version's stored chart can no longer be read.
+- polar: each Version's number, date, note and file, but never the grid. Never work out a target or an efficiency from a Polar: the season's efficiency is polar_performance's and a Race's is in race_summary, each stated as its screen states it.`
+
+const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficiency over the boat's race archive, narrowed by the Analysis Filter, exactly as Layline's Polar performance screen states them.
+
+- Polar Efficiency is total distance sailed over the distance the Polar's Target Speed implies, across all the scored sailing the filter matches; VMG Efficiency is the same for VMG against Target VMG. Each race's sailing is scored against the Polar that race was sailed under. Report them as the percentages given.
+- The two headline figures blend every wind speed the filter matches. Each moment is scored against its own wind's target, but one percentage over all winds can hide that the boat is 110% of target at 4 knots and 50% at 12. Never present the headline figures as any wind band's.
+- To answer about a wind range, pass windWindow: the Polar performance screen's own wind window, a centre in whole knots and a width of 2, 4 or 6 (windWindowOptions in every answer says which centres the Polar allows). 10-14 knots is { centre: 12, width: 4 }. The window has its own Polar Efficiency over the sailing inside it (the screen prints it under the window, as reading; there is no VMG figure for a window, because VMG collapses at the beam by definition), the Polar columns that sailing was scored against, and its patches: 5 degrees of |TWA| by half a knot of SOG, each with its own percent of target, time, races and Filler-Anchored share. Compare patches only within one window, and call again for another band rather than merging windows. Port and starboard are not told apart.
+- The filter offers the screen's five dimensions: point of sail, sail used, sea state, time of day and when. Wind speed is not one of them; on the screen the wind window owns that axis.
+- A dimension left out includes everything, Not recorded included. Naming buckets narrows to exactly those. Sails are named by their Sail Definition label, never a number; every answer lists each dimension's valid buckets.
+- Every answer carries its Coverage Ledger: how much sailing time matched, how much of it was scored, what was excluded and why, and how much has no Sea State or Sail Configuration recorded. Each figure also states its own scored time; VMG Efficiency can rest on less than Polar Efficiency. State how much sailing is behind a figure, especially when it is little.
+- A figure may be Filler-Anchored: part of it is compared against Polar cells the Polar manufactured rather than measured. Give the figure and say what share is Filler-Anchored; do not withhold it.
+- Target VMG is estimated from the Polar's grid, not the certificate's own optimum.
+- A null figure means nothing in the match could be scored; never fill one in.`
+
+/** What a tool answers when the archive could not be read whole: an error, never a figure. */
+const ARCHIVE_UNREADABLE =
+  'The race archive could not be read, so there is no figure to give. This is not the same as having no races.'
+
 /**
  * A tool's answer as both forms MCP carries: JSON text for a client that reads only text, and the
  * same object as structured content.
@@ -77,9 +121,31 @@ function answer(value: object): CallToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: { ...value } }
 }
 
-/** A refusal Claude reads as a failed call, never as an answer about the archive. */
+/** A refusal Claude reads as a failed call, never as an answer about the archive or the boat. */
 function refusal(message: string): CallToolResult {
   return { isError: true, content: [{ type: 'text', text: message }] }
+}
+
+function toolResult<Answer extends object>(result: McpBoatSetupResult<Answer>): CallToolResult {
+  return result.ok ? answer(result.answer) : refusal(result.refusal)
+}
+
+/** One artifact's screen, read through the caller's client and shaped by `boat-setup`. */
+async function artifactVersions(
+  artifact: BoatSetupKind,
+  version: number | undefined,
+  supabase: SupabaseClient
+): Promise<CallToolResult> {
+  switch (artifact) {
+    case 'polar':
+      return toolResult(polarVersions(await readPolarVersions(supabase), version))
+    case 'crossover_chart':
+      return toolResult(crossoverChartVersions(await readCrossoverChartVersionsWithCharts(supabase), version))
+    case 'rig_tune':
+      return toolResult(rigTuneVersions(await readRigTune(supabase), version))
+    case 'instrument_calibration':
+      return toolResult(instrumentCalibrationVersions(await readInstrumentCalibration(supabase), version))
+  }
 }
 
 /**
@@ -89,7 +155,7 @@ function refusal(message: string): CallToolResult {
  * Every tool is read-only, and the buoy services are the dashboard's own, cache included, so a
  * tool call adds no upstream request the screen would not have made.
  *
- * The archive tools read through `supabase`, the client built from the caller's own token, so
+ * The archive and boat tools read through `supabase`, the client built from the caller's own token, so
  * row-level security decides what they see exactly as it does for a screen. Never the service role.
  */
 export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient }): McpServer {
@@ -175,6 +241,81 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
   )
 
   server.registerTool(
+    'polar_performance',
+    {
+      title: 'Polar performance',
+      description: POLAR_PERFORMANCE_DESCRIPTION,
+      inputSchema: {
+        filter: analysisFilterSchema(POLAR_PERFORMANCE_DIMENSIONS),
+        windWindow: z
+          .object({
+            centre: z.number().describe('Centre of the wind window, in whole knots of TWS.'),
+            width: z.number().describe('Width of the window in knots: 2, 4 or 6.'),
+          })
+          .optional()
+          .describe(
+            "The screen's wind window. TWS from centre - width/2 inclusive to centre + width/2 exclusive."
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ filter, windWindow }) => {
+      // All or nothing (ADR 0026): a short archive would make the Coverage Ledger the wrong part.
+      const archive = await readAnalysisArchive(supabase)
+      if (archive === null) return refusal(ARCHIVE_UNREADABLE)
+
+      const dimensions = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, archive.vocabulary)
+      const reading = filterFromArgument(filter, dimensions)
+      if (!reading.ok) return refusal(reading.message)
+
+      const window = windWindow === undefined ? null : windWindowFromArgument(windWindow, archive.polars)
+      if (window !== null && !window.ok) return refusal(window.message)
+
+      return answer(
+        polarPerformanceAnswer(archive.rows, reading.filter, dimensions, archive.polars, window?.window ?? null)
+      )
+    }
+  )
+
+  const artifacts = BOAT_SETUP_ORDER.join(', ')
+
+  server.registerTool(
+    'boat_setup',
+    {
+      title: 'Boat Setup',
+      description: BOAT_SETUP_DESCRIPTION,
+      inputSchema: {
+        artifact: z
+          .enum(BOAT_SETUP_ORDER)
+          .optional()
+          .describe(
+            `Which artifact: ${BOAT_SETUP_ORDER.map((kind) => `${kind} (${BOAT_SETUP_LABEL[kind]})`).join(
+              ', '
+            )}. Omit it for the boat and every artifact's Version in force.`
+          ),
+        version: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            'One Version of the artifact, by its number, as race_summary names it. Omit it for every Version.'
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ artifact, version }) => {
+      if (artifact === undefined) {
+        return version === undefined
+          ? toolResult(boatSetupOverview(await readBoatSetup(supabase)))
+          : refusal(`A Version is a Version of one artifact. Name it as well: one of ${artifacts}.`)
+      }
+
+      return artifactVersions(artifact, version, supabase)
+    }
+  )
+
+  server.registerTool(
     'race_track',
     {
       title: 'Race track',
@@ -201,13 +342,15 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       ])
 
       if (race === null) {
-        // Never a partial track. The Races there are, so the id can be checked.
-        const races = await readRaces(supabase)
-        const known = races.map((each) => `${each.id} (${each.title ?? `untitled, ${each.window_start}`})`)
+        // Never a partial track. The Races the caller can read, so the id can be checked; a list
+        // that could not be read is empty, and the sentence still points at list_races.
+        const known = (await readRaces(supabase)).map(
+          (each) => `${each.id} (${each.title ?? `untitled, ${each.window_start}`})`
+        )
         return refusal(
           `No Race with id ${raceId} could be read.${
             known.length > 0 ? ` The Races this account can read are: ${known.join('; ')}.` : ''
-          } If the id is among them, the read failed and may be retried.`
+          } Check the id against list_races; if it is listed, the read failed and may be retried.`
         )
       }
 

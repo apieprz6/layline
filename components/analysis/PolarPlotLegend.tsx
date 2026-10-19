@@ -16,7 +16,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import Explainer from '@/components/common/Explainer'
 import { FILLER_DASH } from '@/components/race/track-ink'
-import { UNDRAWN_WORDS as WHY } from '@/services/analysis/polar-plot'
+import { UNDRAWN_REASONS } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
 import type { PolarPlotUndrawn } from '@/types'
 
@@ -55,7 +55,7 @@ export default function PolarPlotLegend({
             {' '}
             {describeDuration(undrawn.seconds)} of this sailing is not drawn:{' '}
             {undrawn.parts
-              .map((part) => `${describeDuration(part.seconds)} ${WHY[part.reason]}`)
+              .map((part) => `${describeDuration(part.seconds)} ${UNDRAWN_REASONS[part.reason]}`)
               .join(', ')}
             .
           </>

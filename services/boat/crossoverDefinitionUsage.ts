@@ -33,3 +33,13 @@ export function crossoverDefinitionUsage(
     cells: counts.get(definition.number) ?? 0,
   }))
 }
+
+/**
+ * How the legend states a definition's share of the chart: `'never recommended'`, `'1 cell'`,
+ * `'5 cells'`. Nought is the answer worth printing — a definition no cell calls for is an inventory
+ * entry the chart never recommends, which is not an absent definition and is not a mistake.
+ */
+export function describeDefinitionUsage(cells: number): string {
+  if (cells === 0) return 'never recommended'
+  return cells === 1 ? '1 cell' : `${cells} cells`
+}

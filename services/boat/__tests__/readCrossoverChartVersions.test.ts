@@ -2,6 +2,7 @@ import {
   readCrossoverChartScreen,
   readCrossoverChartVersion,
   readCrossoverChartVersions,
+  readCrossoverChartVersionsWithCharts,
 } from '../readCrossoverChartVersions'
 
 /**
@@ -179,5 +180,48 @@ describe('readCrossoverChartVersions', () => {
       expect.stringContaining('Crossover Chart'),
       expect.anything()
     )
+  })
+
+  it('reads every Version with its chart in one list, for a reader that states each one', async () => {
+    versionsOrder.mockResolvedValue({
+      data: [
+        { ...V2, payload: CHART },
+        { ...V1, payload: CHART },
+      ],
+      error: null,
+    })
+
+    await expect(readCrossoverChartVersionsWithCharts()).resolves.toEqual({
+      current_version_id: ID2,
+      versions: [
+        { ...V2, is_current: true, payload: CHART },
+        { ...V1, is_current: false, payload: CHART },
+      ],
+    })
+  })
+
+  it('keeps a Version whose stored chart is unreadable in the list, with no chart', async () => {
+    versionsOrder.mockResolvedValue({
+      data: [
+        { ...V2, payload: { ...CHART, sail_definitions: [] } },
+        { ...V1, payload: CHART },
+      ],
+      error: null,
+    })
+
+    const list = await readCrossoverChartVersionsWithCharts()
+
+    // Listed, as the screen lists it, but never drawn with blanks: the chart is stated absent.
+    expect(list?.versions.map((version) => [version.version_number, version.payload])).toEqual([
+      [2, null],
+      [1, CHART],
+    ])
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('v2'), expect.anything())
+  })
+
+  it('answers a failed read with null, never a shorter list', async () => {
+    versionsOrder.mockResolvedValue({ data: null, error: { message: 'connection reset' } })
+
+    await expect(readCrossoverChartVersionsWithCharts()).resolves.toBeNull()
   })
 })

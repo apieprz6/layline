@@ -4,7 +4,7 @@ import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
 import PolarPlot from '@/components/analysis/PolarPlot'
-import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
+import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
 import {
   familiesFor,
   familyKnots,
@@ -153,7 +153,7 @@ export default function PolarPerformanceTeaser({
         >
           {describeDuration(efficiency.elapsed_seconds)} scored across {races} race
           {races === 1 ? '' : 's'}
-          {filler !== null && filler > 0 && `, ${sharePercent(filler)} of it filler-anchored`}. Tap
+          {filler !== null && isFillerFlagged(filler) && `, ${sharePercent(filler)} of it filler-anchored`}. Tap
           for the whole archive, filterable.
         </span>
       </span>

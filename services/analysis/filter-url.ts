@@ -16,7 +16,7 @@ import { RANGE_DIMENSION, selectedBuckets } from '@/services/analysis/filter'
 import type { AnalysisDimensionSpec, AnalysisFilter } from '@/types'
 
 /** `YYYY-MM-DD`, which is the only shape a day bound may take. */
-const DAY = /^\d{4}-\d{2}-\d{2}$/
+export const DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** Every selected bucket, as the URL carries them. Empty where nothing is narrowed. */
 export function filterToSearchParams(

@@ -20,8 +20,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCrossoverChartStructure } from '@/services/boat/crossoverPayload'
 import { fileBackedVersionReader } from '@/services/boat/readFileBackedVersions'
 import type {
+  CrossoverChartPayload,
   CrossoverChartScreen,
   CrossoverChartVersionDetail,
+  FileBackedVersionDetailList,
   FileBackedVersionList,
 } from '@/types'
 
@@ -57,4 +59,15 @@ export function readCrossoverChartScreen(
   client?: SupabaseClient
 ): Promise<CrossoverChartScreen | null> {
   return crossoverChart.readScreen(client)
+}
+
+/**
+ * Every Version with its chart, newest first, or `null` when the read failed — for the MCP server,
+ * which states each Version's Sail Definitions. A Version whose stored chart is unreadable is listed
+ * with `payload: null`.
+ */
+export function readCrossoverChartVersionsWithCharts(
+  client?: SupabaseClient
+): Promise<FileBackedVersionDetailList<CrossoverChartPayload> | null> {
+  return crossoverChart.readVersionsWithPayloads(client)
 }

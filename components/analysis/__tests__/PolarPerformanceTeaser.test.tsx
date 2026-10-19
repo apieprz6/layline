@@ -9,6 +9,7 @@ function aggregate(over: Partial<EfficiencyAggregate> = {}): EfficiencyAggregate
     filler_anchored_rows: 0,
     vmg_rows: 812,
     vmg_filler_anchored_rows: 0,
+    vmg_elapsed_seconds: 10_860,
     rows_without_interval: 5,
     rows_without_target: 61,
     elapsed_seconds: 10_860,
