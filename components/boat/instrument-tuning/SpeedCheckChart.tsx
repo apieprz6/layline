@@ -48,10 +48,11 @@ import {
   type PaddlewheelVerdict,
   type SpeedBandRead,
 } from '@/services/analysis/paddlewheel-verdict'
+import { BAND_WORDS, slowFast } from '@/services/analysis/paddlewheel-verdict-words'
 import type { CalibrationLogEntry } from '@/types'
 
 import CalibrationRail, { type RailRace } from './CalibrationRail'
-import { BAND_COLOUR, BAND_WORDS, Checklist, VerdictBanner, slowFast } from './SpeedVerdict'
+import { BAND_COLOUR, Checklist, VerdictBanner } from './SpeedVerdict'
 import {
   Absent,
   Big,
@@ -83,7 +84,7 @@ import {
   rows as rowsPhrase,
   signedKnots,
   type RaceLabels,
-} from './chart-text'
+} from '@/services/analysis/instrument-tuning-text'
 
 type View = 'chart' | 'checklist' | 'scatter'
 

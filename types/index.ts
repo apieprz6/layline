@@ -2971,6 +2971,51 @@ export interface CoverageStatement {
   reason: string
 }
 
+/**
+ * The three channels the Instrument Tuning screen checks, in the causal order it reads them in:
+ * `HDG → AWA → STW`. Not every **Calibration Channel**: `AWS` has no check of its own, there being
+ * nothing in a Recording to measure a wind speed against.
+ */
+export type CheckedChannel = Extract<CalibrationChannel, 'HDG' | 'AWA' | 'STW'>
+
+/** One headline figure, with the speed or point of sail it belongs to where there are two of them. */
+export interface ChannelFigure {
+  /** `4 kt`, `up`, `down` — absent where the channel has one figure and nothing to tell apart. */
+  at?: string
+  reading: string
+}
+
+/**
+ * One channel's headline over a season, as the "This season" rail's **Instrument tuning** row
+ * states it (ADR 0035): its figures or the words in their place, the coverage they rest on, and
+ * how close that is to `SOLID`. Built by `services/analysis/instrument-tuning-headlines.ts`, which
+ * the row and the MCP `instrument_tuning` tool both call.
+ */
+export interface SeasonChannelHeadline {
+  channel: CheckedChannel
+  figures: ChannelFigure[]
+  /** Words in place of the figures, where the channel produced none. Null where it did. */
+  instead: string | null
+  coverage: CoverageStatement
+  /** 0–1 of the way to `SOLID`, or null where there is no figure to draw evidence for. */
+  towards_solid: number | null
+}
+
+/**
+ * One channel's column in LAY-149 variant D's tile, which the season row and a Race page's
+ * calibration check both draw: the figures, what they rest on, and a bar.
+ */
+export interface ChannelColumn {
+  channel: CheckedChannel
+  figures: ChannelFigure[]
+  /** Words in place of the figures, where the channel produced none. Null where it did. */
+  instead: string | null
+  /** What the figure rests on, in words. Null where there is nothing to say it of. */
+  basis: string | null
+  /** 0–1, or null where there is no figure to draw evidence for. */
+  bar: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Uploading a race, and what a race states afterwards
 // ---------------------------------------------------------------------------

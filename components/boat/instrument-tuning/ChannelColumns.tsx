@@ -14,26 +14,8 @@
 
 import type { CSSProperties, ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
-import { CHANNEL_TITLE, type CheckedChannel } from './chart-text'
-
-/** One figure, with the speed or point of sail it belongs to where there are two of them. */
-export interface ChannelFigure {
-  /** `4 kt`, `up`, `down` — absent where the column has one figure and nothing to tell apart. */
-  at?: string
-  reading: string
-}
-
-/** One channel's column, computed by whoever knows what the figures are over. */
-export interface ChannelColumn {
-  channel: CheckedChannel
-  figures: ChannelFigure[]
-  /** Words in place of the figures, where the channel produced none. Null where it did. */
-  instead: string | null
-  /** What the figure rests on, in words. Null where there is nothing to say it of. */
-  basis: string | null
-  /** 0–1, or null where there is no figure to draw evidence for. */
-  bar: number | null
-}
+import { CHANNEL_TITLE } from '@/services/analysis/instrument-tuning-text'
+import type { ChannelColumn } from '@/types'
 
 /** The `data-testid` each band carries, so each place keeps the hooks its own suites read. */
 export interface ChannelColumnTestIds {

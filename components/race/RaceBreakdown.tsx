@@ -29,21 +29,13 @@ import type { CSSProperties, ReactElement, ReactNode } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import EfficiencyFigure from '@/components/analysis/EfficiencyFigure'
 import { AGREEMENT_GLYPHS, AGREEMENT_WORDS } from '@/components/analysis/sail-selection-chrome'
-import {
-  NO_FIT_WORDS,
-  asymmetryAbsence,
-  rows as rowsPhrase,
-  signedKnots,
-  tackPairs,
-  widerReading,
-} from '@/components/boat/instrument-tuning/chart-text'
-import ChannelColumns, { type ChannelColumn } from '@/components/boat/instrument-tuning/ChannelColumns'
+import ChannelColumns from '@/components/boat/instrument-tuning/ChannelColumns'
 import Explainer from '@/components/common/Explainer'
 import { radius, spacing } from '@/lib/utils/design'
 import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
 import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
-import { ASYMMETRY_SOLID_PAIRS } from '@/services/analysis/coverage-verdict'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { raceHeadlines } from '@/services/analysis/instrument-tuning-headlines'
 import {
   fillerAnchoredShare,
   noFigureNote,
@@ -317,7 +309,7 @@ function cellMix({ cells }: RaceChartAgreement): string {
  * instrument and never what to set it to (LAY-138 decision 7).
  */
 function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElement {
-  const columns = [compass(check), windAngle(check), boatSpeed(check)]
+  const columns = raceHeadlines(check)
 
   return (
     <Tile title="Instrument calibration check" testId="race-calibration">
@@ -341,88 +333,6 @@ function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElemen
       </Link>
     </Tile>
   )
-}
-
-function compass({ heading, heading_swing_deg }: RaceInstrumentCheck): ChannelColumn {
-  if (!heading.ok) {
-    return {
-      channel: 'HDG',
-      figures: [],
-      instead: `No compass reading — only ${rowsPhrase(heading.row_count)} this check could read.`,
-      basis: null,
-      bar: null,
-    }
-  }
-
-  const { heading_coverage } = heading.offset
-  const basis = `${sharePercent(heading_coverage)} of the rose`
-
-  return heading_swing_deg === null
-    ? {
-        channel: 'HDG',
-        figures: [],
-        instead: 'Only one heading carries a figure, so there is no swing to span.',
-        basis,
-        bar: heading_coverage,
-      }
-    : {
-        channel: 'HDG',
-        figures: [{ reading: `${heading_swing_deg.toFixed(1)}° swing` }],
-        instead: null,
-        basis,
-        bar: heading_coverage,
-      }
-}
-
-function windAngle({ asymmetry }: RaceInstrumentCheck): ChannelColumn {
-  if (!asymmetry.ok) {
-    return {
-      channel: 'AWA',
-      figures: [],
-      instead: `No Tack Pair — ${asymmetryAbsence(asymmetry)}.`,
-      basis: null,
-      bar: null,
-    }
-  }
-
-  const { upwind, downwind } = asymmetry.asymmetry
-  const pairs = (upwind?.pair_count ?? 0) + (downwind?.pair_count ?? 0)
-
-  return {
-    channel: 'AWA',
-    figures: [
-      { at: 'up', reading: widerReading(upwind) },
-      { at: 'down', reading: widerReading(downwind) },
-    ],
-    instead: null,
-    basis: tackPairs(pairs),
-    // Against the count that reads `SOLID` for a season, so a full bar is never one race's claim.
-    bar: Math.min(1, pairs / ASYMMETRY_SOLID_PAIRS),
-  }
-}
-
-function boatSpeed({ speed }: RaceInstrumentCheck): ChannelColumn {
-  if (!speed.fitted) {
-    return {
-      channel: 'STW',
-      figures: [],
-      instead: `No line — ${NO_FIT_WORDS[speed.reason]}.`,
-      basis: null,
-      bar: null,
-    }
-  }
-
-  return {
-    channel: 'STW',
-    figures: speed.gaps.map((gap) => ({
-      at: `${gap.stw_knots} kt`,
-      // A speed this race's line never reached is off it, never extrapolated to.
-      reading: gap.gap_knots === null ? 'off its line' : signedKnots(gap.gap_knots),
-    })),
-    instead: null,
-    basis: `R² ${speed.r_squared.toFixed(2)}`,
-    bar: Math.max(0, Math.min(1, speed.r_squared)),
-  }
 }
 
 /* -------------------------------------------------------------------------------- furniture */

@@ -67,7 +67,7 @@ import {
   shortDate,
   signedDegrees,
   type RaceLabels,
-} from './chart-text'
+} from '@/services/analysis/instrument-tuning-text'
 
 type View = 'strip' | 'rose'
 

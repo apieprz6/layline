@@ -65,7 +65,7 @@ import {
   signedDegrees,
   tackPairs,
   type RaceLabels,
-} from './chart-text'
+} from '@/services/analysis/instrument-tuning-text'
 
 const SEASON = 'season'
 const POINTS_OF_SAIL: readonly PairedPointOfSail[] = ['upwind', 'downwind']

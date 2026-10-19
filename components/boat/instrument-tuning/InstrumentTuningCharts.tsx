@@ -33,7 +33,7 @@ import CompassChart from './CompassChart'
 import SpeedCheckChart from './SpeedCheckChart'
 import TackDial from './TackDial'
 import { CHART_MAX_WIDTH } from './chart-furniture'
-import { CHANNEL_TITLE, raceLabelsFrom } from './chart-text'
+import { CHANNEL_TITLE, raceLabelsFrom } from '@/services/analysis/instrument-tuning-text'
 
 /**
  * The measure the three charts are laid out in.
