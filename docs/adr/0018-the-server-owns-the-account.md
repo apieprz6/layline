@@ -176,6 +176,14 @@ discard the screen the sailor had chosen. Only the two boat routes are affected.
   target written by whoever sent the link, so it goes through `relativePathOrHome` on the way in as well
   as inside `signInWithGoogle` on the way out, and is stripped from the URL once read. Nothing about who
   is signed in crosses the boundary, and nothing is unlocked by it.
+- **Amended by the build, 2026-10-19 (LAY-191): a screen asks for the Auth Sheet by window event.**
+  Settings' Integrations rows offer a **Guest** Sign in from inside a page, which gets no prop from the
+  layout, and `?signin=` cannot serve it: `AppLayout` reads that param once per pathname, so a page
+  setting it on its own URL opens nothing. `askToSignIn()` (`lib/account/askToSignIn.ts`) dispatches a
+  window event that `AppLayout` listens for. It carries no identity and no destination (signing in
+  lands back on the screen that asked) and unlocks nothing, so "no React context" stands: what a Guest
+  may see is still decided on the server, which hands Settings no MCP Server address for one. Settings
+  resolves the **Account** a second time for that, as the boat pages do.
 - **The middleware matcher already covers the future `/auth/*` routes** — it excludes only
   `_next/static`, `_next/image`, `favicon.ico` and image extensions. The `middleware.ts` → `proxy.ts`
   rename that Next 16 wants is a separate chore and deliberately not bundled here.
