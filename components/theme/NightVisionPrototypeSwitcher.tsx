@@ -24,6 +24,16 @@ type VariantKey = (typeof VARIANTS)[number]['key']
 const STORAGE_KEY = 'layline-nv-prototype'
 const DIM_KEY = 'layline-nv-prototype-dim'
 const SIGNAL_KEY = 'layline-nv-prototype-signal'
+const BLUE_KEY = 'layline-nv-prototype-blue'
+const SPEED_KEY = 'layline-nv-prototype-speed'
+
+/** The boat-speed ramp on the track, in both themes. `current` is daylight blue. */
+const SPEED_RAMPS = ['current', 'violet', 'heat'] as const
+type SpeedRamp = (typeof SPEED_RAMPS)[number]
+
+function isSpeedRamp(value: string | null): value is SpeedRamp {
+  return SPEED_RAMPS.some((ramp) => ramp === value)
+}
 
 const TOKENS = [
   '--text-primary',
@@ -38,6 +48,7 @@ const TOKENS = [
   '--tack-starboard',
   '--track-above-2',
   '--state-success',
+  '--track-speed-5',
   '--trend-steady',
 ] as const
 
@@ -82,6 +93,8 @@ export default function NightVisionPrototypeSwitcher(): React.ReactElement {
   const [open, setOpen] = useState(false)
   const [mini, setMini] = useState(false)
   const [signal, setSignal] = useState(false)
+  const [blue, setBlue] = useState(false)
+  const [speed, setSpeed] = useState<SpeedRamp>('current')
   const [readings, setReadings] = useState<{ token: string; value: string; ratio: number | null }[]>([])
   const [windSteps, setWindSteps] = useState<(number | null)[]>([])
 
@@ -94,16 +107,27 @@ export default function NightVisionPrototypeSwitcher(): React.ReactElement {
     if (storedDim >= 20 && storedDim <= 100) setDim(storedDim)
     const sigUrl = new URLSearchParams(window.location.search).get('sig')
     setSignal(sigUrl !== null ? sigUrl === '1' : sessionStorage.getItem(SIGNAL_KEY) === '1')
+    const blueUrl = new URLSearchParams(window.location.search).get('blue')
+    setBlue(blueUrl !== null ? blueUrl === '1' : sessionStorage.getItem(BLUE_KEY) === '1')
+    const speedUrl = new URLSearchParams(window.location.search).get('speed')
+    const storedSpeed = sessionStorage.getItem(SPEED_KEY)
+    setSpeed(isSpeedRamp(speedUrl) ? speedUrl : isSpeedRamp(storedSpeed) ? storedSpeed : 'current')
   }, [])
 
   useEffect(() => {
     document.documentElement.dataset.nv = variant
     document.documentElement.dataset.nvSignal = signal ? 'on' : 'off'
+    document.documentElement.dataset.nvBlue = blue ? 'on' : 'off'
+    document.documentElement.dataset.speed = speed
+    sessionStorage.setItem(SPEED_KEY, speed)
+    sessionStorage.setItem(BLUE_KEY, blue ? '1' : '0')
     sessionStorage.setItem(STORAGE_KEY, variant)
     sessionStorage.setItem(SIGNAL_KEY, signal ? '1' : '0')
     const url = new URL(window.location.href)
     url.searchParams.set('nv', variant)
     url.searchParams.set('sig', signal ? '1' : '0')
+    url.searchParams.set('blue', blue ? '1' : '0')
+    url.searchParams.set('speed', speed)
     window.history.replaceState(window.history.state, '', url)
 
     // Re-read after the cascade settles.
@@ -116,7 +140,7 @@ export default function NightVisionPrototypeSwitcher(): React.ReactElement {
       setWindSteps([0, 1, 2].map((i) => contrast(wind[i], wind[i + 1])))
     })
     return () => cancelAnimationFrame(id)
-  }, [variant, signal, theme])
+  }, [variant, signal, blue, speed, theme])
 
   useEffect(() => {
     sessionStorage.setItem(DIM_KEY, String(dim))
@@ -208,7 +232,7 @@ export default function NightVisionPrototypeSwitcher(): React.ReactElement {
             →
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <button
             style={{ ...button, padding: '4px 8px' }}
             onClick={() => setThemePreference(night ? 'solar' : 'nightvision')}
@@ -220,6 +244,20 @@ export default function NightVisionPrototypeSwitcher(): React.ReactElement {
             onClick={() => setSignal((s) => !s)}
           >
             {signal ? 'Green on' : 'Green off'}
+          </button>
+          <button
+            style={{ ...button, padding: '4px 8px', color: blue ? '#9db8ff' : '#ddd' }}
+            onClick={() => setBlue((b) => !b)}
+          >
+            {blue ? 'Blue on' : 'Blue off'}
+          </button>
+          <button
+            style={{ ...button, padding: '4px 8px' }}
+            onClick={() =>
+              setSpeed((s) => SPEED_RAMPS[(SPEED_RAMPS.indexOf(s) + 1) % SPEED_RAMPS.length])
+            }
+          >
+            Speed: {speed}
           </button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
             Dim

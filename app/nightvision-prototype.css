@@ -335,3 +335,50 @@ html.theme-nightvision[data-nv-signal="on"] {
   --trend-building-bg: rgba(58, 154, 104, 0.10);
   --trend-building-border: rgba(58, 154, 104, 0.30);
 }
+
+/* ---------- Chart blue — a second layer, toggled by <html data-nv-blue="on"> ----------
+   Blue only where daylight's blue carries meaning on a chart: medium air and veering. (The boat-speed
+   ramp was here too, and came off blue in both themes — see the speed ramp block below.) A light periwinkle rather than daylight's #0055BB, which is 2.9:1 on black and blurs:
+   short wavelengths focus in front of the retina and scatter most in the eye. Held at or below
+   the green beside it (Y≈0.22 vs 0.25). --blue-500 is the UI accent despite its name and stays red. */
+html.theme-nightvision[data-nv-blue="on"] {
+  --wind-medium: #5A7ED8;
+
+  --trend-veering: #7B9CF0;
+  --trend-veering-bg: rgba(123, 156, 240, 0.08);
+  --trend-veering-border: rgba(123, 156, 240, 0.25);
+}
+
+/* ---------- Boat-speed ramp — both themes, toggled by <html data-speed="violet|heat"> ----------
+   The owner dislikes daylight's blue ramp. It only ever shares the map with the Dropout ring
+   (--wind-storm red) and the neutral "drawn, not coloured" line, since overlays are shown one at a
+   time — so the ramp must avoid red and gray, and nothing else. Measured against #F0EDE6: monotone
+   OKLab lightness, adjacent ΔL ≥ 0.09, light end above 2:1. */
+html[data-speed="violet"] {
+  --track-speed-1: #B39DDB;   /* under 3 kt */
+  --track-speed-2: #9575CD;
+  --track-speed-3: #7347B8;
+  --track-speed-4: #55279A;
+  --track-speed-5: #3B1470;   /* over 7.5 */
+}
+
+/* Hotter is faster: gold to dark brown. The dark end stops short of red, which is the ring's. */
+html[data-speed="heat"] {
+  --track-speed-1: #CC9628;
+  --track-speed-2: #C47A20;
+  --track-speed-3: #A85418;
+  --track-speed-4: #7E3410;
+  --track-speed-5: #521C08;
+}
+
+/* After dark, either choice becomes one amber ramp, brighter for faster — violet is short-wavelength
+   and costs the most night vision of any hue. Starts at a dim brown so its slow end is never the
+   ring's red, and stops short of pale yellow to keep the fastest stretch from glaring. */
+html.theme-nightvision[data-speed="violet"],
+html.theme-nightvision[data-speed="heat"] {
+  --track-speed-1: #7A4818;
+  --track-speed-2: #A0641F;
+  --track-speed-3: #C8842C;
+  --track-speed-4: #E0A048;
+  --track-speed-5: #F2B560;
+}
