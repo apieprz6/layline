@@ -28,24 +28,22 @@ import PolarPlot from '@/components/analysis/PolarPlot'
 import PolarPlotLegend from '@/components/analysis/PolarPlotLegend'
 import PolarPlotReadingToggle from '@/components/analysis/PolarPlotReadingToggle'
 import { radius, spacing } from '@/lib/utils/design'
-import { sumEfficiency } from '@/services/analysis/efficiency'
-import { sharePercent } from '@/services/analysis/figures'
-import { fillerAnchoredShare } from '@/services/analysis/polar-performance'
+import { patchPercent, sharePercent } from '@/services/analysis/figures'
+import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
 import {
   DEFAULT_FOCUS,
   FOCUS_WIDTHS,
-  PATCH_SOG_KNOTS,
-  PATCH_TWA_DEG,
+  NOTHING_IN_WINDOW,
+  NO_POLAR_TO_DRAW_AGAINST,
   aggregateTargetKnots,
   clampCentre,
-  familiesFor,
   focusRange,
   focusWindow,
-  inFocus,
+  patchBounds,
   plotMoments,
-  plotPatches,
   rimKnots,
-  timeNotDrawn,
+  seasonWindow,
+  windowReading,
   type FocusWidth,
 } from '@/services/analysis/polar-plot'
 import { describeDuration } from '@/services/recordings/coverage'
@@ -70,35 +68,22 @@ export default function SeasonPolarPlot({
   const [reading, setReading] = useState<PolarPlotReading>('knots')
   const [selected, setSelected] = useState<string | null>(null)
 
-  const focus = focusWindow(centre, width)
-  const shown = useMemo(() => inFocus(rows, focusWindow(centre, width)), [rows, centre, width])
-  const patches = useMemo(() => plotPatches(shown), [shown])
-  const moments = useMemo(() => plotMoments(shown), [shown])
-  const families = useMemo(() => familiesFor(shown, polars), [shown, polars])
-  const drawn = useMemo(() => sumEfficiency(shown).elapsed_seconds, [shown])
+  // The window's whole content, worked out in `services/` so the MCP tool reads the same window
+  // the same way (ADR 0042).
+  const view = useMemo(() => seasonWindow(rows, polars, centre, width), [rows, polars, centre, width])
+  const { focus, patches, moments, families } = view
+  const drawn = view.efficiency.elapsed_seconds
+  const undrawn = view.undrawn
+  const inPlay = useMemo(() => new Set(view.columns_in_play), [view])
 
   // Over everything the rail matched and every certificate, not over the window: a rim that moved
   // as the thumb did would redraw every ring and make two positions impossible to compare.
   const rim = useMemo(() => rimKnots(plotMoments(rows), certificates), [rows, certificates])
-  // What is drawn nowhere is over everything the rail matched that this window could hold —
-  // including sailing with no wind reading, which no window position ever draws.
-  const undrawn = useMemo(
-    () => timeNotDrawn([...shown, ...rows.filter((row) => row.tws === null)]),
-    [shown, rows]
-  )
-  // Lit under the slider: the columns the drawn sailing was actually scored against, so the ticks
-  // name exactly the curves on the picture (a 9–11 kt window is read off the 8, 10 and 12).
-  const inPlay = useMemo(
-    () => new Set(families.flatMap((family) => family.curves.map((curve) => curve.tws))),
-    [families]
-  )
 
   if (range === null) {
     return (
       <Card>
-        <p style={NOTE_STYLE}>
-          No race in this archive records a Polar, so there is nothing to draw the sailing against.
-        </p>
+        <p style={NOTE_STYLE}>{NO_POLAR_TO_DRAW_AGAINST}</p>
       </Card>
     )
   }
@@ -127,7 +112,7 @@ export default function SeasonPolarPlot({
           onCentre={setCentre}
           width={width}
           onWidth={setWidth}
-          drawnSeconds={drawn}
+          reading={windowReading(view.efficiency)}
         />
 
         {/* The picture and the patch it was asked about, side by side once there is room: the
@@ -151,7 +136,7 @@ export default function SeasonPolarPlot({
           </div>
 
           {drawn === 0 ? (
-            <p style={NOTE_STYLE}>Nothing in this window could be scored against the Polar.</p>
+            <p style={NOTE_STYLE}>{NOTHING_IN_WINDOW}</p>
           ) : (
             chosen !== null && <PatchCard patch={chosen} onClear={() => setSelected(null)} />
           )}
@@ -192,7 +177,7 @@ function WindFocus({
   onCentre,
   width,
   onWidth,
-  drawnSeconds,
+  reading,
 }: {
   range: { from: number; to: number }
   columns: readonly number[]
@@ -202,7 +187,8 @@ function WindFocus({
   onCentre: (next: number) => void
   width: FocusWidth
   onWidth: (next: FocusWidth) => void
-  drawnSeconds: number
+  /** `windowReading`: the window's time, its own percent of target, and its filler share. */
+  reading: string
 }): ReactElement {
   const { low, high } = focusWindow(centre, width)
   const span = Math.max(1, range.to - range.from)
@@ -216,10 +202,11 @@ function WindFocus({
         >
           {low}–{high} kt
         </strong>
-        <span style={{ ...NOTE_STYLE, fontFamily: 'var(--font-mono)' }}>
-          {drawnSeconds === 0
-            ? 'nothing sailed in this window'
-            : `${describeDuration(drawnSeconds)} of sailing`}
+        <span
+          data-testid="polar-plot-window-reading"
+          style={{ ...NOTE_STYLE, fontFamily: 'var(--font-mono)' }}
+        >
+          {reading}
         </span>
       </div>
 
@@ -298,9 +285,10 @@ function WindFocus({
  * legend's disclosure, once, for the whole picture.
  */
 function PatchCard({ patch, onClear }: { patch: PolarPlotPatch; onClear: () => void }): ReactElement {
-  const pct = patch.efficiency.polar_efficiency
+  const percent = patchPercent(patch.efficiency.polar_efficiency)
   const target = aggregateTargetKnots(patch.efficiency)
-  const filler = fillerAnchoredShare(patch.efficiency) ?? 0
+  const filler = fillerAnchoredShare(patch.efficiency)
+  const bounds = patchBounds(patch)
 
   return (
     <div
@@ -321,8 +309,8 @@ function PatchCard({ patch, onClear }: { patch: PolarPlotPatch; onClear: () => v
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing(2) }}>
         <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-          {patch.twa}–{patch.twa + PATCH_TWA_DEG}° at {patch.sog.toFixed(1)}–
-          {(patch.sog + PATCH_SOG_KNOTS).toFixed(1)} kt
+          {bounds.twa_from}–{bounds.twa_to}° at {bounds.sog_from.toFixed(1)}–
+          {bounds.sog_to.toFixed(1)} kt
         </strong>
         <button
           type="button"
@@ -342,7 +330,7 @@ function PatchCard({ patch, onClear }: { patch: PolarPlotPatch; onClear: () => v
       </div>
 
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>
-        {pct === null ? 'no figure' : `${Math.round(pct * 100)}%`}
+        {percent ?? 'no figure'}
         <span style={{ fontSize: 'var(--text-sm)', fontWeight: 400, color: 'var(--text-muted)' }}> of target</span>
       </span>
 
@@ -352,7 +340,7 @@ function PatchCard({ patch, onClear }: { patch: PolarPlotPatch; onClear: () => v
         {target !== null && ` · target ${target.toFixed(2)} kt`}
       </span>
 
-      {filler > 0 && (
+      {filler !== null && isFillerFlagged(filler) && (
         <span
           data-testid="polar-plot-patch-filler"
           style={{

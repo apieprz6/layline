@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
 import {
   fetchCHII2,
@@ -13,8 +14,10 @@ import {
 import { TIME_SCALES, type TimeScale } from '@/lib/utils/windowing'
 import { readRace } from '@/services/races/readRace'
 import { readRaces } from '@/services/races/readRaces'
+import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
 import { buoyHistory } from './buoy-history'
+import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 import { raceList, raceSummary } from './races'
 
 /**
@@ -51,6 +54,22 @@ const RACE_SUMMARY_DESCRIPTION = `One Race as its page in Layline states it, com
 - testimony is what the sailor recorded: each sail change and each sea state, with its time, in the race page's own words. A sail is named in the Crossover Chart Version the Race was sailed under; an entry with no sail named is only its note, so never put a chart sail to it. An empty list means nobody wrote that down, not that nothing changed: say "not recorded". Sea state is the sailor's own reading of the water, not a buoy measurement.
 - maneuvers are TWA sign flips the detector classified as tacks, gybes and roundings. A recording at roughly thirty-second resolution holds a maneuver in one or two rows: count them, but do not state what one cost.
 - performance is Polar Efficiency (speed over the ground against the Race's own Polar) and VMG Efficiency, over countable time only. fillerAnchoredShare is how much of each figure is compared against a cell the Polar manufactured rather than measured: state it beside the figure whenever it is above zero, never drop the figure for it. Target VMG is estimated, per its caveat. Where there is no figure, note says why.`
+
+const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficiency over the boat's race archive, narrowed by the Analysis Filter, exactly as Layline's Polar performance screen states them.
+
+- Polar Efficiency is total distance sailed over the distance the Polar's Target Speed implies, across all the scored sailing the filter matches; VMG Efficiency is the same for VMG against Target VMG. Each race's sailing is scored against the Polar that race was sailed under. Report them as the percentages given.
+- The two headline figures blend every wind speed the filter matches. Each moment is scored against its own wind's target, but one percentage over all winds can hide that the boat is 110% of target at 4 knots and 50% at 12. Never present the headline figures as any wind band's.
+- To answer about a wind range, pass windWindow: the Polar performance screen's own wind window, a centre in whole knots and a width of 2, 4 or 6 (windWindowOptions in every answer says which centres the Polar allows). 10-14 knots is { centre: 12, width: 4 }. The window has its own Polar Efficiency over the sailing inside it (the screen prints it under the window, as reading; there is no VMG figure for a window, because VMG collapses at the beam by definition), the Polar columns that sailing was scored against, and its patches: 5 degrees of |TWA| by half a knot of SOG, each with its own percent of target, time, races and Filler-Anchored share. Compare patches only within one window, and call again for another band rather than merging windows. Port and starboard are not told apart.
+- The filter offers the screen's five dimensions: point of sail, sail used, sea state, time of day and when. Wind speed is not one of them; on the screen the wind window owns that axis.
+- A dimension left out includes everything, Not recorded included. Naming buckets narrows to exactly those. Sails are named by their Sail Definition label, never a number; every answer lists each dimension's valid buckets.
+- Every answer carries its Coverage Ledger: how much sailing time matched, how much of it was scored, what was excluded and why, and how much has no Sea State or Sail Configuration recorded. Each figure also states its own scored time; VMG Efficiency can rest on less than Polar Efficiency. State how much sailing is behind a figure, especially when it is little.
+- A figure may be Filler-Anchored: part of it is compared against Polar cells the Polar manufactured rather than measured. Give the figure and say what share is Filler-Anchored; do not withhold it.
+- Target VMG is estimated from the Polar's grid, not the certificate's own optimum.
+- A null figure means nothing in the match could be scored; never fill one in.`
+
+/** What a tool answers when the archive could not be read whole: an error, never a figure. */
+const ARCHIVE_UNREADABLE =
+  'The race archive could not be read, so there is no figure to give. This is not the same as having no races.'
 
 /**
  * A tool's answer as both forms MCP carries: JSON text for a client that reads only text, and the
@@ -154,6 +173,43 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
             `No Race with id ${raceId} could be read. Check the id against list_races; if it is listed, the read failed and may be retried.`
           )
         : answer(raceSummary(race))
+    }
+  )
+
+  server.registerTool(
+    'polar_performance',
+    {
+      title: 'Polar performance',
+      description: POLAR_PERFORMANCE_DESCRIPTION,
+      inputSchema: {
+        filter: analysisFilterSchema(POLAR_PERFORMANCE_DIMENSIONS),
+        windWindow: z
+          .object({
+            centre: z.number().describe('Centre of the wind window, in whole knots of TWS.'),
+            width: z.number().describe('Width of the window in knots: 2, 4 or 6.'),
+          })
+          .optional()
+          .describe(
+            "The screen's wind window. TWS from centre - width/2 inclusive to centre + width/2 exclusive."
+          ),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ filter, windWindow }) => {
+      // All or nothing (ADR 0026): a short archive would make the Coverage Ledger the wrong part.
+      const archive = await readAnalysisArchive(supabase)
+      if (archive === null) return refusal(ARCHIVE_UNREADABLE)
+
+      const dimensions = analysisDimensions(POLAR_PERFORMANCE_DIMENSIONS, archive.vocabulary)
+      const reading = filterFromArgument(filter, dimensions)
+      if (!reading.ok) return refusal(reading.message)
+
+      const window = windWindow === undefined ? null : windWindowFromArgument(windWindow, archive.polars)
+      if (window !== null && !window.ok) return refusal(window.message)
+
+      return answer(
+        polarPerformanceAnswer(archive.rows, reading.filter, dimensions, archive.polars, window?.window ?? null)
+      )
     }
   )
 

@@ -23,6 +23,7 @@ function scored(ratio: number | null, rows = 10): EfficiencyAggregate {
     filler_anchored_rows: 0,
     vmg_rows: 0,
     vmg_filler_anchored_rows: 0,
+    vmg_elapsed_seconds: rows * 60,
     rows_without_interval: 0,
     rows_without_target: ratio === null ? rows : 0,
     elapsed_seconds: rows * 60,

@@ -78,7 +78,7 @@ export const NOTE_ONLY = 'note-only'
 export const RANGE_DIMENSION: AnalysisDimension = 'when'
 
 /** Whether this dimension is the one a day range narrows. */
-function ownsDayRange(dimension: AnalysisDimension): boolean {
+export function ownsDayRange(dimension: AnalysisDimension): boolean {
   return dimension === RANGE_DIMENSION
 }
 

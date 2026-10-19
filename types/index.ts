@@ -1745,6 +1745,8 @@ export interface EfficiencyAggregate {
   vmg_rows: number
   /** How many of *those* rested on filler. Target VMG has its own trust (`TargetVmg`). */
   vmg_filler_anchored_rows: number
+  /** Measured seconds behind the **VMG** sums: `elapsed_seconds` over the `vmg_rows` alone. */
+  vmg_elapsed_seconds: number
   /**
    * **Countable** rows left out for want of a measured interval: the last row of the window, and
    * any row the naive wall clock stepped backwards across.
@@ -3610,6 +3612,95 @@ export interface ProtectedResourceMetadata {
 
 export interface CurrentConditionsAnswer {
   stations: [McpStationReading, McpStationReading | McpStationOutOfSeason]
+}
+
+// The Analysis Filter as an MCP tool's argument, shared by every tool that narrows the archive
+// (ADR 0042, LAY-185). Keys are the dimensions the tool offers, values the screen's own bucket ids;
+// a dimension absent or empty is untouched, Not recorded included. `dayRange` is the `when`
+// dimension's span of days, offered only where `when` is.
+export type McpAnalysisFilterArgument = Partial<Record<AnalysisDimension, string[]>> & {
+  dayRange?: AnalysisDayRange
+}
+
+// One figure as the Polar performance screen prints it: `McpEfficiencyFigure` (the race page's
+// ratio, percent and Filler-Anchored share), plus the time it is over and the flag raised beside it,
+// never in its place (ADR 0036). `ratio` null means nothing in the match could be scored; `note`
+// then says so in words.
+export interface McpPolarPerformanceFigure extends McpEfficiencyFigure {
+  scoredSeconds: number
+  fillerAnchored: boolean
+  note?: string
+}
+
+// The Coverage Ledger in time, never in rows (ADR 0037). Each figure states its own scored
+// seconds; `excluded` says what matched and was left out of them, and why. `statement` is the
+// screen's own wording, line by line.
+export interface McpCoverageLedger {
+  matchedSeconds: number
+  totalSeconds: number
+  matchedRaces: number
+  totalRaces: number
+  countableSeconds: number
+  excluded: { reason: string; seconds: number }[]
+  notRecorded: { dimension: AnalysisDimension; missing: string; seconds: number; share: number | null }[]
+  statement: string[]
+}
+
+// One dimension a tool offers, with every bucket it can be narrowed to, empty ones included.
+export interface McpAnalysisDimension {
+  dimension: AnalysisDimension
+  label: string
+  buckets: { id: string; label: string; footnote?: string }[]
+}
+
+// The Polar Plot's focus window as a tool argument: a centre in whole knots and a width of 2, 4
+// or 6, exactly the screen's slider (ADR 0040). It narrows what the window states, never the match.
+export interface McpWindWindowArgument {
+  centre: number
+  width: number
+}
+
+// One Polar Plot patch: 5° of |TWA| by half a knot of SOG, inside one wind window, so every
+// moment in it was sailed in comparable wind. `percent` is the patch card's whole percent.
+export interface McpPolarPlotPatch {
+  twaDegrees: { from: number; to: number }
+  sogKnots: { from: number; to: number }
+  ratio: number | null
+  percent: string | null
+  targetKnots: number | null
+  scoredSeconds: number
+  races: number
+  fillerAnchoredShare: number | null
+  fillerAnchored: boolean
+}
+
+// What one position of the wind window holds. `highKnots` is exclusive. `polarEfficiency` is over
+// the window's own sailing and `reading` is the line the screen prints under the window's knots;
+// no VMG figure, because the screen states none for a window. `notDrawn` is what the window could
+// hold and draws nowhere, and why.
+export interface McpWindWindow {
+  centreKnots: number
+  widthKnots: number
+  lowKnots: number
+  highKnots: number
+  polarColumnsInPlay: number[]
+  polarEfficiency: McpPolarPerformanceFigure
+  reading: string
+  notDrawn: { seconds: number; parts: { reason: string; seconds: number }[] }
+  patches: McpPolarPlotPatch[]
+  note?: string
+}
+
+export interface PolarPerformanceAnswer {
+  filter: McpAnalysisFilterArgument
+  polarEfficiency: McpPolarPerformanceFigure
+  vmgEfficiency: McpPolarPerformanceFigure & { caveat: string }
+  coverageLedger: McpCoverageLedger
+  dimensions: McpAnalysisDimension[]
+  // The windows a call may ask for, or null where no race records a Polar.
+  windWindowOptions: { centreFromKnots: number; centreToKnots: number; widthsKnots: number[] } | null
+  // The window asked for, or null where none was.
+  windWindow: McpWindWindow | null
 }
 
 // One observation in a station's history, as the station page plots it. `gustKnots` and
