@@ -29,8 +29,15 @@
 import { useState, type KeyboardEvent, type ReactElement } from 'react'
 import { spacing } from '@/lib/utils/design'
 import { BIN_SIZE_DEG, MIN_ROWS_PER_BIN } from '@/services/analysis/compass-deviation'
+import {
+  binSpan,
+  headingsUnread,
+  noCurveSentence,
+  raceHeadingReading,
+  racesAtHeading,
+} from '@/services/analysis/compass-words'
 import { headingCoverage } from '@/services/analysis/coverage-verdict'
-import type { CalibrationLogEntry, EraHeadingBin, EraHeadingOffset, HeadingBin } from '@/types'
+import type { CalibrationLogEntry, EraHeadingBin, EraHeadingOffset } from '@/types'
 
 import CalibrationRail, { railRacesFrom } from './CalibrationRail'
 import {
@@ -62,7 +69,6 @@ import {
   compassPoint,
   eraLabel,
   raceLabel,
-  races as racesPhrase,
   rows as rowsPhrase,
   shortDate,
   signedDegrees,
@@ -236,17 +242,9 @@ export default function CompassChart({
 
 function Summary({ era }: { era: EraHeadingOffset }): ReactElement {
   const { swing } = era
-  /** Headings the curve has no reading at, which the coverage word's own share does not say. */
-  const blank = era.heading_bin_count - era.headings_covered
+  const blank = headingsUnread(era)
 
-  if (swing === null) {
-    return (
-      <div>
-        No heading in this Era rests on {MIN_ROWS_PER_BIN} rows of any Race, so there is no curve to
-        read. {racesPhrase(era.race_count)} measured; {era.excluded.length} produced nothing.
-      </div>
-    )
-  }
+  if (swing === null) return <div>{noCurveSentence(era)}</div>
 
   return (
     <>
@@ -288,12 +286,8 @@ function BinDetail({
 }): ReactElement {
   const now = era.bins[bin]
   const before = previous?.bins[bin] ?? null
-  const start = now.bin_start_deg
-
-  // Every Race that put a row in this bin, including the ones whose bin fell under the gate —
-  // listed as not counted rather than omitted, so "nobody sailed here" and "nobody sailed here
-  // long enough" are different sentences (ADR 0034).
-  const behind = era.races.filter((race) => race.bins[bin].row_count > 0)
+  const span = binSpan(now)
+  const behind = racesAtHeading(era, bin)
 
   return (
     <>
@@ -306,7 +300,7 @@ function BinDetail({
         }}
       >
         <Big>
-          {start}°–{start + BIN_SIZE_DEG}° · {compassPoint(now.bin_center_deg)}
+          {span.from}°–{span.to}° · {compassPoint(now.bin_center_deg)}
         </Big>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flexShrink: 0 }}>
           {now.mean_error_deg === null ? 'no figure' : signedDegrees(now.mean_error_deg)} now
@@ -318,21 +312,14 @@ function BinDetail({
       {behind.length === 0 ? (
         <div>No Race in this Era sailed this heading.</div>
       ) : (
-        behind.map((race) => {
-          const theirs: HeadingBin = race.bins[bin]
-          return (
-            <DetailRow
-              key={race.race_id}
-              emphasis={race.race_id === overlay}
-              name={raceLabel(labels, race.race_id, race.window_start)}
-              figure={
-                theirs.mean_error_deg === null
-                  ? `${rowsPhrase(theirs.row_count)} — under ${MIN_ROWS_PER_BIN}, not counted`
-                  : `${signedDegrees(theirs.mean_error_deg)} · ${rowsPhrase(theirs.row_count)}`
-              }
-            />
-          )
-        })
+        behind.map(({ race, reading }) => (
+          <DetailRow
+            key={race.race_id}
+            emphasis={race.race_id === overlay}
+            name={raceLabel(labels, race.race_id, race.window_start)}
+            figure={raceHeadingReading(reading)}
+          />
+        ))
       )}
     </>
   )

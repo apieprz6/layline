@@ -15,19 +15,18 @@ import { spacing } from '@/lib/utils/design'
 import {
   CLOSE_ENOUGH_KNOTS,
   HEADING_SECTORS,
-  exceeds,
-  SPOT_ON_SHARE_TO_LEAVE,
   type PaddlewheelRecommendation,
   type PaddlewheelVerdict,
   type SpeedBandRead,
   type SpeedBandVerdict,
 } from '@/services/analysis/paddlewheel-verdict'
-import { sharePercent } from '@/services/analysis/figures'
 import {
-  bandRange,
-  slowFast,
-  spans,
+  CHECKLIST_ANSWER_WORDS,
+  paddlewheelChecklist,
+  sectorReading,
   verdictWords,
+  type ChecklistAnswer,
+  type ChecklistEvidence,
 } from '@/services/analysis/paddlewheel-verdict-words'
 
 import { CHART_FONT } from './chart-furniture'
@@ -46,8 +45,6 @@ const RECOMMENDATION_COLOUR: Record<PaddlewheelRecommendation, string> = {
   'leave-it': 'var(--state-success)',
   'cant-tell': 'var(--text-muted)',
 }
-
-const OFF: readonly SpeedBandVerdict[] = ['reads-slow', 'reads-fast']
 
 /** The answer, first, with its colour down the edge and its words beside it. */
 export function VerdictBanner({ verdict }: { verdict: PaddlewheelVerdict }): ReactElement {
@@ -72,111 +69,34 @@ export function VerdictBanner({ verdict }: { verdict: PaddlewheelVerdict }): Rea
 
 /* ----------------------------------------------------------------------- checklist */
 
-type Answer = 'fine' | 'attention' | 'unknown'
-
-const ANSWER: Record<Answer, { mark: string; colour: string; words: string }> = {
-  fine: { mark: '✓', colour: 'var(--state-success)', words: 'fine' },
-  attention: { mark: '!', colour: 'var(--state-warning)', words: 'needs attention' },
-  unknown: { mark: '?', colour: 'var(--text-muted)', words: 'can’t say yet' },
+const ANSWER: Record<ChecklistAnswer, { mark: string; colour: string }> = {
+  fine: { mark: '✓', colour: 'var(--state-success)' },
+  attention: { mark: '!', colour: 'var(--state-warning)' },
+  unknown: { mark: '?', colour: 'var(--text-muted)' },
 }
 
 /**
  * The five questions a rigger asks before touching the calibration, each answered in a sentence
- * with its evidence under it. The last two are the ones a scatter cannot answer at all: they are
- * what rule out current and weed.
+ * with its evidence under it — `paddlewheelChecklist`'s, which the MCP tool states too.
  */
 export function Checklist({ verdict }: { verdict: PaddlewheelVerdict }): ReactElement {
-  const { bands, spot_on_share: share, heading, drift } = verdict
-  const judged = bands.filter((band) => band.verdict !== 'thin' && band.mean_gap_knots !== null)
-  const outside = judged.filter((band) => exceeds(band.mean_gap_knots ?? 0, CLOSE_ENOUGH_KNOTS))
-  const agreeing = outside.filter((band) => OFF.includes(band.verdict))
-  const disagreeing = outside.filter((band) => band.verdict === 'races-disagree')
-  const sailedMostSpotOn = share !== null && share >= SPOT_ON_SHARE_TO_LEAVE
-  const listed = outside.map((band) => `${bandRange(band)} (${slowFast(band.mean_gap_knots ?? 0)})`).join(', ')
+  const evidence: Record<ChecklistEvidence, ReactElement> = {
+    bands: <BandStrip bands={verdict.bands} />,
+    heading: <HeadingRose sectors={verdict.heading.sectors} />,
+    drift: <DriftLine offsets={verdict.drift.points.map((point) => point.measured_offset_knots)} />,
+  }
 
   return (
     <ol data-testid="speed-checklist" style={{ display: 'grid', gap: spacing(3), listStyle: 'none', margin: 0, padding: 0 }}>
-      <Question
-        answer={sailedMostSpotOn ? 'fine' : agreeing.length > 0 ? 'attention' : 'unknown'}
-        question="Is it off where you sail most?"
-        finding={
-          sailedMostSpotOn
-            ? `No — spot on at ${spans(bands, ['spot-on'])}, ${sharePercent(share ?? 0)} of your sailing.${listed === '' ? '' : ` Off at ${listed}.`}`
-            : agreeing.length > 0
-              ? `Yes, at ${listed}.`
-              : 'Not enough Races at the speeds you sail most to say.'
-        }
-        evidence={<BandStrip bands={bands} />}
-      />
-      <Question
-        answer={outside.length === 0 ? 'unknown' : agreeing.length > 0 ? 'attention' : 'fine'}
-        question="Where it’s off, do the Races agree?"
-        finding={
-          outside.length === 0
-            ? 'Nothing is off.'
-            : [
-                agreeing.length > 0 &&
-                  `Yes at ${agreeing.map(bandRange).join(', ')} — ${
-                    agreeing.every((band) => band.agreeing === band.races.length)
-                      ? 'every Race that sailed there shows it'
-                      : 'most Races that sailed there show it'
-                  }, so that is the paddlewheel.`,
-                disagreeing.length > 0 &&
-                  `No at ${disagreeing.map(bandRange).join(', ')} — some Races read slow, some fast: current or noise.`,
-              ]
-                .filter(Boolean)
-                .join(' ')
-        }
-      />
-      <Question
-        answer={
-          heading.swing_knots === null
-            ? 'unknown'
-            : exceeds(heading.swing_knots, 2 * CLOSE_ENOUGH_KNOTS)
-              ? 'attention'
-              : 'fine'
-        }
-        question="Is it the same on every heading?"
-        finding={
-          heading.swing_knots === null
-            ? 'Not enough headings sailed to say.'
-            : exceeds(heading.swing_knots, 2 * CLOSE_ENOUGH_KNOTS)
-              ? `No — it swings ${heading.swing_knots.toFixed(2)} kt with heading. Current does that; a paddlewheel can’t.`
-              : `Yes, within ${heading.swing_knots.toFixed(2)} kt on every heading sailed — so it isn’t current.`
-        }
-        evidence={<HeadingRose sectors={heading.sectors} />}
-      />
-      <Question
-        answer={
-          drift.change_knots === null
-            ? 'unknown'
-            : exceeds(drift.change_knots, CLOSE_ENOUGH_KNOTS)
-              ? 'attention'
-              : 'fine'
-        }
-        question="Has it held steady through the season?"
-        finding={
-          drift.change_knots === null
-            ? 'Not enough Races yet to say.'
-            : exceeds(drift.change_knots, CLOSE_ENOUGH_KNOTS)
-              ? `No — it moved ${Math.abs(drift.change_knots).toFixed(2)} kt between the first Races and the last. Weed on the wheel does that; clean it first.`
-              : `Yes — it moved ${Math.abs(drift.change_knots).toFixed(2)} kt between the first Races and the last, so it isn’t weed.`
-        }
-        evidence={<DriftLine offsets={drift.points.map((point) => point.measured_offset_knots)} />}
-      />
-      <Question
-        answer={agreeing.length === 0 ? 'unknown' : verdict.one_calibration_fixes ? 'attention' : 'fine'}
-        question="Would recalibrating fix it?"
-        finding={
-          agreeing.length === 0
-            ? 'There is nothing for it to fix.'
-            : verdict.one_calibration_fixes
-              ? 'Yes — the gap is a straight line in speed, which one calibration takes out.'
-              : sailedMostSpotOn
-                ? 'No — it is already spot on where you sail most, and recalibrating moves every speed together, so fixing the edges would spoil that.'
-                : 'No — the gap curves with speed, and a calibration can only take out a straight-line error.'
-        }
-      />
+      {paddlewheelChecklist(verdict).map((item) => (
+        <Question
+          key={item.question}
+          answer={item.answer}
+          question={item.question}
+          finding={item.finding}
+          evidence={item.evidence === null ? undefined : evidence[item.evidence]}
+        />
+      ))}
     </ol>
   )
 }
@@ -187,18 +107,18 @@ function Question({
   finding,
   evidence,
 }: {
-  answer: Answer
+  answer: ChecklistAnswer
   question: string
   finding: string
   evidence?: ReactElement
 }): ReactElement {
-  const { mark, colour, words } = ANSWER[answer]
+  const { mark, colour } = ANSWER[answer]
 
   return (
     <li style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: spacing(3), alignItems: 'start' }}>
       <span
         role="img"
-        aria-label={words}
+        aria-label={CHECKLIST_ANSWER_WORDS[answer]}
         style={{
           width: 22,
           height: 22,
@@ -258,8 +178,7 @@ function HeadingRose({ sectors }: { sectors: PaddlewheelVerdict['heading']['sect
         if (gap === null) return null
         const r = 6 + Math.min(1, Math.abs(gap) / 0.6) * (outer - 6)
         const from = sector * width - width / 2
-        const verdict: SpeedBandVerdict =
-          !exceeds(gap, CLOSE_ENOUGH_KNOTS) ? 'spot-on' : gap > 0 ? 'reads-slow' : 'reads-fast'
+        const verdict = sectorReading(gap)
         return (
           <path
             key={sector}

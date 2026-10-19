@@ -15,15 +15,18 @@
  * same verdict, and a tool may not hold a copy of a sentence the card composes (ADR 0042).
  */
 
+import { sharePercent } from '@/services/analysis/figures'
+import { races } from '@/services/analysis/instrument-tuning-text'
 import {
   CLOSE_ENOUGH_KNOTS,
   MIN_RACES_PER_BAND,
   MIN_ROWS_PER_RACE,
+  SPOT_ON_SHARE_TO_LEAVE,
+  exceeds,
   type PaddlewheelVerdict,
   type SpeedBandRead,
   type SpeedBandVerdict,
 } from '@/services/analysis/paddlewheel-verdict'
-import { sharePercent } from '@/services/analysis/figures'
 
 /**
  * The `STW` caveat — the one of the three the checks themselves do not carry.
@@ -132,4 +135,128 @@ export function verdictWords(verdict: PaddlewheelVerdict): { headline: string; d
         detail: 'The Races disagree with each other more than the paddlewheel is off — that is current or noise. More Races will settle it.',
       }
   }
+}
+
+/** How one of the checklist's five questions is answered: its mark, never its colour alone. */
+export type ChecklistAnswer = 'fine' | 'attention' | 'unknown'
+
+/** The mark's own word, for wherever the mark itself cannot be drawn. */
+export const CHECKLIST_ANSWER_WORDS: Record<ChecklistAnswer, string> = {
+  fine: 'fine',
+  attention: 'needs attention',
+  unknown: 'can’t say yet',
+}
+
+/** Which of the verdict's readings a question's evidence is drawn from, where it has any. */
+export type ChecklistEvidence = 'bands' | 'heading' | 'drift'
+
+export interface ChecklistItem {
+  question: string
+  answer: ChecklistAnswer
+  finding: string
+  evidence: ChecklistEvidence | null
+}
+
+const OFF: readonly SpeedBandVerdict[] = ['reads-slow', 'reads-fast']
+
+/**
+ * The five questions a rigger asks before touching the calibration, each answered in a sentence.
+ *
+ * The last two are the ones a scatter cannot answer at all: they are what rule out current and
+ * weed. Every judgement is read off the verdict's own readings against `paddlewheel-verdict.ts`'s
+ * thresholds, so the checklist and the verdict above it cannot disagree.
+ */
+export function paddlewheelChecklist(verdict: PaddlewheelVerdict): ChecklistItem[] {
+  const { bands, spot_on_share: share, heading, drift } = verdict
+  const judged = bands.filter((band) => band.verdict !== 'thin' && band.mean_gap_knots !== null)
+  const outside = judged.filter((band) => exceeds(band.mean_gap_knots ?? 0, CLOSE_ENOUGH_KNOTS))
+  const agreeing = outside.filter((band) => OFF.includes(band.verdict))
+  const disagreeing = outside.filter((band) => band.verdict === 'races-disagree')
+  const sailedMostSpotOn = share !== null && share >= SPOT_ON_SHARE_TO_LEAVE
+  const listed = outside.map((band) => `${bandRange(band)} (${slowFast(band.mean_gap_knots ?? 0)})`).join(', ')
+  const headingSwings = heading.swing_knots !== null && exceeds(heading.swing_knots, 2 * CLOSE_ENOUGH_KNOTS)
+  const drifted = drift.change_knots !== null && exceeds(drift.change_knots, CLOSE_ENOUGH_KNOTS)
+
+  return [
+    {
+      question: 'Is it off where you sail most?',
+      answer: sailedMostSpotOn ? 'fine' : agreeing.length > 0 ? 'attention' : 'unknown',
+      finding: sailedMostSpotOn
+        ? `No — spot on at ${spans(bands, ['spot-on'])}, ${sharePercent(share ?? 0)} of your sailing.${listed === '' ? '' : ` Off at ${listed}.`}`
+        : agreeing.length > 0
+          ? `Yes, at ${listed}.`
+          : 'Not enough Races at the speeds you sail most to say.',
+      evidence: 'bands',
+    },
+    {
+      question: 'Where it’s off, do the Races agree?',
+      answer: outside.length === 0 ? 'unknown' : agreeing.length > 0 ? 'attention' : 'fine',
+      finding:
+        outside.length === 0
+          ? 'Nothing is off.'
+          : [
+              agreeing.length > 0 &&
+                `Yes at ${agreeing.map(bandRange).join(', ')} — ${
+                  agreeing.every((band) => band.agreeing === band.races.length)
+                    ? 'every Race that sailed there shows it'
+                    : 'most Races that sailed there show it'
+                }, so that is the paddlewheel.`,
+              disagreeing.length > 0 &&
+                `No at ${disagreeing.map(bandRange).join(', ')} — some Races read slow, some fast: current or noise.`,
+            ]
+              .filter(Boolean)
+              .join(' '),
+      evidence: null,
+    },
+    {
+      question: 'Is it the same on every heading?',
+      answer: heading.swing_knots === null ? 'unknown' : headingSwings ? 'attention' : 'fine',
+      finding:
+        heading.swing_knots === null
+          ? 'Not enough headings sailed to say.'
+          : headingSwings
+            ? `No — it swings ${heading.swing_knots.toFixed(2)} kt with heading. Current does that; a paddlewheel can’t.`
+            : `Yes, within ${heading.swing_knots.toFixed(2)} kt on every heading sailed — so it isn’t current.`,
+      evidence: 'heading',
+    },
+    {
+      question: 'Has it held steady through the season?',
+      answer: drift.change_knots === null ? 'unknown' : drifted ? 'attention' : 'fine',
+      finding:
+        drift.change_knots === null
+          ? 'Not enough Races yet to say.'
+          : drifted
+            ? `No — it moved ${Math.abs(drift.change_knots).toFixed(2)} kt between the first Races and the last. Weed on the wheel does that; clean it first.`
+            : `Yes — it moved ${Math.abs(drift.change_knots).toFixed(2)} kt between the first Races and the last, so it isn’t weed.`,
+      evidence: 'drift',
+    },
+    {
+      question: 'Would recalibrating fix it?',
+      answer: agreeing.length === 0 ? 'unknown' : verdict.one_calibration_fixes ? 'attention' : 'fine',
+      finding:
+        agreeing.length === 0
+          ? 'There is nothing for it to fix.'
+          : verdict.one_calibration_fixes
+            ? 'Yes — the gap is a straight line in speed, which one calibration takes out.'
+            : sailedMostSpotOn
+              ? 'No — it is already spot on where you sail most, and recalibrating moves every speed together, so fixing the edges would spoil that.'
+              : 'No — the gap curves with speed, and a calibration can only take out a straight-line error.',
+      evidence: null,
+    },
+  ]
+}
+
+/**
+ * One heading sector's gap read as a band's verdict would be, without the Races-agree test a
+ * sector has no count for: spot on inside the window, otherwise slow or fast.
+ */
+export function sectorReading(gap: number): Extract<SpeedBandVerdict, 'spot-on' | 'reads-slow' | 'reads-fast'> {
+  return !exceeds(gap, CLOSE_ENOUGH_KNOTS) ? 'spot-on' : gap > 0 ? 'reads-slow' : 'reads-fast'
+}
+
+/** What a tapped knot of the chart says beneath its verdict: why it is thin, or how many agree. */
+export function bandVerdictSentence(read: SpeedBandRead): string {
+  return read.verdict === 'thin'
+    ? `${read.races.length === 0 ? 'No Race' : `Only ${races(read.races.length)}`} sailed long enough at this speed to count — a verdict needs ${MIN_RACES_PER_BAND}.`
+    : `${read.agreeing} of ${races(read.races.length)} lean the same way.`
 }

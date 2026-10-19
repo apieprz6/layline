@@ -51,8 +51,17 @@ import {
 import {
   BAND_WORDS,
   PADDLEWHEEL_CAVEAT,
+  bandVerdictSentence,
   slowFast,
 } from '@/services/analysis/paddlewheel-verdict-words'
+import {
+  METHOD_WORDS,
+  bandRowsSentence,
+  blankStwSentence,
+  lineAtBand,
+  lineGapSentence,
+  noLineSentence,
+} from '@/services/analysis/speed-check-words'
 import type { CalibrationLogEntry } from '@/types'
 
 import CalibrationRail, { type RailRace } from './CalibrationRail'
@@ -97,11 +106,6 @@ const SEASON = 'season'
 /** The speed axis never shrinks below this, so a light-air season is not drawn as a fast one. */
 const MIN_AXIS_KNOTS = 10
 
-
-const METHOD_WORDS: Record<OfferedFitMethod, string> = {
-  orthogonal: 'The fit treats GPS and paddlewheel as equally imperfect.',
-  'sog-on-stw': 'The fit treats the paddlewheel as exact, which tilts the line flatter than it should be.',
-}
 
 interface SpeedCheckChartProps {
   /**
@@ -339,26 +343,7 @@ function bandAxis(measured: readonly SpeedBandGap[], axisMax: number): AxisBand[
 /* ----------------------------------------------------------------------- readouts */
 
 function BlankStw({ era }: { era: EraDivergence }): ReactElement {
-  const { blank_stw, countable, excluded_blank_stw: excluded } = era.coverage
-
-  if (blank_stw === 0) {
-    const elsewhere = excluded.frozen + excluded.low_speed + excluded.maneuver_window
-    return (
-      <>
-        No row the chart reads lacks an STW
-        {elsewhere > 0
-          ? `: all ${elsewhere} blank-STW rows in these Races were Frozen, Low-Speed or inside a Maneuver Window, and so were never Countable.`
-          : ' anywhere in these Races.'}
-      </>
-    )
-  }
-
-  return (
-    <>
-      The paddlewheel said nothing on {blank_stw} of {countable} Countable rows here, which are
-      counted and not plotted — a blank is not a reading of zero.
-    </>
-  )
+  return <>{blankStwSentence(era.coverage)}</>
 }
 
 function Summary({
@@ -376,27 +361,15 @@ function Summary({
 
   if (line === null) {
     const outcome = race === null ? era.fit : race.fit
-    return (
-      <div>
-        {name} has no line — {outcome.fitted ? '' : REASON_WORDS[outcome.reason]}.
-        {gap !== null && ` Its rows still read ${signedKnots(gap)} from 1:1 on average.`}
-      </div>
-    )
+    return <div>{outcome.fitted ? null : noLineSentence(name, outcome.reason, gap)}</div>
   }
-
 
   return (
     <>
       <Big>
         {gap === null ? '—' : signedKnots(gap)} · R² {line.r_squared.toFixed(2)}
       </Big>
-      <div>
-        {name}: GPS speed reads{' '}
-        {gap === null
-          ? 'no measurable gap from'
-          : `${Math.abs(gap).toFixed(2)} kt ${gap >= 0 ? 'above' : 'below'}`}{' '}
-        the paddlewheel over {rowsPhrase(line.points)}.
-      </div>
+      <div>{lineGapSentence(name, gap, line)}</div>
       {/*
         The line's gap at two speeds, which is the `STW` card's own headline (ADR 0035) and the only
         reading of the drawn line that may be printed — never a slope. Two labelled figures rather
@@ -431,7 +404,7 @@ function BandDetail({
   race: RaceDivergence | null
 }): ReactElement {
   const here = bands[band]?.gap ?? null
-  const saysLine = line === null ? null : lineGapAt(line, band + 0.5)
+  const saysLine = line === null || here === null ? null : lineAtBand(line, here)
 
   return (
     <>
@@ -445,18 +418,9 @@ function BandDetail({
             race === null
             ? 'No Race in this Era sailed this speed.'
             : 'This Race never sailed this speed.'
-          : `Over ${rowsPhrase(here.rows)}${
-              race === null ? ` from ${racesPhrase(here.races)}, each weighted equally` : ''
-            }.`}
+          : bandRowsSentence(here, race !== null)}
       </div>
-      {saysLine !== null && here !== null && (
-        <div style={{ color: 'var(--text-muted)' }}>
-          The straight line says {signedKnots(saysLine)} here
-          {Math.abs(saysLine - here.mean_gap_knots) > 0.1
-            ? ' — the rows disagree with it by more than 0.1 kt, which is the U a straight line cannot follow.'
-            : '.'}
-        </div>
-      )}
+      {saysLine !== null && <div style={{ color: 'var(--text-muted)' }}>{saysLine.sentence}</div>}
     </>
   )
 }
@@ -930,11 +894,7 @@ function BandVerdictDetail({
         {range} · {BAND_WORDS[read.verdict]}
         {read.verdict !== 'thin' && read.mean_gap_knots !== null && ` · ${slowFast(read.mean_gap_knots)}`}
       </Big>
-      <div>
-        {read.verdict === 'thin'
-          ? `${read.races.length === 0 ? 'No Race' : `Only ${racesPhrase(read.races.length)}`} sailed long enough at this speed to count — a verdict needs ${MIN_RACES_PER_BAND}.`
-          : `${read.agreeing} of ${racesPhrase(read.races.length)} lean the same way.`}
-      </div>
+      <div>{bandVerdictSentence(read)}</div>
       {race !== null && (
         <div>
           {pickedHere !== undefined && pickedHere !== null
