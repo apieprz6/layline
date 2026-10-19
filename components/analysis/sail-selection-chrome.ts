@@ -28,7 +28,12 @@
 
 import { radius } from '@/lib/utils/design'
 import { UNKNOWN_SAIL_BAND } from '@/services/boat/crossoverSailBands'
-import type { CellAgreement, SailSelectionCellView } from '@/services/analysis/sail-selection'
+import {
+  AGREEMENT_WORDS,
+  chartSays,
+  type CellAgreement,
+  type SailSelectionCellView,
+} from '@/services/analysis/sail-selection'
 import type { CSSProperties } from 'react'
 
 /**
@@ -60,16 +65,8 @@ export const AGREEMENT_GLYPHS: Record<CellAgreement, string> = {
   'no-rows': '',
 }
 
-/** What each verdict is called in words, where there is room for words. */
-export const AGREEMENT_WORDS: Record<CellAgreement, string> = {
-  agrees: 'carried what the chart calls for',
-  differs: 'carried something else',
-  mixed: 'both, across this cell’s rows',
-  'not-recorded': 'no row’s sail was written down',
-  'off-chart': 'a sail the chart has no word for — never counted as disagreement',
-  'other-version': 'sailed under another Crossover Chart, so its sail numbers mean something else',
-  'no-rows': 'no rows here',
-}
+/** What each verdict is called in words: the service's own, so the tool and the sheet say one thing. */
+export { AGREEMENT_WORDS }
 
 /** A token mixed down to a tint, so the night-vision override on the token still applies. */
 function tint(token: string, percent: number): string {
@@ -301,7 +298,7 @@ export function isFillerAnchored(view: CellView, layer: SailSelectionLayerSpec):
 export function cellSentence(view: CellView, layer: SailSelectionLayerSpec): string {
   const { cell, totals } = view
   const where = `${cell.twa}° at ${cell.tws} kt`
-  const says = `chart says ${cell.recommendation?.definition.label ?? `sail ${cell.sail_number ?? '—'}`}`
+  const says = `chart says ${chartSays(cell)}`
   const opening = `${where} — ${says}`
 
   if (!layer.narrows) return opening

@@ -44,8 +44,12 @@
 import { coverageLedger } from '@/services/analysis/coverage-ledger'
 import { crossoverLookup } from '@/services/analysis/crossover-lookup'
 import { countableRows, mergeEfficiency, sumEfficiency } from '@/services/analysis/efficiency'
+import { countOf, sharePercent } from '@/services/analysis/figures'
 import { EMPTY_FILTER, NOTE_ONLY, NOT_RECORDED, bucketOf, matchedRows } from '@/services/analysis/filter'
+import { fillerAnchoredShare, isFillerFlagged } from '@/services/analysis/polar-performance'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
+import type { SailRegions } from '@/services/boat/crossoverSailRegions'
+import { describeDuration } from '@/services/recordings/coverage'
 import type {
   AnalysisDimension,
   AnalysisDimensionSpec,
@@ -938,4 +942,162 @@ export function gridCoverage(views: readonly SailSelectionCellView[]): GridCover
   }
 
   return { ...coverage, unreachable: known ? coverage.unreachable : null }
+}
+
+/**
+ * One region of the chart: the cells of one sail joined edge to edge, as the Chart layer outlines
+ * and names it (`crossoverSailRegions`), with its cells' slices folded together.
+ *
+ * A region's **Cell Agreement** is the same fold as a cell's, over every slice of every cell in it,
+ * so a region reads as its cells' rows taken together and never as an average of its cells.
+ */
+export interface SailRegionView {
+  /** The region's index in `crossoverSailRegions`, which is how two regions of one sail differ. */
+  index: number
+  sail_number: number
+  /** The sail's name, as `chartSays` gives it. */
+  name: string
+  /** Its cells, in the grid's own order. */
+  views: SailSelectionCellView[]
+  totals: CellTotals
+}
+
+/** The chart's regions, each with its cells and their figures folded, in region order. */
+export function regionViews(
+  views: readonly SailSelectionCellView[],
+  regions: SailRegions
+): SailRegionView[] {
+  const held = new Map<number, SailSelectionCellView[]>()
+
+  for (const view of views) {
+    const index = regions.region[view.cell.row]?.[view.cell.column]
+    if (index == null) continue
+
+    const members = held.get(index) ?? []
+    members.push(view)
+    held.set(index, members)
+  }
+
+  return [...held.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([index, members]) => ({
+      index,
+      sail_number: members[0].cell.sail_number as number,
+      name: chartSays(members[0].cell),
+      views: members,
+      totals: cellTotals(members.flatMap((member) => member.cell.slices)),
+    }))
+}
+
+/**
+ * The share of a cell's Countable rows each verdict holds, or null where the cell has none.
+ *
+ * **Cell Agreement is a proportion** (ADR 0030): a mixed cell is 40 rows one way and 3 the other,
+ * and this is that sentence as numbers.
+ */
+export function verdictShares(totals: Pick<CellTotals, 'rows' | 'verdicts'>): Record<CellVerdict, number> | null {
+  if (totals.rows === 0) return null
+
+  return Object.fromEntries(
+    (Object.keys(totals.verdicts) as CellVerdict[]).map((verdict) => [verdict, totals.verdicts[verdict] / totals.rows])
+  ) as Record<CellVerdict, number>
+}
+
+/**
+ * Of the placed sailing, the share that could be compared with the chart at all — or null where
+ * nothing was placed. What Chart Agreement's share actually rests on.
+ */
+export function judgeableShare(agreement: Pick<ChartAgreement, 'judgeable_rows' | 'placed_rows'>): number | null {
+  return agreement.placed_rows === 0 ? null : agreement.judgeable_rows / agreement.placed_rows
+}
+
+/** What each **Cell Agreement** is called in words, where there is room for words. */
+export const AGREEMENT_WORDS: Record<CellAgreement, string> = {
+  agrees: 'carried what the chart calls for',
+  differs: 'carried something else',
+  mixed: 'both, across this cell’s rows',
+  'not-recorded': 'no row’s sail was written down',
+  'off-chart': 'a sail the chart has no word for — never counted as disagreement',
+  'other-version': 'sailed under another Crossover Chart, so its sail numbers mean something else',
+  'no-rows': 'no rows here',
+}
+
+/** What a sail line's verdict is called. The chart is never "wrong", and neither is the crew. */
+export const SAIL_VERDICT_WORDS: Record<CellVerdict, string> = {
+  agrees: 'what the chart calls for',
+  differs: 'not what the chart calls for',
+  'off-chart': 'a sail the chart has no word for',
+  'not-recorded': 'never written down',
+  'other-version': 'sailed under another Crossover Chart, so not judged against this one',
+}
+
+/**
+ * What the chart calls for in a cell: its Sail Definition's label, or the bare number where the
+ * number names no Definition of its Version (ADR 0023).
+ */
+export function chartSays(cell: Pick<SailSelectionCell, 'recommendation' | 'sail_number'>): string {
+  return cell.recommendation?.definition.label ?? `sail ${cell.sail_number ?? '—'}`
+}
+
+/**
+ * Why a cell holds no sailing: a narrowing emptied it, or no Race ever reached it. Two different
+ * facts, and the second is not a defect (ADR 0014).
+ */
+export function emptyCellSentence(cell: Pick<SailSelectionCell, 'unfiltered_rows'>): string {
+  return cell.unfiltered_rows > 0
+    ? `No Countable sailing here under this filter — ${countOf(cell.unfiltered_rows)} rows with the filter cleared.`
+    : 'No race has reached this cell.'
+}
+
+/** What a reached cell's figure is over, and how much of it rests on the Polar's own filler. */
+export function cellScoredSentence(totals: Pick<CellTotals, 'efficiency'>): string {
+  const filler = fillerAnchoredShare(totals.efficiency)
+  const anchored = isFillerFlagged(filler)
+    ? ` ${sharePercent(filler as number)} of it is compared against a cell the Polar manufactured rather than measured.`
+    : ''
+
+  return (
+    `${describeDuration(totals.efficiency.elapsed_seconds)} of scored sailing, as a ratio of summed ` +
+    `distances rather than a mean of each row's own percentage (ADR 0036).${anchored}`
+  )
+}
+
+/** The rows a cell's figure leaves out for want of a Target Speed, where it has a figure at all. */
+export function cellWithoutTargetSentence(totals: Pick<CellTotals, 'efficiency'>): string | null {
+  const { rows_without_target, polar_efficiency } = totals.efficiency
+  if (rows_without_target === 0 || polar_efficiency === null) return null
+
+  return `${countOf(rows_without_target)} of these rows have no Target Speed and are not in the figure.`
+}
+
+/** The verdict as a proportion, which is what Cell Agreement is: a glyph alone cannot say it. */
+export function verdictTallySentence(totals: Pick<CellTotals, 'verdicts'>): string {
+  const { verdicts } = totals
+  const offChart =
+    verdicts['off-chart'] > 0 ? ` · ${countOf(verdicts['off-chart'])} off-chart, which is never disagreement` : ''
+
+  return (
+    `${countOf(verdicts.agrees)} agreeing · ${countOf(verdicts.differs)} differing · ` +
+    `${countOf(verdicts['not-recorded'])} with no sail written down${offChart}`
+  )
+}
+
+/**
+ * What the matched rows leave out of every cell: the Countable rule's exclusions, and the two ways a
+ * row reaches no cell at all — no wind recorded, or below the chart's own first row or column.
+ */
+export function placementSentence(
+  selection: Pick<SailSelection, 'excluded_rows' | 'rows_unplaced' | 'rows_off_grid'>
+): string {
+  return [
+    `${countOf(selection.excluded_rows)} matched rows are excluded as Frozen, Low-Speed or inside a Maneuver Window.`,
+    ...(selection.rows_unplaced > 0
+      ? [`${countOf(selection.rows_unplaced)} recorded no wind angle or speed, so they belong to no cell.`]
+      : []),
+    ...(selection.rows_off_grid > 0
+      ? [
+          `${countOf(selection.rows_off_grid)} sailed below the chart's own first row or column, where it makes no recommendation to have agreed or disagreed with.`,
+        ]
+      : []),
+  ].join(' ')
 }

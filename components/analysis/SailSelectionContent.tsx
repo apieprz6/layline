@@ -20,7 +20,6 @@ import {
   type SailSelectionLayer,
 } from '@/components/analysis/sail-selection-chrome'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf } from '@/services/analysis/figures'
 import { filterToSearchParams } from '@/services/analysis/filter-url'
 import {
   EMPTY_FILTER,
@@ -34,11 +33,12 @@ import {
   cellViews,
   getSailSelectionData,
   gridCoverage,
+  placementSentence,
   unreachableRegions,
   type GridCoverage,
 } from '@/services/analysis/sail-selection'
 import { sailBands } from '@/services/boat/crossoverSailBands'
-import { crossoverSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
+import { chartSailRegions, type SailRegions } from '@/services/boat/crossoverSailRegions'
 import type {
   AnalysisArchiveRace,
   AnalysisDimensionSpec,
@@ -127,10 +127,7 @@ export default function SailSelectionContent({
   const [selected, setSelected] = useState<string | null>(null)
 
   const bands = useMemo(() => sailBands(chart), [chart])
-  const regions = useMemo(() => {
-    const labels = new Map(chart.sail_definitions.map((each) => [each.number, each.label]))
-    return crossoverSailRegions(chart, (sail) => labels.get(sail) ?? null)
-  }, [chart])
+  const regions = useMemo(() => chartSailRegions(chart), [chart])
 
   // 338 cells folded **once** per narrowing and read by five grids — four thumbnails and the
   // full-size one — plus the summary line. Everything downstream reads the fold rather than
@@ -209,13 +206,8 @@ export default function SailSelectionContent({
           This is that room: the rows the Countable rule excluded, and the two ways a row reaches no
           cell at all — no wind recorded, or below the chart's own first row or column. It is about
           the matched rows rather than a layer, so it spans both panes. */}
-      <p style={NOTE_STYLE}>
-        {countOf(data.excluded_rows)} matched rows are excluded as Frozen, Low-Speed or inside a
-        Maneuver Window.{' '}
-        {data.rows_unplaced > 0 &&
-          `${countOf(data.rows_unplaced)} recorded no wind angle or speed, so they belong to no cell. `}
-        {data.rows_off_grid > 0 &&
-          `${countOf(data.rows_off_grid)} sailed below the chart's own first row or column, where it makes no recommendation to have agreed or disagreed with.`}
+      <p data-testid="sail-selection-placement" style={NOTE_STYLE}>
+        {placementSentence(data)}
       </p>
 
       {narrowed && (

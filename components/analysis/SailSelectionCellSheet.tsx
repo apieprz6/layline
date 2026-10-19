@@ -4,7 +4,6 @@ import type { CSSProperties, ReactElement } from 'react'
 import { NOTE_STYLE } from '@/components/analysis/chrome'
 import {
   AGREEMENT_GLYPHS,
-  AGREEMENT_WORDS,
   cellPercent,
   roundedPercent,
   targetTint,
@@ -12,10 +11,20 @@ import {
 } from '@/components/analysis/sail-selection-chrome'
 import { EYEBROW_STYLE } from '@/components/common/eyebrow'
 import { radius, spacing } from '@/lib/utils/design'
-import { countOf, efficiencyPercent, sharePercent } from '@/services/analysis/figures'
+import { countOf, efficiencyPercent } from '@/services/analysis/figures'
 import type { PolarDomain } from '@/services/analysis/polar-targets'
-import { cellBreakdown, unreachableReason, type BreakdownLine } from '@/services/analysis/sail-selection'
-import { describeDuration } from '@/services/recordings/coverage'
+import {
+  AGREEMENT_WORDS,
+  SAIL_VERDICT_WORDS,
+  cellBreakdown,
+  cellScoredSentence,
+  cellWithoutTargetSentence,
+  chartSays,
+  emptyCellSentence,
+  unreachableReason,
+  verdictTallySentence,
+  type BreakdownLine,
+} from '@/services/analysis/sail-selection'
 import { UNKNOWN_SAIL_BAND } from '@/services/boat/crossoverSailBands'
 import type { AnalysisDimensionSpec } from '@/types'
 
@@ -53,6 +62,7 @@ export default function SailSelectionCellSheet({
   const breakdown = cellBreakdown(cell, dimensions)
   const percent = cellPercent(view)
   const reason = unreachableReason(cell, domain)
+  const withoutTarget = cellWithoutTargetSentence(totals)
   const band = cell.sail_number === null ? undefined : bands.get(cell.sail_number)
 
   return (
@@ -71,16 +81,14 @@ export default function SailSelectionCellSheet({
           {cell.sail_number}
         </span>
         Chart says{' '}
-        <strong>{cell.recommendation?.definition.label ?? `sail ${cell.sail_number}`}</strong>
+        <strong>{chartSays(cell)}</strong>
       </p>
 
       {totals.rows === 0 ? (
         <p style={{ ...NOTE_STYLE, marginTop: spacing(2) }}>
           {/* The ghost said as much in words. A cell a narrowing emptied and a cell no Race ever
               reached are different facts, and the second is not a defect (ADR 0014). */}
-          {cell.unfiltered_rows > 0
-            ? `No Countable sailing here under this filter — ${countOf(cell.unfiltered_rows)} rows with the filter cleared.`
-            : 'No race has reached this cell.'}
+          {emptyCellSentence(cell)}
           {reason !== null && ` ${reason}`}
         </p>
       ) : (
@@ -116,31 +124,16 @@ export default function SailSelectionCellSheet({
             </div>
           </dl>
 
-          <p style={NOTE_STYLE}>
-            {describeDuration(totals.efficiency.elapsed_seconds)} of scored sailing, as a ratio of
-            summed distances rather than a mean of each row&apos;s own percentage (ADR 0036).
-            {totals.efficiency.filler_anchored_rows > 0 &&
-              ` ${sharePercent(
-                totals.efficiency.filler_anchored_rows / totals.efficiency.rows
-              )} of it is compared against a cell the Polar manufactured rather than measured.`}
-          </p>
+          <p style={NOTE_STYLE}>{cellScoredSentence(totals)}</p>
 
           {reason !== null && <p style={NOTE_STYLE}>{reason}</p>}
 
-          {totals.efficiency.rows_without_target > 0 && percent !== null && (
-            <p style={NOTE_STYLE}>
-              {countOf(totals.efficiency.rows_without_target)} of these rows have no Target Speed
-              and are not in the figure.
-            </p>
-          )}
+          {withoutTarget !== null && <p style={NOTE_STYLE}>{withoutTarget}</p>}
 
           {/* The verdict as a proportion, which is what Cell Agreement is. A glyph alone cannot say
               that a mixed cell is 40 rows one way and 3 the other (ADR 0030). */}
           <p data-testid="cell-verdict-tally" style={NOTE_STYLE}>
-            {countOf(totals.verdicts.agrees)} agreeing · {countOf(totals.verdicts.differs)}{' '}
-            differing · {countOf(totals.verdicts['not-recorded'])} with no sail written down
-            {totals.verdicts['off-chart'] > 0 &&
-              ` · ${countOf(totals.verdicts['off-chart'])} off-chart, which is never disagreement`}
+            {verdictTallySentence(totals)}
           </p>
 
           <Group title="Sail actually carried" lines={breakdown.sails} testId="breakdown-sails" />
@@ -196,7 +189,7 @@ function Line({ line }: { line: BreakdownLine }): ReactElement {
           {line.label}
         </span>
         {line.verdict !== null && (
-          <span style={SUBLABEL_STYLE}>{VERDICT_WORDS[line.verdict]}</span>
+          <span style={SUBLABEL_STYLE}>{SAIL_VERDICT_WORDS[line.verdict]}</span>
         )}
       </span>
       <span style={META_STYLE}>
@@ -212,14 +205,6 @@ function Line({ line }: { line: BreakdownLine }): ReactElement {
       </span>
     </li>
   )
-}
-
-/** What a sail line's verdict is called. The chart is never "wrong", and neither is the crew. */
-const VERDICT_WORDS: Record<string, string> = {
-  agrees: 'what the chart calls for',
-  differs: 'not what the chart calls for',
-  'off-chart': 'a sail the chart has no word for',
-  'not-recorded': 'never written down',
 }
 
 /**
