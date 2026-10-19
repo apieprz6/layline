@@ -22,4 +22,12 @@ Stubbed: sign-in (an alert, not the auth sheet), the connected-apps list and Rev
 which are fixtures. The URL is the page's own origin + `MCP_PATH`, the same as
 `requestOrigin` would give.
 
-**Verdict:** _pending_
+**Verdict (2026-10-19): B**, revised. Step 2 is "Add it to your app" with three cards, one
+open at a time: **Claude** (web, desktop and phone, open by default), **ChatGPT** (Developer
+mode → Create → OAuth), and **Using another app?** (any remote-MCP client + the Claude Code
+command). The Claude Code footnote is gone; step 3 says "your app", not "Claude".
+
+To check before shipping: ChatGPT's menu names (Apps & Connectors, Developer mode, Create) and
+plan requirement drift often, so confirm them against ChatGPT on the day. Whether ChatGPT,
+Claude Code (localhost redirect) and VS Code (custom scheme) all complete Supabase's dynamic
+registration has not been tried against the hosted app.

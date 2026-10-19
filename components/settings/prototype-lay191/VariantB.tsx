@@ -86,7 +86,7 @@ function Sheet({ onClose }: { onClose: () => void }) {
   const url = useMcpUrl()
   const { copied, copy } = useCopy()
   const [step, setStep] = useState(0)
-  const [showCode, setShowCode] = useState(false)
+  const [app, setApp] = useState<'claude' | 'chatgpt' | 'other' | null>('claude')
 
   const steps = [
     {
@@ -108,18 +108,83 @@ function Sheet({ onClose }: { onClose: () => void }) {
       ),
     },
     {
-      title: 'Add it in Claude',
+      title: 'Add it to your app',
       content: (
-        <>
-          <p style={body}>
-            On claude.ai, open <b>Settings → Connectors → Add custom connector</b>. Name it Layline
-            and paste the address.
-          </p>
-          <p style={{ ...body, marginTop: 10, color: 'var(--text-muted)' }}>{MOBILE_NOTE}</p>
-          <BigButton onPress={() => window.open('https://claude.ai/settings/connectors', '_blank')}>
-            Open Claude settings ↗
-          </BigButton>
-        </>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <AppCard
+            name="Claude"
+            hint="Web, desktop and phone"
+            open={app === 'claude'}
+            onToggle={() => setApp(app === 'claude' ? null : 'claude')}
+          >
+            <p style={body}>
+              On claude.ai, open <b>Settings → Connectors → Add custom connector</b>. Name it
+              Layline and paste the address.
+            </p>
+            <p style={{ ...body, marginTop: 8, color: 'var(--text-muted)' }}>{MOBILE_NOTE}</p>
+            <BigButton onPress={() => window.open('https://claude.ai/settings/connectors', '_blank')}>
+              Open Claude settings ↗
+            </BigButton>
+          </AppCard>
+
+          <AppCard
+            name="ChatGPT"
+            hint="Plus, Pro or Business, on the web"
+            open={app === 'chatgpt'}
+            onToggle={() => setApp(app === 'chatgpt' ? null : 'chatgpt')}
+          >
+            <ol style={{ ...body, margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
+              <li>
+                On chatgpt.com, open <b>Settings → Apps &amp; Connectors → Advanced settings</b>{' '}
+                and turn on <b>Developer mode</b>.
+              </li>
+              <li>
+                Back in <b>Apps &amp; Connectors</b>, choose <b>Create</b>. Name it Layline, paste
+                the address, and pick <b>OAuth</b> for authentication.
+              </li>
+              <li>In a chat, turn Layline on from the + menu before you ask.</li>
+            </ol>
+            <BigButton onPress={() => window.open('https://chatgpt.com', '_blank')}>
+              Open ChatGPT ↗
+            </BigButton>
+          </AppCard>
+
+          <AppCard
+            name="Using another app?"
+            hint="Claude Code, Cursor, VS Code…"
+            open={app === 'other'}
+            onToggle={() => setApp(app === 'other' ? null : 'other')}
+          >
+            <p style={body}>
+              Any app that supports remote MCP servers: add a server with the address from step 1
+              and sign in when it asks. No key or token is needed.
+            </p>
+            <p style={{ ...body, marginTop: 12, color: 'var(--text-primary)' }}>Claude Code:</p>
+            <button
+              type="button"
+              onClick={() => copy('cmd', claudeCodeCommand(url))}
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: 6,
+                padding: '8px 10px',
+                borderRadius: 6,
+                border: '1px solid var(--surface-border)',
+                background: 'var(--surface-base)',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <code style={{ ...mono, fontSize: 'var(--text-xs)' }}>{claudeCodeCommand(url)}</code>
+              <span style={{ ...body, display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-accent)', marginTop: 4 }}>
+                {copied === 'cmd' ? 'Copied ✓' : 'Tap to copy'}
+              </span>
+            </button>
+            <p style={{ ...body, marginTop: 6, fontSize: 'var(--text-xs)' }}>
+              Then <code style={mono}>/mcp</code> to sign in.
+            </p>
+          </AppCard>
+        </div>
       ),
     },
     {
@@ -127,7 +192,7 @@ function Sheet({ onClose }: { onClose: () => void }) {
       content: (
         <>
           <p style={body}>
-            Claude opens Layline’s sign-in. Sign in with Google and approve. {PRIVACY_LINE}
+            Your app opens Layline’s sign-in. Sign in with Google and approve. {PRIVACY_LINE}
           </p>
           <p style={{ ...body, marginTop: 14, color: 'var(--text-primary)' }}>Then try:</p>
           <ul style={{ ...body, margin: '6px 0 0', paddingLeft: 18, color: 'var(--text-primary)' }}>
@@ -220,20 +285,6 @@ function Sheet({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ borderTop: '1px solid var(--surface-divider)', marginTop: 20, paddingTop: 14 }}>
-          <TextButton onPress={() => setShowCode(!showCode)}>
-            {showCode ? '▾' : '▸'} Using Claude Code instead?
-          </TextButton>
-          {showCode && (
-            <div style={{ marginTop: 8 }}>
-              <code style={{ ...mono, fontSize: 'var(--text-xs)', display: 'block' }}>{claudeCodeCommand(url)}</code>
-              <p style={{ ...body, marginTop: 6, fontSize: 'var(--text-xs)' }}>
-                Then <code style={mono}>/mcp</code> to sign in.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--surface-divider)', marginTop: 14, paddingTop: 14 }}>
           <p style={{ ...body, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 6 }}>
             Connected (LAY-192, stub)
           </p>
@@ -247,6 +298,69 @@ function Sheet({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** One app's instructions. One card open at a time, so step 2 stays a phone's height. */
+function AppCard({
+  name,
+  hint,
+  open,
+  onToggle,
+  children,
+}: {
+  name: string
+  hint: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 10,
+        border: open ? '1.5px solid var(--accent, var(--blue-500))' : '1px solid var(--surface-border)',
+        background: 'var(--surface-raised)',
+      }}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          minHeight: 52,
+          padding: '10px 14px',
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ flex: 1 }}>
+          <span
+            style={{
+              display: 'block',
+              fontFamily: 'var(--font-body)',
+              fontSize: 'var(--text-base)',
+              fontWeight: 'var(--weight-semibold)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {name}
+          </span>
+          <span style={{ ...body, display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            {hint}
+          </span>
+        </span>
+        <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open && <div style={{ padding: '0 14px 14px' }}>{children}</div>}
     </div>
   )
 }
