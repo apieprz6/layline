@@ -265,7 +265,7 @@ function channelFigures(payload: InstrumentCalibrationPayload): McpCalibrationCh
 }
 
 /** A Calibration Log entry in the Log's own words. */
-function logEntry(entry: CalibrationLogEntry): McpCalibrationLogEntry {
+export function calibrationLogEntry(entry: CalibrationLogEntry): McpCalibrationLogEntry {
   if (entry.entry === 'version') {
     return {
       entry: 'version',
@@ -322,7 +322,7 @@ export function instrumentCalibrationVersions(
           changes: changesOf.get(version.id) ?? [],
         })
       ),
-      ...(versionNumber === undefined ? { calibrationLog: log.map(logEntry) } : {}),
+      ...(versionNumber === undefined ? { calibrationLog: log.map(calibrationLogEntry) } : {}),
     },
   }
 }

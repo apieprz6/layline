@@ -4,7 +4,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { BOAT_SETUP_LABEL, BOAT_SETUP_ORDER } from '@/lib/boat/artifacts'
 import { POLAR_PERFORMANCE_DIMENSIONS, analysisDimensions } from '@/services/analysis/filter'
+import { CHANNEL_TITLE, CHECKED_CHANNELS } from '@/services/analysis/instrument-tuning-text'
 import { readAnalysisArchive } from '@/services/analysis/readArchive'
+import { readCalibrationLog, readInstrumentTuning } from '@/services/analysis/readInstrumentTuning'
 import { readBoatSetup } from '@/services/boat/readBoatSetup'
 import { readCrossoverChartVersionsWithCharts } from '@/services/boat/readCrossoverChartVersions'
 import { readInstrumentCalibration } from '@/services/boat/readInstrumentCalibration'
@@ -22,6 +24,12 @@ import { readRace } from '@/services/races/readRace'
 import { readRaces } from '@/services/races/readRaces'
 import { analysisFilterSchema, filterFromArgument } from './analysis-filter'
 import { currentConditions } from './current-conditions'
+import {
+  NO_RACES_TO_MEASURE,
+  instrumentTuningRaceAnswer,
+  instrumentTuningSeasonAnswer,
+  unknownRaceRefusal,
+} from './instrument-tuning'
 import { buoyHistory } from './buoy-history'
 import { polarPerformanceAnswer, windWindowFromArgument } from './polar-performance'
 import { raceList, raceSummary } from './races'
@@ -93,9 +101,27 @@ const POLAR_PERFORMANCE_DESCRIPTION = `Season Polar Efficiency and VMG Efficienc
 - Target VMG is estimated from the Polar's grid, not the certificate's own optimum.
 - A null figure means nothing in the match could be scored; never fill one in.`
 
+/** The Instrument Tuning screen's and a Race page's own caveats, told to Claude (ADR 0042). */
+const INSTRUMENT_TUNING_DESCRIPTION = `What the boat's race archive says about its instruments, exactly as Layline's Instrument Tuning screen and a Race page's calibration check state it: the compass (HDG, via COG), the wind angle tack to tack (the Apparent Wind Asymmetry) and boat speed (the paddlewheel, STW, against GPS SOG), read in that order because compass deviation propagates into the other two.
+
+- Over every Race in the archive. This screen has no filter yet, so nothing can be narrowed by wind or sea state; say so if asked.
+- Findings are evidence about the instruments, never a calibration. No figure here is a value to set an instrument to, and none has been applied: a calibration is something the owner does on the boat and records (boat_setup's instrument_calibration). Never suggest a multiplier, offset or percentage.
+- Every figure belongs to one Calibration Era: a stretch of that channel's life between two entries in the Calibration Log, cut per channel, so HDG and STW Eras need not line up. Never combine figures from two Eras. openedBy is what was done to the boat on the day an Era opens.
+- Coverage is how much evidence a figure rests on, SOLID, THIN or ANECDOTAL with the reason, and never whether the instrument is right. Give the word with its reason whenever you give a figure.
+- Each channel's headline is what the screen's season row shows: the current Era for the compass and boat speed, all Races pooled for wind angle. thinnest is the weakest coverage of the three.
+- Compass: the swing between the highest and lowest heading's offset leads; a single mean of a curve matches no heading the compass shows, so give the two means only beside the swing, each with its weighting.
+- Wind angle: upwind and downwind separately, each saying which tack reads wider. Never average them: they can lean opposite ways. It is not a Measured Offset and names no channel to adjust. season is the one figure that spans Era boundaries; eras are cut on AWA's own Log, compassEras on HDG's, for asking whether the asymmetry is compass-driven.
+- Boat speed: the fitted line's gap from 1:1 at 4 and 6 kt, and recalibration, the card's verdict on whether the paddlewheel needs recalibrating. Report the verdict's headline and detail as given; it says whether, never by how much.
+- With race: that one Race's check, as its page's tile shows it, each channel with the Era the Race was sailed in. One Race is thin evidence for any instrument whatever its share; share is the tile's bar.
+- Every finding carries its caveat. Pass it on when it changes what the figure means.`
+
 /** What a tool answers when the archive could not be read whole: an error, never a figure. */
 const ARCHIVE_UNREADABLE =
   'The race archive could not be read, so there is no figure to give. This is not the same as having no races.'
+
+/** A Race's Era cannot be named without the whole Log, so a failed one is an error too. */
+const CALIBRATION_LOG_UNREADABLE =
+  'The Calibration Log could not be read, so no Era can be named for this Race and nothing is given. Try again shortly.'
 
 /**
  * A tool's answer as both forms MCP carries: JSON text for a client that reads only text, and the
@@ -258,6 +284,45 @@ export function createLaylineMcpServer({ supabase }: { supabase: SupabaseClient 
       return answer(
         polarPerformanceAnswer(archive.rows, reading.filter, dimensions, archive.polars, window?.window ?? null)
       )
+    }
+  )
+
+  server.registerTool(
+    'instrument_tuning',
+    {
+      title: 'Instrument tuning',
+      description: INSTRUMENT_TUNING_DESCRIPTION,
+      inputSchema: {
+        channel: z
+          .enum(CHECKED_CHANNELS)
+          .optional()
+          .describe(
+            `One channel: ${CHECKED_CHANNELS.map((each) => `${each} (${CHANNEL_TITLE[each]})`).join(
+              ', '
+            )}. Omit it for all three.`
+          ),
+        race: z
+          .string()
+          .optional()
+          .describe("One Race's id, as list_races gives it, for its own check. Omit it for the season."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ channel, race: raceId }) => {
+      if (raceId !== undefined) {
+        const [race, log] = await Promise.all([readRace(raceId, supabase), readCalibrationLog(supabase)])
+        if (race === null) return refusal(unknownRaceRefusal(raceId, await readRaces(supabase)))
+        if (log === null) return refusal(CALIBRATION_LOG_UNREADABLE)
+
+        return answer(instrumentTuningRaceAnswer(race, log, channel))
+      }
+
+      // All or nothing (ADR 0026): a season over the Races that happened to load would present as
+      // the whole season, and its coverage verdicts would be claims about evidence it did not have.
+      const read = await readInstrumentTuning(supabase)
+      if (!read.ok) return read.reason === 'no-races' ? answer(NO_RACES_TO_MEASURE) : refusal(ARCHIVE_UNREADABLE)
+
+      return answer(instrumentTuningSeasonAnswer(read.season, read.races.length, channel))
     }
   )
 

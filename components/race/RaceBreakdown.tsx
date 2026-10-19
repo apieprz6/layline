@@ -35,7 +35,7 @@ import { radius, spacing } from '@/lib/utils/design'
 import { ASYMMETRY_CAVEAT } from '@/services/analysis/awa-asymmetry'
 import { HEADING_OFFSET_CAVEAT } from '@/services/analysis/compass-deviation'
 import { efficiencyPercent, sharePercent } from '@/services/analysis/figures'
-import { raceHeadlines } from '@/services/analysis/instrument-tuning-headlines'
+import { RACE_SPEED_CAVEAT, raceHeadlines } from '@/services/analysis/instrument-tuning-headlines'
 import {
   fillerAnchoredShare,
   noFigureNote,
@@ -324,8 +324,7 @@ function CalibrationTile({ check }: { check: RaceInstrumentCheck }): ReactElemen
       </p>
 
       <Explainer summary="What do these rest on?">
-        {HEADING_OFFSET_CAVEAT} {ASYMMETRY_CAVEAT} Boat speed is the paddlewheel against GPS, as a
-        line fitted through this race’s own rows.
+        {HEADING_OFFSET_CAVEAT} {ASYMMETRY_CAVEAT} {RACE_SPEED_CAVEAT}
       </Explainer>
 
       <Link href="/boat-performance/instrument-tuning" style={LINK_STYLE}>

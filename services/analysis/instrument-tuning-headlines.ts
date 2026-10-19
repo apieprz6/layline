@@ -229,6 +229,13 @@ export function thinnestChannel(headlines: readonly SeasonChannelHeadline[]): Se
 /* ------------------------------------------------------------------------------------ race */
 
 /**
+ * What one Race's `STW` figure is, said wherever it is. The season's caveat is about current; a
+ * Race's line is its own rows alone, which is what a reader of one Race needs told.
+ */
+export const RACE_SPEED_CAVEAT =
+  'Boat speed is the paddlewheel against GPS, as a line fitted through this race’s own rows.'
+
+/**
  * One Race's share of each channel: the figure, what it rests on, and a bar.
  *
  * ADR 0034's per-Race tile — numbers over thin coverage bars, the bars being this race's own share

@@ -4037,3 +4037,127 @@ export interface McpRaceSummary {
   }
   performance: McpRacePerformance
 }
+
+// A Calibration Era as the Instrument Tuning charts name it: bounded by the Calibration Log's own
+// entries for the channel, never by a step in the data (ADR 0027). `fromDate` null is the stretch
+// before anything was recorded; `untilDate` null is the Era still running. `openedBy` is the
+// Log's own entries on the boundary day, in the Log's words.
+export interface McpCalibrationEra {
+  channel: CheckedChannel
+  label: string
+  fromDate: string | null
+  untilDate: string | null
+  openedBy: McpCalibrationLogEntry[]
+}
+
+// What a season figure rests on (ADR 0034): the verdict, the reason that earned it, and how close
+// that is to SOLID, 0–1. A statement about the evidence, never about the instrument.
+export interface McpTuningCoverage {
+  verdict: CoverageVerdict
+  reason: string
+  towardsSolid: number | null
+}
+
+// One channel's headline over one Era, as its card and the "This season" row state it (ADR 0035):
+// the figures, or `instead` in words where there are none, and the coverage beneath them.
+export interface McpTuningFinding {
+  // Null only on a headline for a channel no Race has produced a figure for, which has no Era.
+  era: McpCalibrationEra | null
+  figures: ChannelFigure[]
+  instead: string | null
+  coverage: McpTuningCoverage
+  caveat: string
+}
+
+// The compass's curve at its highest or lowest heading: one 10° bin's figure, never an aggregate.
+export interface McpHeadingExtreme {
+  headingDegrees: number
+  compassPoint: string
+  offsetDegrees: number
+}
+
+export interface McpCompassFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  swing: { highest: McpHeadingExtreme; lowest: McpHeadingExtreme; swingDegrees: number } | null
+  // The era mean ADR 0035 demotes beneath the swing, both ways it can be weighted, each named.
+  meanEveryHeadingEqualDegrees: number | null
+  meanEveryRaceEqualDegrees: number | null
+  races: number
+  racesWithNoFigure: number
+}
+
+// One point of sail of the Apparent Wind Asymmetry: which tack reads wider, and by how much.
+export interface McpAsymmetrySide {
+  widerTack: Tack | null
+  widerByDegrees: number
+  tackPairs: number
+  races: number
+}
+
+export interface McpWindAngleFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  upwind: McpAsymmetrySide | null
+  downwind: McpAsymmetrySide | null
+  races: number
+  racesWithNoFigure: number
+}
+
+// The STW card's Recalibration Verdict (ADR 0041): whether, never by how much.
+export interface McpRecalibrationVerdict {
+  recommendation: 'recalibrate' | 'clean-first' | 'leave-it' | 'cant-tell'
+  headline: string
+  detail: string
+}
+
+export interface McpBoatSpeedFinding extends McpTuningFinding {
+  era: McpCalibrationEra
+  recalibration: McpRecalibrationVerdict
+  races: number
+  racesWithALine: number
+}
+
+// One channel over the season. `headline` is what the "This season" row states, over what a tap
+// on the screen opens: the current Era for HDG and STW, the pooled season for AWA. `eras` is every
+// Era holding a Race, oldest first, the last being the current one.
+export type McpTuningChannel =
+  | { channel: 'HDG'; name: string; headline: McpTuningFinding; eras: McpCompassFinding[] }
+  | {
+      channel: 'AWA'
+      name: string
+      headline: McpTuningFinding
+      // Every Race pooled, across AWA and HDG boundaries alike: the one figure that spans one.
+      season: McpWindAngleFinding
+      eras: McpWindAngleFinding[]
+      // The same Races cut on the compass's Eras, for whether the Asymmetry is compass-driven.
+      compassEras: McpWindAngleFinding[]
+    }
+  | { channel: 'STW'; name: string; headline: McpTuningFinding; eras: McpBoatSpeedFinding[] }
+
+// `instrument_tuning` over the season. `thinnest` is the row's "coverage is … at its thinnest",
+// given only when all three channels are.
+export interface McpInstrumentTuningSeason {
+  scope: 'season'
+  races: number
+  channels: McpTuningChannel[]
+  thinnest?: { channel: CheckedChannel; verdict: CoverageVerdict }
+  // Said in place of channels where the archive holds no Race, which is not a failure.
+  note?: string
+}
+
+// One Race's contribution to one channel, as its page's calibration tile states it. A Race has no
+// coverage verdict, being one Race: `basis` is what it rests on in words and `share` the tile's bar.
+export interface McpRaceTuningFinding {
+  channel: CheckedChannel
+  name: string
+  era: McpCalibrationEra | null
+  figures: ChannelFigure[]
+  instead: string | null
+  coverage: { basis: string | null; share: number | null }
+  caveat: string
+}
+
+export interface McpInstrumentTuningRace {
+  scope: 'race'
+  race: { id: string; title: string | null; windowStart: string }
+  channels: McpRaceTuningFinding[]
+}

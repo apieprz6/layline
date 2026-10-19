@@ -24,6 +24,21 @@ import {
   type SpeedBandVerdict,
 } from '@/services/analysis/paddlewheel-verdict'
 
+/**
+ * The `STW` caveat — the one of the three the checks themselves do not carry.
+ *
+ * The other two travel with their figures because each is about how the figure was *derived*: a
+ * compass read through `CTW`, an apparent wind recomputed by qtVlm. This one is about the venue:
+ * the verdict can see a current that swings with heading, but a steady set along the course would
+ * look like the paddlewheel to every check it makes, and only knowing the water rules that out.
+ */
+export const PADDLEWHEEL_CAVEAT =
+  'Current moves SOG and leaves STW alone, so it reads here as a paddlewheel error. The verdict ' +
+  'checks whether the gap swings with heading, which current does; a steady current along the ' +
+  'course would still go unseen. The display applies the Instrument Calibration before the ' +
+  'recording is written, so every STW here already carries it; no uncorrected reading is ' +
+  'reconstructed.'
+
 /** "0.37 kt slow", "0.10 kt fast", or "spot on" — never a signed figure. */
 export function slowFast(gap: number): string {
   if (Math.abs(gap) < 0.005) return 'spot on'

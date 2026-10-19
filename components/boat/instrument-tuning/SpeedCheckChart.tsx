@@ -48,7 +48,11 @@ import {
   type PaddlewheelVerdict,
   type SpeedBandRead,
 } from '@/services/analysis/paddlewheel-verdict'
-import { BAND_WORDS, slowFast } from '@/services/analysis/paddlewheel-verdict-words'
+import {
+  BAND_WORDS,
+  PADDLEWHEEL_CAVEAT,
+  slowFast,
+} from '@/services/analysis/paddlewheel-verdict-words'
 import type { CalibrationLogEntry } from '@/types'
 
 import CalibrationRail, { type RailRace } from './CalibrationRail'
@@ -93,20 +97,6 @@ const SEASON = 'season'
 /** The speed axis never shrinks below this, so a light-air season is not drawn as a fast one. */
 const MIN_AXIS_KNOTS = 10
 
-/**
- * The `STW` caveat — the one of the three the services do not carry.
- *
- * The other two travel with their figures because each is about how the figure was *derived*: a
- * compass read through `CTW`, an apparent wind recomputed by qtVlm. This one is about the venue:
- * the verdict can see a current that swings with heading, but a steady set along the course would
- * look like the paddlewheel to every check it makes, and only knowing the water rules that out.
- */
-const PADDLEWHEEL_CAVEAT =
-  'Current moves SOG and leaves STW alone, so it reads here as a paddlewheel error. The verdict ' +
-  'checks whether the gap swings with heading, which current does; a steady current along the ' +
-  'course would still go unseen. The display applies the Instrument Calibration before the ' +
-  'recording is written, so every STW here already carries it; no uncorrected reading is ' +
-  'reconstructed.'
 
 const METHOD_WORDS: Record<OfferedFitMethod, string> = {
   orthogonal: 'The fit treats GPS and paddlewheel as equally imperfect.',
