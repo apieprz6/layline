@@ -27,7 +27,7 @@ Layline is a **sailing weather dashboard** for competitive racing on Lake Michig
 
 Example: Harrison Dever (CHII2) reports 20 knots at 85ft elevation. Store 20, add metadata about elevation, and explain in UI that surface wind is typically 20-30% lower.
 
-The standard is **as recorded, with known provenance** — not "raw". Boat instrument data has no raw form to store: the masthead reading never reaches us, and every wind figure in a recording was computed upstream. Non-destruction is what always applies. See `docs/adr/0008-provenance-not-rawness-for-instrument-data.md`.
+The standard is **as recorded, with known provenance** — not "raw". Boat instrument data has no raw form to store: the uncorrected masthead reading never reaches us, and every wind figure in a qtVlm recording was computed upstream. A phone recording stores what the gateway sent, byte for byte, and rebuilds everything readable from it. Non-destruction is what always applies. See `docs/adr/0008-provenance-not-rawness-for-instrument-data.md` and `docs/adr/0044-a-phone-recording-stores-the-streams-it-received-and-everything-else-is-rebuilt.md`.
 
 📖 **Read**: `docs/design-docs/core-beliefs.md` for complete principles
 

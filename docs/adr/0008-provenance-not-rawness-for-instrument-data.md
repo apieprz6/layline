@@ -8,6 +8,8 @@ Ruling 2 is upheld and **refined by ADR 0009**, which settles *when* the cleaned
 
 Ruling 3 is upheld in substance and **amended by ADR 0010** in one clause: "whose first entry sits at the race start" is a **convention at entry time, not an invariant**, and no code may enforce it. Because the race window is editable, the entry that resolves onto the earliest row is whichever is earliest, with resolution falling back to it. ADR 0010 also settles the question this ADR left open below — how an admin amends a Race after upload — and extends **Testimony** to cover everything a Race holds that is not its Transcription.
 
+**Amended by ADR 0044** for a second Recording Format, the Layline phone recording. Its Transcription is the Streams received from the gateway, byte for byte, not database rows; Provenance is held per source and quantity in a Device Inventory, not per column; and that format receives apparent wind and heading as the instruments sent them — still corrected inside the sensors, so the uncorrected masthead reading still never reaches us, but one step from it rather than three. Every ruling here stands for the qtVlm VDR export.
+
 ## Context
 
 Layline's founding principle says: **never modify incoming weather measurements**, store them exactly as received, and interpret only in prompts and UI. It was written about buoys, and the worked example is Harrison Dever — the station reports 20 knots at 85 feet, so store 20 and explain, never scale to surface.

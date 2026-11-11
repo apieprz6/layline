@@ -140,7 +140,7 @@ _Avoid_: Stability, consistency
 ### Boat Setup
 
 **Boat Setup**:
-The versioned record of how the boat is configured, in four artifacts: its **Polar**, **Crossover Chart**, **Rig Tune**, and **Instrument Calibration**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
+The versioned record of how the boat is configured, in five artifacts: its **Polar**, **Crossover Chart**, **Rig Tune**, **Instrument Calibration**, and **Device Inventory**. Each is versioned independently; a **Race** is measured against the versions that were current when it was sailed.
 _Avoid_: Versioned artifact, config, boat config, settings (a Boat Setup artifact is a measured or measured-out record, not a preference)
 
 **Version**:
@@ -211,6 +211,10 @@ _Avoid_: Base (bare), base setting, default tune, standard tune
 One true-wind-speed range in a **Rig Tune**, holding the settings for those conditions. The bands belong to the Version, not to the application: they are entered by hand from whichever tuning guide the numbers came from, they must be contiguous, and the top band is open-ended. Distinct from the dashboard's Light / Medium / Heavy / Storm display classification, which describes conditions on screen and has no business indexing a tune.
 _Avoid_: Wind range, condition band, gear (as in "shifting gears" — that's the act, not the row)
 
+**Device Inventory**:
+The versioned record of which device is behind each source a Layline phone recording hears — an NMEA 2000 source address, an NMEA 0183 talker, the phone's own GPS — and, for each quantity that source sends, its **Provenance** class and the chain of devices it passed through on the way (for example, true wind *computed by the TL25, converted by the YDNR-02*). Built from a setup screen that listens to the gateway and lists every source it hears, then labelled by hand; a device that announces its own identity on the bus is filled in, one that does not is named by the owner. A phone **Recording** points at the Version it was recorded under, so adding or swapping a box never changes what an old recording says it heard.
+_Avoid_: Device list, source map, equipment list, network map
+
 **Instrument Calibration**:
 The versioned record of the corrections programmed into the boat's instrument display: one multiplier and one **Programmed Offset** per **Calibration Channel**. Entered by hand off the display's own screens and kept in the display's own encoding — a multiplier reads `1.02`, never `+2%`. A Version snapshots all channels at once, and is dated from when the numbers went into the instrument, not when they were typed into Layline.
 _Avoid_: Calibration (bare), calibration file, calibration settings, instrument correction
@@ -258,25 +262,37 @@ The start and finish a sailor gives for a **Race**, as wall-clock times in the *
 _Avoid_: Race time (that's the weather side's **Target Time**), race duration, clip, window (bare — ambiguous with a maneuver window)
 
 **Recording**:
-One qtVlm VDR export, covering a single **Race** plus the transit before it and the motoring after. Longer than the Race it contains. One export *file* may be uploaded more than once — a regatta day holds several races — and each upload is its own Recording with its own **Transcription**.
-_Avoid_: Log, track, GPX, file
+One recorder's account of one stretch of sailing, in one **Recording Format**. Longer than the **Race** it contains — the transit before it and the motoring after are in it too. A qtVlm export *file* may be uploaded more than once — a regatta day holds several races — and each upload is its own Recording with its own **Transcription**. A Race may hold more than one Recording, made side by side by different recorders.
+_Avoid_: Log, track, GPX, file, capture, bus log
+
+**Recording Format**:
+What kind of recorder made a **Recording**, and so what its **Transcription** holds and which **Provenance** its values carry. Two exist: a *qtVlm VDR export* — one table of computed rows written by the navigation software — and a *Layline phone recording* — a set of **Streams** received as they arrived. Terms written about the VDR export's rows (**Recording Row**, **Dropout**, **Row Quality**, **Water-Referenced**, **Gap Seconds**) describe that format, not every Recording.
+_Avoid_: Source, type, kind (bare)
+
+**Stream**:
+One source's output inside a Layline phone recording, every line in the order it arrived, each stamped with the phone's receive time and nothing about it altered. Named by *protocol*, never by instrument maker, so a Recording from any boat's equipment fits: a **Frame Stream** is NMEA 2000 frames from a gateway, a **Sentence Stream** is NMEA 0183 sentences from a gateway, a **Fix Stream** is the phone's own GPS fixes as iOS delivered them. A Recording holds any number of each, and is incomplete, not broken, when one is missing. A Stream also records what happened to it — connected, disconnected, backgrounded — so a gap is something it states, never something inferred from silence.
+_Avoid_: Feed, channel (that's an instrument quantity), log, capture
+
+**Decoded Series**:
+A Layline phone recording's **Streams** turned into readable values — boat speed, heading, wind, position, one column per quantity *per source*, two sources never merged — by a stated decoder version, and kept per **Recording** so no screen decodes on view. A product of a program, not a record of the boat: never edited, never authoritative, and rebuilt from the Streams whenever the decoder or a derivation changes; the same Streams and the same decoder version always give the same Series. Holds only what the boat sent — a quantity Layline calculates, such as true wind on a bus that carries only apparent, is computed at read and labelled as Layline's.
+_Avoid_: Decoded view, parsed data, rows, the data (bare)
 
 **Recording Row**:
 One timestamped line of a **Recording** — every channel the boat logged at that instant. The unit of the archive, and the smallest thing a **Provenance** applies to.
 _Avoid_: Sample, datapoint, reading (a reading is one channel, a row is all of them), observation
 
 **Transcription**:
-The complete, verbatim copy of a **Recording** in the database: every column, every row, nothing dropped, converted, rounded, or filled in. The test is a round trip — re-parsing the stored bytes reproduces the stored rows exactly. What a **Recording** *means* is computed from the Transcription; it is never written back into it.
+The complete, verbatim copy of a **Recording**: nothing dropped, converted, rounded, or filled in. For a qtVlm VDR export it is every column and every row in the database, and the test is a round trip — re-parsing the stored bytes reproduces the stored rows exactly. For a Layline phone recording it is the **Stream** files themselves, kept byte for byte; what the database holds of one is a decoded view rebuilt from those files, never the Transcription. What a **Recording** *means* is computed from the Transcription; it is never written back into it.
 _Avoid_: Import, ingest, parse, clean (cleaning is a separate, later act that produces a view, not a Transcription)
 
 **Provenance**:
 Where a value came from, and therefore how much weight it carries. One of four classes:
-- **Measured** — a sensor reading. Only **STW** qualifies among the boat's live wind and speed channels.
-- **Computed** — calculated upstream by the navigation software from other channels, using settings the export does not record. Every true and ground wind value is this.
-- **Position-Derived** — from GPS: position, **COG**, **SOG**.
+- **Measured** — a sensor reading. In a qtVlm VDR export only **STW** qualifies among the boat's live wind and speed channels; a Layline phone recording also receives apparent wind and heading as the instruments sent them.
+- **Computed** — calculated upstream, by an instrument or the navigation software, from other channels and using settings the recording does not hold. Every true and ground wind value is this — the TL25's true wind as much as qtVlm's.
+- **Position-Derived** — from GPS: position, **COG**, **SOG**, whether the chartplotter's or the phone's.
 - **Testimony** — a person typed it in from memory. Every **Annotation** is this, and so is everything else a **Race** holds that is not its **Transcription**: the **Race Window**, the recorded **Wind Band**, the frozen **Version** pointers, the title.
 
-Provenance is a property of the *column in the format*, held once as reference data, not a field repeated on each value.
+Provenance is never a field repeated on each value. For a qtVlm VDR export it is a property of the *column in the format*, held once as reference data. For a Layline phone recording it is a property of the *source and quantity*, held once in the **Device Inventory** together with the chain of devices the value passed through — a class is not enough when the same message might be one instrument's measurement or another's computation.
 _Avoid_: Source (that's a weather **Data Source**), origin, lineage, raw vs derived (a two-way split hides Testimony)
 
 **Water-Referenced**:
