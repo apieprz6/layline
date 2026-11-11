@@ -254,15 +254,19 @@ _Avoid_: Calibration period, epoch, generation, era (bare, of anything else — 
 ### Race Archive
 
 **Race**:
-One complete race sailed, as the sailor-supplied **Race Window** inside a **Recording**. The unit sailors talk about and the unit performance is reported for. Everything a Race holds is **Testimony** except its **Transcription**.
+One complete race sailed: the sailor-supplied **Race Window** over the **Recordings** made aboard during it — one analysis, however many recorders were running (ADR 0045). The unit sailors talk about and the unit performance is reported for. Everything a Race holds is **Testimony** except its **Transcription**.
 _Avoid_: Regatta (that's a multi-race event, which Layline does not model), series, event, session
 
 **Race Window**:
-The start and finish a sailor gives for a **Race**, as wall-clock times in the **Recording**'s own frame. A claim about which **Recording Rows** are the race, not a measurement — it is typed from memory, it is routinely round-numbered, and it need not sit inside the recording's own span. A window reaching past the last row means the recording dropped out before the race finished.
+The start and finish a sailor gives for a **Race**, as wall-clock times in the sailor's own local frame — one window per Race, however many **Recordings** it holds, each Recording compared against it through its **Clock Relation**. A claim about which **Recording Rows** are the race, not a measurement — it is typed from memory, it is routinely round-numbered, and it need not sit inside the recording's own span. A window reaching past the last row means the recording dropped out before the race finished.
 _Avoid_: Race time (that's the weather side's **Target Time**), race duration, clip, window (bare — ambiguous with a maneuver window)
 
+**Clock Relation**:
+How one **Recording**'s timeline maps onto its **Race**'s **Race Window**. For a qtVlm VDR export it is the identity: the window is compared against the export's own naive wall-clock stamps, with no conversion. For a Layline phone recording, whose timeline is UTC receive time, it is not yet decided, and until it is a phone Recording cannot be windowed (ADR 0045). A Clock Relation is applied only when the two are compared, and is never written into a **Transcription**.
+_Avoid_: Clock offset, time shift, sync (each assumes the answer is a constant to add)
+
 **Recording**:
-One recorder's account of one stretch of sailing, in one **Recording Format**. Longer than the **Race** it contains — the transit before it and the motoring after are in it too. A qtVlm export *file* may be uploaded more than once — a regatta day holds several races — and each upload is its own Recording with its own **Transcription**. A Race may hold more than one Recording, made side by side by different recorders.
+One recorder's account of one stretch of sailing, in one **Recording Format**. Longer than the **Race** it contains — the transit before it and the motoring after are in it too. A qtVlm export *file* may be uploaded more than once — a regatta day holds several races — and each upload is its own Recording with its own **Transcription**. A Recording belongs to exactly one Race; a Race may hold several, made side by side by different recorders aboard the same boat, or none yet (ADR 0045).
 _Avoid_: Log, track, GPX, file, capture, bus log
 
 **Recording Format**:
@@ -458,16 +462,17 @@ Time-series of wind measurements from a buoy. NDBC provides 10-minute interval r
 
 ## Relationships
 
-- A **Boat Setup** comprises four artifacts: a **Polar**, a **Crossover Chart**, a **Rig Tune**, and an **Instrument Calibration**
+- A **Boat Setup** comprises five artifacts: a **Polar**, a **Crossover Chart**, a **Rig Tune**, an **Instrument Calibration**, and a **Device Inventory**
 - Each **Boat Setup** artifact has many **Versions**; each **Race** points at the four Versions current when it was sailed, or at none of them
-- A **Recording** contains exactly one **Race**; the Race is the sailor-supplied **Race Window** inside it
+- A **Race** holds zero or more **Recordings**; each Recording belongs to exactly one Race, and the Race is the sailor-supplied **Race Window** over them (ADR 0045)
+- Every **Recording** on a **Race** was made aboard that boat; another boat's recording of the same race is that boat's own Race, and a boat's Races and Recordings are private to it
 - One export *file* may back several **Recordings** — a regatta day is uploaded once per **Race** and annotated differently each time
 - Everything on a **Race** except its **Transcription** is **Testimony**, and all of it is editable by **Amendment**; the Transcription never is
 - An **Amendment** carries no change reason and no history, unlike a **Boat Setup** **Version**, because nothing points at a **Race**
 - An **Amendment** is made in the flow that logs a race, minus its file step; logging a second race from one export is the same flow *with* it
 - A **Race Window** may reach past the end of its **Recording** — that means the recording dropped out, and it is stated on the race page, never refused
 - Deleting a **Race** takes its **Annotations**, its **Transcription** and its stored bytes with it; a failed deletion leaves stored bytes behind rather than a **Race** whose bytes are gone
-- Deleting a **Race** is expressed as deleting its **Recording**, which is what makes it one statement; deleting the Race alone would leave the **Transcription** standing, and no **Annotation** can ever destroy one
+- Deleting a **Race** deletes all its **Recordings** with it; deleting one Recording leaves the Race standing, even when it was the last; no **Annotation** can ever destroy a **Transcription**
 - The **Sweeper** removes only stored bytes no **Recording** claims, so a **Race** can never lose its file to one
 - A **Recording** is stored as a **Transcription** — complete and verbatim — and every other view of it is computed, never stored back
 - A **Recording** comprises many **Recording Rows**; each column of a Row has one **Provenance**, fixed by the export format
