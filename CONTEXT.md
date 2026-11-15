@@ -382,7 +382,7 @@ _Avoid_: Account Merging (ADR 0004's term, and now a misnomer — nothing merges
 ### MCP
 
 **MCP Server**:
-Layline's read-only face to an AI assistant such as Claude: an endpoint an **Account** connects once, signs in to with Google, and then asks questions through. It answers only to an Account. Unlike the app, it has no **Guest** tier, not even for weather. See ADR 0042.
+Layline's read-only face to an AI assistant such as Claude: an endpoint an **Account** connects once, signs in to with Google, and then asks questions through. It answers only to an Account, and only with a **Connected App**'s token, never a first-party session's. Unlike the app, it has no **Guest** tier, not even for weather. See ADR 0042 and ADR 0046.
 _Avoid_: API, integration, plugin (it is not a general-purpose interface to the data). Settings' **Integrations** section is named for the apps a crew member connects to it (Claude, ChatGPT, others), not for the MCP Server itself
 
 **Connected App**:
@@ -390,8 +390,22 @@ An app an **Account** has approved at Layline's consent screen to reach the **MC
 _Avoid_: Connector (Claude's own word for the setting, not a grant), integration (Settings' section, not a grant), session
 
 **MCP Tool**:
-One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It returns the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and it holds no rule of its own to make them with, so a changed rule reaches it unaided. That is what makes it a tool rather than a second analysis. See ADR 0042.
+One question the **MCP Server** can answer, shaped like a screen or a card, such as Current Conditions, a Race's summary or the **Sail Selection Screen**. It serves an **Answer**: the screen's own figures with the screen's own provenance beside them, never **Recording Rows**. Its figures must equal the screen's for the same input, and it holds no rule of its own to make them with, so a changed rule reaches it unaided. That is what makes it a tool rather than a second analysis. See ADR 0042 and ADR 0046.
 _Avoid_: Endpoint, query (a tool does not search the archive, it states what a screen states)
+
+### Companion App
+
+**Companion App**:
+Layline's native phone app: it signs in, shows **Current Conditions** and records a race from the phone's GPS and the boat's router. It's a companion, not a copy of the web: the analysis screens stay on the web. It is built with Expo for iOS first, with Android kept cheap. It calls nothing the web is built from (Server Components, Server Actions, cookies), so it talks to the **App API**, and to Supabase directly only for sign-in and for uploading **Streams**. It never reads or writes a table. A **Guest** sees Current Conditions in it, and only an `admin` records. See ADR 0046.
+_Avoid_: iOS app (Android must stay possible). "Mobile" and "the app" are fine in conversation; in code its home is `apps/mobile`
+
+**App API**:
+The **Companion App**'s routes, versioned by path (`/api/app/v1/…`). Each one is an adapter over an **Answer** or a write, and holds no rule of its own. It takes only a first-party session's bearer token, never a **Connected App**'s, and except for Current Conditions it answers only to an **Account**. Within a version, fields are only ever added. A build below the server's minimum is answered with 426 and told to update. See ADR 0046.
+_Avoid_: API on its own (the **MCP Server** is also an API, and the web uses neither), backend, REST API
+
+**Answer**:
+One screen-shaped result from the service layer (`services/answers/`): a function from a reader's Supabase client and an input to the figures a screen or card shows, with their provenance. Every client gets it through an adapter: the web's Server Components, an **App API** route or an **MCP Tool**. So all three show the same figures for the same input, and a rule changed in one place reaches every client. Its input and output are zod schemas in `types/contract/`, which are the contract. See ADR 0046.
+_Avoid_: Response (that is the adapter's HTTP wrapper), DTO, payload
 
 ### UI Components
 
