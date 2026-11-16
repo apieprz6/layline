@@ -174,7 +174,8 @@ shape.
 
 - **Schemas** live in `types/contract/`, one file per Answer, with the TypeScript types inferred from
   them. Both the route and the app parse with them. When LAY-204 decides on `packages/domain`, they
-  move there as a unit.
+  move there as a unit. *(ADR 0047: they move to `packages/domain/contract/`, as `@layline/domain`,
+  when `apps/mobile` is scaffolded.)*
 - **The App API is versioned by path**, starting at `/api/app/v1/`. Within a version, fields are only
   ever added, never renamed, retyped or removed. A Jest contract test checks each v1 response against
   a fixture of its earlier shape.
