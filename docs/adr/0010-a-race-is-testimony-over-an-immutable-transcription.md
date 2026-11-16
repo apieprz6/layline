@@ -8,6 +8,8 @@ Decided concurrently with **ADR 0009**, which owns what happens to a recording *
 
 **Amended 2026-09-10** by *Amendment 1* at the foot of this document, which moves the amend surface onto ADR 0014's window-and-annotation flow, entered without its file step. The amendment changes only **where** amending happens. Nothing about **what** may be amended, or with what audit, changes; every other ruling here stands as written.
 
+**Amended by ADR 0045**, which flips which way the Race and its Recording point. A Race now holds zero or more Recordings, each belonging to exactly one Race. Deleting a Race deletes all its Recordings, and deleting the last Recording leaves the Race standing. The Race Window is one per Race, stated in the sailor's local wall-clock time and compared against each Recording through its Clock Relation. The zero-rows refusal applies only when no Recording has data inside the window. Uploading a qtVlm export once per race, duplicating identical bytes and every ruling on what may be amended still stand.
+
 ## Context
 
 The upload wizard finishes and the sailor notices the finish time is wrong. What can be changed, and what happens to everything hanging off it?
